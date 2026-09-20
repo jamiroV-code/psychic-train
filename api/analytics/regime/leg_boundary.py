@@ -44,18 +44,25 @@ class BoundaryConfirmation:
 
 
 def detect_candidate_boundaries(composite_series: pd.DataFrame) -> list[BoundaryCandidate]:
-    """ADR-1: rolling `ROC_WINDOW_DAYS`-day rate-of-change of the composite,
+    """ADR-1: rolling `ROC_WINDOW_DAYS`-day *absolute change* of the composite,
     z-scored against its own expanding (`ZSCORE_BASELINE`) history, flags a
     candidate date where `|z| >= ZSCORE_THRESHOLD` sustained for
     `>= SUSTAINED_DAYS` consecutive points. `composite_series` has columns
     `date`, `composite` — already the caller's chosen variant (reduced or
     full, ADR-2/`select_composite_variant`).
+
+    Absolute difference, not percentage change (fixed 2026-09-20): the
+    composite is already z-score-scaled and legitimately crosses zero, so
+    dividing by the prior value explodes near every zero-crossing — an
+    empirical run over 2024-2026 produced |z| up to 19 from pure
+    divide-by-near-zero artifacts. A diff is the meaningful "how much did
+    this move" measure for an already-unitless, mean-zero series.
     """
     if composite_series is None or composite_series.empty or len(composite_series) < ROC_WINDOW_DAYS + 1:
         return []
 
     df = composite_series.sort_values("date").reset_index(drop=True)
-    roc = df["composite"].pct_change(periods=ROC_WINDOW_DAYS)
+    roc = df["composite"].diff(periods=ROC_WINDOW_DAYS)
     mean = roc.expanding(min_periods=ZSCORE_MIN_PERIODS).mean()
     std = roc.expanding(min_periods=ZSCORE_MIN_PERIODS).std()
     z = ((roc - mean) / std).replace([np.inf, -np.inf], np.nan)

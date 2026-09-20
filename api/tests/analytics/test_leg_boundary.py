@@ -27,6 +27,26 @@ def _synthetic_composite(n_days: int = 200, shift_at: int | None = 100, shift_si
     return pd.DataFrame({"date": dates, "composite": base})
 
 
+def _mean_zero_composite(
+    n_days: int = 200,
+    shift_at: int | None = 100,
+    shift_size: float = 0.5,
+    oscillation: float = 0.0,
+) -> pd.DataFrame:
+    """A composite centered on 0.0 — the realistic shape, since the composite
+    is itself a blended z-score (live 2024-2026 data ranged ~-0.8..+0.65).
+    Optional `oscillation` makes it repeatedly cross zero; `shift_at` plants a
+    real sustained level shift of `shift_size` on top.
+    """
+    dates = pd.date_range("2023-01-01", periods=n_days, freq="D", tz="utc")
+    base = np.zeros(n_days)
+    if oscillation:
+        base += oscillation * np.sign(np.sin(np.arange(n_days) * np.pi / 10.0))
+    if shift_at is not None:
+        base[shift_at:] += shift_size
+    return pd.DataFrame({"date": dates, "composite": base})
+
+
 def _synthetic_btc_price(n_bars: int = 200, structure_shift_at: int | None = None) -> pd.DataFrame:
     """Flat BTC price series, with an optional clean higher-high/higher-low
     structure shift starting at `structure_shift_at`. `structure_shift_at
@@ -63,6 +83,35 @@ class TestDetectCandidateBoundaries:
     def test_too_short_series_returns_empty_not_raise(self):
         composite = _synthetic_composite(n_days=5)
         assert leg_boundary.detect_candidate_boundaries(composite) == []
+
+    def test_planted_shift_near_zero_baseline_is_detected(self):
+        """Regression test for the 2026-09-20 mean-zero ROC fix: the composite
+        is itself a z-score centered on 0, so the old `pct_change` formula
+        divided by ~0 here and produced infinite/wildly unstable values. With
+        an absolute `diff`, a real planted shift on a zero baseline is detected
+        normally.
+        """
+        composite = _mean_zero_composite(shift_at=100, shift_size=0.5)
+        candidates = leg_boundary.detect_candidate_boundaries(composite)
+        assert len(candidates) >= 1
+        shift_date = composite.iloc[100]["date"]
+        closest = min(candidates, key=lambda c: abs((c.date - shift_date).days))
+        assert abs((closest.date - shift_date).days) <= leg_boundary.ROC_WINDOW_DAYS + leg_boundary.SUSTAINED_DAYS + 2
+        assert abs(closest.z_score) >= leg_boundary.ZSCORE_THRESHOLD
+
+    def test_zero_crossing_series_shift_not_swamped_by_spurious_variance(self):
+        """The old failure mode: a composite that legitimately crosses zero
+        produced huge spurious divide-by-near-zero spikes that inflated the
+        expanding baseline's variance and buried the real shift. A real
+        sustained shift on an oscillating, zero-crossing series must still be
+        detected.
+        """
+        composite = _mean_zero_composite(shift_at=100, shift_size=1.0, oscillation=0.5)
+        candidates = leg_boundary.detect_candidate_boundaries(composite)
+        assert len(candidates) >= 1
+        shift_date = composite.iloc[100]["date"]
+        closest = min(candidates, key=lambda c: abs((c.date - shift_date).days))
+        assert abs((closest.date - shift_date).days) <= leg_boundary.ROC_WINDOW_DAYS + leg_boundary.SUSTAINED_DAYS + 2
 
     def test_empty_series_returns_empty(self):
         assert leg_boundary.detect_candidate_boundaries(pd.DataFrame(columns=["date", "composite"])) == []
