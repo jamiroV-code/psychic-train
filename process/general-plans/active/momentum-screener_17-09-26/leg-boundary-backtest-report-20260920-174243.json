@@ -1,0 +1,93 @@
+[
+  {
+    "cycle": "2017",
+    "window": [
+      "2017-01-01",
+      "2018-03-01"
+    ],
+    "composite_available": true,
+    "composite_points": 34,
+    "btc_history_available": true,
+    "btc_history_points": 424,
+    "candidate_boundaries": [],
+    "confirmed_boundaries": [],
+    "composite_component_coverage": {
+      "min_n_components": 3,
+      "max_n_components": 3,
+      "coverage_change_points": [
+        {
+          "date": "2018-01-11",
+          "n_components": 3,
+          "components_present": "net_liquidity,dollar,stables"
+        }
+      ]
+    }
+  },
+  {
+    "cycle": "2020-21",
+    "window": [
+      "2020-01-01",
+      "2021-12-31"
+    ],
+    "composite_available": true,
+    "composite_points": 501,
+    "btc_history_available": true,
+    "btc_history_points": 730,
+    "candidate_boundaries": [
+      {
+        "date": "2020-02-14",
+        "z_score": 2.5728407786893976,
+        "confirmed": false,
+        "n_components": 3,
+        "components_present": "net_liquidity,dollar,stables"
+      }
+    ],
+    "confirmed_boundaries": [],
+    "composite_component_coverage": {
+      "min_n_components": 2,
+      "max_n_components": 3,
+      "coverage_change_points": [
+        {
+          "date": "2020-01-02",
+          "n_components": 3,
+          "components_present": "net_liquidity,dollar,stables"
+        },
+        {
+          "date": "2020-11-27",
+          "n_components": 2,
+          "components_present": "net_liquidity,stables"
+        },
+        {
+          "date": "2020-11-30",
+          "n_components": 3,
+          "components_present": "net_liquidity,dollar,stables"
+        },
+        {
+          "date": "2020-12-24",
+          "n_components": 2,
+          "components_present": "net_liquidity,stables"
+        },
+        {
+          "date": "2020-12-28",
+          "n_components": 3,
+          "components_present": "net_liquidity,dollar,stables"
+        },
+        {
+          "date": "2021-01-20",
+          "n_components": 2,
+          "components_present": "net_liquidity,stables"
+        },
+        {
+          "date": "2021-01-21",
+          "n_components": 3,
+          "components_present": "net_liquidity,dollar,stables"
+        },
+        {
+          "date": "2021-12-31",
+          "n_components": 2,
+          "components_present": "net_liquidity,stables"
+        }
+      ]
+    }
+  }
+]

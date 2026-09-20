@@ -105,6 +105,50 @@ def _fetch_btc_history_csv() -> pd.DataFrame | None:
         return None
 
 
+_UNKNOWN_COVERAGE = {"n_components": None, "components_present": None}
+
+
+def _coverage_lookup(series: pd.DataFrame) -> dict[str, dict]:
+    """date-string -> that date's component coverage, for annotating each
+    detected boundary with the inputs it was actually built from (the thing
+    a human needs beside each boundary at the Hybrid gate).
+    """
+    if "n_components" not in series.columns:
+        return {}
+    return {
+        row["date"].date().isoformat():
+            {"n_components": int(row["n_components"]), "components_present": row["components_present"]}
+        for _, row in series.iterrows()
+    }
+
+
+def _coverage_summary(series: pd.DataFrame) -> dict:
+    """Window-level coverage picture: min/max components seen, plus the dates
+    where the SET of present components changes. Change points (rather than
+    one entry per day) keep this readable for a 400+ day window while still
+    showing, e.g., stablecoin supply joining in late 2017 or BTC dominance
+    joining in 2024.
+    """
+    if "n_components" not in series.columns or series.empty:
+        return {"min_n_components": None, "max_n_components": None, "coverage_change_points": []}
+
+    change_points = []
+    previous = None
+    for _, row in series.iterrows():
+        present = row["components_present"]
+        if present != previous:
+            change_points.append({"date": row["date"].date().isoformat(),
+                                  "n_components": int(row["n_components"]),
+                                  "components_present": present})
+            previous = present
+
+    return {
+        "min_n_components": int(series["n_components"].min()),
+        "max_n_components": int(series["n_components"].max()),
+        "coverage_change_points": change_points,
+    }
+
+
 def run_backtest(cycle: str) -> dict:
     if cycle not in CYCLE_WINDOWS:
         raise ValueError(f"unknown cycle {cycle!r} — choose one of {list(CYCLE_WINDOWS)}")
@@ -138,13 +182,18 @@ def run_backtest(cycle: str) -> dict:
     )
     confirmed_by_date = {c.candidate_date: c for c in confirmations if c.confirmed}
 
+    coverage_by_date = _coverage_lookup(composite.series)
+    result["composite_component_coverage"] = _coverage_summary(composite.series)
+
     result["candidate_boundaries"] = [
-        {"date": c.date.date().isoformat(), "z_score": c.z_score, "confirmed": c.date in confirmed_by_date}
+        {"date": c.date.date().isoformat(), "z_score": c.z_score, "confirmed": c.date in confirmed_by_date,
+         **coverage_by_date.get(c.date.date().isoformat(), _UNKNOWN_COVERAGE)}
         for c in candidates
     ]
     result["confirmed_boundaries"] = [
         {"date": conf.candidate_date.date().isoformat(),
-         "confirmed_date": conf.confirmed_date.date().isoformat() if conf.confirmed_date is not None else None}
+         "confirmed_date": conf.confirmed_date.date().isoformat() if conf.confirmed_date is not None else None,
+         **coverage_by_date.get(conf.candidate_date.date().isoformat(), _UNKNOWN_COVERAGE)}
         for conf in confirmations if conf.confirmed
     ]
     if btc_df is None or btc_df.empty:
@@ -156,7 +205,15 @@ def write_report(results: list[dict]) -> Path:
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     path = REPORT_DIR / f"leg-boundary-backtest-report-{ts}.json"
-    path.write_text(json.dumps(results, indent=2))
+    # Atomic write: a process death mid-`write_text` can leave a truncated
+    # report sitting at the real report name (already happened once — a
+    # 298-byte stub is in the committed baseline). Write to a sibling temp
+    # file, then `Path.replace`, which is atomic on Windows too (unlike a
+    # bare os.rename onto an existing path). A partial write can then only
+    # ever exist under the .tmp name, never as a report.
+    tmp_path = path.with_suffix(".json.tmp")
+    tmp_path.write_text(json.dumps(results, indent=2))
+    tmp_path.replace(path)
     return path
 
 

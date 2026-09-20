@@ -48,6 +48,23 @@ FULL_COMPOSITE_INPUTS = liqtide_adapter.METRIC_KEYS
 
 ZSCORE_MIN_PERIODS = 5  # need at least this many points before a z-score is meaningful
 
+# Intended weights for this composite's own 4-part universe, sourced from
+# data-sources/all-data-sources.md's LiqTide weight table (net liquidity 30%,
+# stablecoin supply 25%, broad dollar 15%, BTC dominance 10%). The reduced
+# composite implements 4 of LiqTide's 6 weighted components — ON-RRP release
+# and spot-ETF flows are not implemented here — so 80 (not 100) is THIS
+# composite's own "full coverage" denominator, not the full 6-part table.
+COMPONENT_WEIGHTS = {"net_liquidity": 30.0, "dollar": 15.0, "stables": 25.0, "btc_dom": 10.0}
+INTENDED_TOTAL_WEIGHT = sum(COMPONENT_WEIGHTS.values())  # 80.0
+
+# Below this fraction of intended weight actually present for a date, that
+# date's composite is UNAVAILABLE, not a degraded average of whatever's
+# present. Fixes a 2026-09-20 finding: this composite silently reported
+# available=True from a single component (37.5% weight coverage) while its
+# FRED inputs were failing on every call — see git history for the incident.
+# 60% is a defensible starting point, not empirically tuned.
+AVAILABILITY_WEIGHT_THRESHOLD = 0.60
+
 NET_LIQUIDITY_ROC_DAYS = 28  # ~4wk change, calendar days
 DOLLAR_ROC_DAYS = 30  # ~1mo change
 BTC_DOM_ROC_DAYS = 30
@@ -57,7 +74,19 @@ STABLECOIN_ROC_DAYS = 7  # data-sources doc's weight table: "7-day change"
 @dataclass
 class CompositeResult:
     variant: str  # "reduced" | "full"
-    series: pd.DataFrame  # columns: date, composite (mean of available z-scored components)
+    # For "full": columns date, composite.
+    # For "reduced": date, composite (mean of available z-scored components),
+    # plus per-date coverage reporting — `n_components` (int, how many of the
+    # 4 base components had data that date), `components_present`
+    # (comma-joined names, e.g. "net_liquidity,dollar"), and one renormalized
+    # weight column per component (`net_liquidity_weight`, `dollar_weight`,
+    # `stables_weight`, `btc_dom_weight`) giving that component's share of
+    # the weight actually realized that date (present components sum to 1.0;
+    # absent components are null, never 0 — "unavailable, never neutral").
+    series: pd.DataFrame
+    # For "reduced": True only if at least one date cleared
+    # AVAILABILITY_WEIGHT_THRESHOLD — a composite built from a sliver of its
+    # intended weight is reported unavailable, not as a degraded average.
     available: bool
 
 
@@ -90,6 +119,21 @@ def build_reduced_composite(
     for a given date (never zero-filled for a missing component — this
     project's general "unavailable, never neutral" discipline; item 32's
     probe result is one specific instance of it).
+
+    Availability floor (added 2026-09-20): "degrade gracefully when one input
+    is missing" was never meant to mean "report a confident read off a single
+    component". Each date's realized weight (COMPONENT_WEIGHTS over the
+    components actually present) is measured against INTENDED_TOTAL_WEIGHT
+    (80.0 — this composite's own 4-part universe, not LiqTide's full 6); dates
+    below AVAILABILITY_WEIGHT_THRESHOLD are dropped, so `available` is False
+    when nothing clears the floor. The composite VALUE formula is unchanged —
+    still the skipna mean over present z-scores.
+
+    The returned `series` therefore also carries per-date coverage reporting:
+    `n_components`, `components_present` (comma-joined names), and one
+    renormalized weight column per component (`{component}_weight`) holding
+    that component's share of the realized weight (present components sum to
+    1.0 per date; absent components are null, never 0).
     """
     net_liq = fred_adapter.fetch_net_liquidity()
     dollar = fred_adapter.fetch_series(fred_adapter.BROAD_DOLLAR)
@@ -134,11 +178,43 @@ def build_reduced_composite(
     merged["composite"] = merged[z_cols].mean(axis=1, skipna=True)
     merged = merged.dropna(subset=["composite"])
 
+    # Per-date weight coverage. The composite VALUE is still the skipna mean
+    # of whatever z-scores exist (unchanged); what changes here is whether a
+    # date is allowed to count as available at all. A date carrying only a
+    # small slice of the intended 80-point weight is dropped outright rather
+    # than reported as a thin-but-confident read — the 2026-09-20 incident
+    # (1-of-4 components, 37.5% coverage, still available=True) is exactly
+    # the failure this filter closes. This is strictly tighter than the
+    # dropna above, which only caught the zero-component case.
+    present_flags = {}
+    for component in COMPONENT_WEIGHTS:
+        col = f"{component}_z"
+        present_flags[component] = merged[col].notna() if col in merged.columns else pd.Series(False, index=merged.index)
+
+    realized_weight = sum(present_flags[c].astype(float) * w for c, w in COMPONENT_WEIGHTS.items())
+    weight_coverage = realized_weight / INTENDED_TOTAL_WEIGHT
+
+    merged["n_components"] = sum(present_flags[c].astype(int) for c in COMPONENT_WEIGHTS)
+    merged["components_present"] = [
+        ",".join(c for c in COMPONENT_WEIGHTS if present_flags[c].loc[idx]) for idx in merged.index
+    ]
+    for component, weight in COMPONENT_WEIGHTS.items():
+        # Renormalized share of the weight actually realized that date — null
+        # (not 0.0) where the component is absent, so a missing input can
+        # never read as a real zero contribution.
+        merged[f"{component}_weight"] = (weight / realized_weight).where(present_flags[component])
+
+    merged = merged[weight_coverage >= AVAILABILITY_WEIGHT_THRESHOLD]
+
     if date_range is not None:
         start, end = date_range
         merged = merged[(merged["date"] >= start) & (merged["date"] <= end)]
 
-    return CompositeResult(variant="reduced", series=merged[["date", "composite"]].reset_index(drop=True), available=not merged.empty)
+    out_cols = (["date", "composite", "n_components", "components_present"]
+                + [f"{c}_weight" for c in COMPONENT_WEIGHTS])
+    series = merged[out_cols].reset_index(drop=True)
+    series["n_components"] = series["n_components"].astype(int)
+    return CompositeResult(variant="reduced", series=series, available=not merged.empty)
 
 
 def build_full_composite(

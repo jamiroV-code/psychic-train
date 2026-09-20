@@ -18,6 +18,45 @@ def _liqtide_row(date: str, **overrides) -> dict:
     return row
 
 
+class _Empty:
+    df = pd.DataFrame(columns=["date", "value"])
+    status = "unavailable"
+
+
+def _series_stub(n: int = 40):
+    """A smooth 40-point daily series — long enough to clear the slowest
+    component's ROC window (30d) plus ZSCORE_MIN_PERIODS."""
+    import numpy as np
+
+    dates = pd.date_range("2020-01-01", periods=n, freq="D", tz="utc")
+    df = pd.DataFrame({"date": dates, "value": 100.0 + np.arange(n) * 0.5})
+
+    class _Ok:
+        status = "ok"
+
+    _Ok.df = df
+    return _Ok
+
+
+def _patch_inputs(monkeypatch, present: tuple[str, ...]):
+    """Patch the four reduced-composite inputs so exactly `present` have data
+    and the rest are hard-unavailable. Keeps each coverage test's setup down
+    to the one thing it is actually about: which components exist."""
+    net_liq = _series_stub() if "net_liquidity" in present else _Empty
+    dollar = _series_stub() if "dollar" in present else _Empty
+    stables = _series_stub() if "stables" in present else _Empty
+
+    if "btc_dom" in present:
+        history = _series_stub().df.rename(columns={"value": "btc_dom"})
+    else:
+        history = pd.DataFrame()
+
+    monkeypatch.setattr(liquidity_composite.fred_adapter, "fetch_net_liquidity", lambda: net_liq())
+    monkeypatch.setattr(liquidity_composite.fred_adapter, "fetch_series", lambda *a, **k: dollar())
+    monkeypatch.setattr(liquidity_composite.defillama_adapter, "fetch_stablecoin_supply", lambda: stables())
+    monkeypatch.setattr(liquidity_composite.cache, "read_liqtide_history", lambda: history)
+
+
 class TestSelectCompositeVariant:
     def test_pre_cutover_date_is_always_reduced(self, monkeypatch):
         monkeypatch.setattr(liquidity_composite.cache, "read_liqtide_history", lambda: pd.DataFrame([_liqtide_row("2017-06-01")]))
@@ -67,28 +106,55 @@ class TestBuildReducedComposite:
     def test_missing_component_never_zero_fills_others(self, monkeypatch):
         """A component with no data at all is simply excluded from the
         average, never contributes a fabricated zero (this project's
-        general 'unavailable, never neutral' discipline)."""
-        import numpy as np
+        general 'unavailable, never neutral' discipline).
 
-        dates = pd.date_range("2020-01-01", periods=40, freq="D", tz="utc")
-        net_liq_df = pd.DataFrame({"date": dates, "value": 100.0 + np.arange(40) * 0.5})
-
-        class _NetLiq:
-            df = net_liq_df
-            status = "ok"
-
-        class _Empty:
-            df = pd.DataFrame(columns=["date", "value"])
-            status = "unavailable"
-
-        monkeypatch.setattr(liquidity_composite.fred_adapter, "fetch_net_liquidity", lambda: _NetLiq())
-        monkeypatch.setattr(liquidity_composite.fred_adapter, "fetch_series", lambda *a, **k: _Empty())
-        monkeypatch.setattr(liquidity_composite.defillama_adapter, "fetch_stablecoin_supply", lambda: _Empty())
-        monkeypatch.setattr(liquidity_composite.cache, "read_liqtide_history", lambda: pd.DataFrame())
+        Setup clears the availability floor deliberately: net_liquidity +
+        stables = 55/80 = 68.75% >= AVAILABILITY_WEIGHT_THRESHOLD, with
+        dollar and btc_dom absent — so the surviving dates prove the
+        no-zero-fill discipline rather than the coverage filter.
+        """
+        _patch_inputs(monkeypatch, present=("net_liquidity", "stables"))
 
         result = liquidity_composite.build_reduced_composite()
         assert result.available is True
         assert not result.series["composite"].isna().any()
+        # absent components contribute nothing at all — not a zero weight
+        assert result.series["dollar_weight"].isna().all()
+        assert result.series["btc_dom_weight"].isna().all()
+        assert (result.series["components_present"] == "net_liquidity,stables").all()
+
+    def test_below_weight_threshold_is_unavailable(self, monkeypatch):
+        """1-of-4 components (net_liquidity alone, 30/80 = 37.5% coverage) is
+        the exact shape the 2026-09-20 FRED incident produced while still
+        reporting available=True. It must now be unavailable."""
+        _patch_inputs(monkeypatch, present=("net_liquidity",))
+
+        result = liquidity_composite.build_reduced_composite()
+        assert result.available is False
+        assert result.series.empty
+
+    def test_two_components_below_threshold_is_also_unavailable(self, monkeypatch):
+        """net_liquidity + btc_dom = 40/80 = 50% — more than one component,
+        still under the floor."""
+        _patch_inputs(monkeypatch, present=("net_liquidity", "btc_dom"))
+
+        result = liquidity_composite.build_reduced_composite()
+        assert result.available is False
+
+    def test_component_reporting_columns_and_renormalized_weights(self, monkeypatch):
+        """net_liquidity + dollar = 45/80 = 56.25%... below the floor, so use
+        net_liquidity + stables (55/80) and assert the renormalization:
+        30/55 and 25/55."""
+        _patch_inputs(monkeypatch, present=("net_liquidity", "stables"))
+
+        result = liquidity_composite.build_reduced_composite()
+        assert result.available is True
+        assert (result.series["n_components"] == 2).all()
+        assert (result.series["components_present"] == "net_liquidity,stables").all()
+        assert result.series["net_liquidity_weight"].iloc[0] == pytest.approx(30.0 / 55.0)
+        assert result.series["stables_weight"].iloc[0] == pytest.approx(25.0 / 55.0)
+        weight_cols = ["net_liquidity_weight", "dollar_weight", "stables_weight", "btc_dom_weight"]
+        assert result.series[weight_cols].sum(axis=1).iloc[0] == pytest.approx(1.0)
 
     def test_no_inputs_available_is_unavailable_not_raise(self, monkeypatch):
         class _Empty:
