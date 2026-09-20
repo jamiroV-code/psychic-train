@@ -113,6 +113,24 @@ class TestDetectCandidateBoundaries:
         closest = min(candidates, key=lambda c: abs((c.date - shift_date).days))
         assert abs((closest.date - shift_date).days) <= leg_boundary.ROC_WINDOW_DAYS + leg_boundary.SUSTAINED_DAYS + 2
 
+    def test_brief_sustained_shift_detected_at_lowered_threshold(self):
+        """Regression test for the 2026-09-20 `SUSTAINED_DAYS` 5 -> 2 finding:
+        a real-but-brief move that sustains only ~2-3 days then reverts is
+        exactly what a 5-day requirement silently dropped (the whole
+        H2-2020..2021 stretch of the known-cycle gate went dark that way).
+        At `SUSTAINED_DAYS=2` such a spike must be flagged.
+        """
+        composite = _mean_zero_composite(shift_at=None)
+        # a brief excursion: 3 days above baseline, then back to 0.
+        composite.loc[100:102, "composite"] = 0.6
+
+        candidates = leg_boundary.detect_candidate_boundaries(composite)
+        assert len(candidates) >= 1
+        shift_date = composite.iloc[100]["date"]
+        closest = min(candidates, key=lambda c: abs((c.date - shift_date).days))
+        assert abs((closest.date - shift_date).days) <= leg_boundary.ROC_WINDOW_DAYS + leg_boundary.SUSTAINED_DAYS + 2
+        assert abs(closest.z_score) >= leg_boundary.ZSCORE_THRESHOLD
+
     def test_empty_series_returns_empty(self):
         assert leg_boundary.detect_candidate_boundaries(pd.DataFrame(columns=["date", "composite"])) == []
 

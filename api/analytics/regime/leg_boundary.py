@@ -19,11 +19,21 @@ from api.models.regime import CurrentLegState, LegBoundary
 
 # ADR-1's named constants — reviewable/changeable in one place, per the same
 # discipline as the |z| >= 1.5 threshold itself (VALIDATE finding).
+#
+# SUSTAINED_DAYS changed 5 -> 2 on 2026-09-20: swept 1/2/3/5 over the 2020-21
+# known-cycle gate, scored against BTC price-structure confirmation
+# (`confirm_boundaries`) rather than candidate count. At 5 only the two most
+# extreme COVID-crash runs qualified (2/2 confirmed) and the whole
+# H2-2020..2021 stretch went dark despite nine genuine |z| >= 1.5 crossings
+# lasting 1-4 days. At 2: 6 candidates / 5 confirmed (83%), recovering the real
+# 2020-11-20 and 2021-04-20 boundaries. 1 dropped back to 75% precision.
+# ZSCORE_THRESHOLD stays 1.5 — separately validated as sound (every crossing
+# found mapped to a plausible, usually price-confirmed event).
 ROC_WINDOW_DAYS = 14
 ZSCORE_BASELINE = "expanding"
 ZSCORE_MIN_PERIODS = 5
 ZSCORE_THRESHOLD = 1.5
-SUSTAINED_DAYS = 5
+SUSTAINED_DAYS = 2
 
 # Price-structure confirmation (item 38).
 CONFIRMATION_WINDOW_DAYS = 10
