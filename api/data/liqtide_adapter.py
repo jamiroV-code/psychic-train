@@ -73,6 +73,13 @@ class LiqTidePayload:
     tide_score: float | None
     metrics: dict[str, float | None]  # one current value per METRIC_KEYS entry
     status: Status
+    # The untouched upstream JSON, when this payload came from a fresh live
+    # parse. Carries the fields `_parse_payload` otherwise discards
+    # (`tide_index.components`/`weights`/`value`/`label`, `data_quality`,
+    # `regime`) so a verifier (`scripts/snapshot_liqtide.py`) can re-derive
+    # the published score and check it. Must stay LAST — a defaulted
+    # dataclass field cannot precede non-defaulted ones.
+    raw: dict | None = None
 
 
 def _empty_payload(status: Status) -> LiqTidePayload:
@@ -124,7 +131,10 @@ def _parse_payload(raw: dict) -> LiqTidePayload:
     tide_score = tide_index.get("score")
     tide_score = float(tide_score) if isinstance(tide_score, (int, float)) else None
 
-    return LiqTidePayload(generated_utc=generated_utc, date=date, tide_score=tide_score, metrics=metrics, status="ok")
+    return LiqTidePayload(
+        generated_utc=generated_utc, date=date, tide_score=tide_score,
+        metrics=metrics, status="ok", raw=raw,
+    )
 
 
 def _payload_to_row(payload: LiqTidePayload) -> pd.DataFrame:
@@ -134,6 +144,9 @@ def _payload_to_row(payload: LiqTidePayload) -> pd.DataFrame:
 
 
 def _row_to_payload(row: pd.Series) -> LiqTidePayload:
+    # `raw` is deliberately left at its default None: the archived parquet row
+    # holds only the flattened fields, so a cache-replay payload has no fresh
+    # upstream JSON to verify against. Absent, never a fabricated stand-in.
     tide_score = row.get("tide_score")
     return LiqTidePayload(
         generated_utc=row.get("generated_utc"),
@@ -152,8 +165,12 @@ def _hours_since(date_str: str) -> float | None:
     return (datetime.now(timezone.utc) - then).total_seconds() / 3600.0
 
 
-def fetch_latest(client: httpx.Client | None = None) -> LiqTidePayload:
+def fetch_latest(client: httpx.Client | None = None, dry_run: bool = False) -> LiqTidePayload:
     """Fetch (or serve cached) today's LiqTide payload.
+
+    `dry_run=True` fetches and parses exactly as normal but skips the archive
+    write, so a verifier can inspect a live payload without mutating the
+    append-only archive. The returned payload is fully populated either way.
 
     Archives every newly-seen daily payload append-only (Standing Rule 8).
     On a live-fetch failure, falls back to the most recently archived
@@ -176,7 +193,8 @@ def fetch_latest(client: httpx.Client | None = None) -> LiqTidePayload:
         except Exception:
             payload = None
         if payload is not None and payload.date:
-            cache.write_liqtide_payload(payload.date, _payload_to_row(payload))
+            if not dry_run:
+                cache.write_liqtide_payload(payload.date, _payload_to_row(payload))
             return payload
 
     history = cache.read_liqtide_history()

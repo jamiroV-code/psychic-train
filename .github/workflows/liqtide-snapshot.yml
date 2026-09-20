@@ -1,0 +1,50 @@
+name: LiqTide daily snapshot
+
+# LiqTide (liqtide.com) publishes only "latest" -- there is no historical
+# endpoint. A day this workflow doesn't capture is gone forever (Standing
+# Rule 8, data-sources/all-data-sources.md). Runs 45 minutes after LiqTide's
+# own ~22:45 UTC daily refresh.
+on:
+  schedule:
+    - cron: "30 23 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install api/ dependencies
+        run: uv sync --project api
+
+      - name: Run snapshot
+        id: snapshot
+        run: |
+          set +e
+          uv run --project api python api/scripts/snapshot_liqtide.py
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          # Exit 2 = archived but a check flagged something (e.g. LiqTide
+          # changed its own published methodology) -- surface it as a warning,
+          # don't fail the job. Only exit 1 (fetch/write failed outright) fails.
+          if [ "$code" -eq 1 ]; then
+            exit 1
+          fi
+
+      - name: Warn on flagged snapshot
+        if: steps.snapshot.outputs.exit_code == '2'
+        run: echo "::warning::snapshot_liqtide.py flagged a check -- see the job log above"
+
+      - name: Commit archived payload
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add api/data/cache/liqtide/
+          git diff --staged --quiet || git commit -m "chore: liqtide snapshot $(date -u +%Y-%m-%d)"
+          git push

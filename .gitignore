@@ -10,7 +10,13 @@ api/.venv/
 api/**/__pycache__/
 **/__pycache__/
 *.pyc
-api/data/cache/
+# LiqTide has no historical endpoint — an uncaptured day is gone forever, so
+# cache/liqtide/ is tracked while every other cache subdir (regenerable from
+# its source API on demand) stays ignored. The `*` is required: git cannot
+# un-ignore a path inside a directory excluded by a bare directory pattern,
+# so the parent must be excluded per-entry for the negation to take effect.
+api/data/cache/*
+!api/data/cache/liqtide/
 api/data/watchlist.json
 
 # Node (web/)

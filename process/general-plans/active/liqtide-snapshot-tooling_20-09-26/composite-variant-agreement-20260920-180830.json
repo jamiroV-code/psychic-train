@@ -1,0 +1,28 @@
+{
+  "generated_utc": "2026-09-20T18:08:30.957276+00:00",
+  "window": [
+    "2024-01-11",
+    "2026-09-20"
+  ],
+  "tolerance_days": 10,
+  "btc_history_points": 501,
+  "btc_status": "ok",
+  "full": {
+    "available": false,
+    "points": 0,
+    "candidates": 0,
+    "confirmed": [],
+    "note": "full composite unavailable for this window \u2014 no detection possible."
+  },
+  "reduced": {
+    "available": true,
+    "points": 671,
+    "candidates": 0,
+    "confirmed": [],
+    "note": null
+  },
+  "matched_pairs": [],
+  "full_only_unmatched": [],
+  "reduced_only_unmatched": [],
+  "verdict": "DISAGREE"
+}
