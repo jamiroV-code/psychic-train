@@ -43,9 +43,8 @@ real application code has landed and this update replaces intentions with observ
 - Equity data provider remains genuinely unresolved — no equity adapter exists yet in `api/data/`.
 - Deployment target remains genuinely unresolved — no `.github/workflows/` or other CI/deploy
   config exists.
-- The repo is still **not a git repository** (`git rev-parse HEAD` fails) despite a non-trivial
-  amount of code now existing — flagged again under Open Questions since this is now a real risk,
-  not a fresh-scaffold detail.
+- The repo was **not a git repository** as of this file's original 2026-09-20 write-up; `git init`
+  plus a baseline commit landed later the same day — see Open Questions for what's now resolved.
 
 ---
 
@@ -329,8 +328,9 @@ API_PORT=8000
 - App: `API_BASE_URL`, `API_PORT`
 
 Config files present: `web/package.json`, `web/tsconfig.json`, `api/pyproject.toml`,
-`api/.python-version`. No git repository yet, so `.gitignore` coverage hasn't mattered in
-practice — worth setting up before this gets much bigger (see Open Questions).
+`api/.python-version`. Git repository initialized 2026-09-20; `.gitignore` already correctly
+excludes `.venv/`, `node_modules/`, `__pycache__/`, `.next/`, `api/data/cache/`, and (added at
+init time) `.env` and `.claude/hooks/.logs/`.
 
 ## Open Decisions
 
@@ -360,19 +360,36 @@ may be redistributed. See Licensing in `data-sources/all-data-sources.md`.
   are still empty `_GUIDE.md` placeholders. Is momentum-screener meant to eventually be split
   into those feature folders, or do they get superseded/consolidated? Don't guess — ask before
   restructuring either side.
-- **No git repository yet**, despite `api/` and `web/` now holding a real, tested feature. This
-  is no longer a fresh-scaffold non-issue — there's real work with no version history or revert
-  safety net. Worth raising with the user rather than silently initializing one.
-- **"Numbers are never silently wrong" has a known gap, found 2026-09-20.** `fred_adapter.py`
-  had a live bug (CSV header mismatch) that made `fetch_series`/`fetch_net_liquidity` return
-  `status="unavailable"` for every call. `api/analytics/regime/liquidity_composite.py`'s
-  `build_reduced_composite()` degrades gracefully by design when one input is missing — but nothing
-  distinguishes "one input among several is down" from "every FRED series failed on every call,
-  repeatedly" (a broken adapter, not a normal degraded-data case). That silently produced at least
-  three persisted, degraded backtest reports under
-  `process/general-plans/active/momentum-screener_17-09-26/` dated 2026-09-19 (regenerate these
-  now that the fetch is fixed). No fix has been designed yet — flagged here so the next session
-  doesn't have to rediscover it.
+- ~~No git repository yet~~ **Resolved 2026-09-20** — `git init` done, initial baseline commit
+  captures pre-fix state (including the 3 contaminated backtest reports, preserved for diffing),
+  second commit holds the fix below.
+- ~~"Numbers are never silently wrong" gap — consumer-level~~ **Fixed 2026-09-20.**
+  `build_reduced_composite()`'s `composite_available` now derives from realized weight coverage
+  (60% of intended weight, see `COMPONENT_WEIGHTS`/`AVAILABILITY_WEIGHT_THRESHOLD` in
+  `liquidity_composite.py`) instead of "at least one component returned data." Re-run against live
+  data confirms the old 2020-21 confirmed leg boundaries (`2020-04-07`, `2020-04-21`) do not
+  survive with real inputs — they were artifacts of the bug, not real signal. Contamination check:
+  those dates never reached any screener config or feature file (`write_confirmed_boundaries()` in
+  `cache.py` has no caller), so nothing downstream needs correcting.
+- **New, adapter-level half still open (not yet designed):** the consumer-level fix above closes
+  the *symptom* (a composite silently claiming availability from a sliver of its inputs) but not
+  the *cause* (an adapter — any of the 7 under `api/data/`, not just FRED — going to
+  100%-`unavailable` across consecutive calls, with nothing distinguishing that from ordinary
+  per-item missing data). Research done 2026-09-20: all 7 adapters share a typed
+  `ok`/`unavailable`/`stale` convention, but no failure-counting/circuit-breaker state exists
+  anywhere in `api/` (the closest precedent, `pytrends_adapter`'s `presumed-dead`, is time-since-
+  last-success, not call-count, and is per-keyword). No scheduler exists in this repo at all —
+  every adapter call is either router→analytics request-scoped or a manually-run script — so
+  "consecutive calls" only accumulates when something happens to trigger a fetch. Needs a proper
+  INNOVATE pass before implementation; do not patch this ad hoc.
+- **New finding, 2026-09-20: the 2017 leg-boundary backtest window is largely untestable as
+  currently scoped.** The reduced composite has zero usable (≥60%-coverage) dates before
+  2018-01-11 — DefiLlama's stablecoin-supply series doesn't start until 2017-11-29, and net
+  liquidity + dollar alone (56.25% of intended weight) sits just under the 60% floor. The
+  `2017` cycle backtest (`process/general-plans/active/momentum-screener_17-09-26/`,
+  `--cycle 2017`) is effectively testing ~7 weeks of early 2018, not the 2017 cycle it's named
+  for. Undecided: accept this as a structural limit and document it in the backtest's own output,
+  or find another approach for pre-2017-11 dates. Don't guess — ask.
 
 ## References
 
@@ -384,8 +401,9 @@ plus directory listings of `api/`, `web/`, and `process/features/*/`.
 
 ## Scan Metadata
 
-- Generated: 2026-09-20 by `vc-generate-context` (delta update over the 2026-09-17 setup version)
-- HEAD: not a git repository (`git rev-parse HEAD` fails — confirmed, not assumed)
+- Generated: 2026-09-20 by `vc-generate-context` (delta update over the 2026-09-17 setup version);
+  amended same day after `git init` + the composite availability-floor fix
+- HEAD: `e9612e2` (git repository initialized 2026-09-20, mid-session)
 - Mode: delta update from real repo scan (directory listings, `package.json`, `pyproject.toml`,
   `.env.example`, adapter/router/analytics source files, active plan folders) — not a line count
 - Package managers: `pnpm` (web/, lockfile present), `uv` (api/, lockfile present)
