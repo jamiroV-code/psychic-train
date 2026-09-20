@@ -1,0 +1,35 @@
+[
+  {
+    "cycle": "2020-21",
+    "window": [
+      "2020-01-01",
+      "2021-12-31"
+    ],
+    "composite_available": true,
+    "composite_points": 731,
+    "btc_history_available": true,
+    "btc_history_points": 730,
+    "candidate_boundaries": [
+      {
+        "date": "2020-04-07",
+        "z_score": -3.015882654502561,
+        "confirmed": true
+      },
+      {
+        "date": "2020-04-21",
+        "z_score": 2.599362460143079,
+        "confirmed": true
+      }
+    ],
+    "confirmed_boundaries": [
+      {
+        "date": "2020-04-07",
+        "confirmed_date": "2020-04-07"
+      },
+      {
+        "date": "2020-04-21",
+        "confirmed_date": "2020-04-21"
+      }
+    ]
+  }
+]

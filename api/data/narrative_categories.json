@@ -1,0 +1,8 @@
+{
+  "seed_categories": [
+    {"id": "ai", "label": "AI", "keywords": ["AI crypto", "artificial intelligence crypto"]},
+    {"id": "rwa", "label": "Real World Assets", "keywords": ["RWA crypto", "tokenized real world assets"]},
+    {"id": "l2s", "label": "L2s", "keywords": ["layer 2 crypto", "L2 rollup"]},
+    {"id": "memecoins", "label": "Memecoins", "keywords": ["memecoin", "meme coin crypto"]}
+  ]
+}

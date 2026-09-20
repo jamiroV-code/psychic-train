@@ -1,0 +1,298 @@
+"""DuckDB-over-Parquet cache layer.
+
+Centralizes the DuckDB connection + Parquet path construction so no other
+module hand-rolls a cache path (Component Details: `api/data/cache.py`
+"centralizes the DuckDB connection + query helpers so no other module
+hand-rolls a Parquet path").
+"""
+from __future__ import annotations
+
+import os
+import time
+from pathlib import Path
+from typing import Literal
+
+import duckdb
+import pandas as pd
+
+Timeframe = Literal["15m", "1h", "4h", "1d", "1w"]
+TIMEFRAMES: tuple[Timeframe, ...] = ("15m", "1h", "4h", "1d", "1w")
+
+# The cache root is overridable so a test run — notably the Playwright E2E,
+# which needs a real API serving fixture data — can point the whole API at a
+# throwaway tree instead of the developer's live market data.
+#
+# Read from the environment at import, which is when a uvicorn process starts
+# and therefore when the E2E sets it. It remains a plain module attribute, so
+# `monkeypatch.setattr(cache, "CACHE_ROOT", tmp_path)` (the `isolated_cache`
+# fixture) keeps working, and every consumer reads it through a function
+# (`ohlcv_path`, etc.) at call time rather than binding it as a default
+# argument — the RFC-005 watchlist defect.
+DEFAULT_CACHE_ROOT = Path(__file__).resolve().parent / "cache"
+CACHE_ROOT = Path(os.environ["SCREENER_CACHE_ROOT"]) if os.environ.get("SCREENER_CACHE_ROOT") else DEFAULT_CACHE_ROOT
+
+OHLCV_COLUMNS = ["timestamp", "open", "high", "low", "close", "volume", "source"]
+
+# --------------------------------------------------------------------------
+# Every read goes through `_connect()`, never a bare DuckDB connection.
+#
+# Why (ADR-6, 19-09-26): `_raw_to_df` builds timestamps in UTC, but DuckDB
+# converts a TIMESTAMP WITH TIME ZONE to the *session* timezone on read, and
+# that defaults to the machine's local zone. On a Europe/Brussels machine every
+# cached series came back as `datetime64[us, Europe/Brussels]`: daily bars read
+# as 01:00 or 02:00 instead of 00:00, and `resample("W-MON")` anchored on
+# Brussels midnight — 22:00 UTC in summer, 23:00 UTC in winter. Weekly bars
+# were labelled Monday locally and Sunday in UTC, and the anchor shifted by an
+# hour across each DST transition (one week a year is then 167 or 169 hours).
+#
+# The consequence was worse than the offset itself: the meaning of the cached
+# data depended on the timezone of whoever ran the code. Two machines reading
+# the same Parquet files got different weeks. Pinning the session to UTC makes
+# the read boundary timezone-independent.
+#
+# This was found only after ADR-5's 13 golden-value tests were green: they call
+# `_derive_weekly_from_daily` directly on UTC fixtures and never cross the
+# Parquet/DuckDB boundary where the conversion happens. See
+# `api/tests/data/test_cache_timezone.py`, which does cross it.
+# --------------------------------------------------------------------------
+def _connect():
+    """A DuckDB connection pinned to UTC. Use for every read in this module."""
+    conn = duckdb.connect()
+    conn.execute("SET TimeZone='UTC'")
+    return conn
+
+
+def _as_utc(df: pd.DataFrame, column: str = "timestamp") -> pd.DataFrame:
+    """Re-assert the UTC contract in pandas as well as in DuckDB.
+
+    `_connect()` should already have handled it. Doing it again means a future
+    DuckDB that ignores or renames the setting degrades to a no-op here rather
+    than to silently local timestamps.
+    """
+    if column in df.columns and len(df):
+        df[column] = pd.to_datetime(df[column], utc=True)
+    return df
+
+
+
+def bootstrap_cache_dirs() -> None:
+    """Create the cache/ directory tree if it doesn't exist yet."""
+    for sub in ("ohlcv", "liquidity", "liqtide", "legs", "narrative"):
+        (CACHE_ROOT / sub).mkdir(parents=True, exist_ok=True)
+
+
+def ohlcv_path(symbol: str, timeframe: Timeframe) -> Path:
+    return CACHE_ROOT / "ohlcv" / symbol.upper() / f"{timeframe}.parquet"
+
+
+def read_ohlcv(symbol: str, timeframe: Timeframe) -> pd.DataFrame:
+    """Read cached OHLCV bars for one (symbol, timeframe). Empty df if no cache yet."""
+    path = ohlcv_path(symbol, timeframe)
+    if not path.exists():
+        return pd.DataFrame(columns=OHLCV_COLUMNS)
+    df = _connect().sql(
+        f"SELECT * FROM read_parquet('{path.as_posix()}') ORDER BY timestamp"
+    ).df()
+    return _as_utc(df)
+
+
+def write_ohlcv(symbol: str, timeframe: Timeframe, df: pd.DataFrame) -> None:
+    """Write (overwrite) the full cached OHLCV series for one (symbol, timeframe)."""
+    path = ohlcv_path(symbol, timeframe)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    out = df.sort_values("timestamp").drop_duplicates(subset="timestamp", keep="last")
+    out = out[OHLCV_COLUMNS]
+    out.to_parquet(path, index=False)
+
+
+def ohlcv_bar_count(symbol: str, timeframe: Timeframe) -> int:
+    path = ohlcv_path(symbol, timeframe)
+    if not path.exists():
+        return 0
+    result = _connect().sql(
+        f"SELECT COUNT(*) AS n FROM read_parquet('{path.as_posix()}')"
+    ).df()
+    return int(result["n"].iloc[0])
+
+
+def ohlcv_last_refresh(symbol: str, timeframe: Timeframe) -> pd.Timestamp | None:
+    path = ohlcv_path(symbol, timeframe)
+    if not path.exists():
+        return None
+    result = _connect().sql(
+        f"SELECT MAX(timestamp) AS last_ts FROM read_parquet('{path.as_posix()}')"
+    ).df()
+    val = result["last_ts"].iloc[0]
+    if pd.isna(val):
+        return None
+    # Always tz-aware UTC — callers compare it against `pd.Timestamp.now(tz="UTC")`.
+    stamp = pd.Timestamp(val)
+    return stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp.tz_convert("UTC")
+
+
+# --- RFC-002: LiqTide append-only archive (Standing Rule 8) ---------------
+#
+# One immutable file per date, never overwritten once written — LiqTide's
+# own history is not otherwise recoverable if the (self-described beta)
+# endpoint changes or disappears. Contrast `write_ohlcv` above, which
+# overwrites the whole series every refresh: OHLCV bars are re-fetchable
+# from the exchange forever, a LiqTide day's payload is not.
+
+
+def liqtide_payload_path(date: str) -> Path:
+    return CACHE_ROOT / "liqtide" / f"{date}.parquet"
+
+
+def write_liqtide_payload(date: str, row_df: pd.DataFrame) -> None:
+    path = liqtide_payload_path(date)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        row_df.to_parquet(path, index=False)
+
+
+def read_liqtide_history() -> pd.DataFrame:
+    """Read every archived daily LiqTide payload, sorted by date. Empty
+    (columnless) df if nothing has been archived yet.
+    """
+    liqtide_dir = CACHE_ROOT / "liqtide"
+    if not liqtide_dir.exists() or not any(liqtide_dir.glob("*.parquet")):
+        return pd.DataFrame()
+    return _connect().sql(
+        f"SELECT * FROM read_parquet('{(liqtide_dir / '*.parquet').as_posix()}') ORDER BY date"
+    ).df()
+
+
+# --- RFC-002: macro-liquidity input series (FRED, DefiLlama) --------------
+#
+# Full overwrite-per-refresh cache, one file per series id — these
+# providers are themselves the durable primary archive (decades of FRED
+# history; DefiLlama's own aggregate series back to 2017), not a derived
+# composite that could disappear, so (unlike LiqTide above) there is
+# nothing to lose by overwriting on every successful refresh.
+
+
+def liquidity_series_path(series_id: str) -> Path:
+    return CACHE_ROOT / "liquidity" / f"{series_id}.parquet"
+
+
+def read_liquidity_series(series_id: str) -> pd.DataFrame:
+    path = liquidity_series_path(series_id)
+    if not path.exists():
+        return pd.DataFrame(columns=["date", "value"])
+    return _connect().sql(
+        f"SELECT * FROM read_parquet('{path.as_posix()}') ORDER BY date"
+    ).df()
+
+
+def write_liquidity_series(series_id: str, df: pd.DataFrame) -> None:
+    path = liquidity_series_path(series_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    out = df.sort_values("date").drop_duplicates(subset="date", keep="last")
+    out[["date", "value"]].to_parquet(path, index=False)
+
+
+def liquidity_series_age_seconds(series_id: str) -> float | None:
+    """Seconds since this series' cache file was last written, or None if it
+    has never been cached. FRED/DefiLlama publish at most daily, so
+    `fred_adapter`/`defillama_adapter` use this to skip a live re-fetch
+    (which re-downloads each series' FULL history, not just the tail) when
+    the cache is still within their TTL (Standing Rule 4: "cache by
+    default... only fetch the tail" — re-fetching everything on every
+    request is exactly what that rule exists to prevent).
+    """
+    path = liquidity_series_path(series_id)
+    if not path.exists():
+        return None
+    return time.time() - path.stat().st_mtime
+
+
+# --- RFC-002: confirmed leg boundaries (item 41/42 support) ----------------
+
+
+def confirmed_boundaries_path() -> Path:
+    return CACHE_ROOT / "legs" / "confirmed_boundaries.parquet"
+
+
+def write_confirmed_boundaries(df: pd.DataFrame) -> None:
+    path = confirmed_boundaries_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path, index=False)
+
+
+def read_confirmed_boundaries() -> pd.DataFrame:
+    path = confirmed_boundaries_path()
+    if not path.exists():
+        return pd.DataFrame()
+    return _connect().sql(f"SELECT * FROM read_parquet('{path.as_posix()}')").df()
+
+
+# --- RFC-003: narrative proxy series (pytrends/reddit/coingecko) ----------
+#
+# One file per (source, category_id) pair, full overwrite-per-refresh (like
+# the RFC-002 liquidity-series cache above, deduplicated on date) — these
+# are today's-snapshot proxy reads accumulated day by day into a durable
+# local history, not a once-per-day irrecoverable archive like LiqTide, so
+# there is nothing to lose by overwriting the combined series on every
+# write. Schema matches Database/Storage Schema's `cache/narrative/{source}/
+# {category}.parquet`: `date, raw_value, normalized_value, source_status`.
+
+NARRATIVE_COLUMNS = ["date", "raw_value", "normalized_value", "source_status"]
+
+
+def narrative_series_path(source: str, category_id: str) -> Path:
+    return CACHE_ROOT / "narrative" / source / f"{category_id}.parquet"
+
+
+def read_narrative_series(source: str, category_id: str) -> pd.DataFrame:
+    path = narrative_series_path(source, category_id)
+    if not path.exists():
+        return pd.DataFrame(columns=NARRATIVE_COLUMNS)
+    return _connect().sql(
+        f"SELECT * FROM read_parquet('{path.as_posix()}') ORDER BY date"
+    ).df()
+
+
+def write_narrative_point(source: str, category_id: str, date: str, raw_value: float, source_status: str = "fresh") -> None:
+    """Write (dedup-on-date) today's raw proxy value for (source,
+    category_id). A same-day re-fetch replaces, never double-counts.
+    """
+    path = narrative_series_path(source, category_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing = read_narrative_series(source, category_id)
+    new_row = pd.DataFrame([{
+        "date": date, "raw_value": raw_value, "normalized_value": None, "source_status": source_status,
+    }])
+    combined = pd.concat([existing, new_row], ignore_index=True) if not existing.empty else new_row
+    combined = combined.sort_values("date").drop_duplicates(subset="date", keep="last")
+    combined[NARRATIVE_COLUMNS].to_parquet(path, index=False)
+
+
+# --- RFC-003: CoinGecko trending snapshot (item 49) ------------------------
+#
+# Trending is a live "right now" snapshot, not a per-day archive the way
+# LiqTide is — cached under one fixed key, overwritten on every successful
+# fetch. Per-category counts derived from this snapshot are what actually
+# feed the narrative cache above (via write_narrative_point), not this
+# snapshot file itself.
+
+
+def trending_snapshot_path() -> Path:
+    return CACHE_ROOT / "narrative" / "coingecko_trending.parquet"
+
+
+def write_trending_snapshot(date: str, symbols: list[str]) -> None:
+    path = trending_snapshot_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame([{"date": date, "symbols": ",".join(symbols)}]).to_parquet(path, index=False)
+
+
+def read_trending_snapshot() -> tuple[str, list[str]] | None:
+    path = trending_snapshot_path()
+    if not path.exists():
+        return None
+    df = _connect().sql(f"SELECT * FROM read_parquet('{path.as_posix()}')").df()
+    if df.empty:
+        return None
+    row = df.iloc[0]
+    symbols = row["symbols"].split(",") if row["symbols"] else []
+    return row["date"], symbols
