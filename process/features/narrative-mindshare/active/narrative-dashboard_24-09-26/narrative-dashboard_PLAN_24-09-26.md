@@ -397,8 +397,13 @@ hyperliquid_narrative_adapter.py`, thin wrapper reusing `ccxt_adapter._exchange(
 category's aggregate 24h quote volume across its mapped coins ÷ total 24h quote volume across all
 tracked coins; new-listing count = coins present in today's Hyperliquid market list but absent from
 yesterday's daily snapshot, attributed to their mapped category (unmapped new listings recorded
-under an explicit "unmapped" bucket, never dropped). `redistributable=true` (Hyperliquid's public
-market data, no ToS restriction found at RFC-2 Stage 0 — confirm and record).
+under an explicit "unmapped" bucket, never dropped). **Day-1 / no-baseline behavior (E2)**: on the
+first run, there is no prior day's market-list snapshot to diff against — `new_listing_count` MUST
+be `null` with a distinct status/reason (e.g. `status: "unavailable"`, `reason: "no-baseline-yet"`),
+never a bare `0`. A real zero-diff and "nothing to compare against yet" are different facts, and the
+"numbers are never silently wrong" rule applies here exactly as it does to the three existing
+sources. `redistributable=true` (Hyperliquid's public market data, no ToS restriction found at
+RFC-2 Stage 0 — confirm and record).
 
 **Rationale**: the orchestrator's INNOVATE decision is explicit — wiring this into
 `compute_trigger` would change `/categories`' `source_availability`/`trust_weight` shape and risk
@@ -613,6 +618,10 @@ date, optional). Default: full history.
 
 (Numbers illustrative only.) `status` per series ∈ `ok | stale | unavailable | presumed-dead`;
 `points` never contains null/0 as a stand-in — a missing date is simply absent, `reason` names it.
+The exchange-proxy series' `new_listing_count` field is `null` (never `0`) on its first run with
+`status: "unavailable"` / `reason: "no-baseline-yet"` when no prior day's market-list snapshot
+exists yet to diff against (E2) — this is distinct from a genuine zero-diff day, which reports
+`new_listing_count: 0` with `status: "ok"`.
 Composite/comparison/change entries are `unavailable` for a category whose composite coverage is
 too thin (mirrors ADR-5's skipna-mean rule: a category with zero available sources for a date has
 no composite point for that date, not a zero). `start > end` or malformed date → 422.
@@ -677,11 +686,20 @@ existing `cache.py` narrative writer/reader needs no schema change.
 **Stage 0: Pre-Phase Research** (present and STOP)
 - Read `watchlist.read_watchlist()`'s real content; propose the widened `narrative_categories.json`
   seed list and `narrative_category_map.json` map for every currently-watchlisted coin.
+- **Hard gate (E1)**: if `read_watchlist()` returns an empty list, or `api/data/watchlist.json` is
+  absent on the machine running this Stage 0, STOP immediately — do not treat the empty/absent
+  result as "nothing to map." Ask the user directly for their current watchlist content, or defer
+  this entire Stage 0 to a session on the user's own machine. Do not propose a widened map or
+  category list from a fallback, default, or previously-seen watchlist.
 - Confirm `read_narrative_series`/`write_narrative_point`'s exact signature and dedup behavior
   (does a repeated write for the same date overwrite or skip? — confirm before RFC-2's backfill
   logic depends on it).
 - Surface **OQ-4** explicitly: which newly-mapped coins (beyond BTC/ETH/HYPE) would see their
   `/screener` `narrative_state` change, and get explicit user sign-off before implementing.
+- **Hard gate (E4)**: nothing beyond BTC/ETH/HYPE is written to `narrative_category_map.json` (or
+  any newly-widened `narrative_categories.json` entries) until the user has explicitly approved the
+  newly-mapped coin list and the resulting `/screener` `narrative_state` values shown for each. This
+  is a hard execute-agent gate, not an optional courtesy.
 
 **Stages**
 1. `api/data/narrative_category_map.json` — new curated map, approved content from Stage 0.
@@ -707,6 +725,8 @@ existing `cache.py` narrative writer/reader needs no schema change.
 - [ ] Manual test passed
 - [ ] Data in storage verified (query output pasted)
 - [ ] Error handling confirmed
+- [ ] Watchlist read confirmed non-empty (or user supplied watchlist directly / Stage 0 deferred to
+      user's own machine per E1 hard gate) — never proceeded on an empty/absent-watchlist result
 - [ ] User confirmed the widened map (and OQ-4 sign-off) before implementation
 
 **Acceptance Criteria**: AC-1, AC-8.
@@ -714,7 +734,11 @@ existing `cache.py` narrative writer/reader needs no schema change.
 **Ready For**: RFC-2.
 
 **Implementation Checklist**
+- [ ] E1 hard gate: watchlist confirmed non-empty/present before any proposal (STOP and ask user if
+      empty or absent — never guessed)
 - [ ] Stage 0 findings + OQ-4 presented; user approved
+- [ ] E4 hard gate: explicit user sign-off on newly-mapped coins beyond BTC/ETH/HYPE received before
+      `narrative_category_map.json` is written with any entry beyond BTC/ETH/HYPE
 - [ ] `narrative_category_map.json` + `load_category_map()` + tests
 - [ ] Contract snapshot test added and green
 - [ ] Full `pytest` green
@@ -734,14 +758,18 @@ Confirm `pytrends.interest_over_time()`'s real column/index shape. Present and S
 1. `hyperliquid_narrative_adapter.py`: typed result, never raises, `status: ok | unavailable`,
    `redistributable` recorded.
 2. `exchange_attention.py`: volume-share + new-listing diff (reads yesterday's snapshot from
-   `cache/narrative/exchange/`, diffs against today's).
+   `cache/narrative/exchange/`, diffs against today's). Day-1/no-baseline case (E2): when no prior
+   snapshot exists, return `new_listing_count=None` with `status="unavailable"`,
+   `reason="no-baseline-yet"` — never `0`.
 3. `backfill_pytrends_history.py`: fetch → per-date rows via `write_narrative_point(...,
    source_status="backfilled")`, skipping any date already forward-written.
 
 **Post-Phase Testing**
 - `api/tests/data/test_hyperliquid_narrative_adapter.py` — fixture parse, timeout → `unavailable`.
 - `api/tests/analytics/test_exchange_attention.py` — golden volume-share values; new-listing diff
-  on synthetic snapshots; unmapped new listing → explicit "unmapped" bucket, never dropped.
+  on synthetic snapshots; unmapped new listing → explicit "unmapped" bucket, never dropped; **day-1
+  case (E2)**: no prior snapshot present → `new_listing_count` is `None`/`status="unavailable"`/
+  `reason="no-baseline-yet"`, never `0`, and is distinguishable from a genuine zero-diff day.
 - `api/tests/scripts/test_backfill_pytrends_history.py` — synthetic payload → rows written;
   already-forward-written date is skipped, not overwritten.
 - Opt-in: `uv run --project api pytest api/ -m integration -k hyperliquid`.
@@ -787,6 +815,12 @@ change-in-attention window against Stage 0 review. Present and STOP.
 - [ ] Data verified (counts/shape match RFC-2 coverage)
 - [ ] Error handling confirmed
 - [ ] User confirmed working
+- [ ] **E3 risk-evidence-pack**: `GET /api/narrative/history` is a new public API surface
+      (High-Risk Execution Handoff class per `process/development-protocols/orchestration.md`).
+      Produce the manual-first `vc-risk-evidence-pack` artifacts (`risk-gate.json`,
+      `context-snippets.json`, `verification.json`, `review-decision.json`) inside this task
+      folder's `harness/` subdirectory before RFC-3 is treated as finalize-ready — this is a done
+      criterion for RFC-3, not optional cleanup.
 
 **Acceptance Criteria**: AC-2, AC-5, AC-6, AC-9, AC-10.
 **Ready For**: RFC-4 and RFC-5 (parallel).
@@ -818,6 +852,12 @@ change-in-attention window against Stage 0 review. Present and STOP.
 - [ ] Data verified (query output pasted)
 - [ ] Error handling confirmed (Reddit unset case)
 - [ ] User confirmed working (workflow file reviewed, one run triggered)
+- [ ] **E3 risk-evidence-pack**: `.github/workflows/narrative-snapshot.yml` is a new deploy/runtime
+      surface (scheduled job with `contents: write` pushing to `main` — High-Risk Execution Handoff
+      class). Produce the manual-first `vc-risk-evidence-pack` artifacts (`risk-gate.json`,
+      `context-snippets.json`, `verification.json`, `review-decision.json`) inside this task
+      folder's `harness/` subdirectory before RFC-4 is treated as finalize-ready — this is a done
+      criterion for RFC-4, not optional cleanup.
 
 **Acceptance Criteria**: AC-3.
 **Ready For**: RFC-6 (after RFC-5 also lands).
@@ -838,13 +878,16 @@ fetch-once/typed-fetcher pattern; confirm `format-unavailable-reason.ts`'s exten
    `DataQualityCaveat.tsx`.
 3. `NarrativeDashboard.tsx` (soft cap + expandable overflow list).
 4. `web/app/narrative/page.tsx`; link from `web/app/page.tsx`.
-5. `format-unavailable-reason.ts`: add `credentials-not-configured` case.
+5. `format-unavailable-reason.ts`: add `credentials-not-configured` case and a `no-baseline-yet`
+   case (E2 — exchange proxy's day-1 new-listing state, distinct plain-language copy from the
+   generic "unavailable" text, e.g. "not enough history yet to detect new listings").
 
 **Post-Phase Testing**
 - vitest under `web/components/narrative/__tests__/`: one panel per tracked category up to the
   soft cap; overflow list renders remaining categories on demand; caveat present on all three
   views; injected fetcher error → `DeadDataNotice`; `credentials-not-configured` renders its own
-  copy, not the generic "unavailable" text.
+  copy, not the generic "unavailable" text; **`no-baseline-yet` (E2) renders its own copy**, not a
+  bare `0` and not the generic "unavailable" text, for the exchange proxy's day-1 new-listing state.
 - Run: `pnpm --filter web test`.
 - Manual: open `http://localhost:3000/narrative`; confirm caveat visible on every view; confirm
   `NarrativeStrip.tsx` on `/screener` renders unchanged.
@@ -993,7 +1036,9 @@ global — no change needed).
 
 ## Public Contracts
 
-- **New**: `GET /api/narrative/history` (§11 shape); `NarrativeHistoryResult` Python dataclass;
+- **New**: `GET /api/narrative/history` (§11 shape, including the exchange-proxy series'
+  `new_listing_count: int | null` field — `null`/`status="unavailable"`/`reason="no-baseline-yet"`
+  on day one, never `0`, per E2); `NarrativeHistoryResult` Python dataclass;
   `hyperliquid_narrative_adapter.fetch_daily_market_snapshot()` typed result;
   `mapping.load_category_map()`.
 - **Extended, backward-compatible**: `api/data/narrative_categories.json` gains entries (additive);
@@ -1170,11 +1215,14 @@ What this coverage does NOT prove:
 - Playwright E2E: seeded synthetic fixture data only; real-data correctness rests entirely on the AC-12 user walkthrough.
 
 Gate: CONDITIONAL (concerns noted, folded into plan fixes + execute-agent instructions, no unresolved FAILs)
-Accepted by: session (autonomous, automatic-mode VALIDATE pass per user's "go") — accepted concerns:
-ADR-2 dedup-wording inaccuracy (fixed directly in this pass, see plan's ADR-2); E1 watchlist.json
-sandbox gap; E2 new-listing day-1 undefined state; E3 risk-evidence-pack requirement for the new
-public API + scheduled-workflow surfaces; E4 restated OQ-4 hard gate. No item blocks EXECUTE start
-on RFC-1 Stage 0 — E1 only blocks proceeding past Stage 0 if the real watchlist remains unavailable.
+Accepted by: Pending re-validate (PVL cycle 1) — NOT yet user-accepted. The 4 concerns below (E1-E4)
+have been folded directly into the RFC bodies (RFC-1 Stage 0 hard gates, RFC-2 day-1 new-listing
+model/tests/frontend copy, RFC-3/RFC-4 risk-evidence-pack done-criteria, RFC-1 OQ-4 hard gate) by
+this PVL-supplement pass, per the SUPPLEMENT REQUEST. Prior concerns for reference: ADR-2
+dedup-wording inaccuracy (fixed directly in the first VALIDATE pass, see plan's ADR-2); E1
+watchlist.json sandbox gap; E2 new-listing day-1 undefined state; E3 risk-evidence-pack requirement
+for the new public API + scheduled-workflow surfaces; E4 restated OQ-4 hard gate. Re-validate
+required before this contract is Accepted.
 
 
 
@@ -1186,7 +1234,7 @@ Charter + umbrella plan: N/A -- single plan (no umbrella/Stable Program Goal exi
 AUTONOMY RULES: Execute one RFC at a time in order RFC-1..RFC-6 (RFC-4/RFC-5 may run in parallel sessions once RFC-3 is VERIFIED). Each RFC: Stage 0 research -> present findings -> STOP for user approval -> implement -> run the RFC's test stage -> phase report in this task folder -> STOP for user confirmation. Follow Validate Contract execute-agent instructions E1-E4. Tests touching the real cache must use the isolated_cache fixture.
 HARD STOPS: any byte-level change to GET /api/narrative/categories or NarrativeStrip.tsx/confidence-badge behavior; wiring the exchange proxy into trigger.compute_trigger (ADR-6 forbids this); writing narrative_category_map.json beyond BTC/ETH/HYPE without explicit OQ-4 user sign-off (E4); any live network call to pytrends/Reddit/CoinGecko/Hyperliquid from a test; any API key or secret added; any failing test left red.
 TEST GATES: uv run --project api pytest api/ -q | pnpm --filter web test | cd web && pnpm test:e2e -- full commands and per-criterion mapping in this plan's Validate Contract Test gates table.
-VALIDATE CONTRACT: inline in this plan, ## Validate Contract section -- Gate: CONDITIONAL, accepted by session (automatic mode), 24-09-26.
+VALIDATE CONTRACT: inline in this plan, ## Validate Contract section -- Gate: CONDITIONAL, Pending re-validate (PVL cycle 1) -- not yet user-accepted, 24-09-26.
 Next phase: EXECUTE -- RFC-1 Stage 0 only (read the real watchlist per E1, propose widened category/map, surface OQ-4 for explicit sign-off, then STOP for approval before any implementation).
 EXECUTE START: ENTER EXECUTE MODE for RFC-1 Stage 0 of narrative-dashboard_PLAN_24-09-26.md
 Reference for latest state: process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/narrative-dashboard_PLAN_24-09-26.md
