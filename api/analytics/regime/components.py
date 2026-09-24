@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from api.data import cache, defillama_adapter, fred_adapter, liqtide_adapter
+from api.data import cache, defillama_adapter, etf_flows_adapter, fred_adapter, liqtide_adapter
 
 ETF_LAUNCH_DATE = pd.Timestamp("2024-01-11")
 AVAILABILITY_WEIGHT_THRESHOLD = 0.60  # same floor and rationale as liquidity_composite
@@ -79,7 +79,7 @@ COMPONENTS: tuple[ComponentSpec, ...] = (
     ),
     ComponentSpec(
         "etf_flows", "etf_flow_5d", "Spot-BTC ETF net flows (5-day sum)", 0.10, +1, 1e9, 5, 9, 5,
-        "daily (trading days)", "LiqTide `metrics.etf_flows` archive (Farside history: RFC-003)",
+        "daily (trading days)", "Farside `Total` column (US$m; personal use only), LiqTide `metrics.etf_flows` archive for dates Farside lacks",
         "sum of the last 5 daily net flows; contribution = tanh(Σ / $1bn)", "USD",
     ),
     ComponentSpec(
@@ -260,17 +260,39 @@ def _history(key: str, history: pd.DataFrame) -> pd.Series:
     return _clean(history[history["series_key"] == key][["date", "value"]])
 
 
-def build_etf_flows(history: pd.DataFrame) -> ComponentSeries:
+def farside_flows(result: etf_flows_adapter.EtfFlowsResult) -> pd.Series:
+    """Farside daily totals (US$m) -> USD Series on the component's date index."""
+    if result is None or result.df is None or result.df.empty:
+        return pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+    df = result.df.rename(columns={"net_flow_usd_m": "value"})
+    return _clean(df) * 1e6
+
+
+def build_etf_flows(history: pd.DataFrame, farside: etf_flows_adapter.EtfFlowsResult | None = None) -> ComponentSeries:
+    """5-day sum of daily net flows. Farside (RFC-003) is the primary daily
+    record; the LiqTide archive only fills dates Farside does not have."""
     spec = SPEC_BY_ID["etf_flows"]
-    flows = _history("etf_flows", history)
+    liqtide = _history("etf_flows", history)
+    primary = farside_flows(farside)
+    flows = pd.concat([primary, liqtide[~liqtide.index.isin(primary.index)]]).sort_index()
     flows = flows[flows.index >= ETF_LAUNCH_DATE]
     points = rolling_sum_component(spec, flows)
+    farside_status = farside.status if farside is not None else "unavailable"
+    farside_reason = (farside.reason if farside is not None else None) or "Farside adapter not queried"
     if points.empty:
-        status, reason = ("no_data", "fewer than 5 archived daily flows so far") if not flows.empty else (
-            "unavailable", "no ETF flow history archived yet (Farside backfill: RFC-003)")
+        if flows.empty:
+            status, reason = "unavailable", f"no ETF flow history: Farside {farside_status} ({farside_reason})"
+        else:
+            status, reason = "no_data", "fewer than 5 daily flows so far"
+    elif farside_status == "stale" and not primary.empty:
+        status, reason = "stale", farside_reason
     else:
         status, reason = "ok", None
     notes = [f"Not applicable before {ETF_LAUNCH_DATE.date()} (US spot-BTC ETFs launched that day)."]
+    if primary.empty:
+        notes.append(f"Farside {farside_status}: {farside_reason}; LiqTide archive only.")
+    else:
+        notes.append("Farside data is personal use only (not redistributable).")
     return ComponentSeries(spec, points, status, reason, notes)
 
 
@@ -376,7 +398,7 @@ def build_regime_components() -> RegimeComponentsResult:
         build_stablecoin_supply(),
         build_broad_dollar(),
         build_rrp_release(),
-        build_etf_flows(history),
+        build_etf_flows(history, etf_flows_adapter.fetch_btc_spot_flows()),
         build_btc_dominance(history),
     ]
     reproduced = build_reproduced(components)
