@@ -326,16 +326,22 @@ is organizational, not structural.
 
 **Decision**: `narrative_series_path`/`write_narrative_point`/`read_narrative_series` are reused
 as-is. The pytrends historical backfill writes rows with `source_status="backfilled"` (a plain
-string value in an existing, untyped column — no migration). Existing date-based dedup already
-prevents overwrite; the backfill script must never overwrite an already-archived (forward-written)
-point with a backfilled one — forward-written points always win on conflict.
+string value in an existing, untyped column — no migration). The backfill script must never
+overwrite an already-archived (forward-written) point with a backfilled one — forward-written
+points always win on conflict.
 
 **Rationale**: Standing Rule ("numbers are never silently wrong") plus "one source of numerical
 truth" — reusing the exact writer the backend already trusts avoids a second, drifting history path.
 
 **Implications**: `write_narrative_point`'s existing signature is unmodified; the backfill script
 calls it directly, checking `read_narrative_series` first to skip dates that already have a
-forward-written (non-backfilled) point.
+forward-written (non-backfilled) point. **VALIDATE correction (24-09-26):** `write_narrative_point`'s
+own dedup (`drop_duplicates(subset="date", keep="last")` after a non-stable `sort_values`) provides
+NO source-priority guarantee on its own — it does not know "forward" from "backfilled" and, for two
+rows sharing a date, which one survives is not reliably insertion-order-preserving. The
+forward-wins guarantee described above is enforced **entirely** by the backfill script's own
+read-before-write skip check, not by anything inside `write_narrative_point` itself. Do not treat
+the writer as safe to call unconditionally for a date that might already be archived.
 
 ### ADR-3: Nightly archive is a new, separate workflow
 
@@ -1072,4 +1078,116 @@ Reports for each RFC go in this same task folder as
 
 ## Validate Contract
 
-(placeholder — vc-validate-agent writes this section before EXECUTE)
+Status: CONDITIONAL
+Date: 24-09-26
+date: 2026-09-24
+generated-by: outer-pvl
+
+Parallel strategy: sequential
+Rationale: 6 RFCs with a mostly-linear dependency chain (RFC-4/RFC-5 are the only parallel pair,
+both gated behind RFC-3), one feature folder, no independent cross-package workstreams that need
+mid-run coordination — dominant signal is sequential dependency, same shape as the regime
+dashboard's own validate-contract, which this plan is structurally modelled on.
+
+Test gates (C3 5-column table):
+
+| criterion id | behavior | strategy | proving test | gap-resolution |
+|---|---|---|---|---|
+| AC-1 | `GET /api/narrative/categories` byte-identical for BTC/ETH/HYPE before/after | Fully-Automated | `api/tests/routers/test_narrative_categories_contract.py` | B |
+| AC-1 | `/screener` narrative strip/confidence badge unaffected | Hybrid | `pnpm --filter web test` (`NarrativeStrip.test.tsx`, `ConfidenceBadge.test.tsx`, both pre-existing, re-run unmodified) | B |
+| AC-2 | history chart built from archived points, not a single reading | Fully-Automated | `api/tests/analytics/test_history.py` (real cache round-trip) | B |
+| AC-3 | nightly workflow dry-run, no duplicate on same-day re-run, Reddit-unset path clean | Hybrid | `api/tests/scripts/test_snapshot_narrative.py` | B |
+| AC-3 | scheduled trigger actually fires on `narrative-snapshot.yml`'s cron | Agent-Probe | user checks archive after nightly runs (mirrors LiqTide AC-3 precedent) | A |
+| AC-4 | pytrends `interest_over_time()` backfill, golden rows, forward-write-wins dedup | Fully-Automated | `api/tests/scripts/test_backfill_pytrends_history.py` | B |
+| AC-5 | comparison view ranking on seeded fixture | Agent-Probe | vitest component probe + manual walkthrough | B |
+| AC-6 | change-in-attention view distinct from a level ranking | Agent-Probe | vitest component probe + manual walkthrough | B |
+| AC-7 | exchange proxy fails safely, explicit `unavailable` on fetch failure | Fully-Automated | `api/tests/data/test_hyperliquid_narrative_adapter.py`, `api/tests/analytics/test_exchange_attention.py` | B |
+| AC-8 | widened map coverage; unmapped coin still `None` | Fully-Automated | `api/tests/analytics/test_mapping.py` (extend) | B |
+| AC-9 | one source down never takes down the rest of the dashboard | Fully-Automated | `api/tests/routers/test_narrative_history.py` | B |
+| AC-10 | no raw cross-source level comparison; within-source normalisation boundary asserted | Fully-Automated | `api/tests/analytics/test_history.py`, `test_exchange_attention.py` | B |
+| AC-11 | data-quality caveat visible on every dashboard view | Agent-Probe | vitest `__tests__/*` + manual walkthrough | B |
+| AC-12 | real frontend/backend boundary proof on seeded fixture | Fully-Automated | `cd web && pnpm test:e2e` (`web/e2e/narrative.spec.ts`) | B |
+| AC-12 | real-cache user walkthrough against live providers | Agent-Probe | user, own machine (egress proxy blocks providers here — same as regime dashboard AC-11 precedent) | A |
+
+C-4 reconciliation: `strategy` values above are Fully-Automated / Hybrid / Agent-Probe only;
+Known-Gap is not used as a strategy anywhere in this table — every behavior above has a proving
+gate (gap-resolution B = fixed by this plan's own checklist; A = proven directly, Agent-Probe rows
+are proven by the user, not deferred).
+
+Failing stubs (Fully-Automated rows; replace during EXECUTE):
+
+```python
+def test_narrative_categories_contract_byte_identical(): raise NotImplementedError("TDD stub: GET /api/narrative/categories byte-identical for BTC/ETH/HYPE before/after")
+def test_history_accumulates_from_real_cache_round_trip(): raise NotImplementedError("TDD stub: history chart built from archived points via real cache.write_narrative_point/read_narrative_series round trip")
+def test_pytrends_backfill_golden_rows_and_forward_write_wins(): raise NotImplementedError("TDD stub: pytrends backfill golden rows; a date already forward-written is skipped, never overwritten")
+def test_hyperliquid_adapter_timeout_returns_unavailable(): raise NotImplementedError("TDD stub: hyperliquid_narrative_adapter fetch failure -> explicit unavailable, never a silent zero")
+def test_exchange_attention_volume_share_and_new_listing_diff(): raise NotImplementedError("TDD stub: golden volume-share values; new-listing diff on synthetic snapshots; unmapped listing -> explicit unmapped bucket")
+def test_mapping_widened_coverage_and_unmapped_none(): raise NotImplementedError("TDD stub: widened category map covers Stage 0 list; unmapped coin still returns None")
+def test_narrative_history_one_source_down_isolates_failure(): raise NotImplementedError("TDD stub: one source unavailable -> 200 with that series flagged, other series/composite unaffected")
+```
+
+```ts
+test("should render a caveat on every narrative dashboard view", () => { throw new Error("NOT IMPLEMENTED — TDD stub: data-quality caveat visible on history/comparison/change-in-attention views") });
+test("should show the real narrative frontend/backend boundary on a seeded fixture", () => { throw new Error("NOT IMPLEMENTED — TDD stub: web/e2e/narrative.spec.ts real request/response round trip") });
+```
+
+Legacy line form:
+- Contract snapshot: Fully-automated: `uv run --project api pytest api/tests/routers/test_narrative_categories_contract.py -q`
+- History/composite maths: Fully-automated: `uv run --project api pytest api/tests/analytics/test_history.py -q`
+- Exchange proxy: Fully-automated: `uv run --project api pytest api/tests/data/test_hyperliquid_narrative_adapter.py api/tests/analytics/test_exchange_attention.py -q`
+- Nightly workflow: hybrid: `uv run --project api pytest api/tests/scripts/test_snapshot_narrative.py -q` | agent-probe: archive check after nightly runs
+- Backfill: Fully-automated: `uv run --project api pytest api/tests/scripts/test_backfill_pytrends_history.py -q`
+- Full backend suite: Fully-automated: `uv run --project api pytest api/ -q`
+- Frontend: Fully-automated: `pnpm --filter web test` | Fully-automated: `cd web && pnpm test:e2e` | agent-probe: user walkthrough
+
+Dimension findings:
+- Infra fit: PASS — no container/infra/proxy surface touched; `GET /api/narrative/history` inherits the existing global `GZipMiddleware` for free (confirmed in `api/main.py`); the new nightly workflow mirrors `.github/workflows/liqtide-snapshot.yml`'s checkout/setup-uv/run/commit shape exactly, including `permissions: contents: write` — no new infra pattern introduced.
+- Test coverage: CONCERN — see Layer 2 RFC-1/RFC-2 findings below (E1, E2); AC-3/AC-12's live-provider portions are structurally Agent-Probe in this sandbox (egress proxy blocks Google Trends/Reddit/CoinGecko/Hyperliquid, confirmed by the regime dashboard's identical AC-11 precedent) — declared as such in the plan's own Verification Evidence table already, not a new gap.
+- Breaking changes: PASS — mechanically confirmed by reading `api/routers/narrative.py` and `api/analytics/narrative/trigger.py::assemble_narrative_categories` directly: the `/categories` code path never calls `mapping.py` at all (no per-coin lookup happens in that response), so widening `COIN_CATEGORY_MAP`/moving it to JSON cannot change `/categories`' shape or content by construction, independent of the contract snapshot test — the test is real (a byte-identical assertion for BTC/ETH/HYPE) and this mechanical fact makes it sufficient, not merely reassuring. `map_coin_to_category` only reaches `screener_board.py`'s per-coin `narrative_state` (OQ-4's own scope), confirming OQ-4 is correctly the only real risk surface and is already gated as a hard user sign-off at RFC-1 Stage 0.
+- Security surface: PASS — no new secret required to ship (Hyperliquid via keyless `ccxt_adapter._exchange()`; Reddit's two existing optional secrets unchanged); local bind (`127.0.0.1`) and CORS scope unchanged; new nightly workflow's `contents: write` permission mirrors the already-running `liqtide-snapshot.yml` exactly, not a new permission pattern.
+- RFC-1 feasibility: CONCERN — mechanically feasible (`api/tests/analytics/test_mapping.py` already exists to extend; `map_coin_to_category`'s contract is unchanged by the JSON swap). Gap: `api/data/watchlist.json` does not exist in this sandbox (gitignored, personal data) — RFC-1 Stage 0's "read the real watchlist" step cannot execute here; see E1.
+- RFC-2 feasibility: CONCERN — Hyperliquid `fetch_tickers()` volume-share approach mechanically CONFIRMED during this VALIDATE pass by reading the installed `ccxt` 4.5.78 package directly (not a live call, no `needs-live-provider` opt-in required): `ccxt.hyperliquid().has['fetchTickers'] is True`; `fetch_tickers(symbols=None)` returns all market tickers per its own docstring ("all market tickers are returned if not assigned"); `parse_ticker` maps Hyperliquid's `dayNtlVlm` field to the unified `quoteVolume` field per symbol — exactly what RFC-2's volume-share formula needs. RFC-2 Stage 0 can treat this as settled and does not need to re-derive it live; only the redistribution/ToS confirmation remains genuinely open there. Two real gaps found: (a) ADR-2's claim that "existing date-based dedup already prevents overwrite" is inaccurate — fixed directly in this VALIDATE pass, see Plan updates applied below; (b) the new-listing diff has no defined day-1 behavior (no prior snapshot to diff against) — see E2.
+- RFC-3 feasibility: PASS — `grid_dates`/`gap_before`/`max_gap_days` pattern is proven end-to-end on `/regime` already (`api/analytics/regime/components.py`, `components_response.py`); reusing the shape (not the code, per the RFC's own Stage 0 framing) is mechanically straightforward; `get_history` sharing only `load_seed_categories` with `get_categories` is grep-verifiable once written.
+- RFC-4 feasibility: PASS — `.gitignore`'s existing `api/data/cache/*` + `!api/data/cache/liqtide/` carve-out mechanic (confirmed by reading `.gitignore` directly, including its own inline comment explaining "parent must be excluded per-entry") extends cleanly to `!api/data/cache/narrative/`; nested `cache/narrative/exchange/` needs no separate negation, mirroring how `liqtide/`'s contents are already included with only the one parent-level negation line. Workflow file mechanically mirrors `liqtide-snapshot.yml` line for line.
+- RFC-5 feasibility: PASS — `RegimeDashboard.tsx`/`DeadDataNotice.tsx`/`format-unavailable-reason.ts` fetch-once and degraded-state patterns are proven and directly reusable; `format-unavailable-reason.ts`'s `switch` statement is a clean, low-risk extension point for the new `credentials-not-configured` case (mechanically confirmed by reading the file: one new `case` arm).
+- RFC-6 feasibility: PASS — `seed_e2e_cache.py`'s `_guard()` (refuses to run without an explicit, non-default `SCREENER_CACHE_ROOT`) and its `SCREENER_WATCHLIST_PATH` `{"coins": [...]}` shape (confirmed against `watchlist.py::_load_raw`'s actual parsing contract, directly addressing Standing Lesson #7) are real, reusable safety mechanisms — `build_narrative_fixture`/`seed_narrative` can follow the exact same shape.
+
+Execute-agent instructions:
+- E1: RFC-1 Stage 0 — if `api/data/watchlist.json` is absent on the machine running Stage 0 (confirmed absent in this VALIDATE sandbox; it is gitignored, personal data), do not silently treat `read_watchlist()`'s resulting empty list as "nothing to map." Stop and ask the user directly for their current watchlist content (or defer Stage 0 to a session on the user's own machine) before proposing the widened category/map list.
+- E2: RFC-2 `exchange_attention.py`'s new-listing diff has no prior day's market-list snapshot on its first run. Implement an explicit "no baseline yet" state for day one (e.g. `new_listing_count: null` with a distinct status/reason), never a bare `0` — a real zero-diff and "nothing to compare against yet" are different facts and the project's "numbers are never silently wrong" rule applies here exactly as it does to the three existing sources.
+- E3: this plan adds a new public API surface (`GET /api/narrative/history`) and a new deploy/runtime surface (`.github/workflows/narrative-snapshot.yml`, scheduled job with `contents: write` pushing to `main`) — both are High-Risk Execution Handoff classes (`process/development-protocols/orchestration.md`). Produce the manual-first evidence pack (`vc-risk-evidence-pack`: `risk-gate.json`, `context-snippets.json`, `verification.json`, `review-decision.json`) inside this task folder's `harness/` subdirectory before treating RFC-3/RFC-4 as finalize-ready. Auto-stop rule applies — do not report those RFCs DONE with the work implied fully proven until the pack exists.
+- E4: RFC-1 Stage 0's OQ-4 sign-off (which newly-mapped coins would see their `/screener` `narrative_state` change) must be presented and explicitly approved by the user before any map file beyond BTC/ETH/HYPE is written — this was already a plan requirement; restated here because it is a hard execute-agent gate, not an optional courtesy.
+
+Open gaps: none carried to backlog — all findings above are either mechanically resolved during this VALIDATE pass (RFC-2 ccxt feasibility, ADR-2 wording), folded into the plan as execute-agent instructions (E1-E4), or already correctly scoped as Agent-Probe/user-only in the plan's own Verification Evidence table (AC-3's cron-firing portion, AC-12's live-provider portion).
+
+What this coverage does NOT prove:
+- Contract snapshot test: not that `screener_board.py`'s per-coin `narrative_state` is unaffected by the widened map for newly-mapped coins beyond BTC/ETH/HYPE — that change is intended (OQ-4) and gated on explicit user sign-off, not proven "unchanged" by this gate.
+- History/composite tests: not that the composite/rank/delta maths matches any external ground truth — narrative attention has no authoritative source to check against; only internal consistency (skipna-mean coverage rule, normalisation boundary) is proven.
+- Nightly workflow hybrid test: not that GitHub Actions cron actually fires on schedule in production, and not that Reddit secrets (if the user later adds them) work end-to-end — only the unset-credentials path and no-duplicate-on-rerun behavior are proven.
+- Backfill test: not that `pytrends.interest_over_time()` still works at all (it is unofficial/archived since April 2025, per `pytrends_adapter.py`'s own module docstring) — only that IF it returns data, the rows are written correctly and forward-written dates are skipped.
+- Hyperliquid adapter/exchange-attention tests: not that Hyperliquid's real `fetch_tickers()` payload matches the fixture shape used in tests forever — only that the shape confirmed during this VALIDATE pass (read from the installed `ccxt` 4.5.78 source) is handled correctly today; an opt-in `integration`-marked test against the real exchange is the ongoing pin for this (per Standing Lesson #1).
+- vitest component/caveat tests: not real canvas rendering or real cross-panel behavior (jsdom).
+- Playwright E2E: seeded synthetic fixture data only; real-data correctness rests entirely on the AC-12 user walkthrough.
+
+Gate: CONDITIONAL (concerns noted, folded into plan fixes + execute-agent instructions, no unresolved FAILs)
+Accepted by: session (autonomous, automatic-mode VALIDATE pass per user's "go") — accepted concerns:
+ADR-2 dedup-wording inaccuracy (fixed directly in this pass, see plan's ADR-2); E1 watchlist.json
+sandbox gap; E2 new-listing day-1 undefined state; E3 risk-evidence-pack requirement for the new
+public API + scheduled-workflow surfaces; E4 restated OQ-4 hard gate. No item blocks EXECUTE start
+on RFC-1 Stage 0 — E1 only blocks proceeding past Stage 0 if the real watchlist remains unavailable.
+
+
+
+## Autonomous Goal Block
+
+```
+SESSION GOAL: Build /narrative per process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/narrative-dashboard_PLAN_24-09-26.md -- per-category attention history, comparison view, change-in-attention view, a display-only Hyperliquid volume/listing proxy, and a widened coin-to-category map, fed by a nightly forward-archive workflow, while GET /api/narrative/categories and /screener's narrative strip stay byte-identical.
+Charter + umbrella plan: N/A -- single plan (no umbrella/Stable Program Goal exists for narrative-mindshare)
+AUTONOMY RULES: Execute one RFC at a time in order RFC-1..RFC-6 (RFC-4/RFC-5 may run in parallel sessions once RFC-3 is VERIFIED). Each RFC: Stage 0 research -> present findings -> STOP for user approval -> implement -> run the RFC's test stage -> phase report in this task folder -> STOP for user confirmation. Follow Validate Contract execute-agent instructions E1-E4. Tests touching the real cache must use the isolated_cache fixture.
+HARD STOPS: any byte-level change to GET /api/narrative/categories or NarrativeStrip.tsx/confidence-badge behavior; wiring the exchange proxy into trigger.compute_trigger (ADR-6 forbids this); writing narrative_category_map.json beyond BTC/ETH/HYPE without explicit OQ-4 user sign-off (E4); any live network call to pytrends/Reddit/CoinGecko/Hyperliquid from a test; any API key or secret added; any failing test left red.
+TEST GATES: uv run --project api pytest api/ -q | pnpm --filter web test | cd web && pnpm test:e2e -- full commands and per-criterion mapping in this plan's Validate Contract Test gates table.
+VALIDATE CONTRACT: inline in this plan, ## Validate Contract section -- Gate: CONDITIONAL, accepted by session (automatic mode), 24-09-26.
+Next phase: EXECUTE -- RFC-1 Stage 0 only (read the real watchlist per E1, propose widened category/map, surface OQ-4 for explicit sign-off, then STOP for approval before any implementation).
+EXECUTE START: ENTER EXECUTE MODE for RFC-1 Stage 0 of narrative-dashboard_PLAN_24-09-26.md
+Reference for latest state: process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/narrative-dashboard_PLAN_24-09-26.md
+```
