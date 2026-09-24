@@ -1,0 +1,178 @@
+{
+  "legacy_only": {
+    "categories": [
+      {
+        "confirmed": false,
+        "id": "ai",
+        "keywords": [
+          "AI crypto",
+          "artificial intelligence crypto"
+        ],
+        "label": "AI",
+        "seed": true,
+        "source_availability": {
+          "coingecko": "ok",
+          "pytrends": "ok",
+          "reddit": "ok"
+        },
+        "triggered": true,
+        "trust_weight": 0.6
+      },
+      {
+        "confirmed": false,
+        "id": "rwa",
+        "keywords": [
+          "RWA crypto",
+          "tokenized real world assets"
+        ],
+        "label": "Real World Assets",
+        "seed": true,
+        "source_availability": {
+          "coingecko": "ok",
+          "pytrends": "ok",
+          "reddit": "ok"
+        },
+        "triggered": true,
+        "trust_weight": 0.6
+      },
+      {
+        "confirmed": false,
+        "id": "l2s",
+        "keywords": [
+          "layer 2 crypto",
+          "L2 rollup"
+        ],
+        "label": "L2s",
+        "seed": true,
+        "source_availability": {
+          "coingecko": "ok",
+          "pytrends": "ok",
+          "reddit": "ok"
+        },
+        "triggered": true,
+        "trust_weight": 0.6
+      },
+      {
+        "confirmed": false,
+        "id": "memecoins",
+        "keywords": [
+          "memecoin",
+          "meme coin crypto"
+        ],
+        "label": "Memecoins",
+        "seed": true,
+        "source_availability": {
+          "coingecko": "ok",
+          "pytrends": "ok",
+          "reddit": "ok"
+        },
+        "triggered": true,
+        "trust_weight": 0.6
+      }
+    ],
+    "coingecko_cache_as_of": {
+      "ai": 0.0,
+      "l2s": 2.0,
+      "memecoins": 0.0,
+      "rwa": 0.0
+    },
+    "screener_narrative_state": {
+      "ARB": "unmapped",
+      "BTC": "unavailable",
+      "DOGE": "unmapped",
+      "ETH": "in-focus",
+      "FET": "unmapped",
+      "HYPE": "in-focus",
+      "ONDO": "unmapped",
+      "SOMEUNMAPPED": "unmapped"
+    }
+  },
+  "with_newly_mapped": {
+    "categories": [
+      {
+        "confirmed": false,
+        "id": "ai",
+        "keywords": [
+          "AI crypto",
+          "artificial intelligence crypto"
+        ],
+        "label": "AI",
+        "seed": true,
+        "source_availability": {
+          "coingecko": "ok",
+          "pytrends": "ok",
+          "reddit": "ok"
+        },
+        "triggered": true,
+        "trust_weight": 0.6
+      },
+      {
+        "confirmed": false,
+        "id": "rwa",
+        "keywords": [
+          "RWA crypto",
+          "tokenized real world assets"
+        ],
+        "label": "Real World Assets",
+        "seed": true,
+        "source_availability": {
+          "coingecko": "ok",
+          "pytrends": "ok",
+          "reddit": "ok"
+        },
+        "triggered": true,
+        "trust_weight": 0.6
+      },
+      {
+        "confirmed": false,
+        "id": "l2s",
+        "keywords": [
+          "layer 2 crypto",
+          "L2 rollup"
+        ],
+        "label": "L2s",
+        "seed": true,
+        "source_availability": {
+          "coingecko": "ok",
+          "pytrends": "ok",
+          "reddit": "ok"
+        },
+        "triggered": true,
+        "trust_weight": 0.6
+      },
+      {
+        "confirmed": false,
+        "id": "memecoins",
+        "keywords": [
+          "memecoin",
+          "meme coin crypto"
+        ],
+        "label": "Memecoins",
+        "seed": true,
+        "source_availability": {
+          "coingecko": "ok",
+          "pytrends": "ok",
+          "reddit": "ok"
+        },
+        "triggered": true,
+        "trust_weight": 0.6
+      }
+    ],
+    "coingecko_cache_as_of": {
+      "ai": 0.0,
+      "l2s": 2.0,
+      "memecoins": 0.0,
+      "rwa": 0.0
+    },
+    "screener_narrative_state": {
+      "ARB": "unmapped",
+      "BTC": "unavailable",
+      "DOGE": "unmapped",
+      "ETH": "in-focus",
+      "FET": "unmapped",
+      "HYPE": "in-focus",
+      "ONDO": "unmapped",
+      "SOMEUNMAPPED": "unmapped"
+    }
+  }
+}

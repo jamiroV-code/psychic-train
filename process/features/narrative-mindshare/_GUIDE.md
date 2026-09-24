@@ -22,6 +22,15 @@ Target locations once work begins:
 
 ## Notes
 
+**How to edit the narrative map (added 2026-09-24, narrative-dashboard RFC-1):**
+- Edit `api/data/narrative_category_map.json` → `"map"`. Keys are UPPERCASE tickers; values are a
+  seed category id from `api/data/narrative_categories.json` (`ai`, `rwa`, `l2s`, `memecoins`).
+- No code change or restart: the API re-reads the file when its modification time changes.
+- Bad entries (lowercase symbol, unknown category) are skipped with a logged warning; the rest load.
+- This map drives only `/api/narrative/history` and `/narrative` (coins not in the legacy map show as
+  "narrative-only"). `/api/narrative/categories` and `/screener` stay on the frozen legacy
+  BTC/ETH/HYPE map in `api/analytics/narrative/mapping.py` (option B) — do not edit that to widen coverage.
+
 Scoped 2026-09-17 to **free proxies only, explicitly labelled**: Google Trends via the unofficial
 `pytrends`, the Reddit API free tier, CoinGecko trending endpoints, and exchange volume /
 new-listing activity as an attention proxy. No paid vendor until the signal demonstrably changes a
