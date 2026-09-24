@@ -11,7 +11,11 @@ feature: narrative-mindshare
 
 **Date**: 24-09-26
 **Complexity**: Complex (standard complex — one authoritative plan, 6 sequential/semi-parallel RFCs)
-**Status**: ⏳ PLANNED — no RFC started
+**Status**: 🔨 CODE DONE — all 6 RFCs implemented, EVL-confirmed, committed and pushed
+  (branch `claude/kind-tesla-tat3vo`, HEAD `7ef8eb3`). Not ✅ VERIFIED: AC-3 (cron firing),
+  AC-12 (real-cache walkthrough), and two manual-first risk-pack review decisions
+  (`harness/review-decision.json`, `harness/rfc-004/review-decision.json`) are pending on the
+  user's own machine — see the amended Resume and Execution Handoff below. Plan stays in `active/`.
 **Feature folder**: `process/features/narrative-mindshare/`
 **Owner**: Jamiro (user) · executor: vc harness agents
 
@@ -58,12 +62,12 @@ behavior by even one byte. Every RFC below is designed around that constraint fi
 
 | RFC | Title | Status |
 |---|---|---|
-| RFC-1 | Data foundation: category map JSON + history read/write | ⏳ PLANNED |
-| RFC-2 | Exchange (Hyperliquid) adapter + pytrends historical backfill script | ⏳ PLANNED — depends on RFC-1 |
-| RFC-3 | `GET /api/narrative/history` endpoint + comparison/change maths | ⏳ PLANNED — depends on RFC-1, RFC-2 |
-| RFC-4 | Nightly forward-archive workflow | ⏳ PLANNED — depends on RFC-3; **can run in parallel with RFC-5** |
-| RFC-5 | `/narrative` page — history charts, comparison, change-in-attention, caveat | ⏳ PLANNED — depends on RFC-3; **can run in parallel with RFC-4** |
-| RFC-6 | End-to-end proof + AC-12 real-cache handoff | ⏳ PLANNED — depends on RFC-4 and RFC-5 |
+| RFC-1 | Data foundation: category map JSON + history read/write | 🔨 CODE DONE — EVL-confirmed 24-09-26 (option B: curated JSON drives only `/history`/`/narrative`; legacy 3-coin map frozen for `/categories`/`/screener`) |
+| RFC-2 | Exchange (Hyperliquid) adapter + pytrends historical backfill script | 🔨 CODE DONE — EVL-confirmed 24-09-26 (redistributable=False pending Hyperliquid terms check; real Hyperliquid/pytrends run is a user-PC step) |
+| RFC-3 | `GET /api/narrative/history` endpoint + comparison/change maths | 🔨 CODE DONE — EVL-confirmed 24-09-26 (`harness/review-decision.json` PENDING user) |
+| RFC-4 | Nightly forward-archive workflow | 🔨 CODE DONE — EVL-confirmed 24-09-26 (`harness/rfc-004/review-decision.json` PENDING user; first `workflow_dispatch` + AC-3 cron confirmation are user-PC steps after merge to `main`) |
+| RFC-5 | `/narrative` page — history charts, comparison, change-in-attention, caveat | 🔨 CODE DONE — EVL-confirmed 24-09-26 |
+| RFC-6 | End-to-end proof + AC-12 real-cache handoff | 🔨 CODE DONE — EVL-confirmed 24-09-26 (26/26 Playwright x2; found and fixed a real day-2 HTTP 500 in `/history`, see Post-EXECUTE Amendments). AC-12's live-provider portion is a user-PC step. |
 
 ---
 
@@ -660,8 +664,21 @@ Local only for the app. New scheduled workflow (repo-hosted, no user action beyo
 
 ### Current Status
 
-All RFCs ⏳ PLANNED. Nothing in `process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/`
-has started implementation.
+**Amended by UPDATE PROCESS, 24-09-26.** All 6 RFCs are code-complete, EVL-confirmed, and
+committed/pushed to branch `claude/kind-tesla-tat3vo` (HEAD `7ef8eb3`, 58 files changed,
++5536/-4). Final gate counts: `pytest api/ -q` 392 passed / 3 deselected; `pnpm --filter web test`
+110 passed (16 files); `tsc --noEmit` exit 0; `cd web && pnpm test:e2e` 26/26 passed, run twice
+(14 new `narrative.spec.ts` + 6 `regime.spec.ts` + 6 `screener.spec.ts`). `git diff` on
+`trigger.py`/`screener_board.py`/`NarrativeStrip.tsx`/`liqtide-snapshot.yml` is empty — AC-1
+byte-compatibility and workflow isolation both hold.
+
+Not yet done: two manual-first risk-pack review decisions are `PENDING`
+(`harness/review-decision.json` for RFC-3's new public API surface,
+`harness/rfc-004/review-decision.json` for RFC-4's new `contents: write` scheduled workflow), and
+AC-3 (cron actually firing) / AC-12 (real-cache walkthrough) require the user's own machine — this
+container's egress proxy blocks Google Trends, Reddit, CoinGecko and Hyperliquid with a 403/timeout
+(same constraint as the regime dashboard's AC-11 precedent). The plan stays in `active/` until
+those land — see the amended Resume and Execution Handoff below for the exact checklist.
 
 Each RFC below carries: Summary, Dependencies, Stage 0, Stages, Post-Phase Testing, Verification
 Checklist, Acceptance Criteria, What's Functional Now, Ready For, Implementation Checklist.
@@ -1110,19 +1127,53 @@ Commands and runners per `process/context/tests/all-tests.md`:
 
 ## Resume and Execution Handoff
 
+**Amended by UPDATE PROCESS, 24-09-26 — supersedes the paragraph below, kept for history.**
+
 1. **Selected plan file**: `process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/narrative-dashboard_PLAN_24-09-26.md`
-2. **Last completed phase or step**: PLAN complete 24-09-26; VALIDATE not yet run; no RFC started.
-3. **Validate-contract status**: PASS — `## Validate Contract` written below (PVL cycle 1
-   re-validate, 24-09-26).
-4. **Supporting context files loaded**: `process/context/all-context.md`,
+2. **Last completed phase or step**: all 6 RFCs implemented and EVL-confirmed 24-09-26; committed
+   and pushed (branch `claude/kind-tesla-tat3vo`, HEAD `7ef8eb3`). Plan/SPEC/context reconciliation
+   done this UPDATE PROCESS pass; plan stays in `active/` pending the user-PC steps below.
+3. **Validate-contract status**: PASS (unchanged — `## Validate Contract` below, PVL cycle 1
+   re-validate, 24-09-26). No re-validate was needed during EXECUTE.
+4. **Supporting context files loaded this pass**: `process/context/all-context.md`,
    `process/context/data-sources/all-data-sources.md`, `process/context/tests/all-tests.md`,
-   `process/context/planning/all-planning.md`, `process/features/narrative-mindshare/_GUIDE.md`,
-   the narrative-dashboard SPEC in this same task folder, the regime dashboard PLAN as structural
-   precedent, plus every source file named under §1 Context and Goals.
-5. **Next step for a fresh agent**: `ENTER EXECUTE MODE` for **RFC-1 Stage 0 only** (read the real
-   watchlist, propose the widened category/map, surface OQ-4 for explicit sign-off — including the
-   seed-category exposure list per the PVL cycle 1 correction below — then STOP for approval before
-   any implementation).
+   `process/features/narrative-mindshare/_GUIDE.md`, this SPEC, all 6
+   `narrative-dashboard_RFC-00N_REPORT_24-09-26.md` files, the two `*-stage0_REPORT_*.md` files that
+   have one, `narrative-dashboard-pvl-iteration-001_REPORT_24-09-26.md`,
+   `narrative-dashboard-evl-iteration-001_REPORT_24-09-26.md`, and `results.tsv`.
+5. **Next step for a fresh agent (user-PC checklist, exact commands from the RFC-6 report)**:
+   1. Merge/push the branch to `main`; confirm GitHub Settings → Actions → General has Actions
+      enabled and Workflow permissions = Read and write.
+   2. **AC-3**: `gh workflow run narrative-snapshot.yml --ref main` then `gh run watch` (or the
+      Actions tab → "narrative-snapshot" → Run workflow). Expect exit 0 (or exit 2 with a warning)
+      and a bot commit touching only `api/data/cache/narrative/`. The next day after 23:00 UTC,
+      confirm a second bot commit, then `git pull` and
+      `uv run --project api python -m api.scripts.snapshot_narrative --verify-only`.
+   3. Local sanity: `uv run --project api --with pytrends python -m api.scripts.snapshot_narrative --dry-run`,
+      then the same command without `--dry-run` run twice (second run skips everything), then
+      `--verify-only`.
+   4. Hyperliquid integration test: `uv run --project api pytest api/tests/data/test_hyperliquid_narrative_adapter.py -m integration -q`.
+   5. **AC-4 pytrends backfill**: `uv run --project api --with pytrends python api/scripts/backfill_pytrends_history.py --dry-run`,
+      review, then run again without `--dry-run`.
+   6. **Hyperliquid terms check**: read Hyperliquid's ToU/API docs on redistributing market data. If
+      they allow it, set `HYPERLIQUID_REDISTRIBUTABLE = True` in `api/data/hyperliquid_narrative_adapter.py`
+      and re-run `uv run --project api pytest api/ -q`; otherwise leave it `False`.
+   7. **AC-12 real-cache walkthrough**: `uv run --project api uvicorn api.main:app --host 127.0.0.1 --port 8000`
+      and `pnpm --filter web dev`; open `http://localhost:3000/narrative` and confirm the caveat on
+      every view, growing per-category charts, dashed backfill lines with orange mixed-scale dots,
+      comparison/change tables with "—" + reason where missing, Reddit showing "no archived data"
+      (unless secrets + the workflow `env:` edit are added), Hyperliquid volume/new-listing text, and
+      the personal-use badges; then open `http://localhost:3000/screener` and confirm the narrative
+      strip is unchanged.
+   8. **Two review decisions** (manual-first risk packs — set `"decision"` to `approved`,
+      `approved-with-concerns`, or `rejected`, with rationale + timestamp):
+      `harness/review-decision.json` (RFC-3, `/history` public API) and
+      `harness/rfc-004/review-decision.json` (RFC-4 workflow: `contents: write`, pushes to `main`,
+      no secrets). Both are `PENDING` with `mustStopBeforeFinalize: true`.
+   9. Optional: Reddit history from day one needs BOTH the `REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET`
+      repo secrets AND a two-line `env:` mapping added to `narrative-snapshot.yml` — the workflow
+      deliberately maps no secrets today, so adding the secrets alone does nothing (RFC-4 finding).
+   Once all of the above are done, re-enter UPDATE PROCESS to archive this plan to `completed/`.
 
 **Open Questions carried from SPEC, plus one new question raised during PLAN:**
 - **OQ-1** (category/coin-map scope) — resolved procedurally: RFC-1 Stage 0 reads the real
@@ -1152,7 +1203,8 @@ Commands and runners per `process/context/tests/all-tests.md`:
   vacuously on a fixture that happens to omit the newly-mapped coins.
 
 Reports for each RFC go in this same task folder as
-`narrative-dashboard_24-09-26-RFC-N-phase-report.md`.
+`narrative-dashboard_RFC-00N_REPORT_24-09-26.md` (the actual naming used; corrects the
+`narrative-dashboard_24-09-26-RFC-N-phase-report.md` form written above during PLAN).
 
 ## Validate Contract
 
@@ -1291,3 +1343,134 @@ Next phase: EXECUTE -- RFC-1 Stage 0 only (read the real watchlist per E1, propo
 EXECUTE START: ENTER EXECUTE MODE for RFC-1 Stage 0 of narrative-dashboard_PLAN_24-09-26.md
 Reference for latest state: process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/narrative-dashboard_PLAN_24-09-26.md
 ```
+
+(Historical — EXECUTE is now complete for all 6 RFCs; see §Current Status and the amended Resume
+and Execution Handoff above for the live state.)
+
+---
+
+## Post-EXECUTE Amendments (UPDATE PROCESS, 24-09-26)
+
+All 6 RFCs shipped with real, user-approved deviations from this plan's original text. This
+section is the durable record; the numbered sections above (ADRs, §11, §12b, §19) are left as
+originally written for history and corrected here rather than silently rewritten in place.
+
+**AC-1 / OQ-4 resolution (RFC-1, user decision "option B"):** AC-1 stayed strict, but the
+mechanism differs from ADR-7's original design. `mapping.py::map_coin_to_category` (the function
+`trigger.py`/`screener_board.py` actually call) stays on the **frozen legacy 3-coin map**
+(`LEGACY_COIN_CATEGORY_MAP`, unchanged) — `/categories` and `/screener` are proven byte-identical
+against a pre-change snapshot, including a scenario where a newly-mapped coin appears in the
+mocked CoinGecko-trending fixture. The new curated JSON (`narrative_category_map.json`, 32
+entries: l2s 9, ai 7, rwa 7, memecoins 8, plus grandfathered BTC→store-of-value) drives a
+**separate, new function**, `mapping.map_coin_to_narrative_category(symbol) -> (category_id |
+None, narrative_only)`, used only by `/history` and `/narrative`. Coins present only in the new
+map show a `narrative_only` label. E1's gate resolved to option 3 (a curated well-known-coin list
+per seed category, not literally sized against the real watchlist — the user approved the proposed
+32-coin list as-is, with the explicit ask that it stay editable; the `_GUIDE.md` "How to edit the
+narrative map" note documents this). OQ-1 resolved: seed categories stayed the existing 4 (ai, rwa,
+l2s, memecoins) — no new seed categories were added. OQ-2 resolved: Hyperliquid via the existing
+`ccxt_adapter._exchange()` singleton (ADR-6's direction), formula below. OQ-3 resolved: ADR-8's
+original "archive an explicit `unavailable`/`credentials-not-configured` row" design was replaced
+during RFC-4 (see below) by "write no row at all" — the display reason correspondingly differs.
+
+**ADR-2 (history reuse) — confirmed as written**, no further correction beyond the one already
+inline (forward-wins is enforced by the backfill script's read-before-write skip, not by
+`write_narrative_point`'s own dedup).
+
+**ADR-6 (exchange proxy) corrections (RFC-2):**
+- **Denominator (D1):** not "all tracked coins" as ADR-6 said — the volume-share denominator is
+  all active, non-HIP-3 Hyperliquid perps, plus an explicit `unmapped` bucket that is part of the
+  total (shares sum to 1).
+- **`redistributable` (D4):** `False`, not `true` as ADR-6 assumed — Hyperliquid's terms were never
+  confirmed at RFC-2 Stage 0 (container egress blocked the check). `HYPERLIQUID_REDISTRIBUTABLE` in
+  `api/data/hyperliquid_narrative_adapter.py` is a single constant; flip it to `True` only after the
+  user reads Hyperliquid's ToU/API docs (user-PC step 6 in the Resume and Execution Handoff).
+- **Symbol resolution:** ccxt upper-cases the `k`-prefixed base for meme perps (e.g. `kPEPE` →
+  `KPEPE`); the resolver in `exchange_attention.py` handles `base == SYM` or `baseName ==
+  "k"+SYM`. `ccxt_adapter.resolve_market_symbol` itself was not touched — out of RFC-2's scope.
+- **New-listing diff (D3):** append-only market-snapshot JSON (`cache/narrative/exchange/markets/{date}.json`)
+  plus a `baseline_date` field recording which prior day a diff was taken against. RFC-2's known
+  gap, not fixed: if Hyperliquid is unavailable on the first attempt of a day, `run_daily`'s
+  append-only write still records that day as `unavailable`; a later same-day successful retry
+  stays `unavailable` (first-observation-wins). Flagged as a follow-up stub, not fixed this program.
+- **Real verification unrun:** no live Hyperliquid payload and no real pytrends run have happened
+  (container proxy blocks both); user-PC steps 3-5 in the Resume and Execution Handoff.
+
+**ADR-7 title/scope correction:** "Coin-to-category map moves to curated JSON, sized against the
+real watchlist" is only half true after option B — see the AC-1/OQ-4 resolution above. The curated
+JSON does NOT replace `COIN_CATEGORY_MAP`'s lookup contract for `/categories`/`/screener` (that
+map is frozen); it feeds a new, parallel lookup path used only by `/history`/`/narrative`.
+
+**§11 API Surface — actual shape differs from the plan's flat `series[]` sketch (RFC-3):** the real
+`GET /api/narrative/history` response is **category-first**, not the flat per-series list shown in
+§11's illustrative JSON. Each category carries `variant`, `in_composite`, `mixed_scale`,
+`coverage`, `sources_present`, `redistributable_all`, and a `coins` list (narrative-only flagging).
+`trust_weight` is per composite point, not per source. Ranking happens only at `as_of` (latest
+composite date ≤ `end`), scoped to the requested categories — no per-date rank history. An extra
+composite slot, `coingecko-narrative`, sits alongside `pytrends`/`reddit`/`exchange_volume_share`;
+the **legacy CoinGecko-trending count is shown for reference (labelled "CoinGecko trending
+(legacy-map count)") but excluded from the composite** — user decision D1(a), RFC-3. `pytrends` has
+two separate variants, `nightly-7d` and `backfill-269d`, each normalised on its own; a composite
+point using a `backfill-269d` value (or a change figure spanning one) is flagged `mixed_scale`
+because the two variants are on different Google-Trends request scales and are not directly
+comparable (RFC-2's Forward Preview note, applied in RFC-3 as D2(a)). `redistributable` is `False`
+for every source pending Hyperliquid's terms check.
+
+**§12b Storage Schema — corrected (RFC-2, RFC-3):**
+
+| Path | Columns | Write mode | Note |
+|---|---|---|---|
+| existing `cache/narrative/{source}/{category}.parquet` | `date, raw_value, normalized_value, source_status` | unchanged | **Keying correction:** `pytrends` and `reddit` are keyed by **keyword** (`source, keywords[0]`, e.g. `pytrends/AI crypto.parquet`), not by category id as the plan assumed (`pytrends/ai.parquet`) — this is how the pre-existing forward writers (`pytrends_adapter.py`, `reddit_adapter.py`) already worked; RFC-2's backfill and RFC-3/RFC-4's readers/writers all key the same way. `coingecko` (legacy) and the new `coingecko-narrative` are keyed by category id. |
+| `cache/narrative/exchange/{category}.parquet` (RFC-2, actual columns) | `date, volume_share, volume_status, volume_reason, new_listing_count, listing_status, listing_reason, baseline_date` | append-only, forward-written, never rewrites an existing date | Volume and listing have separate statuses/reasons because day 1 has a valid volume share but no listing baseline (E2) |
+| `cache/narrative/exchange/markets/{date}.json` (new, not in original §12b) | full daily market-list snapshot | append-only, never overwritten | Used by the new-listing diff to compare against the prior day |
+| `cache/narrative/coingecko-narrative/{category}.parquet` (new, not in original §12b) | `date, raw_value, normalized_value, source_status` | written by RFC-4's nightly script via `map_coin_to_narrative_category` counts | Composite slot; excluded from the legacy `/categories` trigger path |
+
+**Reddit "no-archived-data" — corrects ADR-8 (RFC-4, RFC-6):** ADR-8 originally said the nightly
+job would archive an explicit `source_status="unavailable"` row with reason
+`credentials-not-configured` when Reddit creds are unset. The actual RFC-4 implementation (C1) is
+stricter: **no row is written at all** for Reddit when `REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET`
+are unset — the script prints a `reddit: unavailable (credentials-not-configured)` summary line to
+the job log only. Because no row exists, `/history` and `/narrative` show Reddit's absence as
+**`no-archived-data`**, not `credentials-not-configured` (RFC-6's e2e spec and vitest assert
+`no-archived-data`; `format-unavailable-reason.ts` carries both reason strings — one for a fetch
+that ran and failed, one for a fetch that never ran).
+
+**§19 Ops Runbook corrections (RFC-2, RFC-4):**
+- pytrends is **not** a project dependency — every pytrends command needs `--with pytrends`:
+  `uv run --project api --with pytrends python api/scripts/backfill_pytrends_history.py [--dry-run]`
+  and `uv run --project api --with pytrends python -m api.scripts.snapshot_narrative [--dry-run]`.
+  The plan's original Ops Runbook line omitted `--with pytrends`.
+- **Optional Reddit history from day one needs two changes, not one.** Adding the
+  `REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET` GitHub Actions secrets is not sufficient by itself — the
+  workflow (`narrative-snapshot.yml`) deliberately maps zero secrets into the job's `env`, so a
+  second, manual two-line `env:` edit to the workflow file is also required. The original Ops
+  Runbook line implied the secrets alone were enough.
+- The nightly workflow's cron is `0 23 * * *` (not the `15 23 * * *` placeholder the plan's RFC-4
+  Stage description suggested), 30 minutes ahead of LiqTide's `30 23 * * *`, with its own
+  `concurrency: narrative-snapshot` group (not shared with LiqTide's).
+
+**Known bug queued as a separate follow-up (RFC-3, not fixed in this program):**
+`trigger.py::compute_narrative_categories` (line 206) reads
+`cache.read_narrative_series(source, category_id)` for pytrends/reddit/coingecko — i.e. by
+**category id**, not by the keyword key those adapters actually write under (see the §12b keying
+correction above). Effect: `/categories`' own trigger never reads the archived pytrends/reddit
+history back — it effectively runs on CoinGecko alone. This predates this program (RFC-003 of
+momentum-screener) and was found, not caused, here. Fixing it would change `/categories`' output,
+so it requires its own deliberate AC-1 contract re-baseline and user sign-off — explicitly **not**
+folded into this program. Backlog note owner: orchestrator, to queue as a separate plan.
+
+**D1 product fix inside RFC-3's blast radius (RFC-6):** `api/analytics/narrative/history.py`'s
+`_exchange_frames` built columns from Python `str`/`None` lists; current pandas infers a
+NaN-backed `StringDtype` for such a list, turning `None` into `NaN`, which
+`NarrativeHistoryPoint.reason: str | None` then rejected — a 500 on `/history` as soon as one
+exchange series holds a day with a listing reason and a day without (i.e. from day 2 of the nightly
+archive onward). Fixed by building those columns as `pd.Series(..., dtype=object)` instead, which
+preserves `None`. Caught by RFC-6's `web/e2e/narrative.spec.ts` (a real defect no earlier layer's
+coverage could reach — vitest uses injected fixtures, RFC-3's own tests used single-row/all-None
+reasons); a regression test now pins it. See `process/context/tests/all-tests.md` for the
+generalized Standing Lesson entry.
+
+**Verification Evidence table — additions, not replacements:** every row in the plan's original
+table still holds; add that RFC-6's e2e run is the actual AC-12 (E2E portion) proof, at 26/26 x2,
+and that it is what found and fixed the D1 defect above — a concrete instance of this project's
+"green does not mean verified" Standing Lesson, closed the same session it was found.
