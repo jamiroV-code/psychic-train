@@ -430,7 +430,17 @@ proof mechanical (a snapshot test of the three existing keys).
 
 **Implications**: see Open Question **OQ-4** below — this decision widens map coverage but does
 **not** decide whether newly-mapped coins' screener badges are allowed to change; that is
-explicitly surfaced, not silently accepted.
+explicitly surfaced, not silently accepted. **VALIDATE correction (PVL cycle 1, 24-09-26):**
+`map_coin_to_category` is not only reached via `screener_board.py`. `trigger.py::compute_narrative_categories`
+— the function that directly backs `GET /api/narrative/categories` — also calls
+`mapping.map_coin_to_category(symbol)` inside its CoinGecko trending-count loop (one call per
+trending symbol, per seed category, to compute that category's `trending_count`, which is archived
+and feeds `compute_trigger`'s composite/triggered/confirmed/trust_weight for that category). Today
+only `l2s` (via `ETH`/`HYPE`) has a seed-category member; widening the map into `l2s` — or into any
+other seed category once it gains a member — can change that category's `trending_count` on any day
+a newly-mapped coin appears in CoinGecko's live trending list, which changes `/categories`' own
+response, not just `screener_board.py`'s `narrative_state`. OQ-4's sign-off scope is corrected below
+to cover this.
 
 ### ADR-8: Reddit in the nightly job degrades honestly, with a distinct reason
 
@@ -695,11 +705,15 @@ existing `cache.py` narrative writer/reader needs no schema change.
   (does a repeated write for the same date overwrite or skip? — confirm before RFC-2's backfill
   logic depends on it).
 - Surface **OQ-4** explicitly: which newly-mapped coins (beyond BTC/ETH/HYPE) would see their
-  `/screener` `narrative_state` change, and get explicit user sign-off before implementing.
+  `/screener` `narrative_state` change, AND which seed categories (currently only `l2s`) would gain
+  a member coin and could therefore see `GET /api/narrative/categories`' own
+  `trending_count`/composite/triggered/confirmed/trust_weight shift on a day that coin appears in
+  CoinGecko's live trending list — get explicit user sign-off on both before implementing.
 - **Hard gate (E4)**: nothing beyond BTC/ETH/HYPE is written to `narrative_category_map.json` (or
   any newly-widened `narrative_categories.json` entries) until the user has explicitly approved the
-  newly-mapped coin list and the resulting `/screener` `narrative_state` values shown for each. This
-  is a hard execute-agent gate, not an optional courtesy.
+  newly-mapped coin list, the resulting `/screener` `narrative_state` values shown for each, AND the
+  list of seed categories (by id) that gain a member coin as a result. This is a hard execute-agent
+  gate, not an optional courtesy.
 
 **Stages**
 1. `api/data/narrative_category_map.json` — new curated map, approved content from Stage 0.
@@ -707,14 +721,20 @@ existing `cache.py` narrative writer/reader needs no schema change.
    `trigger.load_seed_categories`); `map_coin_to_category` reads from it; unmapped still returns
    `None`.
 3. `api/data/narrative_categories.json` — widened seed list (if Stage 0 approved new categories).
-4. Contract snapshot test: `GET /api/narrative/categories` output for BTC/ETH/HYPE fixed inputs,
-   captured before this RFC and re-asserted after.
+4. Contract snapshot test: `GET /api/narrative/categories`'s full response (all seed categories:
+   ai/rwa/l2s/memecoins, not a BTC/ETH/HYPE-filtered subset) for fixed/mocked pytrends/reddit/
+   CoinGecko-trending inputs, captured before this RFC and re-asserted byte-identical after —
+   including at least one scenario where the mocked trending fixture contains a newly-mapped coin,
+   to prove the assertion is meaningful (see ADR-7 Implications / OQ-4 correction).
 
 **Post-Phase Testing**
 - Test file: `api/tests/analytics/test_mapping.py` (extend) — widened map covers Stage 0's list;
   unmapped coin still `None`; JSON load failure degrades to empty map (not a crash).
-- Test file: `api/tests/routers/test_narrative_categories_contract.py` (new) — byte-identical
-  response for BTC/ETH/HYPE before/after.
+- Test file: `api/tests/routers/test_narrative_categories_contract.py` (new) — byte-identical full
+  response before/after, including a scenario where a newly-mapped coin appears in the mocked
+  CoinGecko-trending fixture for the `l2s` seed category (or whichever seed category(s) gained a
+  member at RFC-1 Stage 0), proving the test would catch `trending_count`/composite drift, not only
+  a filtered BTC/ETH/HYPE comparison.
 - Run: `uv run --project api pytest api/ -q`.
 - Verification query:
   ```
@@ -727,7 +747,8 @@ existing `cache.py` narrative writer/reader needs no schema change.
 - [ ] Error handling confirmed
 - [ ] Watchlist read confirmed non-empty (or user supplied watchlist directly / Stage 0 deferred to
       user's own machine per E1 hard gate) — never proceeded on an empty/absent-watchlist result
-- [ ] User confirmed the widened map (and OQ-4 sign-off) before implementation
+- [ ] User confirmed the widened map, the resulting screener badges, AND the seed-category
+      exposure list (OQ-4 sign-off, corrected scope) before implementation
 
 **Acceptance Criteria**: AC-1, AC-8.
 **What's Functional Now**: wider map, contract-proven unchanged `/categories` behavior.
@@ -740,7 +761,8 @@ existing `cache.py` narrative writer/reader needs no schema change.
 - [ ] E4 hard gate: explicit user sign-off on newly-mapped coins beyond BTC/ETH/HYPE received before
       `narrative_category_map.json` is written with any entry beyond BTC/ETH/HYPE
 - [ ] `narrative_category_map.json` + `load_category_map()` + tests
-- [ ] Contract snapshot test added and green
+- [ ] Contract snapshot test added and green — covers the full `/categories` response and the
+      newly-mapped-coin-in-trending scenario (E5)
 - [ ] Full `pytest` green
 
 ### RFC-2: Exchange adapter + pytrends historical backfill
@@ -1090,17 +1112,17 @@ Commands and runners per `process/context/tests/all-tests.md`:
 
 1. **Selected plan file**: `process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/narrative-dashboard_PLAN_24-09-26.md`
 2. **Last completed phase or step**: PLAN complete 24-09-26; VALIDATE not yet run; no RFC started.
-3. **Validate-contract status**: pending — `vc-validate-agent` writes `## Validate Contract` before
-   EXECUTE.
+3. **Validate-contract status**: PASS — `## Validate Contract` written below (PVL cycle 1
+   re-validate, 24-09-26).
 4. **Supporting context files loaded**: `process/context/all-context.md`,
    `process/context/data-sources/all-data-sources.md`, `process/context/tests/all-tests.md`,
    `process/context/planning/all-planning.md`, `process/features/narrative-mindshare/_GUIDE.md`,
    the narrative-dashboard SPEC in this same task folder, the regime dashboard PLAN as structural
    precedent, plus every source file named under §1 Context and Goals.
-5. **Next step for a fresh agent**: run `ENTER VALIDATE MODE` on this plan. On PASS/CONDITIONAL
-   acceptance, `ENTER EXECUTE MODE` for **RFC-1 Stage 0 only** (read the real watchlist, propose the
-   widened category/map, surface OQ-4 for explicit sign-off, then STOP for approval before any
-   implementation).
+5. **Next step for a fresh agent**: `ENTER EXECUTE MODE` for **RFC-1 Stage 0 only** (read the real
+   watchlist, propose the widened category/map, surface OQ-4 for explicit sign-off — including the
+   seed-category exposure list per the PVL cycle 1 correction below — then STOP for approval before
+   any implementation).
 
 **Open Questions carried from SPEC, plus one new question raised during PLAN:**
 - **OQ-1** (category/coin-map scope) — resolved procedurally: RFC-1 Stage 0 reads the real
@@ -1111,22 +1133,34 @@ Commands and runners per `process/context/tests/all-tests.md`:
   at RFC-2 Stage 0.
 - **OQ-3** (Reddit nightly credentials) — resolved (ADR-8): no secret required to ship; optional
   secret documented in the Ops Runbook.
-- **OQ-4 (new, raised during PLAN)** — widening `COIN_CATEGORY_MAP` (via ADR-7) will change
-  `screener_board.py`'s `narrative_state` output for any newly-mapped coin beyond BTC/ETH/HYPE
-  (which AC-1 protects explicitly). This is a real, intended side effect of US-5/AC-8, but it is a
-  `/screener` display change nonetheless. **Do not silently proceed** — RFC-1 Stage 0 must present
-  the exact list of newly-mapped coins and their resulting screener narrative badges for explicit
+- **OQ-4 (new, raised during PLAN; scope corrected at PVL cycle 1 re-validate, 24-09-26)** —
+  widening `COIN_CATEGORY_MAP` (via ADR-7) will change `screener_board.py`'s `narrative_state`
+  output for any newly-mapped coin beyond BTC/ETH/HYPE (which AC-1 protects explicitly). This is a
+  real, intended side effect of US-5/AC-8, but it is not only a `/screener` display change: any
+  newly-mapped coin whose category already has (or gains) a seed-category presence — today only
+  `l2s`, via `ETH`/`HYPE` — can also shift that category's `trending_count`/composite/
+  triggered/confirmed/trust_weight inside `GET /api/narrative/categories`' own response on any day
+  the coin appears in CoinGecko's live trending list (`trigger.py::compute_narrative_categories`
+  calls `mapping.map_coin_to_category` directly; see ADR-7 Implications). **Do not silently
+  proceed** — RFC-1 Stage 0 must present the exact list of newly-mapped coins, their resulting
+  screener narrative badges, AND which seed categories (by id) gain a member coin, for explicit
   user approval before implementation, separate from (but alongside) the category-list approval.
+  The contract snapshot test (RFC-1 Stage 1.4) must assert the full `/categories` response
+  (all seed categories, not a BTC/ETH/HYPE-filtered subset) is byte-identical under a fixed/mocked
+  CoinGecko-trending fixture, and must include at least one scenario where a newly-mapped coin is
+  present in that fixture, to prove the test would actually catch this drift rather than passing
+  vacuously on a fixture that happens to omit the newly-mapped coins.
 
 Reports for each RFC go in this same task folder as
 `narrative-dashboard_24-09-26-RFC-N-phase-report.md`.
 
 ## Validate Contract
 
-Status: CONDITIONAL
+Status: PASS
 Date: 24-09-26
 date: 2026-09-24
 generated-by: outer-pvl
+supersedes: 2026-09-24 (outer-pvl) — PVL cycle 1 re-validate has current evidence
 
 Parallel strategy: sequential
 Rationale: 6 RFCs with a mostly-linear dependency chain (RFC-4/RFC-5 are the only parallel pair,
@@ -1138,11 +1172,11 @@ Test gates (C3 5-column table):
 
 | criterion id | behavior | strategy | proving test | gap-resolution |
 |---|---|---|---|---|
-| AC-1 | `GET /api/narrative/categories` byte-identical for BTC/ETH/HYPE before/after | Fully-Automated | `api/tests/routers/test_narrative_categories_contract.py` | B |
+| AC-1 | `GET /api/narrative/categories` byte-identical, full response, incl. a newly-mapped-coin-in-trending scenario (E5) | Fully-Automated | `api/tests/routers/test_narrative_categories_contract.py` | B |
 | AC-1 | `/screener` narrative strip/confidence badge unaffected | Hybrid | `pnpm --filter web test` (`NarrativeStrip.test.tsx`, `ConfidenceBadge.test.tsx`, both pre-existing, re-run unmodified) | B |
 | AC-2 | history chart built from archived points, not a single reading | Fully-Automated | `api/tests/analytics/test_history.py` (real cache round-trip) | B |
 | AC-3 | nightly workflow dry-run, no duplicate on same-day re-run, Reddit-unset path clean | Hybrid | `api/tests/scripts/test_snapshot_narrative.py` | B |
-| AC-3 | scheduled trigger actually fires on `narrative-snapshot.yml`'s cron | Agent-Probe | user checks archive after nightly runs (mirrors LiqTide AC-3 precedent) | A |
+| AC-3 | scheduled trigger actually fires on `narrative-snapshot.yml`'s cron | Agent-Probe | user checks archive after nightly runs (mirrors LiqTide AC-3 precedent; plan gate, structurally user/machine-only) | A |
 | AC-4 | pytrends `interest_over_time()` backfill, golden rows, forward-write-wins dedup | Fully-Automated | `api/tests/scripts/test_backfill_pytrends_history.py` | B |
 | AC-5 | comparison view ranking on seeded fixture | Agent-Probe | vitest component probe + manual walkthrough | B |
 | AC-6 | change-in-attention view distinct from a level ranking | Agent-Probe | vitest component probe + manual walkthrough | B |
@@ -1152,7 +1186,7 @@ Test gates (C3 5-column table):
 | AC-10 | no raw cross-source level comparison; within-source normalisation boundary asserted | Fully-Automated | `api/tests/analytics/test_history.py`, `test_exchange_attention.py` | B |
 | AC-11 | data-quality caveat visible on every dashboard view | Agent-Probe | vitest `__tests__/*` + manual walkthrough | B |
 | AC-12 | real frontend/backend boundary proof on seeded fixture | Fully-Automated | `cd web && pnpm test:e2e` (`web/e2e/narrative.spec.ts`) | B |
-| AC-12 | real-cache user walkthrough against live providers | Agent-Probe | user, own machine (egress proxy blocks providers here — same as regime dashboard AC-11 precedent) | A |
+| AC-12 | real-cache user walkthrough against live providers | Agent-Probe | user, own machine (egress proxy blocks providers here — same as regime dashboard AC-11 precedent; plan gate, structurally user/machine-only) | A |
 
 C-4 reconciliation: `strategy` values above are Fully-Automated / Hybrid / Agent-Probe only;
 Known-Gap is not used as a strategy anywhere in this table — every behavior above has a proving
@@ -1162,7 +1196,8 @@ are proven by the user, not deferred).
 Failing stubs (Fully-Automated rows; replace during EXECUTE):
 
 ```python
-def test_narrative_categories_contract_byte_identical(): raise NotImplementedError("TDD stub: GET /api/narrative/categories byte-identical for BTC/ETH/HYPE before/after")
+def test_narrative_categories_contract_byte_identical(): raise NotImplementedError("TDD stub: GET /api/narrative/categories byte-identical, full response, before/after")
+def test_narrative_categories_contract_newly_mapped_coin_in_trending(): raise NotImplementedError("TDD stub (E5): mocked CoinGecko-trending fixture contains a newly-mapped l2s coin -> proves the contract test would catch trending_count/composite drift, not just a BTC/ETH/HYPE-filtered comparison")
 def test_history_accumulates_from_real_cache_round_trip(): raise NotImplementedError("TDD stub: history chart built from archived points via real cache.write_narrative_point/read_narrative_series round trip")
 def test_pytrends_backfill_golden_rows_and_forward_write_wins(): raise NotImplementedError("TDD stub: pytrends backfill golden rows; a date already forward-written is skipped, never overwritten")
 def test_hyperliquid_adapter_timeout_returns_unavailable(): raise NotImplementedError("TDD stub: hyperliquid_narrative_adapter fetch failure -> explicit unavailable, never a silent zero")
@@ -1185,56 +1220,73 @@ Legacy line form:
 - Full backend suite: Fully-automated: `uv run --project api pytest api/ -q`
 - Frontend: Fully-automated: `pnpm --filter web test` | Fully-automated: `cd web && pnpm test:e2e` | agent-probe: user walkthrough
 
+Plan updates applied (this re-validate pass, PVL cycle 1 re-validate, 24-09-26):
+
+| # | What changed | Where in plan | Why |
+|---|---|---|---|
+| P1 | ADR-7 Implications: added VALIDATE correction that `trigger.py::compute_narrative_categories` (which backs `GET /api/narrative/categories`) calls `mapping.map_coin_to_category` inside its CoinGecko trending-count loop — the map is not only reached via `screener_board.py` | ADR-7 | Direct code read of `trigger.py` line 194 (`compute_narrative_categories`) shows this call; the prior pass's "mapping.py is never reached by /categories" claim (see below) was factually wrong |
+| P2 | OQ-4: widened scope to cover `/categories`' own seed-category exposure (today only `l2s`, via ETH/HYPE), not only `/screener`'s `narrative_state`; requires the contract snapshot test to include a newly-mapped-coin-in-trending scenario | Open Questions — OQ-4 | Same root cause as P1 — OQ-4 as originally scoped only asked about screener badges, missing the `/categories` exposure path |
+| P3 | RFC-1 Stage 0: OQ-4 sign-off bullet now also asks which seed categories gain a member coin | RFC-1 Stage 0 | Makes the Stage-0 approval step concretely cover the corrected OQ-4 scope |
+| P4 | RFC-1 E4 hard gate: sign-off now also covers the seed-category exposure list, not only screener badges | RFC-1 Stage 0, E4 hard gate | Keeps E4 (already a hard execute-agent gate) as the single mechanism closing this finding — no new gate invented |
+| P5 | RFC-1 Stage 1.4: contract snapshot test spec now requires the full `/categories` response (all 4 seed categories) under a fixed/mocked trending fixture, plus a newly-mapped-coin-in-trending scenario, instead of a BTC/ETH/HYPE-filtered comparison | RFC-1 Stages | A BTC/ETH/HYPE-filtered assertion cannot detect `l2s` composite drift from a newly-mapped, non-BTC/ETH/HYPE coin |
+| P6 | RFC-1 Post-Phase Testing: test-file description updated to match P5 | RFC-1 Post-Phase Testing | Keeps the test-file description and the Stage description in sync |
+| P7 | RFC-1 Implementation Checklist: contract-snapshot checklist item now references the E5 scenario explicitly | RFC-1 Implementation Checklist | Makes the new requirement checkable at EXECUTE time |
+| P8 | RFC-1 Verification Checklist: OQ-4 sign-off checklist item now names the seed-category exposure list explicitly | RFC-1 Verification Checklist | Same as P7, for the Verification Checklist copy of the sign-off gate |
+
+Prior-pass plan update for reference (already applied, unchanged this cycle): ADR-2's dedup-wording
+correction (`write_narrative_point`'s own dedup provides no source-priority guarantee; the
+forward-wins rule is enforced entirely by the backfill script's own read-before-write skip check).
+
 Dimension findings:
 - Infra fit: PASS — no container/infra/proxy surface touched; `GET /api/narrative/history` inherits the existing global `GZipMiddleware` for free (confirmed in `api/main.py`); the new nightly workflow mirrors `.github/workflows/liqtide-snapshot.yml`'s checkout/setup-uv/run/commit shape exactly, including `permissions: contents: write` — no new infra pattern introduced.
-- Test coverage: CONCERN — see Layer 2 RFC-1/RFC-2 findings below (E1, E2); AC-3/AC-12's live-provider portions are structurally Agent-Probe in this sandbox (egress proxy blocks Google Trends/Reddit/CoinGecko/Hyperliquid, confirmed by the regime dashboard's identical AC-11 precedent) — declared as such in the plan's own Verification Evidence table already, not a new gap.
-- Breaking changes: PASS — mechanically confirmed by reading `api/routers/narrative.py` and `api/analytics/narrative/trigger.py::assemble_narrative_categories` directly: the `/categories` code path never calls `mapping.py` at all (no per-coin lookup happens in that response), so widening `COIN_CATEGORY_MAP`/moving it to JSON cannot change `/categories`' shape or content by construction, independent of the contract snapshot test — the test is real (a byte-identical assertion for BTC/ETH/HYPE) and this mechanical fact makes it sufficient, not merely reassuring. `map_coin_to_category` only reaches `screener_board.py`'s per-coin `narrative_state` (OQ-4's own scope), confirming OQ-4 is correctly the only real risk surface and is already gated as a hard user sign-off at RFC-1 Stage 0.
+- Test coverage: PASS — E1 (watchlist gap) and E2 (new-listing day-1 state) from the first-pass CONDITIONAL are now folded into RFC-1/RFC-2/RFC-5 as concrete, testable requirements (hard gates, pytest cases, vitest cases, frontend copy) — verified present in this re-validate. E5 (this pass's new finding, see Plan updates applied) is likewise folded in as a concrete test requirement, not left open. AC-3/AC-12's live-provider portions remain structurally Agent-Probe in this sandbox (egress proxy blocks Google Trends/Reddit/CoinGecko/Hyperliquid, confirmed by the regime dashboard's identical AC-11 precedent) and AC-3's cron-firing portion is likewise Agent-Probe/user-only — both are declared plan gates in the plan's own Verification Evidence table, not validate concerns, and do not block PASS.
+- Breaking changes: PASS (corrected this pass) — the first-pass claim that "the `/categories` code path never calls `mapping.py` at all" is factually wrong: `trigger.py::compute_narrative_categories` (which directly backs `GET /api/narrative/categories`) calls `mapping.map_coin_to_category(symbol)` inside its CoinGecko trending-count loop, and that count feeds `compute_trigger`'s composite for the matching seed category. Confirmed by direct read of `trigger.py` lines 27, 192-196 and `mapping.py`'s current 3-entry map (`BTC`→`store-of-value` — not a seed category, so BTC never reaches `/categories`; `ETH`/`HYPE`→`l2s`, which IS a seed category). This is now corrected in ADR-7/OQ-4/RFC-1 (P1-P8 above): OQ-4's sign-off scope and the contract snapshot test both now explicitly cover this exposure, closing the gap as a concrete plan requirement (gap-resolution B) rather than leaving it as an unstated assumption. `map_coin_to_category`'s own contract (curated lookup or `None`) is still unchanged by the JSON swap — only the *set of coins it recognizes* grows, which is exactly what ADR-7/AC-8 intend.
 - Security surface: PASS — no new secret required to ship (Hyperliquid via keyless `ccxt_adapter._exchange()`; Reddit's two existing optional secrets unchanged); local bind (`127.0.0.1`) and CORS scope unchanged; new nightly workflow's `contents: write` permission mirrors the already-running `liqtide-snapshot.yml` exactly, not a new permission pattern.
-- RFC-1 feasibility: CONCERN — mechanically feasible (`api/tests/analytics/test_mapping.py` already exists to extend; `map_coin_to_category`'s contract is unchanged by the JSON swap). Gap: `api/data/watchlist.json` does not exist in this sandbox (gitignored, personal data) — RFC-1 Stage 0's "read the real watchlist" step cannot execute here; see E1.
-- RFC-2 feasibility: CONCERN — Hyperliquid `fetch_tickers()` volume-share approach mechanically CONFIRMED during this VALIDATE pass by reading the installed `ccxt` 4.5.78 package directly (not a live call, no `needs-live-provider` opt-in required): `ccxt.hyperliquid().has['fetchTickers'] is True`; `fetch_tickers(symbols=None)` returns all market tickers per its own docstring ("all market tickers are returned if not assigned"); `parse_ticker` maps Hyperliquid's `dayNtlVlm` field to the unified `quoteVolume` field per symbol — exactly what RFC-2's volume-share formula needs. RFC-2 Stage 0 can treat this as settled and does not need to re-derive it live; only the redistribution/ToS confirmation remains genuinely open there. Two real gaps found: (a) ADR-2's claim that "existing date-based dedup already prevents overwrite" is inaccurate — fixed directly in this VALIDATE pass, see Plan updates applied below; (b) the new-listing diff has no defined day-1 behavior (no prior snapshot to diff against) — see E2.
-- RFC-3 feasibility: PASS — `grid_dates`/`gap_before`/`max_gap_days` pattern is proven end-to-end on `/regime` already (`api/analytics/regime/components.py`, `components_response.py`); reusing the shape (not the code, per the RFC's own Stage 0 framing) is mechanically straightforward; `get_history` sharing only `load_seed_categories` with `get_categories` is grep-verifiable once written.
-- RFC-4 feasibility: PASS — `.gitignore`'s existing `api/data/cache/*` + `!api/data/cache/liqtide/` carve-out mechanic (confirmed by reading `.gitignore` directly, including its own inline comment explaining "parent must be excluded per-entry") extends cleanly to `!api/data/cache/narrative/`; nested `cache/narrative/exchange/` needs no separate negation, mirroring how `liqtide/`'s contents are already included with only the one parent-level negation line. Workflow file mechanically mirrors `liqtide-snapshot.yml` line for line.
-- RFC-5 feasibility: PASS — `RegimeDashboard.tsx`/`DeadDataNotice.tsx`/`format-unavailable-reason.ts` fetch-once and degraded-state patterns are proven and directly reusable; `format-unavailable-reason.ts`'s `switch` statement is a clean, low-risk extension point for the new `credentials-not-configured` case (mechanically confirmed by reading the file: one new `case` arm).
+- RFC-1 feasibility: PASS — mechanically feasible (`api/tests/analytics/test_mapping.py` already exists to extend; `map_coin_to_category`'s contract is unchanged by the JSON swap). `api/data/watchlist.json` remains absent in this sandbox (gitignored, personal data) — this is E1's own scenario, already a hard Stage-0 gate (stop and ask the user / defer to the user's machine), not a validate concern; confirmed the gate text is concrete and unconditional (no fallback-to-default path exists in the RFC-1 text). The new E5 requirement (contract snapshot test covers the full response + a newly-mapped-coin-in-trending scenario) is folded into RFC-1 Stages/Post-Phase Testing/Implementation Checklist this pass.
+- RFC-2 feasibility: PASS — Hyperliquid `fetch_tickers()` volume-share approach re-confirmed this pass by reading the installed `ccxt` 4.5.78 package directly (`ccxt.hyperliquid().has['fetchTickers'] is True`; `parse_ticker` maps `dayNtlVlm` -> unified `quoteVolume`, confirmed by grepping the installed source): `'quoteVolume': self.safe_number(ticker, 'dayNtlVlm')`. RFC-2 Stage 0 can treat this as settled; only the redistribution/ToS confirmation remains genuinely open there (expected Stage-0 scope, not a validate concern). E2's day-1 no-baseline state is present in ADR-6, API Surface, Public Contracts, RFC-2 Stages/Post-Phase Testing, RFC-5 Stages/Post-Phase Testing — verified concrete and testable across the full stack (backend typed result, pytest, contract doc, frontend copy, vitest) this pass.
+- RFC-3 feasibility: PASS — `grid_dates`/`gap_before`/`max_gap_days` pattern is proven end-to-end on `/regime` already (`api/analytics/regime/components.py`, `components_response.py`); reusing the shape (not the code, per the RFC's own Stage 0 framing) is mechanically straightforward; `get_history` sharing only `load_seed_categories` with `get_categories` is grep-verifiable once written. E3 risk-evidence-pack done-criterion present and concrete (harness/ artifact list named).
+- RFC-4 feasibility: PASS — `.gitignore`'s existing `api/data/cache/*` + `!api/data/cache/liqtide/` carve-out mechanic (confirmed by reading `.gitignore` directly, including its own inline comment explaining "parent must be excluded per-entry") extends cleanly to `!api/data/cache/narrative/`; nested `cache/narrative/exchange/` needs no separate negation, mirroring how `liqtide/`'s contents are already included with only the one parent-level negation line. Workflow file mechanically mirrors `liqtide-snapshot.yml` line for line. E3 risk-evidence-pack done-criterion present and concrete.
+- RFC-5 feasibility: PASS — `RegimeDashboard.tsx`/`DeadDataNotice.tsx`/`format-unavailable-reason.ts` fetch-once and degraded-state patterns are proven and directly reusable; `format-unavailable-reason.ts`'s `switch` statement is a clean, low-risk extension point for both the new `credentials-not-configured` case and E2's `no-baseline-yet` case (mechanically confirmed by reading the file: two new `case` arms, both already named in RFC-5 Stage 5).
 - RFC-6 feasibility: PASS — `seed_e2e_cache.py`'s `_guard()` (refuses to run without an explicit, non-default `SCREENER_CACHE_ROOT`) and its `SCREENER_WATCHLIST_PATH` `{"coins": [...]}` shape (confirmed against `watchlist.py::_load_raw`'s actual parsing contract, directly addressing Standing Lesson #7) are real, reusable safety mechanisms — `build_narrative_fixture`/`seed_narrative` can follow the exact same shape.
 
 Execute-agent instructions:
 - E1: RFC-1 Stage 0 — if `api/data/watchlist.json` is absent on the machine running Stage 0 (confirmed absent in this VALIDATE sandbox; it is gitignored, personal data), do not silently treat `read_watchlist()`'s resulting empty list as "nothing to map." Stop and ask the user directly for their current watchlist content (or defer Stage 0 to a session on the user's own machine) before proposing the widened category/map list.
 - E2: RFC-2 `exchange_attention.py`'s new-listing diff has no prior day's market-list snapshot on its first run. Implement an explicit "no baseline yet" state for day one (e.g. `new_listing_count: null` with a distinct status/reason), never a bare `0` — a real zero-diff and "nothing to compare against yet" are different facts and the project's "numbers are never silently wrong" rule applies here exactly as it does to the three existing sources.
 - E3: this plan adds a new public API surface (`GET /api/narrative/history`) and a new deploy/runtime surface (`.github/workflows/narrative-snapshot.yml`, scheduled job with `contents: write` pushing to `main`) — both are High-Risk Execution Handoff classes (`process/development-protocols/orchestration.md`). Produce the manual-first evidence pack (`vc-risk-evidence-pack`: `risk-gate.json`, `context-snippets.json`, `verification.json`, `review-decision.json`) inside this task folder's `harness/` subdirectory before treating RFC-3/RFC-4 as finalize-ready. Auto-stop rule applies — do not report those RFCs DONE with the work implied fully proven until the pack exists.
-- E4: RFC-1 Stage 0's OQ-4 sign-off (which newly-mapped coins would see their `/screener` `narrative_state` change) must be presented and explicitly approved by the user before any map file beyond BTC/ETH/HYPE is written — this was already a plan requirement; restated here because it is a hard execute-agent gate, not an optional courtesy.
+- E4: RFC-1 Stage 0's OQ-4 sign-off — which newly-mapped coins would see their `/screener` `narrative_state` change, AND which seed categories (by id) gain a member coin and could shift `GET /api/narrative/categories`' own `trending_count`/composite/triggered/confirmed/trust_weight — must be presented and explicitly approved by the user before any map file beyond BTC/ETH/HYPE is written. This was already a plan requirement (screener-badge scope only); this pass widens it to also cover the `/categories` exposure path found in E5/P1-P4. It remains a hard execute-agent gate, not an optional courtesy.
+- E5 (new this pass): the RFC-1 contract snapshot test (`api/tests/routers/test_narrative_categories_contract.py`) must assert the FULL `GET /api/narrative/categories` response (all 4 seed categories: ai/rwa/l2s/memecoins) is byte-identical before/after, under a fixed/mocked pytrends/reddit/CoinGecko-trending fixture — not a response filtered down to BTC/ETH/HYPE-named fields, since those are coin symbols, not category ids, and the endpoint's response is category-shaped. The test MUST include at least one case where the mocked CoinGecko-trending fixture contains a coin newly added to `narrative_category_map.json` for a seed category that already has (or gains) a member — today only `l2s`, via ETH/HYPE — and assert what the response does in that case, so the test provably would catch `trending_count`/composite drift rather than passing vacuously on a fixture that happens to omit the newly-mapped coins.
 
-Open gaps: none carried to backlog — all findings above are either mechanically resolved during this VALIDATE pass (RFC-2 ccxt feasibility, ADR-2 wording), folded into the plan as execute-agent instructions (E1-E4), or already correctly scoped as Agent-Probe/user-only in the plan's own Verification Evidence table (AC-3's cron-firing portion, AC-12's live-provider portion).
+Open gaps: none carried to backlog — all findings from this pass and the prior pass are either
+mechanically resolved during a VALIDATE pass (RFC-2 ccxt feasibility, ADR-2 wording, this pass's
+E5/mapping.py finding), folded into the plan as execute-agent instructions (E1-E5), or already
+correctly scoped as Agent-Probe/user-only plan gates in the plan's own Verification Evidence table
+(AC-3's cron-firing portion, AC-12's live-provider portion).
 
 What this coverage does NOT prove:
-- Contract snapshot test: not that `screener_board.py`'s per-coin `narrative_state` is unaffected by the widened map for newly-mapped coins beyond BTC/ETH/HYPE — that change is intended (OQ-4) and gated on explicit user sign-off, not proven "unchanged" by this gate.
+- Contract snapshot test: not that `screener_board.py`'s per-coin `narrative_state` is unaffected by the widened map for newly-mapped coins beyond BTC/ETH/HYPE — that change is intended (OQ-4) and gated on explicit user sign-off, not proven "unchanged" by this gate. Also not that a newly-mapped coin's category will NEVER shift `/categories`' own output going forward — only that the specific fixture scenarios exercised at RFC-1 (including the E5 newly-mapped-coin-in-trending case) behave as specified; a real, live CoinGecko trending list on any future day can still include a different newly-mapped coin than the one tested, which is exactly why OQ-4's sign-off (not just this test) is the actual control on whether widening into an already-seeded category is acceptable.
 - History/composite tests: not that the composite/rank/delta maths matches any external ground truth — narrative attention has no authoritative source to check against; only internal consistency (skipna-mean coverage rule, normalisation boundary) is proven.
 - Nightly workflow hybrid test: not that GitHub Actions cron actually fires on schedule in production, and not that Reddit secrets (if the user later adds them) work end-to-end — only the unset-credentials path and no-duplicate-on-rerun behavior are proven.
 - Backfill test: not that `pytrends.interest_over_time()` still works at all (it is unofficial/archived since April 2025, per `pytrends_adapter.py`'s own module docstring) — only that IF it returns data, the rows are written correctly and forward-written dates are skipped.
-- Hyperliquid adapter/exchange-attention tests: not that Hyperliquid's real `fetch_tickers()` payload matches the fixture shape used in tests forever — only that the shape confirmed during this VALIDATE pass (read from the installed `ccxt` 4.5.78 source) is handled correctly today; an opt-in `integration`-marked test against the real exchange is the ongoing pin for this (per Standing Lesson #1).
+- Hyperliquid adapter/exchange-attention tests: not that Hyperliquid's real `fetch_tickers()` payload matches the fixture shape used in tests forever — only that the shape confirmed during this and the prior VALIDATE pass (read from the installed `ccxt` 4.5.78 source) is handled correctly today; an opt-in `integration`-marked test against the real exchange is the ongoing pin for this (per Standing Lesson #1).
 - vitest component/caveat tests: not real canvas rendering or real cross-panel behavior (jsdom).
 - Playwright E2E: seeded synthetic fixture data only; real-data correctness rests entirely on the AC-12 user walkthrough.
 
-Gate: CONDITIONAL (concerns noted, folded into plan fixes + execute-agent instructions, no unresolved FAILs)
-Accepted by: Pending re-validate (PVL cycle 1) — NOT yet user-accepted. The 4 concerns below (E1-E4)
-have been folded directly into the RFC bodies (RFC-1 Stage 0 hard gates, RFC-2 day-1 new-listing
-model/tests/frontend copy, RFC-3/RFC-4 risk-evidence-pack done-criteria, RFC-1 OQ-4 hard gate) by
-this PVL-supplement pass, per the SUPPLEMENT REQUEST. Prior concerns for reference: ADR-2
-dedup-wording inaccuracy (fixed directly in the first VALIDATE pass, see plan's ADR-2); E1
-watchlist.json sandbox gap; E2 new-listing day-1 undefined state; E3 risk-evidence-pack requirement
-for the new public API + scheduled-workflow surfaces; E4 restated OQ-4 hard gate. Re-validate
-required before this contract is Accepted.
-
-
+Gate: PASS (no FAILs, no unresolved CONCERNs — E1-E4 from the first-pass CONDITIONAL are confirmed
+folded into concrete, testable plan requirements; this pass's own new finding (E5, the
+`/categories`-calls-`mapping.py` correction) is fixed directly in the plan text, per the same
+mechanism used for the ADR-2 correction in the first VALIDATE pass. AC-1/AC-3/AC-12's user- or
+machine-only portions and the E1/OQ-4 sign-off gates are declared plan gates in the plan's own
+Verification Evidence table and RFC-1 Stage 0, not open validate concerns, and do not block PASS.)
 
 ## Autonomous Goal Block
 
 ```
 SESSION GOAL: Build /narrative per process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/narrative-dashboard_PLAN_24-09-26.md -- per-category attention history, comparison view, change-in-attention view, a display-only Hyperliquid volume/listing proxy, and a widened coin-to-category map, fed by a nightly forward-archive workflow, while GET /api/narrative/categories and /screener's narrative strip stay byte-identical.
 Charter + umbrella plan: N/A -- single plan (no umbrella/Stable Program Goal exists for narrative-mindshare)
-AUTONOMY RULES: Execute one RFC at a time in order RFC-1..RFC-6 (RFC-4/RFC-5 may run in parallel sessions once RFC-3 is VERIFIED). Each RFC: Stage 0 research -> present findings -> STOP for user approval -> implement -> run the RFC's test stage -> phase report in this task folder -> STOP for user confirmation. Follow Validate Contract execute-agent instructions E1-E4. Tests touching the real cache must use the isolated_cache fixture.
+AUTONOMY RULES: Execute one RFC at a time in order RFC-1..RFC-6 (RFC-4/RFC-5 may run in parallel sessions once RFC-3 is VERIFIED). Each RFC: Stage 0 research -> present findings -> STOP for user approval -> implement -> run the RFC's test stage -> phase report in this task folder -> STOP for user confirmation. Follow Validate Contract execute-agent instructions E1-E5. Tests touching the real cache must use the isolated_cache fixture.
 HARD STOPS: any byte-level change to GET /api/narrative/categories or NarrativeStrip.tsx/confidence-badge behavior; wiring the exchange proxy into trigger.compute_trigger (ADR-6 forbids this); writing narrative_category_map.json beyond BTC/ETH/HYPE without explicit OQ-4 user sign-off (E4); any live network call to pytrends/Reddit/CoinGecko/Hyperliquid from a test; any API key or secret added; any failing test left red.
 TEST GATES: uv run --project api pytest api/ -q | pnpm --filter web test | cd web && pnpm test:e2e -- full commands and per-criterion mapping in this plan's Validate Contract Test gates table.
-VALIDATE CONTRACT: inline in this plan, ## Validate Contract section -- Gate: CONDITIONAL, Pending re-validate (PVL cycle 1) -- not yet user-accepted, 24-09-26.
+VALIDATE CONTRACT: inline in this plan, ## Validate Contract section -- Gate: PASS, PVL cycle 1 re-validate complete, 24-09-26.
 Next phase: EXECUTE -- RFC-1 Stage 0 only (read the real watchlist per E1, propose widened category/map, surface OQ-4 for explicit sign-off, then STOP for approval before any implementation).
 EXECUTE START: ENTER EXECUTE MODE for RFC-1 Stage 0 of narrative-dashboard_PLAN_24-09-26.md
 Reference for latest state: process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/narrative-dashboard_PLAN_24-09-26.md
