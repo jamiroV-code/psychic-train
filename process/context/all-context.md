@@ -1,7 +1,7 @@
 # my_site - All Context
 
-Last updated: 2026-09-20 (amended 18:47 — see Changes Since Last Update below; the 17:46 version of
-this file predates both ADR-1 leg-boundary amendments and the LiqTide snapshot-tooling EXECUTE)
+Last updated: 2026-09-24 (regime dashboard UPDATE PROCESS closeout — see Changes Since Last
+Update below; the 2026-09-20 18:47 version predates the whole `/regime` build)
 
 This file is the root context entrypoint for the repo.
 
@@ -13,6 +13,65 @@ Use it for two things:
 Start here before loading deeper context files.
 
 ---
+
+## Changes Since Last Update (2026-09-20 → 2026-09-24)
+
+The regime dashboard (`process/features/cycle-regime/active/regime-dashboard_24-09-26/`) shipped
+across six RFCs, all code-complete and committed to `main` (`db8d854`). This is the second real
+feature after the momentum screener, and the first to live in `process/features/cycle-regime/`
+(previously an empty `_GUIDE.md` placeholder).
+
+- `[Product]` New route **`/regime`**: seven synced `lightweight-charts` panels (six liquidity
+  components + one composite panel with two labelled lines — reproduced vs. LiqTide-published),
+  a shared hover readout, per-panel drill-down, and a reserved 280px column for a future insights
+  box. `web/app/regime/page.tsx`, `web/components/regime/{RegimeDashboard,ComponentPanel,Readout,
+  DrillDown}.tsx`.
+- `[Product]` New API: **`GET /api/regime/components`** (`api/routers/regime.py`,
+  `api/models/regime.py`) — returns all six components + the composite, a shared `grid_dates`
+  union for synced panels, per-point `gap_before` flags and per-series `max_gap_days`, gzip'd via
+  `GZipMiddleware` in `api/main.py`. `/api/regime/legs` (the existing leg-boundary endpoint) is
+  byte-for-byte unchanged.
+- `[Product]` New analytics: `api/analytics/regime/components.py` + `components_response.py`
+  compute the six impulses (net liquidity, stablecoin supply, broad dollar, ON-RRP, spot-ETF
+  flows, BTC dominance) as calendar-window transforms, normalise with `sign × tanh(impulse/scale)`
+  (LiqTide's own formula, reverse-engineered and matched to 4 decimals), and build both a
+  reproduced composite (with coverage/60%-floor) and a passthrough of LiqTide's own published
+  index for comparison. `liquidity_composite.py`, `leg_boundary.py` and the screener are untouched
+  — this is a second, parallel maths path, not a replacement.
+- `[Product]` **Eighth adapter**: `api/data/etf_flows_adapter.py` (Farside Investors, spot BTC-ETF
+  daily flows, personal-use only, `redistributable=false`, at most one request per UTC day —
+  LiqTide's own archive fills gaps between Farside fetches). See
+  `data-sources/all-data-sources.md`.
+- `[Product]` **LiqTide raw-JSON archive landed and is scheduled**: `cache.py` gained
+  `write_liqtide_raw`/`read_liqtide_raw` (append-only, no-overwrite); `liqtide_adapter.fetch_latest`
+  writes the full payload alongside the existing flattened parquet row. This is scheduled, not
+  manual — see the `.github/workflows/` correction below.
+- `[Correction]` **`.github/workflows/` is no longer empty.** Earlier versions of this file said
+  "no CI/deploy config exists" — that was true through 2026-09-20 but is stale now.
+  `.github/workflows/liqtide-snapshot.yml` runs nightly at 23:30 UTC, executes
+  `snapshot_liqtide.py`, and commits `api/data/cache/liqtide/` to `main` — discovered mid-session
+  on 2026-09-24 (it had already captured 09-21 through 09-24 by the time this was found). This is
+  the **only** scheduled fetch of LiqTide; the Windows Task Scheduler step in the regime plan's Ops
+  Runbook is consequently not needed. Deployment/CI beyond this one workflow is still open — see
+  Open Decisions.
+- `[Correction]` **The LiqTide full-vs-reduced composite comparison open question (raised
+  2026-09-20) is now substantially addressed, not fully closed.** RFC-001/002 didn't wait for the
+  archive to accumulate years of history the way `compare_composite_variants.py` needed — instead
+  they reproduce LiqTide's six components independently from FRED/DefiLlama/Farside primaries
+  (ADR-1 in the regime plan) and show LiqTide's own published index as a second line for direct
+  visual/statistical comparison wherever both exist. A real-data check found 5/6 components exact
+  and Pearson r = 0.964 against LiqTide's published index. This doesn't replace the original
+  archive-accumulation approach (still running nightly, still the only way to ever get true
+  pre-archive LiqTide history) — it's a second, faster path to the same "do our numbers agree with
+  theirs" question. See Open Questions for what's still open (real-cache walkthrough, ETF/BTC-dom
+  depth limits).
+- Testing: full-suite counts changed materially — see the amendment to `tests/all-tests.md`
+  pointer below; **294 pytest passed / 2 deselected, 75 vitest passed (12 files, 0 failed), 12/12
+  Playwright** (6 new `regime.spec.ts` + 6 existing `screener.spec.ts`), run twice.
+- **Known gap, carried forward, not closed this session:** AC-11 (the real-cache user walkthrough)
+  has not run — this container's egress proxy blocks FRED/DefiLlama/stablecoins.llama.fi (403), so
+  it must run on the user's own PC. The regime-dashboard plan stays in `active/` until that
+  confirmation lands; see the plan's Resume and Execution Handoff section for the exact PC steps.
 
 ## Changes Since Last Update (2026-09-17 → 2026-09-20)
 
@@ -185,14 +244,17 @@ For most substantial tasks:
 | File | Read when |
 |---|---|
 | `process/context/all-context.md` | any substantial planning, research, review, or implementation task |
+| `process/context/data-sources/all-data-sources.md` | Market-data providers, free-tier limits, licensing, and analytics library choices |
+| `process/context/planning/all-planning.md` | Plan-shape calibration, SIMPLE vs COMPLEX conventions, planning references |
+| `process/context/tests/all-tests.md` | Test runners, commands, verification order, debugging reference, and known gaps |
 
 ## Current Context Groups
 
 | Group | Entry point | Scope |
 |---|---|---|
-| planning | `process/context/planning/all-planning.md` | plan-shape calibration, SIMPLE vs COMPLEX, planning conventions |
-| tests | `process/context/tests/all-tests.md` | test runners, commands, verification order, known gaps |
-| data-sources | `process/context/data-sources/all-data-sources.md` | market-data providers, free-tier limits, licensing, open-source library choices |
+| `data-sources/` | `process/context/data-sources/all-data-sources.md` | Market-data providers, free-tier limits, licensing, and analytics library choices |
+| `planning/` | `process/context/planning/all-planning.md` | Plan-shape calibration, SIMPLE vs COMPLEX conventions, planning references |
+| `tests/` | `process/context/tests/all-tests.md` | Test runners, commands, verification order, debugging reference, and known gaps |
 <!-- /GENERATED:routing -->
 
 ## Task Routing Table
@@ -261,42 +323,55 @@ Key Patterns below are replaced by observations instead of intentions.
 
 ## Repository Structure
 
-Observed layout (2026-09-20), 2-3 levels deep on the parts that changed since setup:
+Observed layout (2026-09-24), 2-3 levels deep on the parts that changed since setup:
 
 ```
 my_site/
   web/                      -- Next.js 15.0.3 App Router frontend (TypeScript, React 19)
-    app/                    -- app/page.tsx, app/layout.tsx, app/screener/page.tsx (only
-                                route live so far — charts/regime/narrative routes not built yet)
-    components/             -- chart/, screener/
-    lib/                    -- api/, types/, format-unavailable-reason.ts, __tests__/
-    e2e/                    -- Playwright specs
+    app/                    -- app/page.tsx, app/layout.tsx, app/screener/page.tsx,
+                                app/regime/page.tsx (charting/narrative routes not built yet)
+    components/             -- chart/, screener/, regime/ (RegimeDashboard, ComponentPanel,
+                                Readout, DrillDown + __tests__/)
+    lib/                    -- api/ (incl. regime.ts), types/ (incl. regime.ts),
+                                format-unavailable-reason.ts, format-regime-value.ts,
+                                regime-chart-sync.ts, regime-line-segments.ts, __tests__/
+    e2e/                    -- Playwright specs (screener.spec.ts, regime.spec.ts)
   api/                      -- FastAPI service (Python 3.12, uv-managed)
     routers/                -- screener.py, regime.py, narrative.py, watchlist.py
-    analytics/              -- confidence/, indicators/, narrative/, regime/, screener_board.py
+    analytics/              -- confidence/, indicators/, narrative/, screener_board.py,
+                                regime/ (liquidity_composite.py, leg_boundary.py, components.py,
+                                components_response.py -- the last two new 24-09-26, a second
+                                maths path alongside the composite/leg-boundary one, not a
+                                replacement)
     data/                   -- ccxt_adapter.py, coingecko_adapter.py, defillama_adapter.py,
                                 fred_adapter.py, liqtide_adapter.py, pytrends_adapter.py,
-                                reddit_adapter.py, cache.py (DuckDB-over-Parquet), watchlist.py
+                                reddit_adapter.py, etf_flows_adapter.py (8th adapter, new
+                                24-09-26, Farside), cache.py (DuckDB-over-Parquet), watchlist.py
     models/                 -- screener.py, regime.py, narrative.py (pydantic schemas)
-    scripts/                -- refresh_cache.py, backfill_primaries.py, and diagnostic/backtest
-                                one-offs (backtest_leg_boundaries.py, check_weekly_anchor.py,
+    scripts/                -- refresh_cache.py, backfill_primaries.py, backfill_liqtide_series.py,
+                                seed_e2e_cache.py, and diagnostic/backtest one-offs
+                                (backtest_leg_boundaries.py, check_weekly_anchor.py,
                                 snapshot_liqtide.py, compare_composite_variants.py, etc.)
-    tests/                  -- analytics/, data/, routers/, scripts/ (new, 20-09-26) — pytest,
+    tests/                  -- analytics/, data/, routers/, scripts/ -- pytest,
                                 `integration` marker for real-network tests (deselected by default)
   process/                  -- this agent harness
     context/                -- durable project knowledge (this file + groups)
     general-plans/          -- cross-cutting plans, incl. the momentum-screener feature (see
                                 Changes Since Last Update)
-    features/               -- feature-scoped plans and guides (charting-indicators,
-                                cointegration-screener, cycle-regime, narrative-mindshare —
-                                still only `_GUIDE.md` placeholders, no plans written yet)
+    features/               -- feature-scoped plans and guides. `cycle-regime/` now has a real
+                                task folder (`regime-dashboard_24-09-26/`, all 6 RFCs code-done,
+                                see Changes Since Last Update); charting-indicators,
+                                cointegration-screener, narrative-mindshare are still only
+                                `_GUIDE.md` placeholders
     development-protocols/  -- RIPER-5 methodology docs
+  .github/workflows/        -- liqtide-snapshot.yml (nightly 23:30 UTC snapshot + commit to
+                                main -- new 24-09-26, see Changes Since Last Update)
   .claude/ .codex/ .agents/ -- agent + skill surfaces
   .env.example               -- REDDIT_CLIENT_ID/SECRET, LIQTIDE_ATTRIBUTION_URL,
                                  API_BASE_URL, API_PORT (see Environment and Configuration)
 ```
 
-Not present: `.git/` (repo is not yet git-initialized), `.github/workflows/` (no CI/deploy config).
+Deployment CI/CD (beyond the one nightly snapshot workflow) remains not present -- see Open Decisions.
 
 The web/api split is deliberate: see the first entry under Key Patterns.
 
@@ -403,7 +478,7 @@ Carry these into any plan that touches them. Do not resolve them silently.
 | Persistence layer | Settled 2026-09-17, confirmed in use — Parquet + DuckDB (`api/data/cache.py`) |
 | Narrative / mindshare data source | Implemented on the settled approach: CoinGecko, pytrends, Reddit adapters all exist under `api/data/`, feeding `api/analytics/narrative/`. Still free-proxy-only, still labelled low-confidence |
 | Testing strategy | **Resolved** — `pytest` (api, `integration` marker gates real-network tests) + `vitest` + Playwright (web). See `tests/all-tests.md` |
-| Deployment target | Still deliberately deferred — no CI/deploy config exists |
+| Deployment target | Still deliberately deferred — the only CI/scheduling config that exists is the single-purpose `liqtide-snapshot.yml` nightly workflow (see Repository Structure); no app deploy pipeline |
 | Package managers | Settled 2026-09-17, confirmed in use — pnpm (web) + uv (api) |
 
 **Redistribution is a first-class constraint, not a launch-day detail.** Some free data this
@@ -463,9 +538,34 @@ may be redistributed. See Licensing in `data-sources/all-data-sources.md`.
   `compare_composite_variants.py`'s `full.available` stays `false` over the 2024-01-11..2026-09-20
   window until there's materially more than one day of history to compare against. Not a code
   defect — see the 18:47 Amendment above for the mechanics and the corrected reduced-composite
-  candidate count. Undecided: whether to accept this as a multi-year wait, look for a way to
-  backfill LiqTide history from its own underlying six sources instead of the endpoint, or drop
-  the comparison as a goal. Don't guess — ask.
+  candidate count. **Update, 2026-09-24: this is not the same composite as the one below, and
+  stays open on its own terms** — `compare_composite_variants.py` compares `liquidity_composite.py`'s
+  reduced vs. full variant (the leg-boundary input), which is unaffected by the regime dashboard
+  work. The archive-accumulation constraint described here is unchanged; don't conflate it with
+  the regime dashboard's ADR-1 reproduction, which is a separate module (`components.py`) built to
+  sidestep exactly this multi-year wait for a different (but related) purpose. Still undecided:
+  whether to accept the wait, backfill LiqTide history from its six underlying sources, or drop
+  this specific comparison as a goal. Don't guess — ask.
+- **New, 2026-09-24, mostly resolved: does the regime dashboard's reproduced composite agree with
+  LiqTide's published index?** Yes, closely, on the overlap window that exists — a real-data check
+  during RFC-002 found 5 of 6 components exact and Pearson r = 0.964 between the reproduced and
+  published composite. This is a different, narrower question than the `compare_composite_variants.py`
+  one above (that one needs the archive to grow for years; this one only needs the overlap that
+  already exists between LiqTide's own publish window and our primaries). Not fully closed:
+  the exact overlap window is short (LiqTide's own history is ~2024-09 at best) and the 1/6
+  mismatched component hasn't been root-caused — see the RFC-002 phase report for the specific
+  component and its residual.
+- **New, 2026-09-24, open: AC-11 real-cache user walkthrough for `/regime` has not run.** All
+  automated gates are green (see Changes Since Last Update), but this cloud container's egress
+  proxy blocks FRED/DefiLlama/stablecoins.llama.fi with a 403, so the walkthrough against real
+  cached data must happen on the user's own PC. The regime-dashboard plan stays in
+  `process/features/cycle-regime/active/` until that confirmation lands. See the plan's Resume and
+  Execution Handoff section for the exact PC steps.
+- **New, 2026-09-24, open: two component depth limits are accepted, not solved.** BTC-dominance
+  history has no free, keyless source deeper than LiqTide's own (~2025-06); spot-ETF flows
+  structurally cannot exist before 2024-01-11 (product launch date). Both panels show honest
+  "no data" / "not applicable" states rather than any fill. Revisit only if a free deeper source
+  for BTC dominance appears — don't invent one.
 
 ## References
 
@@ -485,22 +585,33 @@ and `...-183336.json`, a `device_list_dir` of `api/data/cache/liqtide/` (one fil
 `2026-09-20.parquet`), and
 `process/general-plans/active/momentum-screener_17-09-26/update-process-closeout_20-09-26.md`.
 
+**Added at the 2026-09-24 UPDATE PROCESS closeout (regime dashboard, RFC-001..006):**
+`process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`
+(full plan incl. Status Strip, ADRs, Validate Contract, Resume and Execution Handoff), all six
+`regime-dashboard_24-09-26-RFC-00N-phase-report.md` files in that task folder, the Stage-0 reports
+for RFC-001/RFC-002, the Farside `regime-dashboard-farside_FEASIBILITY_24-09-26.md`, the
+`regime-dashboard-validate_REPORT_24-09-26.md`, `.github/workflows/liqtide-snapshot.yml`, and
+`git log`/`git status` at `db8d854`.
+
 ## Scan Metadata
 
 - Generated: 2026-09-20 by `vc-generate-context` (delta update over the 2026-09-17 setup version);
   amended same day after `git init` + the composite availability-floor fix; amended again 18:47
   by `vc-update-process-agent` closing out the ADR-1 leg-boundary and liqtide-snapshot-tooling
-  threads (no `vc-generate-context` re-run — targeted UPDATE PROCESS edit per this file's own
-  Context Update Protocol)
-- HEAD: `e9612e2` (git repository initialized 2026-09-20, mid-session) — this agent has no device
-  shell this session and could not confirm whether HEAD has moved since; treat as last-known, not
-  re-verified
+  threads; amended again 2026-09-24 by `vc-update-process-agent` closing out the regime dashboard
+  program (no `vc-generate-context` re-run for either amendment — targeted UPDATE PROCESS edits
+  per this file's own Context Update Protocol)
+- HEAD: `db8d854` (branch `claude/compassionate-goldberg-o2iq49`, confirmed clean working tree at
+  the 2026-09-24 amendment via `git status`/`git log`)
 - Mode: delta update from real repo scan (directory listings, `package.json`, `pyproject.toml`,
   `.env.example`, adapter/router/analytics source files, active plan folders) — not a line count.
-  18:47 amendment mode: targeted read of the plan's ADR-1 text, the EXECUTE report, both
-  comparison-JSON artifacts, and a device-side directory listing of the LiqTide archive — not a
+  18:47 amendment mode and the 2026-09-24 amendment mode were both targeted reads (the regime
+  plan, its RFC phase reports, `git log`/`git status`, and directory listings of the new
+  `web/app/regime/`, `web/components/regime/`, `api/analytics/regime/`, `api/data/` paths) — not a
   full repo re-scan
 - Package managers: `pnpm` (web/, lockfile present), `uv` (api/, lockfile present)
-- Source scanned: `api/` (routers, analytics, data, models, scripts, tests), `web/` (app,
-  components, lib, e2e), `process/general-plans/active/momentum-screener_17-09-26/`,
-  `process/features/*/` (confirmed placeholder-only), `.env.example`, no `.github/`
+- Source scanned: `api/` (routers, analytics incl. `regime/`, data incl. `etf_flows_adapter.py`,
+  models, scripts, tests), `web/` (app incl. `regime/`, components incl. `regime/`, lib, e2e),
+  `process/general-plans/active/momentum-screener_17-09-26/`,
+  `process/features/cycle-regime/active/regime-dashboard_24-09-26/`, `process/features/*/` (the
+  other three still placeholder-only), `.env.example`, `.github/workflows/liqtide-snapshot.yml`

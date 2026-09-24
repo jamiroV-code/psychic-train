@@ -1,3 +1,10 @@
+---
+name: context:all-planning
+description: "Plan-shape calibration, SIMPLE vs COMPLEX conventions, planning references"
+keywords: plan, planning, simple, complex, prd, rfc, phase, acceptance criteria, validate contract
+date: 24-09-26
+---
+
 # Planning Context
 
 This file is the canonical planning context entrypoint for my_site.

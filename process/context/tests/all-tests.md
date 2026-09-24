@@ -1,6 +1,14 @@
+---
+name: context:all-tests
+description: "Test runners, commands, verification order, debugging reference, and known gaps"
+keywords: pytest, vitest, playwright, test, e2e, runner, coverage, fixture, debugging, isolated_cache, gate
+date: 24-09-26
+---
+
 # my_site - All Tests
 
-Last updated: 2026-09-20 (dead-data-notice-unification cycle — `dead-data-notice-unification_PLAN_20-09-26.md`, RFC-006's third and final queued item; RFC-006 is now fully closed)
+Last updated: 2026-09-24 (regime dashboard RFC-001..006 EVL — final green counts below; the
+2026-09-20 counts were the momentum-screener's own RFC-006, a separate closed program)
 
 Attach this file first when the task involves testing, verification, or test debugging.
 
@@ -15,18 +23,18 @@ Do not load the whole `process/context/tests/` folder by default. Start here, th
 
 ---
 
-## Status: three runners, backend green, E2E 5/6 (1 known cold-start flake, backlogged)
+## Status: three runners, all green (backend + frontend + E2E) as of the regime dashboard EVL
 
 **This file previously said "no test surface exists" and was stale from 18-09-26 to 19-09-26.**
 Its own Update Trigger ("a test runner is added to either `web/` or `api/`") fired when RFC-001
 landed pytest and vitest, and nothing actioned it. Corrected during RFC-005 UPDATE PROCESS.
 
-| Package | Runner | Command | State (19-09-26) |
+| Package | Runner | Command | State (24-09-26, regime dashboard EVL) |
 |---|---|---|---|
-| `api/` | pytest | `uv run --project api pytest api/ -q` | 165 passed, 1 deselected (last confirmed run; see Playwright E2E phase report residual 1 for one unconfirmed edit since) |
-| `api/` (network) | pytest | `uv run --project api pytest api/ -m integration` | opt-in, hits the real exchange |
-| `web/` | vitest | `pnpm --filter web test` | component + `lib/` unit tests. `getjson-timeout-catch_PLAN_19-09-26.md` added 3 cases (31/31 passed 19-09-26); `reason-value-rendering_PLAN_19-09-26.md` added 7 more on top (38/38 passed 19-09-26); `dead-data-notice-unification_PLAN_20-09-26.md` added 2 more — one new case each in `LegTimelineBanner.test.tsx` and `RelativePerformanceChart.test.tsx`, closing pre-existing zero-coverage gaps on those components' error branches — user-confirmed **40/40 passed 20-09-26**. That same run also carried an out-of-band pre-existing-bug fix (unrelated to this plan's own touchpoints) to `ScreenerBoard.test.tsx`'s `makeCoin()` helper, which was missing `leg_context`/`narrative_state` base fields and failed `tsc --noEmit`; see `dead-data-notice-unification_20-09-26-phase-report.md`. **75/75 passed, 12 files, 0 failed files (24-09-26, regime RFC-006)** — `vitest.config.ts` now excludes `e2e/**`, so Playwright specs are no longer collected by vitest |
-| `web/` (E2E) | Playwright | `cd web && pnpm test:e2e` | **12/12 passed, twice (24-09-26, regime RFC-006)** — `e2e/screener.spec.ts` (6) + `e2e/regime.spec.ts` (6). The seeder now also writes every `/api/regime/components` input (FRED, DefiLlama, Farside + today's `.last_attempt` ok marker, LiqTide raw + daily rows) so the API never reaches a provider. Browser: optional `PLAYWRIGHT_CHROMIUM_PATH=/path/to/chrome` makes the chromium project launch that executable (no-op when unset) — needed in the sandbox, where @playwright/test 1.63 wants chromium build 1243 but only `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` exists. Earlier: **5/6 passed (20-09-26)** — `dead-data-notice-unification_PLAN_20-09-26.md` EVL. The 1 failure (`"the board renders one panel per watchlist symbol, from a real request"`) is a pre-existing backend cold-start timing defect, not a regression from that plan's frontend-only touchpoints — root-caused and backlogged, see Debugging Quick Reference below and `board-endpoint-cold-start-latency_20-09-26.md`. Prior run: 6/6 passed 19-09-26, first real run of the frontend/backend boundary. Run `pnpm exec playwright install chromium` once first |
+| `api/` | pytest | `uv run --project api pytest api/ -q` | **294 passed, 2 deselected** (final EVL run, regime dashboard RFC-001..006 — deselected are the opt-in `integration`-marked tests) |
+| `api/` (network) | pytest | `uv run --project api pytest api/ -m integration` | opt-in, hits real providers (exchange, Farside) |
+| `web/` | vitest | `pnpm --filter web test` | **75 passed, 12 files, 0 failed files** (final EVL run, regime dashboard) — `vitest.config.ts` excludes `e2e/**`, so Playwright specs are never collected by vitest. `tsc --noEmit` and `next build` both clean at the same commit |
+| `web/` (E2E) | Playwright | `cd web && pnpm test:e2e` | **12/12 passed, run twice (24-09-26, regime dashboard RFC-006)** — `e2e/screener.spec.ts` (6) + `e2e/regime.spec.ts` (6, new). The seeder writes every `/api/regime/components` input (FRED, DefiLlama, Farside + today's `.last_attempt` ok marker, LiqTide raw + daily rows) so the API never reaches a real provider. **Cloud-container note (persists — same fix needed every fresh container):** `@playwright/test` 1.63 wants chromium build 1243 but only `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` is present, so set `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` before running (no-op on a machine with a matching browser, e.g. the user's PC after `pnpm exec playwright install chromium`). This container's egress proxy also blocks FRED/DefiLlama/stablecoins.llama.fi (403) — the seeded-fixture E2E run above never needs them, but a real-cache walkthrough (AC-11 in the regime plan) cannot run here at all and must happen on the user's PC |
 
 Live-cache spot check (reads only, no runner): `uv run --project api python api/scripts/check_weekly_anchor.py`
 — reports the week anchor of every cached `1w` series. The unit tests run against an isolated

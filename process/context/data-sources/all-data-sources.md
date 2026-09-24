@@ -1,6 +1,14 @@
+---
+name: context:data-sources
+description: "Market-data providers, free-tier limits, licensing, and analytics library choices"
+keywords: provider, data source, adapter, fred, liqtide, defillama, ccxt, farside, etf, coingecko, pytrends, reddit, api key, rate limit, licence, license, redistribution
+date: 24-09-26
+---
+
 # Data Sources Context
 
-Last updated: 2026-09-20 (LiqTide archival note added — see that section)
+Last updated: 2026-09-24 (Farside spot-ETF adapter added, `etf_flows_adapter.py`; per-series
+`max_gap_days` cadence pointer added — regime dashboard, RFC-003)
 
 Canonical entrypoint for the `data-sources` context group in my_site.
 
@@ -114,6 +122,28 @@ is invisible to everything above it.
 **Risk:** the product describes itself as beta and free "while it's beta". Terms can change and
 the endpoint can move. Cache every daily payload locally from the first fetch, so that a
 discontinuation costs the future rather than the history.
+
+**Per-series data-cadence reference (added 24-09-26):** every regime-dashboard series carries a
+declared `max_gap_days` (its normal release cadence plus holiday slack) so real data holes can be
+flagged (`gap_before: bool` per point) instead of silently interpolated. The authoritative table of
+these values and their reasons lives in code, not here — `api/analytics/regime/components.py`'s
+`MAX_GAP_DAYS_REASONS` — because the values are re-checked against live cadence and should not
+drift out of sync with a duplicated doc copy. See `GET /api/regime/components` (§11 of
+`process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`)
+for the response shape that carries these flags.
+
+### Farside Investors — spot-BTC ETF daily flows
+
+New adapter, `api/data/etf_flows_adapter.py` (added 24-09-26, regime dashboard RFC-003). Scrapes
+Farside's public flows table with stdlib `html.parser` — no API, no key. Cached, cache-first;
+**at most one request per UTC day** (LiqTide's own archived index fills any gap between fetches,
+so a missed day is not a data hole). `redistributable: false` — **personal use only**, per Standing
+Rule 7 — checked at the RFC-001 Stage 0 gate before building (see
+`regime-dashboard-farside_FEASIBILITY_24-09-26.md`). Data starts 2024-01-11 (the day US spot BTC
+ETFs launched); no dates before that are meaningful for this series, and the regime dashboard marks
+them `not_applicable` rather than `unavailable` — a real, structural distinction, not a gap.
+Real-data check at RFC-003: cached 2024-01-11 → 2026-09-23 (677 days), only US holidays and the
+current day missing.
 
 **Standing Rule 8 implemented, 2026-09-20.** `api/scripts/snapshot_liqtide.py` archives each
 day's payload to `api/data/cache/liqtide/` (now git-tracked via a `.gitignore` negation carve-out

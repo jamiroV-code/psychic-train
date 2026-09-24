@@ -2,7 +2,7 @@
 
 **Date**: 24-09-26
 **Complexity**: Complex (standard complex — one authoritative plan, sequential RFCs)
-**Status**: ⏳ PLANNED — VALIDATE CONDITIONAL (accepted 24-09-26)
+**Status**: 🔨 CODE DONE — all 6 RFCs implemented and committed (`db8d854`); all automated gates green; AC-11 real-cache walkthrough pending on user's PC (see Resume and Execution Handoff)
 **Feature folder**: `process/features/cycle-regime/`
 **Owner**: Jamiro (user) · executor: vc harness agents
 
@@ -52,12 +52,12 @@ its layout column so adding it later does not move the charts.
 
 | RFC | Title | Status |
 |---|---|---|
-| RFC-001 | LiqTide raw archive, history backfill + source research | 🧪 TESTING — live payload replayed OK (24-09-26); awaiting pytest on PC + scheduled task |
+| RFC-001 | LiqTide raw archive, history backfill + source research | 🔨 CODE DONE (24-09-26) — a nightly GitHub Actions workflow (`.github/workflows/liqtide-snapshot.yml`, 23:30 UTC) runs the snapshot and commits the archive to `main`; Windows Task Scheduler step in the Ops Runbook is therefore not needed. pytest green in the full 294-passed run below. AC-1 raw-file-on-schedule confirmation still needs the user to look at the archive after a few nightly runs |
 | RFC-002 | Component maths (six impulses + reproduced composite) | 🔨 CODE DONE (24-09-26) — real-data check: 5/6 components exact, r = 0.964 vs published |
-| RFC-003 | Spot-ETF flows adapter (conditional on RFC-001 Stage 0) | 🔨 CODE DONE (24-09-26) — Farside cached 2024-01-11 → 2026-09-23 (677 days); 256 passed; see RFC-003 phase report |
+| RFC-003 | Spot-ETF flows adapter (conditional on RFC-001 Stage 0) | 🔨 CODE DONE (24-09-26) — Farside cached 2024-01-11 → 2026-09-23 (677 days); see RFC-003 phase report |
 | RFC-004 | `GET /api/regime/components` endpoint | 🔨 CODE DONE (24-09-26) — 20 endpoint tests green; live run: ETF 8 / BTC-dom 117 pts match RFC-002 |
-| RFC-005 | `/regime` page — stacked synced charts, readout, drill-down | 🔨 CODE DONE (24-09-26) — vitest 63/63 (40 + 23 new), tsc + `next build` clean, E3 sync proven; browser probe screenshot in task folder |
-| RFC-006 | End-to-end proof + user walkthrough | 🔨 CODE DONE (24-09-26) — Playwright 12/12 twice (6 new regime specs + 6 screener), vitest 75/75 ×5, pytest 294 passed; AC-11 walkthrough pending on the PC |
+| RFC-005 | `/regime` page — stacked synced charts, readout, drill-down | 🔨 CODE DONE (24-09-26) — vitest green (see RFC-006 row for the final combined count), tsc + `next build` clean, E3 sync proven; browser probe screenshot in task folder |
+| RFC-006 | End-to-end proof + user walkthrough | 🔨 CODE DONE (24-09-26) — final EVL confirmation: pytest 294 passed / 2 deselected, vitest 75 passed (12 files, 0 failed), tsc clean, `next build` clean, Playwright 12/12 (6 regime + 6 screener) run twice with `PLAYWRIGHT_CHROMIUM_PATH` in the cloud container. **AC-11 real-cache user walkthrough is the one open item — not yet run** (blocked in this container: FRED/DefiLlama/stablecoins.llama.fi egress is proxied 403; must run on the user's PC). Plan stays in `active/` until AC-11 is confirmed |
 
 ---
 
@@ -1022,6 +1022,26 @@ then RFC-006 (end-to-end proof, incl. `web/e2e/regime.spec.ts`).
 Automated boundary proof is green (Playwright 12/12, run twice). Next: user runs the AC-11
 walkthrough in that report against the real cache on the PC; on confirmation mark RFC-006 and
 the plan ✅ VERIFIED, then UPDATE PROCESS (archive the task folder).
+
+**UPDATE PROCESS closeout, 24-09-26 (single next step for a fresh agent/user):** all six RFCs are
+CODE DONE and committed on `main` at `db8d854`. Every automated gate is green (pytest 294 / 2
+deselected, vitest 75 / 12 files / 0 failed, tsc clean, `next build` clean, Playwright 12/12 ×2).
+The **only** remaining item is AC-11 — the real-cache user walkthrough — which cannot run in this
+cloud container because FRED/DefiLlama/stablecoins.llama.fi are blocked by the egress proxy (403).
+**On the user's PC:**
+1. `git pull` (the nightly LiqTide snapshot workflow pushes to `main` daily — pull first).
+2. `uv run --project api python api/scripts/backfill_primaries.py` (or just start the API — the
+   adapters are cache-first and will populate on first real request).
+3. Start API (`uv run --project api uvicorn api.main:app --host 127.0.0.1 --port 8000`) and web
+   (`pnpm --filter web dev`), open `http://localhost:3000/regime`.
+4. Run the RFC-006 walkthrough checklist (`regime-dashboard_24-09-26-RFC-006-phase-report.md`)
+   against the real cache: 3y default range, zoom/hover/drill-down sync, ETF "not applicable before
+   2024-01-11" note, at least one real gap rendered with a reason, ~2000+ point net-liquidity series
+   render performantly.
+5. On confirmation: update this plan's Status Strip to ✅ VERIFIED for all six RFCs and
+   `ENTER UPDATE PROCESS MODE` again to archive `regime-dashboard_24-09-26/` from `active/` to
+   `completed/`. Until then this plan **stays in `active/`** — see Closeout Packet
+   (`regime-dashboard_CLOSEOUT_24-09-26.md`) for the full archive-readiness reasoning.
 
 **RFC-001 Stage 0 decisions (user, 24-09-26):** Farside = build, personal use only
 (`redistributable=false`, probe first in RFC-003); snapshot at 03:00 Brussels; archive row gains
