@@ -1,0 +1,10 @@
+{
+  "scenarios": [
+    {"scenario": "Secret exfiltration via workflow", "ruled_out": true, "rationale": "Workflow references no secrets; only the default GITHUB_TOKEN via checkout."},
+    {"scenario": "Untrusted PR code runs with write token", "ruled_out": true, "rationale": "Triggers are schedule + workflow_dispatch only; no pull_request_target / pull_request."},
+    {"scenario": "Shell injection from untrusted input", "ruled_out": true, "rationale": "No github.event.* interpolation; only GITHUB_REF_NAME (branch name set by maintainer dispatch) and date."},
+    {"scenario": "Job commits unintended files", "ruled_out": true, "rationale": "git add is scoped to api/data/cache/narrative/; trending snapshot re-ignored; a fresh checkout contains no legacy coingecko/ series and the script never writes it."},
+    {"scenario": "Push race with liqtide-snapshot clobbers history", "ruled_out": true, "rationale": "30-min offset plus pull --rebase before each push attempt (3 retries); plain push, never force."},
+    {"scenario": "Same-day rerun rewrites archived observations", "ruled_out": true, "rationale": "Read-before-write per key; backfilled pytrends dates never overwritten; tested."}
+  ]
+}
