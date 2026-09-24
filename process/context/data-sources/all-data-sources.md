@@ -1,6 +1,6 @@
 # Data Sources Context
 
-Last updated: 2026-09-17
+Last updated: 2026-09-20 (LiqTide archival note added — see that section)
 
 Canonical entrypoint for the `data-sources` context group in my_site.
 
@@ -114,6 +114,16 @@ is invisible to everything above it.
 **Risk:** the product describes itself as beta and free "while it's beta". Terms can change and
 the endpoint can move. Cache every daily payload locally from the first fetch, so that a
 discontinuation costs the future rather than the history.
+
+**Standing Rule 8 implemented, 2026-09-20.** `api/scripts/snapshot_liqtide.py` archives each
+day's payload to `api/data/cache/liqtide/` (now git-tracked via a `.gitignore` negation carve-out
+— see `process/context/all-context.md` Environment and Configuration). Confirmed operationally,
+not just in theory: LiqTide has no historical endpoint, so this archive is genuinely the only way
+to ever get pre-today LiqTide history, and it can only grow one day at a time from whenever the
+script is actually run. As of this note the archive holds a single day. A downstream consumer
+(`api/scripts/compare_composite_variants.py`, checking full-vs-reduced liquidity-composite
+agreement) needs materially more history than that before it can produce a meaningful answer —
+see the Open Questions entry in `all-context.md` for the current state of that question.
 
 ## Equity Providers
 

@@ -1,6 +1,7 @@
 # my_site - All Context
 
-Last updated: 2026-09-20
+Last updated: 2026-09-20 (amended 18:47 — see Changes Since Last Update below; the 17:46 version of
+this file predates both ADR-1 leg-boundary amendments and the LiqTide snapshot-tooling EXECUTE)
 
 This file is the root context entrypoint for the repo.
 
@@ -45,6 +46,59 @@ real application code has landed and this update replaces intentions with observ
   config exists.
 - The repo was **not a git repository** as of this file's original 2026-09-20 write-up; `git init`
   plus a baseline commit landed later the same day — see Open Questions for what's now resolved.
+
+### Amendment, 2026-09-20 18:47 — ADR-1 leg-boundary fixes + LiqTide snapshot tooling
+
+Two more sessions closed the same day, after this file's 17:46 version. Both are UPDATE PROCESS
+closeouts for threads that had already gone through EXECUTE; see
+`process/general-plans/active/momentum-screener_17-09-26/update-process-closeout_20-09-26.md` for
+the full reconciliation.
+
+- `[Product]` **ADR-1 leg-boundary detection was fixed twice, post-EXECUTE, in
+  `api/analytics/regime/leg_boundary.py`'s `detect_candidate_boundaries`:**
+  1. **Formula fix** — the rate-of-change step is now `df["composite"].diff(periods=ROC_WINDOW_DAYS)`
+     (an absolute difference), not `.pct_change(...)`. The liquidity composite is itself a blended
+     z-score (mean ≈ 0, legitimately crosses zero), so dividing by the prior value exploded at every
+     zero-crossing (`roc.std() = 21.95`, range -455.9..+189.8, `max|z| = 19.14`) while still
+     producing zero candidates. A control replay against a strictly-positive series (stablecoin
+     supply) gave clean z-scores (max 3.78) and 10 candidates, confirming the divisor was the cause.
+     `liquidity_composite.py`'s own component-level `_roc` is unaffected — it's deliberately left
+     `pct_change`-based because it runs on raw, strictly-positive economic series, not the composite.
+  2. **Constant re-tune** — `SUSTAINED_DAYS` is now **2**, not 5 (`ZSCORE_THRESHOLD` stays 1.5,
+     unchanged). Sweeping `SUSTAINED_DAYS` against `confirm_boundaries` price-structure confirmation
+     (not candidate count) gave 5→2/2 (100% precision, too few), 3→4/3 (75%), **2→6/5 (83%,
+     chosen)**, 1→12/9 (75%). At 2, the previously dark H2-2020..2021 stretch gets two new,
+     independently price-confirmed events: `2020-11-20` and `2021-04-20`.
+  - Full rationale, evidence tables and both amendments' exact text are in the plan's own
+    `## Architecture Decisions (Final)` section (ADR-1 Amendment + ADR-1 Amendment #2) — read there
+    before touching this function again; do not restate the numbers from memory.
+  - Confirming backtest (`leg-boundary-backtest-report-20260920-184700.json`): 2017 → 0
+    candidates / 0 confirmed (34 composite points in-window — see Open Questions, unchanged
+    structural gap); 2020-21 → 6 candidates / 5 confirmed.
+- `[Product]` **LiqTide snapshot tooling shipped** (`liqtide-snapshot-tooling_20-09-26` task
+  folder, EXECUTE `COMPLETE_WITH_GAPS`): `LiqTidePayload.raw: dict | None` added (additive, last
+  field) to `api/data/liqtide_adapter.py`; `fetch_latest(client=None, dry_run=False)` added so a
+  dry run never writes; two new scripts under `api/scripts/` —
+  `snapshot_liqtide.py` (arithmetic + coverage checks, `--coverage`/`--verify-only`) and
+  `compare_composite_variants.py` (full-vs-reduced composite agreement check, reused
+  `CONFIRMATION_WINDOW_DAYS` as its match tolerance); a new `api/tests/scripts/` test package (11
+  synthetic-fixture tests, no network); `.gitignore` changed from a blanket
+  `api/data/cache/` ignore to `api/data/cache/*` + `!api/data/cache/liqtide/` so the LiqTide daily
+  archive is git-tracked going forward (Standing Rule 8 in the data-sources group, now implemented).
+  All 6 test gates passed (179 passed / 1 deselected, final `uv run pytest tests/ -x -q`).
+  **But the tool's actual purpose — proving the full and reduced composites agree — is still
+  unanswered, not because of a bug but because LiqTide has no historical endpoint**: the archive
+  can only be populated forward from the day the snapshot script actually runs, and as of this
+  amendment it holds exactly one day (`api/data/cache/liqtide/2026-09-20.parquet`). The comparison
+  script's `full.available` is still `false` for the 2024-01-11..2026-09-20 window with that single
+  day present — one day is not enough history for the full composite to be considered available
+  over a multi-year window. **Reconciliation of a stale report number:** the EXECUTE report's own
+  comparison run (18:08, before the `SUSTAINED_DAYS` re-tune above) says the reduced composite
+  found 0 candidates in that window; a later re-run at 18:33 (after the re-tune landed) found
+  **4 candidates, 3 confirmed** (`2026-03-17`, `2026-04-20`, `2026-06-02`). The verdict is still
+  `DISAGREE` either way, for the same reason (the full side has no data to compare against) — but
+  the report's "0 candidates" line should not be read as current; treat the 18:33 run as the
+  live number until a fresh comparison is run.
 
 ---
 
@@ -225,9 +279,10 @@ my_site/
                                 reddit_adapter.py, cache.py (DuckDB-over-Parquet), watchlist.py
     models/                 -- screener.py, regime.py, narrative.py (pydantic schemas)
     scripts/                -- refresh_cache.py, backfill_primaries.py, and diagnostic/backtest
-                                one-offs (backtest_leg_boundaries.py, check_weekly_anchor.py, etc.)
-    tests/                  -- analytics/, data/, routers/ — pytest, `integration` marker for
-                                real-network tests (deselected by default)
+                                one-offs (backtest_leg_boundaries.py, check_weekly_anchor.py,
+                                snapshot_liqtide.py, compare_composite_variants.py, etc.)
+    tests/                  -- analytics/, data/, routers/, scripts/ (new, 20-09-26) — pytest,
+                                `integration` marker for real-network tests (deselected by default)
   process/                  -- this agent harness
     context/                -- durable project knowledge (this file + groups)
     general-plans/          -- cross-cutting plans, incl. the momentum-screener feature (see
@@ -328,9 +383,13 @@ API_PORT=8000
 - App: `API_BASE_URL`, `API_PORT`
 
 Config files present: `web/package.json`, `web/tsconfig.json`, `api/pyproject.toml`,
-`api/.python-version`. Git repository initialized 2026-09-20; `.gitignore` already correctly
-excludes `.venv/`, `node_modules/`, `__pycache__/`, `.next/`, `api/data/cache/`, and (added at
-init time) `.env` and `.claude/hooks/.logs/`.
+`api/.python-version`. Git repository initialized 2026-09-20; `.gitignore` excludes `.venv/`,
+`node_modules/`, `__pycache__/`, `.next/`, and (added at init time) `.env` and
+`.claude/hooks/.logs/`. **`api/data/cache/` changed 20-09-26** from a blanket ignore to
+`api/data/cache/*` + `!api/data/cache/liqtide/` (negation line after the broader ignore) — every
+other cache subfolder stays untracked, but `api/data/cache/liqtide/` is now git-tracked so the
+daily LiqTide archive survives (one file present as of this update: `2026-09-20.parquet`). See
+the 18:47 Amendment above and `data-sources/all-data-sources.md` Standing Rule 8.
 
 ## Open Decisions
 
@@ -390,6 +449,23 @@ may be redistributed. See Licensing in `data-sources/all-data-sources.md`.
   `--cycle 2017`) is effectively testing ~7 weeks of early 2018, not the 2017 cycle it's named
   for. Undecided: accept this as a structural limit and document it in the backtest's own output,
   or find another approach for pre-2017-11 dates. Don't guess — ask.
+  **Sharpened, still unresolved, 2026-09-20 18:47:** the post-ADR-1-Amendment confirming backtest
+  (`leg-boundary-backtest-report-20260920-184700.json`) reproduces exactly this — 2017 → 0
+  candidates / 0 confirmed against 34 in-window composite points, unchanged by either ADR-1 fix.
+  This rules out "the ROC bug/threshold was masking 2017 signal" as an explanation: the 2017 gap is
+  purely the pre-2018 coverage floor described above, not a downstream effect of the amendments.
+  The choice between accepting the structural limit vs. finding another pre-2017-11 approach is
+  still open — this evidence narrows the cause, it does not answer the question.
+- **New, 2026-09-20 18:47: the full-vs-reduced liquidity composite agreement question (the
+  LiqTide snapshot tooling's actual purpose) remains unanswered, and may stay that way for a long
+  time.** `api/data/cache/liqtide/` now holds one archived day (`2026-09-20.parquet`); LiqTide has
+  no historical endpoint, so the archive can only grow forward one day at a time, and
+  `compare_composite_variants.py`'s `full.available` stays `false` over the 2024-01-11..2026-09-20
+  window until there's materially more than one day of history to compare against. Not a code
+  defect — see the 18:47 Amendment above for the mechanics and the corrected reduced-composite
+  candidate count. Undecided: whether to accept this as a multi-year wait, look for a way to
+  backfill LiqTide history from its own underlying six sources instead of the endpoint, or drop
+  the comparison as a goal. Don't guess — ask.
 
 ## References
 
@@ -399,13 +475,31 @@ Source files this update was based on: `web/package.json`, `api/pyproject.toml`,
 `process/general-plans/active/momentum-screener_17-09-26/momentum-screener_PLAN_17-09-26.md`,
 plus directory listings of `api/`, `web/`, and `process/features/*/`.
 
+**Added at the 18:47 amendment (UPDATE PROCESS closeout of two 20-09-26 threads):**
+`api/analytics/regime/leg_boundary.py` (via the plan's ADR-1 Amendment + Amendment #2 text, read
+directly), `api/scripts/snapshot_liqtide.py`, `api/scripts/compare_composite_variants.py`,
+`process/general-plans/active/momentum-screener_17-09-26/leg-boundary-backtest-report-20260920-184700.json`,
+`process/general-plans/active/liqtide-snapshot-tooling_20-09-26/liqtide-snapshot-tooling_REPORT_20-09-26.md`,
+`process/general-plans/active/liqtide-snapshot-tooling_20-09-26/composite-variant-agreement-20260920-180830.json`
+and `...-183336.json`, a `device_list_dir` of `api/data/cache/liqtide/` (one file:
+`2026-09-20.parquet`), and
+`process/general-plans/active/momentum-screener_17-09-26/update-process-closeout_20-09-26.md`.
+
 ## Scan Metadata
 
 - Generated: 2026-09-20 by `vc-generate-context` (delta update over the 2026-09-17 setup version);
-  amended same day after `git init` + the composite availability-floor fix
-- HEAD: `e9612e2` (git repository initialized 2026-09-20, mid-session)
+  amended same day after `git init` + the composite availability-floor fix; amended again 18:47
+  by `vc-update-process-agent` closing out the ADR-1 leg-boundary and liqtide-snapshot-tooling
+  threads (no `vc-generate-context` re-run — targeted UPDATE PROCESS edit per this file's own
+  Context Update Protocol)
+- HEAD: `e9612e2` (git repository initialized 2026-09-20, mid-session) — this agent has no device
+  shell this session and could not confirm whether HEAD has moved since; treat as last-known, not
+  re-verified
 - Mode: delta update from real repo scan (directory listings, `package.json`, `pyproject.toml`,
-  `.env.example`, adapter/router/analytics source files, active plan folders) — not a line count
+  `.env.example`, adapter/router/analytics source files, active plan folders) — not a line count.
+  18:47 amendment mode: targeted read of the plan's ADR-1 text, the EXECUTE report, both
+  comparison-JSON artifacts, and a device-side directory listing of the LiqTide archive — not a
+  full repo re-scan
 - Package managers: `pnpm` (web/, lockfile present), `uv` (api/, lockfile present)
 - Source scanned: `api/` (routers, analytics, data, models, scripts, tests), `web/` (app,
   components, lib, e2e), `process/general-plans/active/momentum-screener_17-09-26/`,
