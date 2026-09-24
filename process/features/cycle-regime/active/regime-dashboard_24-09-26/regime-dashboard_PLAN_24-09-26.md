@@ -54,7 +54,7 @@ its layout column so adding it later does not move the charts.
 |---|---|---|
 | RFC-001 | LiqTide raw archive, history backfill + source research | 🧪 TESTING — live payload replayed OK (24-09-26); awaiting pytest on PC + scheduled task |
 | RFC-002 | Component maths (six impulses + reproduced composite) | 🔨 CODE DONE (24-09-26) — real-data check: 5/6 components exact, r = 0.964 vs published |
-| RFC-003 | Spot-ETF flows adapter (conditional on RFC-001 Stage 0) | ⏳ PLANNED — not started; user chose to do RFC-004 first (not skipped) |
+| RFC-003 | Spot-ETF flows adapter (conditional on RFC-001 Stage 0) | 🔨 CODE DONE (24-09-26) — Farside cached 2024-01-11 → 2026-09-23 (677 days); 256 passed; see RFC-003 phase report |
 | RFC-004 | `GET /api/regime/components` endpoint | 🔨 CODE DONE (24-09-26) — 20 endpoint tests green; live run: ETF 8 / BTC-dom 117 pts match RFC-002 |
 | RFC-005 | `/regime` page — stacked synced charts, readout, drill-down | 🔨 CODE DONE (24-09-26) — vitest 63/63 (40 + 23 new), tsc + `next build` clean, E3 sync proven; browser probe screenshot in task folder |
 | RFC-006 | End-to-end proof + user walkthrough | ⏳ PLANNED |
@@ -494,7 +494,7 @@ stand-in — dates without a value are simply absent and `reason` explains the g
 
 Status rules (RFC-004, see `components.status_for_range`): `not_applicable` when the requested
 `end` is before the component's first possible date (ETF flows: 2024-01-11); with no ETF data at
-all the status is `unavailable` (reason names RFC-003, not built) and `notes` still say pre-launch
+all the status is `unavailable` (reason names the Farside status — RFC-003 merged: Farside primary, LiqTide archive fills gaps) and `notes` still say pre-launch
 dates are not applicable. A component whose data exists but has no points inside the requested
 window is `no_data`. `composite.published.status` is `ok` when it has points, else `unavailable`.
 `start > end` or a malformed date → 422. `agreement` is whole-history (not window-filtered).
@@ -684,9 +684,9 @@ unless terms say otherwise → wire into RFC-002's ETF builder.
 - Verification query: DuckDB `select min(date), max(date), count(*) from 'api/data/cache/etf_flows/btc_spot.parquet'`.
 
 **Verification Checklist**
-- [ ] Manual test passed
-- [ ] Data verified
-- [ ] Error handling confirmed
+- [x] Manual test passed (one live request, `ok`, 677 rows — 24-09-26)
+- [x] Data verified (DuckDB: min 2024-01-11, max 2026-09-23, 677; only US holidays + today missing)
+- [x] Error handling confirmed (timeout/challenge/layout → `unavailable`, cache → `stale` in tests; real bad-URL run → `unavailable`)
 - [ ] User confirmed working
 
 **Acceptance Criteria**: AC-6.
@@ -985,13 +985,18 @@ needed**; pull before working locally, since the workflow pushes to `main` daily
 **RFC-002 (24-09-26):** 🔨 CODE DONE — see `regime-dashboard-rfc002-stage0_REPORT_24-09-26.md` and
 `regime-dashboard_24-09-26-RFC-002-phase-report.md`. Next: user confirms, then RFC-003 (Farside probe).
 
+**RFC-003 (24-09-26):** 🔨 CODE DONE — see `regime-dashboard_24-09-26-RFC-003-phase-report.md`.
+`api/data/etf_flows_adapter.py` (stdlib `html.parser`, `redistributable=false`, at most one request
+per UTC day) feeds `components.build_etf_flows` (Farside first, LiqTide archive fills gaps). Next:
+user confirms (optionally runs `uv run --project api pytest api/ -m integration -k etf`), then RFC-004.
+
 **RFC-004 (24-09-26):** 🔨 CODE DONE — see `regime-dashboard_24-09-26-RFC-004-phase-report.md`.
-RFC-003 not started (user chose RFC-004 first; not skipped). Next: user runs the RFC-004 checks on
+RFC-003 was built in a parallel session (see above). Next: user runs the RFC-004 checks on
 the PC (pytest + curl with a populated FRED/DefiLlama cache), then RFC-005 (`/regime` page).
 
 **RFC-005 (24-09-26):** 🔨 CODE DONE — see `regime-dashboard_24-09-26-RFC-005-phase-report.md`.
 Next: user runs the RFC-005 PC checklist (zoom/hover/drill-down/stop-API) with a populated cache;
-then RFC-006 (end-to-end proof, incl. `web/e2e/regime.spec.ts`). RFC-003 still not started.
+then RFC-006 (end-to-end proof, incl. `web/e2e/regime.spec.ts`).
 
 **RFC-001 Stage 0 decisions (user, 24-09-26):** Farside = build, personal use only
 (`redistributable=false`, probe first in RFC-003); snapshot at 03:00 Brussels; archive row gains

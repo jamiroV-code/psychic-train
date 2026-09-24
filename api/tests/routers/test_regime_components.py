@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 
 from api.analytics.regime import components as comp
 from api.analytics.regime import leg_boundary
-from api.data import cache, defillama_adapter, fred_adapter, liqtide_adapter
+from api.data import cache, defillama_adapter, etf_flows_adapter, fred_adapter, liqtide_adapter
 from api.main import app
 from api.models.regime import CurrentLegState, LegBoundaryResponse
 
@@ -68,6 +68,9 @@ def client(isolated_cache, monkeypatch):
     monkeypatch.setattr(comp, "_utc_today", lambda: pd.Timestamp("2026-09-24"))
     monkeypatch.setattr(liqtide_adapter, "fetch_latest",
                         lambda *a, **k: pytest.fail("live LiqTide call from /components"))
+    # RFC-003: /components builds ETF flows from Farside; never hit the network.
+    monkeypatch.setattr(etf_flows_adapter, "fetch_btc_spot_flows", lambda *a, **k: etf_flows_adapter.EtfFlowsResult(
+        pd.DataFrame(columns=etf_flows_adapter.COLUMNS), "unavailable", "stubbed: no network in tests"))
     _write_liqtide_archive()
     return TestClient(app)
 
@@ -200,10 +203,10 @@ class TestNotApplicable:
         assert "2024-01-11" in etf["reason"]
         assert etf["points"] == []
 
-    def test_etf_without_data_is_unavailable_naming_rfc003(self, client):
+    def test_etf_without_data_is_unavailable_naming_farside(self, client):
         etf = _by_id(client.get(URL).json())["etf_flows"]
         assert etf["status"] == "unavailable"
-        assert "RFC-003" in etf["reason"]
+        assert etf["reason"] == "no ETF flow history: Farside unavailable (stubbed: no network in tests)"
         assert any("Not applicable before 2024-01-11" in n for n in etf["notes"])
 
     def test_other_components_unaffected_by_pre_launch_end(self, client):

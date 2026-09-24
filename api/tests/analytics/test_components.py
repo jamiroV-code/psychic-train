@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 from api.analytics.regime import components as comp
-from api.data import cache, defillama_adapter, fred_adapter, liqtide_adapter
+from api.data import cache, defillama_adapter, etf_flows_adapter, fred_adapter, liqtide_adapter
 
 S = comp.SPEC_BY_ID
 
@@ -170,6 +170,13 @@ class TestLiqTideSourced:
         c = comp.build_etf_flows(_history([]))
         assert c.status == "unavailable"
 
+    def test_etf_no_history_reason_names_farside(self):
+        farside = etf_flows_adapter.EtfFlowsResult(pd.DataFrame(columns=etf_flows_adapter.COLUMNS),
+                                                   "unavailable", "request timed out")
+        c = comp.build_etf_flows(_history([]), farside)
+        assert c.status == "unavailable"
+        assert "Farside unavailable" in c.reason and "timed out" in c.reason
+
     def test_btc_dominance_golden(self):
         c = comp.build_btc_dominance(_history([("btc_dom", "2026-08-25", 59.237158),
                                                ("btc_dom", "2026-09-24", 58.792047)]))
@@ -269,6 +276,9 @@ class TestOrchestrator:
                                 pd.DataFrame({"date": pd.to_datetime(days, utc=True),
                                               "value": np.linspace(3.0e11, 3.1e11, len(days))}), "ok"))
         monkeypatch.setattr(liqtide_adapter, "fetch_latest", lambda *a, **k: pytest.fail("live LiqTide call"))
+        monkeypatch.setattr(etf_flows_adapter, "fetch_btc_spot_flows", lambda *a, **k:
+                            etf_flows_adapter.EtfFlowsResult(pd.DataFrame(columns=etf_flows_adapter.COLUMNS),
+                                                             "unavailable", "test: no network"))
         result = comp.build_regime_components()
         ids = [c.spec.id for c in result.components]
         assert ids == [s.id for s in comp.COMPONENTS]
@@ -326,3 +336,51 @@ class TestGapFlags:
         dates = pd.to_datetime(["2025-11-01", "2025-11-03", "2025-11-06", "2025-11-07", "2026-08-03", "2026-08-04"])
         assert comp.gap_before_flags(dates, S["btc_dominance"].max_gap_days) == [
             False, False, False, False, True, False]
+
+
+def _farside(pairs: dict[str, float], status: str = "ok", reason: str | None = None):
+    df = pd.DataFrame({"date": pd.to_datetime(list(pairs)), "net_flow_usd_m": list(pairs.values())})
+    return etf_flows_adapter.EtfFlowsResult(df, status, reason)
+
+
+class TestEtfFarsideWiring:
+    """RFC-003: Farside daily totals (US$m) feed the 5-day ETF impulse."""
+
+    FLOWS_M = {"2026-09-17": 159.5, "2026-09-18": 433.0, "2026-09-21": 999.0,
+               "2026-09-22": 714.7, "2026-09-23": 32.4}
+
+    def test_farside_usd_m_converted_and_golden(self):
+        c = comp.build_etf_flows(_history([]), _farside(self.FLOWS_M))
+        assert c.status == "ok"
+        last = c.points.iloc[-1]
+        assert last["value"] == pytest.approx(2338.6e6)
+        assert round(last["contribution"], 4) == 0.9816
+        assert any("personal use only" in n for n in c.notes)
+
+    def test_farside_preferred_liqtide_fills_missing_dates(self):
+        flows = dict(self.FLOWS_M)
+        del flows["2026-09-17"]
+        history = _history([("etf_flows", "2026-09-17", 159.5e6), ("etf_flows", "2026-09-23", 9e9)])
+        c = comp.build_etf_flows(history, _farside(flows))
+        last = c.points.iloc[-1]
+        assert last["date"] == pd.Timestamp("2026-09-23")
+        assert last["value"] == pytest.approx(2338.6e6)  # Farside's 32.4m wins over LiqTide's 9bn
+
+    def test_farside_pre_launch_rows_dropped(self):
+        pairs = {f"2024-01-{d:02d}": 100.0 for d in (8, 9, 10, 11, 12, 16, 17, 18)}
+        c = comp.build_etf_flows(_history([]), _farside(pairs))
+        assert c.points["date"].min() >= comp.ETF_LAUNCH_DATE
+
+    def test_farside_stale_propagates(self):
+        c = comp.build_etf_flows(_history([]), _farside(self.FLOWS_M, "stale", "latest fetch failed"))
+        assert c.status == "stale"
+        assert c.reason == "latest fetch failed"
+
+    def test_farside_unavailable_falls_back_to_liqtide_archive(self):
+        rows = [("etf_flows", d, v * 1e6) for d, v in self.FLOWS_M.items()]
+        farside = etf_flows_adapter.EtfFlowsResult(pd.DataFrame(columns=etf_flows_adapter.COLUMNS),
+                                                   "unavailable", "blocked by source")
+        c = comp.build_etf_flows(_history(rows), farside)
+        assert c.status == "ok"
+        assert c.points.iloc[-1]["value"] == pytest.approx(2338.6e6)
+        assert any("LiqTide archive only" in n for n in c.notes)

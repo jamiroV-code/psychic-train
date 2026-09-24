@@ -11,6 +11,7 @@ plan: process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dash
 **Date**: 24-09-26
 **Plan**: `regime-dashboard_PLAN_24-09-26.md` (§11, §15 RFC-004, Stage 0 decisions 1–6)
 **Status**: 🔨 CODE DONE — endpoint tests green; not ✅ VERIFIED until the user confirms on the PC.
+> **Post-merge note (24-09-26):** RFC-003 has since landed on main and was merged in. The ETF component now reads Farside first with the LiqTide archive filling gaps; with no data its reason is "no ETF flow history: Farside {status} ({reason})", no longer "RFC-003, not built".
 RFC-003 is **not started** (user chose RFC-004 first) — not skipped.
 
 ## What Was Done
