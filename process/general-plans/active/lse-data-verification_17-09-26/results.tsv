@@ -1,0 +1,3 @@
+iteration	timestamp	gaps_found	fail_count	concern_count	applied	saturation_status	loop_status	notes
+0	2026-09-24T00:00:00Z	TBD	0	0	0	ACTIVE	baseline	Plan 17-09-26 with outer-pvl validate-contract written; first-pass Gate: CONDITIONAL (3 CONCERNs: delisted ticker unnamed, NVDA missing from symbol set, 50-symbol universe undefined)
+1	2026-09-24T00:30:00Z	3	0	3	3	ACTIVE	CONTINUE	V3 CONDITIONAL: G1 delisted ticker unnamed, G2 NVDA absent from fixed set, G3 50-symbol universe undefined. All 3 applied, none backlogged. Re-validate from V1.
