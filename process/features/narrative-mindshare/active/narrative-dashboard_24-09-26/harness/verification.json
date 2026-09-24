@@ -1,0 +1,59 @@
+{
+  "steps": [
+    {
+      "step": "RFC-3 analytics tests (composite golden, skipna, coverage floor, pytrends variants, legacy coingecko excluded, coingecko-narrative absent/present, gaps, ranks, change windows, UTC boundary, allow-list)",
+      "command": "uv run --project api pytest api/tests/analytics/test_history.py -q",
+      "result": "PASS",
+      "notes": "25 passed"
+    },
+    {
+      "step": "RFC-3 router tests (shape, filters, 422 x6, one source down, empty cache, read-only, gzip, separation from get_categories)",
+      "command": "uv run --project api pytest api/tests/routers/test_narrative_history.py -q",
+      "result": "PASS",
+      "notes": "17 passed"
+    },
+    {
+      "step": "RFC-1 contract test: /categories + /screener byte-identical",
+      "command": "uv run --project api pytest api/tests/routers/test_narrative_categories_contract.py -q",
+      "result": "PASS",
+      "notes": "3 passed"
+    },
+    {
+      "step": "Full api suite",
+      "command": "uv run --project api pytest api/ -q",
+      "result": "PASS",
+      "notes": "378 passed, 3 deselected (was 336 + 42 new)"
+    },
+    {
+      "step": "Full web suite",
+      "command": "pnpm --filter web test",
+      "result": "PASS",
+      "notes": "75 passed, 12 files"
+    },
+    {
+      "step": "trigger.py / screener_board.py untouched",
+      "command": "git diff --quiet -- api/analytics/narrative/trigger.py api/analytics/screener_board.py",
+      "result": "PASS",
+      "notes": "empty diff; get_categories body unchanged (only imports around it grew)"
+    },
+    {
+      "step": "Manual curl against a real cache",
+      "command": "curl \"http://127.0.0.1:8000/api/narrative/history\" | python -m json.tool | head -80",
+      "result": "SKIP",
+      "notes": "narrative cache empty in this container (egress proxy blocks providers); user-PC step"
+    }
+  ],
+  "task": "RFC-3: GET /api/narrative/history (narrative dashboard)",
+  "commands": [
+    "uv run --project api pytest api/tests/analytics/test_history.py -q",
+    "uv run --project api pytest api/tests/routers/test_narrative_history.py -q",
+    "uv run --project api pytest api/tests/routers/test_narrative_categories_contract.py -q",
+    "uv run --project api pytest api/ -q",
+    "pnpm --filter web test",
+    "git diff --quiet -- api/analytics/narrative/trigger.py api/analytics/screener_board.py"
+  ],
+  "manualChecks": [
+    "curl /api/narrative/history on the user's PC against a real cache and review sample output for 2+ categories (pending)"
+  ],
+  "result": "automated-pass; manual-pending"
+}

@@ -1,0 +1,12 @@
+{
+  "reviewer": "pending \u2014 user (manual-first)",
+  "decision": "PENDING",
+  "rationale": "Not yet reviewed. Manual-first evidence contract: RFC-3 is not finalize-ready until the user records APPROVE or REJECT here after reviewing sample /history output for 2+ categories (plan RFC-3 'Done when').",
+  "timestamp": null,
+  "task": "RFC-3: GET /api/narrative/history (narrative dashboard)",
+  "blockingFindings": [],
+  "nonBlockingFindings": [
+    "Existing /categories bug (backlog, not fixed here): trigger.py:206 reads pytrends/reddit by category_id while pytrends_adapter.py:100 and reddit_adapter.py:133 write by keyword."
+  ],
+  "notes": "decision deliberately left PENDING (manual-first); the validator's decision check fails until the user records approved/approved-with-concerns/rejected."
+}
