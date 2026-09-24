@@ -54,6 +54,10 @@ class ComponentSpec:
     source: str
     transform: str
     unit: str
+    # First date the component can exist at all (RFC-004 decision 1). Before
+    # it the component is `not_applicable`, which is a different state from
+    # `unavailable` (the source failed) and `no_data` (history too short).
+    applicable_from: pd.Timestamp | None = None
 
 
 COMPONENTS: tuple[ComponentSpec, ...] = (
@@ -81,6 +85,7 @@ COMPONENTS: tuple[ComponentSpec, ...] = (
         "etf_flows", "etf_flow_5d", "Spot-BTC ETF net flows (5-day sum)", 0.10, +1, 1e9, 5, 9, 5,
         "daily (trading days)", "LiqTide `metrics.etf_flows` archive (Farside history: RFC-003)",
         "sum of the last 5 daily net flows; contribution = tanh(Σ / $1bn)", "USD",
+        ETF_LAUNCH_DATE,
     ),
     ComponentSpec(
         "btc_dominance", "rotation_30d", "BTC dominance, inverted (30-day change)", 0.10, -1, 2.0, 30, 5, 3,
@@ -96,7 +101,7 @@ class ComponentSeries:
     spec: ComponentSpec
     # columns: date (tz-naive Timestamp), value (impulse), raw (level), contribution
     points: pd.DataFrame
-    status: str  # ok | stale | unavailable | no_data
+    status: str  # ok | stale | unavailable | no_data | not_applicable (see status_for_range)
     reason: str | None = None
     notes: list[str] = field(default_factory=list)
 
@@ -267,7 +272,7 @@ def build_etf_flows(history: pd.DataFrame) -> ComponentSeries:
     points = rolling_sum_component(spec, flows)
     if points.empty:
         status, reason = ("no_data", "fewer than 5 archived daily flows so far") if not flows.empty else (
-            "unavailable", "no ETF flow history archived yet (Farside backfill: RFC-003)")
+            "unavailable", "no ETF flow history archived yet (Farside backfill, RFC-003, not built)")
     else:
         status, reason = "ok", None
     notes = [f"Not applicable before {ETF_LAUNCH_DATE.date()} (US spot-BTC ETFs launched that day)."]
@@ -284,6 +289,30 @@ def build_btc_dominance(history: pd.DataFrame) -> ComponentSeries:
     if not level.empty:
         notes.append(f"No data before {level.index.min().date()}.")
     return ComponentSeries(spec, points, status, reason, notes)
+
+
+def status_for_range(component: ComponentSeries, end: pd.Timestamp | None) -> tuple[str, str | None]:
+    """Status/reason for a component over a requested range (RFC-004 decision 1).
+
+    One status per component (plan §11). The rule:
+
+    - If the spec has an ``applicable_from`` date and the requested ``end`` is
+      before it, the component cannot exist anywhere in the range, so it is
+      ``not_applicable`` — whatever the builder reported. Example: spot-BTC
+      ETF flows with ``end`` before 2024-01-11.
+    - Otherwise the builder's own status stands. In particular, when there is
+      no ETF data at all the status stays ``unavailable`` with a reason naming
+      RFC-003 (Farside backfill not built); the component's notes still say
+      pre-launch dates are not applicable.
+
+    Range-dependent, so it lives beside the builders rather than inside them:
+    the builders stay range-agnostic.
+    """
+    start_of_life = component.spec.applicable_from
+    if start_of_life is not None and end is not None and end < start_of_life:
+        return "not_applicable", (
+            f"not applicable before {start_of_life.date()}; the requested range ends before that date")
+    return component.status, component.reason
 
 
 # --------------------------------------------------------------- composite

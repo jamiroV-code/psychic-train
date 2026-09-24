@@ -16,6 +16,7 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 # NOTE (RFC-002/RFC-003 scope): routers/regime.py (item 42) and
 # routers/narrative.py (item 56) are now both wired in.
@@ -44,6 +45,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# RFC-004 decision 5: /api/regime/components returns decades of daily points;
+# gzip is transparent to clients (no shape change).
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.include_router(screener.router)
 app.include_router(watchlist.router)

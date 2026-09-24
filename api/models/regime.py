@@ -48,3 +48,87 @@ class LegBoundaryResponse(BaseModel):
     candidate_boundaries: list[LegBoundary]
     confirmed_boundaries: list[LegBoundary]
     active_benchmark_reason: str
+
+
+# --- RFC-004 (regime dashboard): GET /api/regime/components, plan §11 ------
+#
+# Additive. `status` gains `not_applicable` (RFC-004 decision 1): a component
+# that cannot exist in the requested range, distinct from `unavailable`
+# (source failed, nothing cached) and `no_data` (history shorter than the
+# change window). Point lists never carry null/NaN/0 stand-ins — a date with
+# no value is simply absent.
+
+ComponentStatus = Literal["ok", "stale", "unavailable", "not_applicable", "no_data"]
+PublishedStatus = Literal["ok", "unavailable"]
+
+
+class ComponentPoint(BaseModel):
+    date: str  # ISO date
+    value: float  # impulse, in the component's unit
+    raw: float  # underlying level
+    contribution: float  # sign·tanh(impulse/scale), in [-1, 1]
+
+
+class RegimeComponent(BaseModel):
+    id: str
+    label: str
+    weight: float
+    source: str
+    transform: str
+    frequency: str
+    unit: str
+    status: ComponentStatus
+    reason: str | None = None
+    notes: list[str]
+    first_date: str | None = None
+    last_date: str | None = None
+    # Most recent fetch among this component's cached inputs (decision 2);
+    # null only when nothing is cached.
+    last_fetched_utc: str | None = None
+    points: list[ComponentPoint]
+
+
+class ReproducedPoint(BaseModel):
+    date: str
+    value: float
+    coverage: float
+
+
+class ReproducedComposite(BaseModel):
+    label: str
+    normalisation: str
+    points: list[ReproducedPoint]
+
+
+class PublishedPoint(BaseModel):
+    date: str
+    value: float
+    regime_label: str | None = None  # only where LiqTide published one
+
+
+class PublishedComposite(BaseModel):
+    label: str
+    attribution: str
+    status: PublishedStatus
+    points: list[PublishedPoint]
+
+
+class CompositeAgreement(BaseModel):
+    overlap_days: int
+    pearson_r: float | None = None
+    mean_abs_diff: float | None = None
+    full_coverage_days: int = 0
+    full_coverage_mean_abs_diff: float | None = None
+
+
+class RegimeComposite(BaseModel):
+    reproduced: ReproducedComposite
+    published: PublishedComposite
+    agreement: CompositeAgreement
+
+
+class RegimeComponentsResponse(BaseModel):
+    generated_utc: str
+    grid_dates: list[str]
+    components: list[RegimeComponent]
+    composite: RegimeComposite

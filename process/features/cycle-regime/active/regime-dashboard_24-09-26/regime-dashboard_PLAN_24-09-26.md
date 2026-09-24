@@ -54,8 +54,8 @@ its layout column so adding it later does not move the charts.
 |---|---|---|
 | RFC-001 | LiqTide raw archive, history backfill + source research | 🧪 TESTING — live payload replayed OK (24-09-26); awaiting pytest on PC + scheduled task |
 | RFC-002 | Component maths (six impulses + reproduced composite) | 🔨 CODE DONE (24-09-26) — real-data check: 5/6 components exact, r = 0.964 vs published |
-| RFC-003 | Spot-ETF flows adapter (conditional on RFC-001 Stage 0) | ⏳ PLANNED |
-| RFC-004 | `GET /api/regime/components` endpoint | ⏳ PLANNED |
+| RFC-003 | Spot-ETF flows adapter (conditional on RFC-001 Stage 0) | ⏳ PLANNED — not started; user chose to do RFC-004 first (not skipped) |
+| RFC-004 | `GET /api/regime/components` endpoint | 🔨 CODE DONE (24-09-26) — 20 endpoint tests green; live run: ETF 8 / BTC-dom 117 pts match RFC-002 |
 | RFC-005 | `/regime` page — stacked synced charts, readout, drill-down | ⏳ PLANNED |
 | RFC-006 | End-to-end proof + user walkthrough | ⏳ PLANNED |
 
@@ -451,16 +451,18 @@ Query: `start` (ISO date, optional), `end` (ISO date, optional). Default: full h
       "id": "net_liquidity",
       "label": "Net liquidity (4-week change)",
       "weight": 0.30,
-      "source": "FRED: WALCL − WTREGEN − RRPONTSYD×1000",
-      "transform": "change vs value as of 28 calendar days earlier, $bn",
-      "frequency": "daily (WALCL/WTREGEN as of latest weekly release)",
+      "source": "FRED: WALCL − WDTGAL − RRPONTSYD×1000",
+      "transform": "level(t) − level(t − 28 days); contribution = tanh(Δ / $150bn)",
+      "frequency": "weekly (Wednesday, H.4.1)",
+      "unit": "USD",
+      "notes": [],
       "status": "ok",
       "reason": null,
       "first_date": "2002-12-18",
       "last_date": "2026-09-17",
       "last_fetched_utc": "2026-09-24T06:00:00Z",
       "points": [
-        { "date": "2023-09-27", "value": -41.2, "raw": 7102.4, "contribution": -0.31 }
+        { "date": "2023-09-27", "value": -41200000000.0, "raw": 7102400000000.0, "contribution": -0.27 }
       ]
     }
   ],
@@ -476,7 +478,8 @@ Query: `start` (ISO date, optional), `end` (ISO date, optional). Default: full h
       "status": "ok",
       "points": [ { "date": "2024-09-02", "value": 52.0, "regime_label": "neutral" } ]
     },
-    "agreement": { "overlap_days": 380, "pearson_r": 0.71, "mean_abs_diff": 6.4 }
+    "agreement": { "overlap_days": 380, "pearson_r": 0.71, "mean_abs_diff": 6.4,
+                   "full_coverage_days": 90, "full_coverage_mean_abs_diff": 2.1 }
   }
 }
 ```
@@ -484,6 +487,16 @@ Query: `start` (ISO date, optional), `end` (ISO date, optional). Default: full h
 (Numbers above are illustrative shape only.) `status` per component ∈
 `ok | stale | unavailable | not_applicable | no_data`; `points` never contains null or 0 as a
 stand-in — dates without a value are simply absent and `reason` explains the gap range.
+
+Status rules (RFC-004, see `components.status_for_range`): `not_applicable` when the requested
+`end` is before the component's first possible date (ETF flows: 2024-01-11); with no ETF data at
+all the status is `unavailable` (reason names RFC-003, not built) and `notes` still say pre-launch
+dates are not applicable. A component whose data exists but has no points inside the requested
+window is `no_data`. `composite.published.status` is `ok` when it has points, else `unavailable`.
+`start > end` or a malformed date → 422. `agreement` is whole-history (not window-filtered).
+`last_fetched_utc` = newest cache-file write among the component's inputs (LiqTide-derived:
+latest raw archive file); null only when nothing is cached. Responses are gzip-compressed when
+the client accepts it.
 
 ---
 
@@ -693,6 +706,19 @@ unless terms say otherwise → wire into RFC-002's ETF builder.
 
 **Acceptance Criteria**: AC-7.
 **Ready For**: RFC-005.
+
+**RFC-004 Stage 0 decisions (user, 24-09-26):**
+1. `not_applicable` is a real status; ETF is `not_applicable` when `end` < 2024-01-11, else
+   `unavailable` (RFC-003 not built) with notes stating pre-launch dates are not applicable.
+2. `last_fetched_utc` per component = newest cache mtime of its inputs, computed at serialization.
+3. `composite.agreement` includes `full_coverage_days` and `full_coverage_mean_abs_diff`.
+4. Published status `ok`/`unavailable`; attribution "Data: LiqTide (liqtide.com)"; `label` →
+   `regime_label`; reproduced label + normalisation strings fixed.
+5. `GZipMiddleware(minimum_size=1000)` in `api/main.py`.
+6. §11 example updated to match code (WDTGAL, weekly H.4.1, real transform, extra fields).
+
+RFC-003 status at this point: not started — user chose to proceed to RFC-004 first (not skipped).
+Report: `regime-dashboard_24-09-26-RFC-004-phase-report.md`.
 
 ### RFC-005: `/regime` page
 
@@ -923,6 +949,10 @@ needed**; pull before working locally, since the workflow pushes to `main` daily
 
 **RFC-002 (24-09-26):** 🔨 CODE DONE — see `regime-dashboard-rfc002-stage0_REPORT_24-09-26.md` and
 `regime-dashboard_24-09-26-RFC-002-phase-report.md`. Next: user confirms, then RFC-003 (Farside probe).
+
+**RFC-004 (24-09-26):** 🔨 CODE DONE — see `regime-dashboard_24-09-26-RFC-004-phase-report.md`.
+RFC-003 not started (user chose RFC-004 first; not skipped). Next: user runs the RFC-004 checks on
+the PC (pytest + curl with a populated FRED/DefiLlama cache), then RFC-005 (`/regime` page).
 
 **RFC-001 Stage 0 decisions (user, 24-09-26):** Farside = build, personal use only
 (`redistributable=false`, probe first in RFC-003); snapshot at 03:00 Brussels; archive row gains
