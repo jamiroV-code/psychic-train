@@ -1,0 +1,9 @@
+{
+  "scenarios": [
+    {"scenario": "Path traversal via ?categories=../../x (cache paths are built from category ids)", "ruled_out": true, "rationale": "Ids are allow-listed against seed ids before any path is built; test_bad_params_422 and test_unknown_category_rejected_before_any_path_is_built."},
+    {"scenario": "Endpoint triggers live provider calls or cache writes (cost, rate limits, data mutation)", "ruled_out": true, "rationale": "history.py only calls cache readers; test_read_only_no_cache_writes and the no_network fixture (all fetchers raise) prove it."},
+    {"scenario": "Change leaks into /categories or /screener output", "ruled_out": true, "rationale": "trigger.py and screener_board.py have an empty git diff; the RFC-1 contract test stays 3/3; get_categories source contains no history reference."},
+    {"scenario": "Huge start/end range or malformed dates cause 500s", "ruled_out": true, "rationale": "FastAPI date parsing gives 422 on malformed input; ranges only filter the local archive, which is bounded by stored days."},
+    {"scenario": "Non-redistributable data served without a flag", "ruled_out": true, "rationale": "Every series carries redistributable (all currently False) plus top-level redistributable_all."}
+  ]
+}

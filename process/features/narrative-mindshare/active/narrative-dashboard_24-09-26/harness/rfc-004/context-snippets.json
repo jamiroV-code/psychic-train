@@ -1,0 +1,9 @@
+{
+  "snippets": [
+    {"file": ".github/workflows/narrative-snapshot.yml", "lines": "11-22", "description": "Trigger, least-privilege permissions, concurrency group", "content": "on: schedule cron \"0 23 * * *\" + workflow_dispatch; permissions: contents: write; concurrency: group narrative-snapshot, cancel-in-progress false"},
+    {"file": ".github/workflows/narrative-snapshot.yml", "lines": "34-46", "description": "Run step: pytrends added per-run, exit 1 fails, exit 2 warns", "content": "uv run --project api --with pytrends python -m api.scripts.snapshot_narrative"},
+    {"file": ".github/workflows/narrative-snapshot.yml", "lines": "53-69", "description": "Commit/push: stages only api/data/cache/narrative/, commit-if-diff, pull --rebase + push with 3 retries", "content": "git add api/data/cache/narrative/ ... git pull --rebase origin \"${GITHUB_REF_NAME}\" && git push"},
+    {"file": ".gitignore", "lines": "18-25", "description": "Carve-out: narrative/ tracked, coingecko_trending.parquet re-ignored", "content": "api/data/cache/*\n!api/data/cache/liqtide/\n!api/data/cache/narrative/\napi/data/cache/narrative/coingecko_trending.parquet"},
+    {"file": "api/scripts/snapshot_narrative.py", "lines": "has_row / snapshot_* functions", "description": "Read-before-write first-observation-wins; the only writes are write_narrative_point (pytrends, coingecko-narrative), reddit_adapter.fetch_mentions (creds set only) and exchange_attention.run_daily (append-only)", "content": "if has_row(source, key, date): skip"}
+  ]
+}

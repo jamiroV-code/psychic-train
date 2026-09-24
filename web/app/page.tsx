@@ -10,6 +10,11 @@ export default function HomePage() {
       <p>
         <Link href="/regime">Open the regime dashboard</Link>
       </p>
+      <p>
+        <Link href="/narrative" data-testid="home-link-narrative">
+          Open the narrative dashboard
+        </Link>
+      </p>
     </main>
   );
 }

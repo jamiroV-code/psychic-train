@@ -1,0 +1,6 @@
+{
+  "riskClass": "deploy/runtime/container/proxy/gateway behavior",
+  "workDescription": "RFC-4: new scheduled GitHub Actions workflow .github/workflows/narrative-snapshot.yml (cron 0 23 * * * + workflow_dispatch, permissions contents: write, pushes to main) running api/scripts/snapshot_narrative.py; .gitignore carve-out for api/data/cache/narrative/.",
+  "approver": "pending user review (manual-first)",
+  "mustStopBeforeFinalize": true
+}

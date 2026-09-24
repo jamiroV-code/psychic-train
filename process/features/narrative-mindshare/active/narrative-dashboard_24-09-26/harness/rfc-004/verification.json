@@ -1,0 +1,11 @@
+{
+  "steps": [
+    {"step": "New unit tests (10) - full run, curated-map coingecko-narrative, no legacy write, same-day rerun first-wins, backfilled date protected, Reddit creds unset (no row + reason), partial failure isolation, stale trending not archived, all-down exit 2, dry-run writes nothing, verify-only", "command": "uv run --project api pytest api/tests/scripts/test_snapshot_narrative.py -q", "result": "PASS", "notes": "10 passed"},
+    {"step": "Full api suite regression", "command": "uv run --project api pytest api/ -q", "result": "PASS", "notes": "388 passed, 3 deselected"},
+    {"step": "/categories contract test", "command": "uv run --project api pytest api/tests/routers/test_narrative_categories_contract.py -q", "result": "PASS", "notes": "3 passed"},
+    {"step": "Workflow YAML parses; no secrets references", "command": "python yaml.safe_load + grep -c 'secrets\\.'", "result": "PASS", "notes": "schedule/permissions/concurrency/6 steps as intended; 0 secrets refs. actionlint not installed - not run."},
+    {"step": ".gitignore check-ignore on representative paths", "command": "git check-ignore -v --no-index <path>", "result": "PASS", "notes": "pytrends/reddit/coingecko-narrative/exchange series + exchange/markets json tracked; coingecko_trending.parquet ignored (.gitignore:25); ohlcv still ignored; liqtide still tracked"},
+    {"step": "Local real dry-run (boundary: egress blocked)", "command": "uv run --project api python -m api.scripts.snapshot_narrative --dry-run", "result": "PASS", "notes": "All 4 sources degraded with per-source lines, reddit shows credentials-not-configured, exit 2, real cache untouched"},
+    {"step": "workflow_dispatch run on GitHub", "command": "manual", "result": "SKIP", "notes": "Pending user: trigger once after merge (done criterion)"}
+  ]
+}
