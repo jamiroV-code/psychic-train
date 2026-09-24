@@ -17,6 +17,12 @@ api/**/__pycache__/
 # so the parent must be excluded per-entry for the negation to take effect.
 api/data/cache/*
 !api/data/cache/liqtide/
+# Narrative forward-archive (RFC-4): pytrends/Google Trends and Reddit
+# keep no history server-side, so nightly points are committed like LiqTide.
+# The CoinGecko trending snapshot is a single overwritten "right now" file,
+# not an archive, so it stays ignored (re-ignored after the negation).
+!api/data/cache/narrative/
+api/data/cache/narrative/coingecko_trending.parquet
 api/data/watchlist.json
 
 # Node (web/)

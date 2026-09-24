@@ -1,0 +1,41 @@
+{
+  "snippets": [
+    {
+      "file": "api/routers/narrative.py",
+      "lines": "38-40",
+      "description": "get_categories unchanged: still only calls trigger.assemble_narrative_categories()",
+      "content": "@router.get(\"/categories\", response_model=list[NarrativeCategory])\ndef get_categories() -> list[NarrativeCategory]:\n    return trigger.assemble_narrative_categories()"
+    },
+    {
+      "file": "api/routers/narrative.py",
+      "lines": "48-67",
+      "description": "get_history: start>end, empty categories and unknown ids -> 422; delegates to history.build_narrative_history",
+      "content": "if start is not None and end is not None and start > end: raise HTTPException(422) ... except history.UnknownCategoryError -> 422"
+    },
+    {
+      "file": "api/analytics/narrative/history.py",
+      "lines": "360-376",
+      "description": "category ids allow-listed against seed ids BEFORE any cache path is built from them (blocks path traversal via ?categories=)",
+      "content": "unknown = [c for c in category_ids if c not in seed_by_id]\nif unknown: raise UnknownCategoryError(unknown)"
+    },
+    {
+      "file": "api/analytics/narrative/history.py",
+      "lines": "210-234",
+      "description": "read-only cache access: pytrends/reddit by seed keywords[0], coingecko / coingecko-narrative / exchange by category id; no adapter fetch, no writes",
+      "content": "_narrative_frame(\"pytrends\", keyword) ... cache.read_exchange_series(category_id)"
+    },
+    {
+      "file": "api/analytics/narrative/history.py",
+      "lines": "237-275",
+      "description": "composite: skipna mean of within-source-normalised slots, only when >= trigger.MIN_AVAILABLE_SOURCES present; legacy coingecko and new_listing_count excluded",
+      "content": "if len(slots) < trigger.MIN_AVAILABLE_SOURCES: continue"
+    },
+    {
+      "file": "api/models/narrative.py",
+      "lines": "40-152",
+      "description": "new additive model set (NarrativeHistoryResponse etc.); NarrativeCategory untouched",
+      "content": "class NarrativeHistoryResponse(BaseModel): ..."
+    }
+  ],
+  "task": "RFC-3: GET /api/narrative/history (narrative dashboard)"
+}

@@ -1,0 +1,14 @@
+{
+  "riskClass": "public API or external contract changes",
+  "workDescription": "RFC-3: new read-only endpoint GET /api/narrative/history (api/routers/narrative.py::get_history, api/analytics/narrative/history.py, additive models in api/models/narrative.py). GET /api/narrative/categories and /screener must stay byte-identical (AC-1).",
+  "approver": "pending user review (manual-first)",
+  "mustStopBeforeFinalize": true,
+  "task": "RFC-3: GET /api/narrative/history (narrative dashboard)",
+  "planPath": "process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/narrative-dashboard_PLAN_24-09-26.md",
+  "riskLevel": "high",
+  "riskClasses": [
+    "public-api-contract"
+  ],
+  "humanApprovalRequired": true,
+  "why": "New public HTTP surface consumed by the /narrative page (RFC-5); must not alter /categories or /screener (AC-1)."
+}

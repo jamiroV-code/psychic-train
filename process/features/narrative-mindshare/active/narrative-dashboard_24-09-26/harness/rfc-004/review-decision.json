@@ -1,0 +1,6 @@
+{
+  "reviewer": "pending - user",
+  "decision": "PENDING",
+  "rationale": "Manual-first: user reviews .github/workflows/narrative-snapshot.yml and triggers one workflow_dispatch run, then sets APPROVE or REJECT here.",
+  "timestamp": null
+}

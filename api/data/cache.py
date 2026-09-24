@@ -358,3 +358,97 @@ def read_trending_snapshot() -> tuple[str, list[str]] | None:
     row = df.iloc[0]
     symbols = row["symbols"].split(",") if row["symbols"] else []
     return row["date"], symbols
+
+
+# --- Narrative dashboard RFC-2: exchange (Hyperliquid) attention -----------
+#
+# Two stores, both append-only / forward-written (ADR-6, decision D2):
+#   cache/narrative/exchange/markets/{YYYY-MM-DD}.json  daily active-perp list
+#   cache/narrative/exchange/{category_id}.parquet      daily per-category row
+# Neither is ever overwritten for a date that already exists — a second run
+# on the same UTC day is a no-op, so the first observation of a day stands.
+# Display-only: nothing here feeds trigger.compute_trigger or /categories.
+
+EXCHANGE_SERIES_COLUMNS = [
+    "date",
+    "volume_share",
+    "volume_status",
+    "volume_reason",
+    "new_listing_count",
+    "listing_status",
+    "listing_reason",
+    "baseline_date",
+]
+
+
+def exchange_market_snapshot_path(date: str) -> Path:
+    return CACHE_ROOT / "narrative" / "exchange" / "markets" / f"{date}.json"
+
+
+def write_exchange_market_snapshot(date: str, names: list[str]) -> bool:
+    """Archive one UTC day's active-perp name list. Append-only: returns False
+    and writes nothing when that date already exists."""
+    path = exchange_market_snapshot_path(date)
+    if path.exists():
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(sorted(set(names)), ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)
+    return True
+
+
+def read_exchange_market_snapshot(date: str) -> list[str] | None:
+    path = exchange_market_snapshot_path(date)
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def list_exchange_market_snapshot_dates() -> list[str]:
+    snap_dir = CACHE_ROOT / "narrative" / "exchange" / "markets"
+    if not snap_dir.exists():
+        return []
+    return sorted(p.stem for p in snap_dir.glob("*.json"))
+
+
+def exchange_series_path(category_id: str) -> Path:
+    return CACHE_ROOT / "narrative" / "exchange" / f"{category_id}.parquet"
+
+
+def read_exchange_series(category_id: str) -> pd.DataFrame:
+    path = exchange_series_path(category_id)
+    if not path.exists():
+        return pd.DataFrame(columns=EXCHANGE_SERIES_COLUMNS)
+    return _connect().sql(
+        f"SELECT * FROM read_parquet('{path.as_posix()}') ORDER BY date"
+    ).df()
+
+
+def write_exchange_point(category_id: str, row: dict) -> bool:
+    """Append one day's exchange-attention row for `category_id`.
+
+    Forward-written and append-only: returns False (writes nothing) if the
+    row's date is already present. Missing values are stored as nulls, never
+    zero-filled.
+    """
+    date = row["date"]
+    existing = read_exchange_series(category_id)
+    if not existing.empty and (existing["date"].astype(str) == date).any():
+        return False
+    path = exchange_series_path(category_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    new_row = pd.DataFrame([{col: row.get(col) for col in EXCHANGE_SERIES_COLUMNS}])
+    new_row = new_row.astype({
+        "date": "string", "volume_share": "float64", "volume_status": "string",
+        "volume_reason": "string", "new_listing_count": "Int64", "listing_status": "string",
+        "listing_reason": "string", "baseline_date": "string",
+    })
+    if existing.empty:
+        combined = new_row
+    else:
+        existing = existing.astype(new_row.dtypes.to_dict())
+        combined = pd.concat([existing, new_row], ignore_index=True)
+    combined = combined.sort_values("date", kind="stable")
+    combined[EXCHANGE_SERIES_COLUMNS].to_parquet(path, index=False)
+    return True

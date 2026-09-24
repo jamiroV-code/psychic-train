@@ -1,8 +1,9 @@
 # my_site - All Context
 
-Last updated: 2026-09-24 (regime dashboard AC-11-confirmed UPDATE PROCESS closeout — plan archived
-to `completed/`; see Changes Since Last Update below; the 2026-09-20 18:47 version predates the
-whole `/regime` build)
+Last updated: 2026-09-24 (merge of two same-day UPDATE PROCESS closeouts — narrative-mindshare
+`/narrative` dashboard RFC-1..6, and the regime dashboard's AC-11-confirmed 2nd pass with its plan
+archived to `completed/`; see Changes Since Last Update below for both. The 2026-09-20 18:47
+version predates both the `/regime` and `/narrative` builds)
 
 This file is the root context entrypoint for the repo.
 
@@ -14,6 +15,78 @@ Use it for two things:
 Start here before loading deeper context files.
 
 ---
+
+## Changes Since Last Update (2026-09-24, narrative-mindshare `/narrative` dashboard)
+
+Same day as the regime dashboard entry below, a second program shipped: the narrative-mindshare
+`/narrative` dashboard (`process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/`),
+all 6 RFCs code-complete and EVL-confirmed, committed and pushed to branch
+`claude/kind-tesla-tat3vo` (HEAD `7ef8eb3`, 58 files, +5536/-4). This graduates the narrative
+backend that shipped inside momentum-screener's RFC-003 into its own first-class feature — the
+first time `narrative-mindshare/` (previously an empty `_GUIDE.md` placeholder, same as
+`charting-indicators`/`cointegration-screener`) has real code. This also answers the earlier
+`momentum-screener-vs-features` Open Question, but **only for narrative** — the narrative surface
+(`api/analytics/narrative/`, `api/data/{pytrends,reddit,coingecko,hyperliquid_narrative}_adapter.py`,
+`api/routers/narrative.py`) is now planning/documentation-owned by `narrative-mindshare/`, while the
+rest of momentum-screener stays under `process/general-plans/`. No files moved — this is an
+ownership/documentation change, not a code relocation.
+
+- `[Product]` New route **`/narrative`**: one growing attention-history chart per tracked seed
+  category (ai/rwa/l2s/memecoins), a comparison view, a change-in-attention view, a display-only
+  Hyperliquid exchange-volume/new-listing proxy, and a visible data-quality caveat on every view.
+  `web/app/narrative/page.tsx`, `web/components/narrative/{NarrativeDashboard,CategoryHistoryPanel,
+  ComparisonView,ChangeInAttentionView,DataQualityCaveat,RedistributionBadge}.tsx`.
+- `[Product]` New API: **`GET /api/narrative/history`** (`api/routers/narrative.py::get_history`,
+  additive to `api/models/narrative.py`) — category-first response with per-category composite,
+  comparison rank, change-in-attention delta, `coingecko-narrative` as a new composite slot
+  alongside `pytrends`/`reddit`/`exchange_volume_share`, and the legacy CoinGecko-trending count
+  shown for reference but excluded from the composite. `GET /api/narrative/categories` is
+  byte-identical before/after (contract-snapshot-tested, including a newly-mapped-coin-in-trending
+  scenario) — proven, not assumed.
+- `[Product]` **Ninth adapter**: `api/data/hyperliquid_narrative_adapter.py` — keyless `ccxt`
+  Hyperliquid perps via the existing `_exchange()` singleton, `redistributable=False` pending a
+  user terms check, handles `k`-prefixed meme-perp symbols (`kPEPE`→`KPEPE`). See
+  `data-sources/all-data-sources.md`.
+- `[Product]` **Second scheduled workflow**: `.github/workflows/narrative-snapshot.yml` (cron
+  `0 23 * * *`, 30 min before `liqtide-snapshot.yml`'s `30 23 * * *`; its own
+  `concurrency: narrative-snapshot` group) runs `api/scripts/snapshot_narrative.py` nightly,
+  forward-archiving one point per (source, category) to `api/data/cache/narrative/` (new
+  `.gitignore` carve-out, same per-entry mechanic as `liqtide/`). AC-3 (the cron actually firing) is
+  a user-PC step, same shape as the LiqTide precedent.
+- `[Product]` **User-editable curated coin map, "option B"**: `api/data/narrative_category_map.json`
+  (32 entries) drives a new `mapping.map_coin_to_narrative_category()` used only by `/history` and
+  `/narrative`; the original 3-coin `LEGACY_COIN_CATEGORY_MAP` stays frozen and continues to drive
+  `/categories`/`/screener` unchanged. This is the mechanism that keeps AC-1 byte-compatible while
+  still widening coverage — see the plan's `## Post-EXECUTE Amendments` for the full ADR-7
+  correction.
+- `[Product]` pytrends' own `interest_over_time()` backfills a 269-day daily window per seed
+  category on day one (`api/scripts/backfill_pytrends_history.py`, `--with pytrends` required, not
+  a project dependency); every other source starts thin and grows forward only. Backfilled points
+  are flagged `mixed_scale` in the composite/change figures because they're on a different
+  Google-Trends request scale than the nightly 7-day window.
+- `[Correction]` **Pytrends and Reddit's archived history is keyed by keyword, not category id** —
+  `pytrends/AI crypto.parquet`, not `pytrends/ai.parquet` — matching how the pre-existing forward
+  writers already worked. RFC-1's plan text assumed category-id keying; corrected in the plan's
+  `## Post-EXECUTE Amendments`.
+- `[Correction]` A real product bug was found and fixed by the E2E proof (RFC-6): a pandas
+  `None`→`NaN` coercion in `history.py::_exchange_frames` 500'd `/history` from the second nightly
+  archive day onward (fixed with `dtype=object`, regression test added). See
+  `tests/all-tests.md` for the generalized lesson.
+- `[Correction]` **Known pre-existing bug, found but explicitly not fixed here:**
+  `trigger.py::compute_narrative_categories` reads pytrends/Reddit history by category id, but
+  those adapters write under the keyword key (see above) — so `/categories`' own trigger never
+  actually sees archived pytrends/Reddit history; it runs on CoinGecko alone. Predates this
+  program (RFC-003 of momentum-screener). Fixing it changes `/categories`' output and needs its own
+  deliberate AC-1 re-baseline — queued as a separate follow-up, not silently absorbed here.
+- Testing: `pytest api/ -q` 392 passed / 3 deselected (was 294 pre-narrative); `pnpm --filter web
+  test` 110 passed (16 files, was 75/12); `tsc --noEmit` exit 0; `cd web && pnpm test:e2e` 26/26
+  passed, run twice (14 new `narrative.spec.ts` + 6 `regime.spec.ts` + 6 `screener.spec.ts`).
+- **Known gap, carried forward, not closed this session:** AC-3 (cron firing) and AC-12 (real-cache
+  walkthrough) have not run — this container's egress proxy blocks Google Trends, Reddit,
+  CoinGecko and Hyperliquid, same constraint as the regime dashboard's AC-11. Two manual-first
+  risk-pack review decisions (`harness/review-decision.json`,
+  `harness/rfc-004/review-decision.json`) are `PENDING`. The narrative-dashboard plan stays in
+  `active/` until the user completes the checklist in its Resume and Execution Handoff.
 
 ## Changes Since Last Update (2026-09-20 → 2026-09-24)
 
@@ -332,49 +405,63 @@ Observed layout (2026-09-24), 2-3 levels deep on the parts that changed since se
 my_site/
   web/                      -- Next.js 15.0.3 App Router frontend (TypeScript, React 19)
     app/                    -- app/page.tsx, app/layout.tsx, app/screener/page.tsx,
-                                app/regime/page.tsx (charting/narrative routes not built yet)
+                                app/regime/page.tsx, app/narrative/page.tsx (charting route not
+                                built yet)
     components/             -- chart/, screener/, regime/ (RegimeDashboard, ComponentPanel,
-                                Readout, DrillDown + __tests__/)
-    lib/                    -- api/ (incl. regime.ts), types/ (incl. regime.ts),
-                                format-unavailable-reason.ts, format-regime-value.ts,
-                                regime-chart-sync.ts, regime-line-segments.ts, __tests__/
-    e2e/                    -- Playwright specs (screener.spec.ts, regime.spec.ts)
+                                Readout, DrillDown + __tests__/), narrative/ (NarrativeDashboard,
+                                CategoryHistoryPanel, ComparisonView, ChangeInAttentionView,
+                                DataQualityCaveat, RedistributionBadge + __tests__/)
+    lib/                    -- api/ (incl. regime.ts, narrative.ts), types/ (incl. regime.ts,
+                                narrative.ts), format-unavailable-reason.ts,
+                                format-regime-value.ts, regime-chart-sync.ts,
+                                regime-line-segments.ts, narrative-view-model.ts, __tests__/
+    e2e/                    -- Playwright specs (screener.spec.ts, regime.spec.ts, narrative.spec.ts)
   api/                      -- FastAPI service (Python 3.12, uv-managed)
     routers/                -- screener.py, regime.py, narrative.py, watchlist.py
-    analytics/              -- confidence/, indicators/, narrative/, screener_board.py,
+    analytics/              -- confidence/, indicators/, screener_board.py,
                                 regime/ (liquidity_composite.py, leg_boundary.py, components.py,
-                                components_response.py -- the last two new 24-09-26, a second
-                                maths path alongside the composite/leg-boundary one, not a
-                                replacement)
+                                components_response.py -- a second maths path alongside the
+                                composite/leg-boundary one, not a replacement),
+                                narrative/ (scoring.py, trigger.py, mapping.py -- RFC-003
+                                original, unchanged behavior; history.py, exchange_attention.py
+                                -- new 24-09-26, narrative-dashboard RFC-2/RFC-3)
     data/                   -- ccxt_adapter.py, coingecko_adapter.py, defillama_adapter.py,
                                 fred_adapter.py, liqtide_adapter.py, pytrends_adapter.py,
-                                reddit_adapter.py, etf_flows_adapter.py (8th adapter, new
-                                24-09-26, Farside), cache.py (DuckDB-over-Parquet), watchlist.py
-    models/                 -- screener.py, regime.py, narrative.py (pydantic schemas)
+                                reddit_adapter.py, etf_flows_adapter.py (8th adapter, Farside),
+                                hyperliquid_narrative_adapter.py (9th adapter, new 24-09-26,
+                                narrative-dashboard RFC-2), cache.py (DuckDB-over-Parquet,
+                                gained exchange-snapshot helpers 24-09-26), watchlist.py
+    models/                 -- screener.py, regime.py, narrative.py (pydantic schemas;
+                                narrative.py gained additive history models 24-09-26)
     scripts/                -- refresh_cache.py, backfill_primaries.py, backfill_liqtide_series.py,
-                                seed_e2e_cache.py, and diagnostic/backtest one-offs
-                                (backtest_leg_boundaries.py, check_weekly_anchor.py,
-                                snapshot_liqtide.py, compare_composite_variants.py, etc.)
+                                seed_e2e_cache.py (gained build_narrative_fixture/seed_narrative
+                                24-09-26), snapshot_narrative.py, backfill_pytrends_history.py
+                                (both new 24-09-26, narrative-dashboard RFC-2/RFC-4), and
+                                diagnostic/backtest one-offs (backtest_leg_boundaries.py,
+                                check_weekly_anchor.py, snapshot_liqtide.py,
+                                compare_composite_variants.py, etc.)
     tests/                  -- analytics/, data/, routers/, scripts/ -- pytest,
                                 `integration` marker for real-network tests (deselected by default)
   process/                  -- this agent harness
     context/                -- durable project knowledge (this file + groups)
     general-plans/          -- cross-cutting plans, incl. the momentum-screener feature (see
                                 Changes Since Last Update)
-    features/               -- feature-scoped plans and guides. `cycle-regime/` now has a real
-                                task folder (`regime-dashboard_24-09-26/`, all 6 RFCs code-done,
-                                see Changes Since Last Update); charting-indicators,
-                                cointegration-screener, narrative-mindshare are still only
-                                `_GUIDE.md` placeholders
+    features/               -- feature-scoped plans and guides. `cycle-regime/` and
+                                `narrative-mindshare/` both now have real task folders
+                                (`regime-dashboard_24-09-26/`, `narrative-dashboard_24-09-26/`,
+                                all RFCs code-done, see Changes Since Last Update); still-empty
+                                `_GUIDE.md` placeholders: charting-indicators,
+                                cointegration-screener
     development-protocols/  -- RIPER-5 methodology docs
-  .github/workflows/        -- liqtide-snapshot.yml (nightly 23:30 UTC snapshot + commit to
-                                main -- new 24-09-26, see Changes Since Last Update)
+  .github/workflows/        -- liqtide-snapshot.yml (nightly 23:30 UTC), narrative-snapshot.yml
+                                (nightly 23:00 UTC, new 24-09-26) -- both snapshot + commit to
+                                main, see Changes Since Last Update
   .claude/ .codex/ .agents/ -- agent + skill surfaces
   .env.example               -- REDDIT_CLIENT_ID/SECRET, LIQTIDE_ATTRIBUTION_URL,
                                  API_BASE_URL, API_PORT (see Environment and Configuration)
 ```
 
-Deployment CI/CD (beyond the one nightly snapshot workflow) remains not present -- see Open Decisions.
+Deployment CI/CD (beyond the two nightly snapshot workflows -- liqtide-snapshot.yml, narrative-snapshot.yml) remains not present -- see Open Decisions.
 
 The web/api split is deliberate: see the first entry under Key Patterns.
 
@@ -479,9 +566,9 @@ Carry these into any plan that touches them. Do not resolve them silently.
 | Macro liquidity / regime input | Implemented, both paths at once (RFC-002): `liqtide_adapter.py` consumes the LiqTide endpoint directly; `fred_adapter.py` reproduces net liquidity + broad dollar + reserves from FRED's keyless CSV export. `api/analytics/regime/liquidity_composite.py` picks a full vs. reduced composite per-date depending on which inputs are available. See data-sources group |
 | Equity data provider | Still unresolved — no equity adapter exists in `api/data/` yet. London Strategic Edge remains the leading free candidate **pending verification**; its data is personal-use only, which collides with the public-later goal. See data-sources group |
 | Persistence layer | Settled 2026-09-17, confirmed in use — Parquet + DuckDB (`api/data/cache.py`) |
-| Narrative / mindshare data source | Implemented on the settled approach: CoinGecko, pytrends, Reddit adapters all exist under `api/data/`, feeding `api/analytics/narrative/`. Still free-proxy-only, still labelled low-confidence |
+| Narrative / mindshare data source | Implemented on the settled approach: CoinGecko, pytrends, Reddit adapters all exist under `api/data/`, feeding `api/analytics/narrative/`. Still free-proxy-only, still labelled low-confidence. Widened 24-09-26 with a 9th adapter (Hyperliquid, keyless, display-only, `redistributable=False` pending user terms check) and a standalone `/narrative` history dashboard — see Changes Since Last Update |
 | Testing strategy | **Resolved** — `pytest` (api, `integration` marker gates real-network tests) + `vitest` + Playwright (web). See `tests/all-tests.md` |
-| Deployment target | Still deliberately deferred — the only CI/scheduling config that exists is the single-purpose `liqtide-snapshot.yml` nightly workflow (see Repository Structure); no app deploy pipeline |
+| Deployment target | Still deliberately deferred — the only CI/scheduling config that exists is two single-purpose nightly workflows, `liqtide-snapshot.yml` and `narrative-snapshot.yml` (see Repository Structure); no app deploy pipeline |
 | Package managers | Settled 2026-09-17, confirmed in use — pnpm (web) + uv (api) |
 
 **Redistribution is a first-class constraint, not a launch-day detail.** Some free data this
@@ -492,11 +579,31 @@ may be redistributed. See Licensing in `data-sources/all-data-sources.md`.
 ## Open Questions
 
 - **Momentum screener lives under `process/general-plans/`, not `process/features/`.** It's
-  the first and only shipped feature, and it draws on macro-liquidity and narrative work that
-  overlaps `cycle-regime` and `narrative-mindshare`, but those four `process/features/*` folders
-  are still empty `_GUIDE.md` placeholders. Is momentum-screener meant to eventually be split
-  into those feature folders, or do they get superseded/consolidated? Don't guess — ask before
-  restructuring either side.
+  the first shipped feature, and it draws on macro-liquidity and narrative work that overlaps
+  `cycle-regime` and `narrative-mindshare`. **Partially resolved, 24-09-26, for narrative only:**
+  the narrative surface (`api/analytics/narrative/`, the pytrends/reddit/coingecko/hyperliquid
+  adapters, `api/routers/narrative.py`) is now explicitly planning/documentation-owned by
+  `narrative-mindshare/`, per the narrative-dashboard plan's ADR-1 — no source files moved.
+  `cycle-regime/` reached the same real-code state independently (the regime dashboard). Still
+  open: whether the *rest* of momentum-screener (screener board, confidence badges, leg-boundary/
+  liquidity-composite regime maths) ever splits out of `process/general-plans/`, or stays there
+  permanently as the cross-cutting integration layer these three features feed into. Don't guess
+  — ask before restructuring momentum-screener itself.
+- **New, 24-09-26: known pre-existing keying bug in `/categories`' trigger, found but explicitly
+  not fixed.** `trigger.py::compute_narrative_categories` reads pytrends/Reddit archived history by
+  category id, but `pytrends_adapter.py`/`reddit_adapter.py` write under the keyword key instead
+  (e.g. `pytrends/AI crypto.parquet`, not `pytrends/ai.parquet`) — so `/categories`' trigger never
+  actually reads back archived pytrends/Reddit history; it effectively runs on CoinGecko alone.
+  Predates the narrative-dashboard program (this is RFC-003 of momentum-screener); found during
+  narrative-dashboard RFC-3. Fixing it changes `/categories`' own output and needs a deliberate,
+  separately-scoped AC-1 re-baseline plus user sign-off — queued as a follow-up plan, not absorbed
+  into the narrative-dashboard program. Don't fix ad hoc.
+- **New, 24-09-26: Hyperliquid's terms of use for redistributing market data are unverified.**
+  `HYPERLIQUID_REDISTRIBUTABLE = False` in `api/data/hyperliquid_narrative_adapter.py` pending the
+  user reading Hyperliquid's ToU/API docs — a one-line flip once confirmed. Also unverified: real
+  Hyperliquid ticker shapes for `k`-prefixed meme perps beyond what the installed `ccxt` source
+  shows (this sandbox's egress proxy blocks the live call). See the narrative-dashboard plan's
+  Resume and Execution Handoff for the exact user-PC steps.
 - ~~No git repository yet~~ **Resolved 2026-09-20** — `git init` done, initial baseline commit
   captures pre-fix state (including the 3 contaminated backtest reports, preserved for diffing),
   second commit holds the fix below.
@@ -604,8 +711,19 @@ for RFC-001/RFC-002, the Farside `regime-dashboard-farside_FEASIBILITY_24-09-26.
 `regime-dashboard-validate_REPORT_24-09-26.md`, `.github/workflows/liqtide-snapshot.yml`, and
 `git log`/`git status` at `db8d854`.
 
-**Added at the same-day 2nd UPDATE PROCESS pass (AC-11 confirmed, plan archived):** the plan's
-Status Strip (all six RFCs ✅ VERIFIED), `regime-dashboard_CLOSEOUT_24-09-26.md` (updated
+**Added at the 2026-09-24 UPDATE PROCESS closeout (narrative-mindshare `/narrative` dashboard,
+RFC-1..6):**
+`process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/narrative-dashboard_PLAN_24-09-26.md`
+(incl. the new `## Post-EXECUTE Amendments` section), `narrative-dashboard_SPEC_24-09-26.md` (incl.
+its `## Post-EXECUTE Amendment`), all six `narrative-dashboard_RFC-00N_REPORT_24-09-26.md` files
+and both `*-stage0_REPORT_*.md` files in that task folder,
+`narrative-dashboard-pvl-iteration-001_REPORT_24-09-26.md`,
+`narrative-dashboard-evl-iteration-001_REPORT_24-09-26.md`, `results.tsv`, `.github/workflows/
+narrative-snapshot.yml`, and `git log`/`git status`/`git show --stat` at `7ef8eb3` on branch
+`claude/kind-tesla-tat3vo`.
+
+**Added at the same-day 2nd UPDATE PROCESS pass (AC-11 confirmed, regime plan archived):** the
+plan's Status Strip (all six RFCs ✅ VERIFIED), `regime-dashboard_CLOSEOUT_24-09-26.md` (updated
 classification), and `git log --oneline -- api/data/cache/liqtide/*.parquet` (4 consecutive
 automated `github-actions[bot]` commits, 09-21..09-24, cited as evidence the nightly schedule
 mechanism runs unattended).
@@ -617,20 +735,32 @@ mechanism runs unattended).
   by `vc-update-process-agent` closing out the ADR-1 leg-boundary and liqtide-snapshot-tooling
   threads; amended again 2026-09-24 by `vc-update-process-agent` closing out the regime dashboard
   program; amended a further time the same day (2026-09-24, 2nd pass) after the user confirmed
-  AC-11 on their PC and the task folder was archived to `completed/` (no `vc-generate-context`
-  re-run for any amendment — targeted UPDATE PROCESS edits per this file's own Context Update
-  Protocol)
-- HEAD: `db8d854` (branch `claude/compassionate-goldberg-o2iq49`, confirmed clean working tree at
-  the 2026-09-24 amendment via `git status`/`git log`)
+  AC-11 on their PC and the regime task folder was archived to `completed/`; amended a third time
+  same day (24-09-26) by `vc-update-process-agent` closing out the narrative-mindshare
+  `/narrative` dashboard program (no `vc-generate-context` re-run for any of these amendments —
+  targeted UPDATE PROCESS edits per this file's own Context Update Protocol); this version is
+  further the result of merging two independent same-day sessions' branches together
+- HEAD (pre-merge): `7ef8eb3` (branch `claude/kind-tesla-tat3vo`, narrative-dashboard closeout) and
+  `ecb5e39` (branch `claude/compassionate-goldberg-o2iq49`, regime-dashboard AC-11-confirmed
+  closeout) — two independent branches/sessions, reconciled here via a `git merge` commit rather
+  than a single linear history
 - Mode: delta update from real repo scan (directory listings, `package.json`, `pyproject.toml`,
   `.env.example`, adapter/router/analytics source files, active plan folders) — not a line count.
-  18:47 amendment mode and the 2026-09-24 amendment mode were both targeted reads (the regime
-  plan, its RFC phase reports, `git log`/`git status`, and directory listings of the new
-  `web/app/regime/`, `web/components/regime/`, `api/analytics/regime/`, `api/data/` paths) — not a
-  full repo re-scan
+  18:47 and both 2026-09-24 amendments were targeted reads (the plan file(s), their RFC phase
+  reports, `git log`/`git status`/`git show --stat`, and directory listings of the new source
+  paths for that program) — not a full repo re-scan each time
 - Package managers: `pnpm` (web/, lockfile present), `uv` (api/, lockfile present)
-- Source scanned: `api/` (routers, analytics incl. `regime/`, data incl. `etf_flows_adapter.py`,
-  models, scripts, tests), `web/` (app incl. `regime/`, components incl. `regime/`, lib, e2e),
+- Source scanned (narrative-dashboard amendment): `api/analytics/narrative/{history,
+  exchange_attention}.py`, `api/data/hyperliquid_narrative_adapter.py`,
+  `api/data/narrative_category_map.json`, `api/routers/narrative.py`, `api/models/narrative.py`,
+  `api/scripts/{snapshot_narrative.py,backfill_pytrends_history.py}`,
+  `web/app/narrative/`, `web/components/narrative/`, `web/lib/{api,types}/narrative.ts`,
+  `web/e2e/narrative.spec.ts`, `.github/workflows/narrative-snapshot.yml`,
+  `process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/` (plan, SPEC, all RFC
+  reports, results.tsv), `git diff 7ef8eb3~9..7ef8eb3 --stat` (58 files, +5536/-4)
+- Source scanned (regime-dashboard amendment, unchanged from prior entry): `api/` (routers,
+  analytics incl. `regime/`, data incl. `etf_flows_adapter.py`, models, scripts, tests), `web/`
+  (app incl. `regime/`, components incl. `regime/`, lib, e2e),
   `process/general-plans/active/momentum-screener_17-09-26/`,
   `process/features/cycle-regime/completed/regime-dashboard_24-09-26/`, `process/features/*/` (the
   other three still placeholder-only), `.env.example`, `.github/workflows/liqtide-snapshot.yml`

@@ -237,6 +237,147 @@ def seed_regime(today: pd.Timestamp | None = None) -> dict:
     return fixture["facts"]
 
 
+# --- /narrative fixture (narrative dashboard RFC-6) ------------------------
+# Every store `GET /api/narrative/history` reads, written through the REAL
+# cache writers (`write_narrative_point`, `write_exchange_market_snapshot`,
+# `write_exchange_point`) so the E2E crosses the real writer/reader boundary
+# (Standing Lesson #7). Keying matches `history.load_category_series`:
+# pytrends/reddit by the seed's keywords[0], everything else by category id.
+# Dates are UTC calendar dates — the same clock `/history` uses for "today"
+# (ADR-6 timezone boundary).
+#
+# Designed-in shape (the expected ranks/signs below are derived by hand from
+# this shape, NOT by calling history.py, so the E2E is not self-validating):
+#   ai        rising to its max on day 0 (composite 1.0 -> rank 1); pytrends
+#             nightly has a hole (days -12..-9) -> gap_before on day -8;
+#             60 days of backfilled pytrends before the nightly start, of
+#             which days -29..-20 overlap coingecko-narrative -> 10 mixed-scale
+#             composite points; legacy coingecko rows; 2 new listings on day 0.
+#   l2s       flat (every source normalises to 0.5 -> rank 2), composite only
+#             from day -2 -> no 7..9-day baseline -> change delta null.
+#   memecoins falling to its min on day 0 (composite 0.0 -> rank 3, delta < 0).
+#   rwa       only exchange volume, unavailable (no-hyperliquid-market) ->
+#             < 2 composite sources on every date -> comparison rank null.
+#   reddit    never written for any category (RFC-4 C1: no credentials, no row)
+#             -> `unavailable / no-archived-data`.
+#   exchange  day -1 = first market snapshot, listings `no-baseline-yet`;
+#             day 0 = second snapshot with two new ai perps.
+# `coingecko_trending.parquet` is deliberately NOT seeded: with no trending
+# snapshot, `/categories` (hit by /screener's NarrativeStrip) cannot fall back
+# to a cached snapshot and write legacy coingecko rows mid-run.
+NARRATIVE_NIGHTLY_DAYS = 20          # days 0..-19
+NARRATIVE_GAP_DAYS = (9, 10, 11, 12)  # ai pytrends nightly hole
+NARRATIVE_BACKFILL_DAYS = 60         # days -20..-79, ai only
+NARRATIVE_AI_CG_DAYS = 30            # ai coingecko-narrative days 0..-29
+NARRATIVE_L2S_DAYS = 3               # l2s days 0..-2
+NARRATIVE_LEGACY_DAYS = 5
+NARRATIVE_NEW_AI_PERPS = ["TAO", "WLD"]
+NARRATIVE_BASE_PERPS = ["BTC", "ETH", "HYPE", "SOL", "DOGE", "ARB"]
+
+
+def build_narrative_fixture(today: pd.Timestamp) -> dict:
+    """Pure: the synthetic narrative rows for UTC `today` (tz-naive date) plus
+    the facts the E2E asserts against. Writes nothing."""
+    from api.analytics.narrative import mapping, trigger
+
+    seeds = {c["id"]: c for c in trigger.load_seed_categories()}
+    kw = {cid: c["keywords"][0] for cid, c in seeds.items()}
+    day = lambda k: (today - pd.Timedelta(days=k)).strftime("%Y-%m-%d")  # noqa: E731
+
+    points: list[tuple[str, str, str, float, str]] = []  # source, key, date, raw, status
+
+    def add(source: str, key: str, ks, value, status: str = "fresh") -> None:
+        for k in ks:
+            points.append((source, key, day(k), float(value(k)), status))
+
+    nightly = [k for k in range(NARRATIVE_NIGHTLY_DAYS) if k not in NARRATIVE_GAP_DAYS]
+    add("pytrends", kw["ai"], nightly, lambda k: 100 - 3 * k)
+    add("pytrends", kw["ai"], range(NARRATIVE_NIGHTLY_DAYS, NARRATIVE_NIGHTLY_DAYS + NARRATIVE_BACKFILL_DAYS),
+        lambda k: 90 - (k - NARRATIVE_NIGHTLY_DAYS) % 30, status="backfilled")
+    add("coingecko-narrative", "ai", range(NARRATIVE_AI_CG_DAYS), lambda k: 40 - k)
+    add("coingecko", "ai", range(NARRATIVE_LEGACY_DAYS), lambda k: 1)
+    add("pytrends", kw["memecoins"], range(NARRATIVE_NIGHTLY_DAYS), lambda k: 20 + 3 * k)
+    add("coingecko-narrative", "memecoins", range(NARRATIVE_NIGHTLY_DAYS), lambda k: 1 + k)
+    add("pytrends", kw["l2s"], range(NARRATIVE_L2S_DAYS), lambda k: 50)
+    add("coingecko-narrative", "l2s", range(NARRATIVE_L2S_DAYS), lambda k: 3)
+
+    d1, d0 = day(1), day(0)
+    markets = {d1: list(NARRATIVE_BASE_PERPS), d0: list(NARRATIVE_BASE_PERPS) + NARRATIVE_NEW_AI_PERPS}
+    volume = {"ai": (0.02, 0.05), "l2s": (0.10, 0.10), "memecoins": (0.08, 0.03)}  # (day -1, day 0)
+    exchange: dict[str, list[dict]] = {}
+    for cid in seeds:
+        rows = []
+        for when, idx in ((d1, 0), (d0, 1)):
+            vs = volume.get(cid)
+            first = when == d1
+            rows.append({
+                "date": when,
+                "volume_share": vs[idx] if vs else None,
+                "volume_status": "ok" if vs else "unavailable",
+                "volume_reason": None if vs else "no-hyperliquid-market",
+                "new_listing_count": None if first else (len(NARRATIVE_NEW_AI_PERPS) if cid == "ai" else 0),
+                "listing_status": "unavailable" if first else "ok",
+                "listing_reason": "no-baseline-yet" if first else None,
+                "baseline_date": None if first else d1,
+            })
+        exchange[cid] = rows
+
+    curated = mapping.load_category_map()
+    narrative_only = sorted(
+        s for s, cid in curated.items() if cid == "ai" and mapping.map_coin_to_narrative_category(s)[1]
+    )
+
+    return {
+        "points": points,
+        "markets": markets,
+        "exchange": exchange,
+        "facts": {
+            "today": d0,
+            "day_minus_1": d1,
+            "category_ids": sorted(seeds),
+            "keywords": kw,
+            "gap": {"category": "ai", "series": "pytrends-nightly-7d", "gap_date": day(8)},
+            "ai_backfill_range": [day(NARRATIVE_NIGHTLY_DAYS + NARRATIVE_BACKFILL_DAYS - 1), day(NARRATIVE_NIGHTLY_DAYS)],
+            "ai_chart_points": NARRATIVE_NIGHTLY_DAYS + NARRATIVE_BACKFILL_DAYS,  # days 0..-79, hole filled by coingecko-narrative
+            "ai_mixed_scale_points": NARRATIVE_AI_CG_DAYS - NARRATIVE_NIGHTLY_DAYS,
+            "ai_new_listings": len(NARRATIVE_NEW_AI_PERPS),
+            "ai_legacy_count": 1,
+            "narrative_only_symbol": narrative_only[0] if narrative_only else None,
+            # Hand-derived from the designed shape above.
+            "comparison": [
+                {"category_id": "ai", "rank": 1}, {"category_id": "l2s", "rank": 2},
+                {"category_id": "memecoins", "rank": 3},
+                {"category_id": "rwa", "rank": None, "reason": "no-composite-on-as-of"},
+            ],
+            "change": [
+                {"category_id": "ai", "rank": 1, "sign": 1},
+                {"category_id": "memecoins", "rank": 2, "sign": -1},
+                {"category_id": "l2s", "rank": None, "reason": "no-baseline-in-window"},
+                {"category_id": "rwa", "rank": None, "reason": "no-composite-on-as-of"},
+            ],
+            "no_market_category": "rwa",
+            "panel_cap_note": "only 4 seed categories exist; the 10-panel cap/overflow is unit-tested only",
+        },
+    }
+
+
+def seed_narrative(today: pd.Timestamp | None = None) -> dict:
+    """Write the narrative fixture through the real cache writers. Caller must
+    already have passed `_guard()`. Returns the manifest facts."""
+    from api.data import cache
+
+    today = today if today is not None else pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
+    fixture = build_narrative_fixture(today)
+    for source, key, when, raw, status in fixture["points"]:
+        cache.write_narrative_point(source, key, when, raw, source_status=status)
+    for when, names in fixture["markets"].items():
+        cache.write_exchange_market_snapshot(when, names)
+    for cid, rows in fixture["exchange"].items():
+        for row in rows:
+            cache.write_exchange_point(cid, row)
+    return fixture["facts"]
+
+
 def main() -> int:
     root = _guard()
     from api.data import cache, watchlist as watchlist_store
@@ -272,9 +413,11 @@ def main() -> int:
         print("WARNING: SCREENER_WATCHLIST_PATH unset — the API will read the real watchlist.")
 
     regime = seed_regime()
+    narrative = seed_narrative()
 
     manifest = {
         "regime": regime,
+        "narrative": narrative,
         "cache_root": str(root),
         "watchlist": WATCHLIST,
         "benchmarks": BENCHMARKS,
@@ -288,6 +431,7 @@ def main() -> int:
 
     print(f"seeded {len(written)} symbols into {root}")
     print(f"regime     inputs seeded; gap at {regime['gap']['expected_gap_date']}")
+    print(f"narrative  {len(narrative['category_ids'])} categories seeded; gap at {narrative['gap']['gap_date']}")
     print(f"watchlist  {WATCHLIST} -> {watchlist_path or '(not set)'}")
     print(f"manifest   {MANIFEST_PATH}")
     print(f"store path {watchlist_store.DEFAULT_WATCHLIST_PATH}")
