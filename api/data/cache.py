@@ -7,6 +7,7 @@ hand-rolls a Parquet path").
 """
 from __future__ import annotations
 
+import json
 import os
 import time
 from pathlib import Path
@@ -157,9 +158,70 @@ def read_liqtide_history() -> pd.DataFrame:
     liqtide_dir = CACHE_ROOT / "liqtide"
     if not liqtide_dir.exists() or not any(liqtide_dir.glob("*.parquet")):
         return pd.DataFrame()
+    # union_by_name: rows archived before 24-09-26 lack the additive
+    # `tide_value`/`tide_label` columns (RFC-001, regime dashboard). Without
+    # it DuckDB rejects the schema mismatch; with it, old rows read those
+    # columns as NULL — absent, never a fabricated value.
     return _connect().sql(
-        f"SELECT * FROM read_parquet('{(liqtide_dir / '*.parquet').as_posix()}') ORDER BY date"
+        f"SELECT * FROM read_parquet('{(liqtide_dir / '*.parquet').as_posix()}', union_by_name=true) ORDER BY date"
     ).df()
+
+
+# --- Regime dashboard RFC-001: raw LiqTide payload archive + history backfill
+#
+# The parquet row above keeps only the flattened fields the composites read.
+# The upstream JSON also carries the six signed component impulses, their
+# weights, the 0-100 `value`, the label, `signals` and thinned history series
+# — none recoverable after the day passes. Each fresh payload is therefore
+# also kept verbatim, append-only, one file per `generated_utc` date.
+#
+# Both live in SUBFOLDERS of `liqtide/` on purpose: `read_liqtide_history`
+# globs `liqtide/*.parquet`, so a backfill parquet placed next to the daily
+# rows would be unioned into them as if it were a day's payload. The
+# `.gitignore` carve-out (`!api/data/cache/liqtide/`) tracks both subfolders.
+
+
+def liqtide_raw_path(date: str) -> Path:
+    return CACHE_ROOT / "liqtide" / "raw" / f"{date}.json"
+
+
+def write_liqtide_raw(date: str, raw: dict) -> bool:
+    """Write one day's upstream JSON verbatim. Append-only: returns False and
+    writes nothing when that date is already archived."""
+    path = liqtide_raw_path(date)
+    if path.exists():
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(raw, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    tmp.replace(path)
+    return True
+
+
+def read_liqtide_raw(date: str) -> dict | None:
+    path = liqtide_raw_path(date)
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def list_liqtide_raw_dates() -> list[str]:
+    raw_dir = CACHE_ROOT / "liqtide" / "raw"
+    if not raw_dir.exists():
+        return []
+    return sorted(p.stem for p in raw_dir.glob("*.json"))
+
+
+def liqtide_backfill_path(date: str) -> Path:
+    return CACHE_ROOT / "liqtide" / "backfill" / f"{date}.parquet"
+
+
+def write_liqtide_backfill(date: str, df: pd.DataFrame) -> None:
+    """Long-format history (`series_key, date, value`) extracted from one raw
+    payload. Re-running for the same source date rewrites the same content."""
+    path = liqtide_backfill_path(date)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path, index=False)
 
 
 # --- RFC-002: macro-liquidity input series (FRED, DefiLlama) --------------

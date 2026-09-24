@@ -77,9 +77,15 @@ class LiqTidePayload:
     # parse. Carries the fields `_parse_payload` otherwise discards
     # (`tide_index.components`/`weights`/`value`/`label`, `data_quality`,
     # `regime`) so a verifier (`scripts/snapshot_liqtide.py`) can re-derive
-    # the published score and check it. Must stay LAST — a defaulted
-    # dataclass field cannot precede non-defaulted ones.
+    # the published score and check it. Defaulted fields must follow the
+    # non-defaulted ones.
     raw: dict | None = None
+    # Regime dashboard RFC-001 (additive): the published 0-100 index
+    # (`tide_index.value`) and its band label. `tide_score` above is the
+    # -1..+1 `tide_index.score` (value = 50 + 50 * score, confirmed against
+    # the live payload 24-09-26) — the two are different scales.
+    tide_value: float | None = None
+    tide_label: str | None = None
 
 
 def _empty_payload(status: Status) -> LiqTidePayload:
@@ -130,16 +136,24 @@ def _parse_payload(raw: dict) -> LiqTidePayload:
 
     tide_score = tide_index.get("score")
     tide_score = float(tide_score) if isinstance(tide_score, (int, float)) else None
+    tide_value = tide_index.get("value")
+    tide_value = float(tide_value) if isinstance(tide_value, (int, float)) else None
+    tide_label = tide_index.get("label")
+    tide_label = tide_label if isinstance(tide_label, str) else None
 
     return LiqTidePayload(
         generated_utc=generated_utc, date=date, tide_score=tide_score,
         metrics=metrics, status="ok", raw=raw,
+        tide_value=tide_value, tide_label=tide_label,
     )
 
 
 def _payload_to_row(payload: LiqTidePayload) -> pd.DataFrame:
     row = {"date": payload.date, "generated_utc": payload.generated_utc, "tide_score": payload.tide_score}
     row.update(payload.metrics)
+    # Appended after the original columns so older readers are unaffected.
+    row["tide_value"] = payload.tide_value
+    row["tide_label"] = payload.tide_label
     return pd.DataFrame([row])
 
 
@@ -148,12 +162,17 @@ def _row_to_payload(row: pd.Series) -> LiqTidePayload:
     # holds only the flattened fields, so a cache-replay payload has no fresh
     # upstream JSON to verify against. Absent, never a fabricated stand-in.
     tide_score = row.get("tide_score")
+    tide_value = row.get("tide_value")
+    tide_label = row.get("tide_label")
     return LiqTidePayload(
         generated_utc=row.get("generated_utc"),
         date=row.get("date"),
         tide_score=float(tide_score) if pd.notna(tide_score) else None,
         metrics={k: (float(row[k]) if k in row.index and pd.notna(row[k]) else None) for k in METRIC_KEYS},
         status="ok",
+        # Rows archived before 24-09-26 have no such columns -> None.
+        tide_value=float(tide_value) if tide_value is not None and pd.notna(tide_value) else None,
+        tide_label=tide_label if isinstance(tide_label, str) else None,
     )
 
 
@@ -195,6 +214,13 @@ def fetch_latest(client: httpx.Client | None = None, dry_run: bool = False) -> L
         if payload is not None and payload.date:
             if not dry_run:
                 cache.write_liqtide_payload(payload.date, _payload_to_row(payload))
+                # Verbatim upstream JSON, append-only (regime dashboard
+                # RFC-001). A failure here must not lose the parquet row
+                # above or raise past the adapter boundary.
+                try:
+                    cache.write_liqtide_raw(payload.date, raw)
+                except Exception:
+                    pass
             return payload
 
     history = cache.read_liqtide_history()
@@ -205,3 +231,75 @@ def fetch_latest(client: httpx.Client | None = None, dry_run: bool = False) -> L
     age_hours = _hours_since(payload.date)
     payload.status = "ok" if (age_hours is not None and age_hours <= STALENESS_HOURS) else "stale"
     return payload
+
+
+# --- Regime dashboard RFC-002: history carried inside archived payloads ----
+#
+# Each payload ships thinned history (`tide_series`, `metrics.*.series`).
+# `extract_history_series` flattens one payload; `read_history_series`
+# unions every archived raw payload (newest payload wins for a repeated
+# `(series_key, date)`) — a pure cache read, never a network call, so the
+# dashboard can use it without ever touching `latest.json` (VALIDATE P1).
+
+HISTORY_COLUMNS = ["series_key", "date", "value"]
+TIDE_SERIES_KEY = "tide_value"
+
+
+def _history_points(series: object) -> list[tuple[str, float]]:
+    """`[[date, value], ...]` -> clean `(date, value)` tuples; anything
+    malformed is dropped rather than coerced."""
+    if not isinstance(series, list):
+        return []
+    out: list[tuple[str, float]] = []
+    for point in series:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        date, value = point[0], point[1]
+        if not isinstance(date, str) or isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        out.append((date[:10], float(value)))
+    return out
+
+
+def extract_history_series(raw: dict) -> pd.DataFrame:
+    """Long-format history (`series_key, date, value`) carried in one payload."""
+    rows: list[dict] = []
+    for date, value in _history_points(raw.get("tide_series")):
+        rows.append({"series_key": TIDE_SERIES_KEY, "date": date, "value": value})
+    metrics = raw.get("metrics")
+    if isinstance(metrics, dict):
+        for key in sorted(metrics):
+            entry = metrics[key]
+            if not isinstance(entry, dict):
+                continue
+            for date, value in _history_points(entry.get("series")):
+                rows.append({"series_key": key, "date": date, "value": value})
+    if not rows:
+        return pd.DataFrame(columns=HISTORY_COLUMNS)
+    df = pd.DataFrame(rows, columns=HISTORY_COLUMNS)
+    return (
+        df.drop_duplicates(subset=["series_key", "date"], keep="last")
+        .sort_values(["series_key", "date"])
+        .reset_index(drop=True)
+    )
+
+
+def read_history_series() -> pd.DataFrame:
+    """Union of the history in every archived raw payload. Empty frame with
+    `HISTORY_COLUMNS` when nothing is archived."""
+    frames = []
+    for date in cache.list_liqtide_raw_dates():  # sorted oldest -> newest
+        raw = cache.read_liqtide_raw(date)
+        if raw is None:
+            continue
+        df = extract_history_series(raw)
+        if not df.empty:
+            frames.append(df)
+    if not frames:
+        return pd.DataFrame(columns=HISTORY_COLUMNS)
+    merged = pd.concat(frames, ignore_index=True)
+    return (
+        merged.drop_duplicates(subset=["series_key", "date"], keep="last")
+        .sort_values(["series_key", "date"])
+        .reset_index(drop=True)
+    )

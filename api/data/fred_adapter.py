@@ -62,6 +62,13 @@ TGA = "WTREGEN"             # Treasury General Account balance, weekly average, 
 RRP = "RRPONTSYD"           # Overnight reverse repo, daily, billions (converted below)
 BROAD_DOLLAR = "DTWEXBGS"   # Nominal Broad U.S. Dollar Index, daily
 RESERVES = "WRESBAL"        # Reserve balances at the Fed, weekly, billions (TOTRESNS discontinued 2020)
+# Regime dashboard RFC-002: TGA *Wednesday level* (H.4.1), weekly, millions.
+# Unlike WTREGEN (a weekly average), WALCL - WDTGAL - RRPONTSYD*1000 on the
+# Wednesday grid reproduces LiqTide's published net liquidity exactly
+# (checked 24-09-26 on 2024-09-04, 2026-08-19, 2026-09-09, 2026-09-16).
+# `fetch_net_liquidity` below keeps WTREGEN on purpose: the leg-boundary
+# path was tuned on it (see backlog liquidity-composite-calendar-windows).
+TGA_WEDNESDAY = "WDTGAL"
 
 RRP_BILLIONS_TO_MILLIONS = 1000.0
 

@@ -108,6 +108,7 @@ def check_coverage(history: pd.DataFrame) -> list[str]:
 
     total = len(history)
     print(f"liqtide archive: {total} archived day(s)")
+    print(f"  raw JSON days   {len(cache.list_liqtide_raw_dates())}")
 
     for column in ("tide_score", *liqtide_adapter.METRIC_KEYS):
         if column not in history.columns:
@@ -169,11 +170,20 @@ def main() -> int:
     print(f"  date            {payload.date}")
     print(f"  generated_utc   {payload.generated_utc}")
     print(f"  status          {payload.status}")
-    print(f"  tide_score      {payload.tide_score}")
+    print(f"  tide_score      {payload.tide_score}  (-1..+1)")
+    print(f"  tide_value      {payload.tide_value}  (0-100)  label={payload.tide_label!r}")
     if payload.raw is not None:
         tide_index = payload.raw.get("tide_index") or {}
         print(f"  tide_index      value={tide_index.get('value')} label={tide_index.get('label')!r}")
         print(f"  regime          {payload.raw.get('regime')!r}")
+
+    # The adapter never raises past its boundary, so a failed raw-JSON write
+    # would otherwise be silent. Check the file actually exists.
+    if payload.raw is not None and not args.verify_only:
+        raw_path = cache.liqtide_raw_path(payload.date)
+        print(f"  raw archive     {raw_path}")
+        if not raw_path.exists():
+            problems.append(f"raw payload for {payload.date} was not archived ({raw_path})")
 
     if payload.status == "stale":
         problems.append(f"payload is stale (older than {liqtide_adapter.STALENESS_HOURS}h)")
