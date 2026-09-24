@@ -56,7 +56,7 @@ its layout column so adding it later does not move the charts.
 | RFC-002 | Component maths (six impulses + reproduced composite) | 🔨 CODE DONE (24-09-26) — real-data check: 5/6 components exact, r = 0.964 vs published |
 | RFC-003 | Spot-ETF flows adapter (conditional on RFC-001 Stage 0) | ⏳ PLANNED — not started; user chose to do RFC-004 first (not skipped) |
 | RFC-004 | `GET /api/regime/components` endpoint | 🔨 CODE DONE (24-09-26) — 20 endpoint tests green; live run: ETF 8 / BTC-dom 117 pts match RFC-002 |
-| RFC-005 | `/regime` page — stacked synced charts, readout, drill-down | ⏳ PLANNED |
+| RFC-005 | `/regime` page — stacked synced charts, readout, drill-down | 🔨 CODE DONE (24-09-26) — vitest 63/63 (40 + 23 new), tsc + `next build` clean, E3 sync proven; browser probe screenshot in task folder |
 | RFC-006 | End-to-end proof + user walkthrough | ⏳ PLANNED |
 
 ---
@@ -760,6 +760,22 @@ lightweight-charts v5 sync APIs against the installed version; present. STOP.
 **Acceptance Criteria**: AC-8, AC-9, AC-10.
 **Ready For**: RFC-006.
 
+**RFC-005 decisions (user-approved at Stage 0, 24-09-26; implemented):**
+1. Panels plot the impulse (`value`); raw level + contribution shown in the readout and drill-down.
+2. Composite = 7th panel: one chart, two labelled lines ("Reproduced tide index (this app)",
+   "LiqTide tide index (published)") plus "Data: LiqTide (liqtide.com)". LiqTide's `regime_label`
+   appears only in the readout cell / drill-down for the published line, marked as LiqTide's.
+3. Readout: one row above the stack, 8 cells; value, raw level + contribution (components),
+   coverage (reproduced), date. Not hovering → latest grid date. Whitespace → "no value", never 0.
+4. Drill-down reuses `DrillDownView`'s inline `role="dialog"` + Close pattern; composite drill-down
+   shows normalisation, coverage rule and all five agreement stats.
+5. Default visible range = last 3 calendar years before the last grid date (logical index range).
+6. Value formatting via `web/lib/format-regime-value.ts`, driven by each component's `unit`.
+7. Reserved right column: fixed 280px grid column, empty, `aria-hidden`.
+8. Screener's hard-coded palette; no theme toggle.
+Sync is LOGICAL-range (`subscribeVisibleLogicalRangeChange` / `setVisibleLogicalRange`) rather than
+the time-range calls named in ADR-7 — exact on the shared grid, see the RFC-005 phase report.
+
 ### RFC-006: End-to-end proof + user walkthrough
 
 **Summary**: prove the real frontend/backend boundary, per the all-tests "green ≠ verified" lesson.
@@ -953,6 +969,10 @@ needed**; pull before working locally, since the workflow pushes to `main` daily
 **RFC-004 (24-09-26):** 🔨 CODE DONE — see `regime-dashboard_24-09-26-RFC-004-phase-report.md`.
 RFC-003 not started (user chose RFC-004 first; not skipped). Next: user runs the RFC-004 checks on
 the PC (pytest + curl with a populated FRED/DefiLlama cache), then RFC-005 (`/regime` page).
+
+**RFC-005 (24-09-26):** 🔨 CODE DONE — see `regime-dashboard_24-09-26-RFC-005-phase-report.md`.
+Next: user runs the RFC-005 PC checklist (zoom/hover/drill-down/stop-API) with a populated cache;
+then RFC-006 (end-to-end proof, incl. `web/e2e/regime.spec.ts`). RFC-003 still not started.
 
 **RFC-001 Stage 0 decisions (user, 24-09-26):** Farside = build, personal use only
 (`redistributable=false`, probe first in RFC-003); snapshot at 03:00 Brussels; archive row gains

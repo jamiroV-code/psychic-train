@@ -7,6 +7,9 @@ export default function HomePage() {
       <p>
         <Link href="/screener">Open the screener board</Link>
       </p>
+      <p>
+        <Link href="/regime">Open the regime dashboard</Link>
+      </p>
     </main>
   );
 }
