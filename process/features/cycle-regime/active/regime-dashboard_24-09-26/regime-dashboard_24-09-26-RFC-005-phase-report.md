@@ -101,6 +101,46 @@ Manual checklist:
 - The Playwright E2E spec (see deviation 6).
 - Real-data checks for the four FRED/DefiLlama components: they need your PC.
 
+## Supplement: data-gap line breaks (24-09-26)
+
+The user chose "option 1: API marks real gaps". This change is additive and backward compatible. Nothing was committed.
+
+**Problem.** lightweight-charts line series do not break at whitespace points. They draw a straight line from the last value to the next one. This made real holes look interpolated, e.g. BTC dominance 2025-12-07 → 2026-08-03.
+
+**Rule (Python, `api/analytics/regime/components.py`).**
+- Every series has a `max_gap_days`: its normal release cadence plus slack for weekends and holidays.
+- A point gets `gap_before = true` when the previous point of the same series is more than `max_gap_days` calendar days earlier.
+- The first point of a series is always `false`.
+- Flags are computed on the full series (after dropping non-finite rows), before any `start`/`end` filtering, so the first point of a window keeps its true flag.
+- Code: `gap_before_flags()`, `with_gap_flags()`, applied in `components_response._flagged()`.
+
+| Series | max_gap_days | Reason |
+|---|---|---|
+| net_liquidity | 10 | Weekly H.4.1 Wednesday grid: 7-day steps, 8 when a holiday moves a release. |
+| stablecoin_supply | 4 | Daily including weekends; tolerates a couple of missed DefiLlama days. |
+| broad_dollar | 5 | Business days; a Fri+Mon holiday weekend is a 5-day step (Thu → Tue). |
+| rrp_release | 5 | Business days; same allowance as the dollar index. |
+| etf_flows | 5 | US trading days (observed steps 1 and 3); Thanksgiving plus the weekend is 5. |
+| btc_dominance | 5 | Observed in the archived series: steps of 1, 2 and 3 days (thinned history), then daily. The 239-day hole 2025-12-07 → 2026-08-03 is a real gap. |
+| reproduced composite | 5 | Follows its daily / business-day inputs. A longer absence (coverage < 60% or missing inputs) is a gap. |
+| published tide index | 10 | Weekly `tide_series` (observed 7 days, 8 once) plus a daily archive. **No real gap exists in the current data** — its longest step is 8 days. |
+
+**Verified mechanism (real Chromium 1194, lightweight-charts 5.2.1).**
+- Method: a throwaway page rendering a flat 8-point line, counting red pixels between each pair of logical indices. Scratchpad only; nothing left in the repo.
+- Whitespace at indices 3–4 → the segments 2→5 are all drawn (56 px each). **Whitespace does not break the line.**
+- Point 4 with `color: rgba(0,0,0,0)` → segment 4→5 is 0 px while 3→4 is still drawn. **A point's colour paints the segment that starts at it.**
+- To hide the bridge into a flagged point k, the renderer makes the last real point before k transparent (`web/lib/regime-line-segments.ts`).
+- A transparent point's marker is also transparent. So "isolated" points (no drawn segment on either side, including a series' only point) are drawn by a dots-only companion series (`lineVisible: false`, `pointMarkersVisible: true`, radius 2). That series drew dots (30 px each) and 0 px between them.
+- Crosshair sync still registers the line series. The dots series is never used for sync.
+
+**Results.**
+- API: `uv run --project api pytest api/ -q` → **265 passed, 2 failed, 1 deselected**. The 2 failures are the pre-existing `test_board_integration.py` ones (no screener cache in this container). Baseline was 252 passed; +13 new tests: 8 in `test_components.py::TestGapFlags`, 5 in `test_regime_components.py::TestGapFlags`. Existing shape assertions were updated for the new fields.
+- Web: `pnpm --filter web test` → **70 passed**. Baseline was 63; +5 in `lib/__tests__/regime-line-segments.test.ts`, +2 in `RegimeDashboard.test.tsx`. The e2e ENOENT collection noise is pre-existing. The first run after the edits had 2 timing failures; the next 4 full runs and 3 isolated runs were green (likely a cold-start `waitFor` timeout — noted, not fixed).
+- `pnpm --filter web exec tsc --noEmit` → exit 0. `pnpm --filter web build` → success (`/regime` 5.23 kB). `web/tsconfig.tsbuildinfo` restored.
+- Live API in the container: only `btc_dominance` has a flag (`2026-08-03`). Published has 108 points with no flag.
+- Screenshot: `rfc005-screenshot-gaps-24-09-26.png`. The BTC dominance line now stops in Dec 2025 and resumes in Aug 2026, with no bridge. The published tide line stays continuous because its data is continuous weekly. Its long straight runs are weekly points on the index-spaced time axis (few grid dates there), not missing data.
+- The browser must load `http://localhost:3000` — CORS allows only that origin, not `127.0.0.1:3000`.
+
 ## Test Infra Gaps Found
 
 - Repo hooks block Bash text containing `process.env` or `.env`-like tokens (false-positive privacy block), and block paths containing `node_modules`. Workaround: use the Write tool. Classification: harness-drift.

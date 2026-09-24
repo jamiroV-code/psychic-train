@@ -58,6 +58,12 @@ class ComponentSpec:
     # it the component is `not_applicable`, which is a different state from
     # `unavailable` (the source failed) and `no_data` (history too short).
     applicable_from: pd.Timestamp | None = None
+    # Longest normal calendar-day step between consecutive points of this
+    # component (its release cadence plus slack for weekends and holidays).
+    # A longer step is a real data gap: the point after it gets
+    # `gap_before = true` and the chart does not draw a line into it
+    # (RFC-005 decision 9). Chosen per component; see MAX_GAP_DAYS_REASONS.
+    max_gap_days: int = 5
 
 
 COMPONENTS: tuple[ComponentSpec, ...] = (
@@ -65,35 +71,83 @@ COMPONENTS: tuple[ComponentSpec, ...] = (
         "net_liquidity", "net_liquidity_4w", "Net liquidity (4-week change)", 0.30, +1, 150e9, 28, 3, 10,
         "weekly (Wednesday, H.4.1)", "FRED: WALCL − WDTGAL − RRPONTSYD×1000",
         "level(t) − level(t − 28 days); contribution = tanh(Δ / $150bn)", "USD",
+        max_gap_days=10,
     ),
     ComponentSpec(
         "stablecoin_supply", "stablecoin_7d", "Stablecoin supply (7-day change)", 0.25, +1, 0.01, 7, 3, 3,
         "daily", "DefiLlama: total circulating USD-pegged supply",
         "level(t) / level(t − 7 days) − 1; contribution = tanh(Δ% / 1%)", "fraction",
+        max_gap_days=4,
     ),
     ComponentSpec(
         "broad_dollar", "dollar_1m", "Broad dollar, inverted (1-month change)", 0.15, -1, 0.02, 30, 5, 10,
         "daily (business days)", "FRED: DTWEXBGS",
         "level(t) / level(t − 30 days) − 1; contribution = −tanh(Δ% / 2%)", "fraction",
+        max_gap_days=5,
     ),
     ComponentSpec(
         "rrp_release", "rrp_release_4w", "ON-RRP release (4-week change)", 0.10, -1, 75e9, 28, 5, 5,
         "daily (business days)", "FRED: RRPONTSYD",
         "level(t) − level(t − 28 days); contribution = −tanh(Δ / $75bn)", "USD",
+        max_gap_days=5,
     ),
     ComponentSpec(
         "etf_flows", "etf_flow_5d", "Spot-BTC ETF net flows (5-day sum)", 0.10, +1, 1e9, 5, 9, 5,
         "daily (trading days)", "LiqTide `metrics.etf_flows` archive (Farside history: RFC-003)",
         "sum of the last 5 daily net flows; contribution = tanh(Σ / $1bn)", "USD",
         ETF_LAUNCH_DATE,
+        max_gap_days=5,
     ),
     ComponentSpec(
         "btc_dominance", "rotation_30d", "BTC dominance, inverted (30-day change)", 0.10, -1, 2.0, 30, 5, 3,
         "daily (thinned before archive start)", "LiqTide `metrics.btc_dom` archive (CoinGecko upstream)",
         "level(t) − level(t − 30 days), percentage points; contribution = −tanh(Δ / 2pp)", "percentage points",
+        max_gap_days=5,
     ),
 )
 SPEC_BY_ID = {spec.id: spec for spec in COMPONENTS}
+
+# Composite cadences (RFC-005 decision 9).
+# Reproduced index: one point per date where the inputs cover >= 60% of the
+# weight. Its dates follow its daily / business-day inputs, so the normal
+# step is 1-3 days (up to 5 over a long-weekend holiday). An absence longer
+# than that (coverage below the floor, or inputs missing) is a gap.
+REPRODUCED_MAX_GAP_DAYS = 5
+# Published index: LiqTide's `tide_series` history is weekly (observed steps
+# 7 days, once 8), then one point per archived day. 10 days allows one
+# shifted weekly release; anything longer is a real hole.
+PUBLISHED_MAX_GAP_DAYS = 10
+
+# Why each component's max_gap_days is what it is (observed 2026-09-24).
+MAX_GAP_DAYS_REASONS: dict[str, str] = {
+    "net_liquidity": "weekly H.4.1 Wednesday grid; 7-day steps, 8 when a holiday moves a release — 10 allows that",
+    "stablecoin_supply": "daily incl. weekends; 4 tolerates a couple of missed DefiLlama days",
+    "broad_dollar": "business days; a Fri+Mon holiday weekend is a 5-day step (Thu -> Tue)",
+    "rrp_release": "business days; same holiday-weekend allowance as the dollar index",
+    "etf_flows": "US trading days (observed steps 1 and 3); Thanksgiving + weekend is 5",
+    "btc_dominance": "LiqTide history is thinned (observed steps 1, 2 and 3 days) then daily from the archive; "
+                     "5 covers the thinning. The 2025-12-07 -> 2026-08-03 hole (239 days) is a real gap",
+}
+
+
+def gap_before_flags(dates, max_gap_days: int) -> list[bool]:
+    """For each date (ascending), True when the calendar-day distance from the
+    previous date exceeds `max_gap_days`. The first date is False.
+
+    Run it on the FULL series, before any start/end filtering, so the first
+    point of a viewing window keeps its true flag."""
+    ts = pd.to_datetime(pd.Series(list(dates)))
+    if ts.empty:
+        return []
+    steps = ts.diff().dt.days
+    return [bool(s > max_gap_days) if pd.notna(s) else False for s in steps]
+
+
+def with_gap_flags(df: pd.DataFrame, max_gap_days: int) -> pd.DataFrame:
+    """Copy of a `date, ...` frame, sorted by date, with a `gap_before` column."""
+    out = df.sort_values("date").reset_index(drop=True).copy() if not df.empty else df.copy()
+    out["gap_before"] = gap_before_flags(out["date"], max_gap_days) if not out.empty else pd.Series(dtype=bool)
+    return out
 
 
 @dataclass

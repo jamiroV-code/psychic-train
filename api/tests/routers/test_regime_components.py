@@ -85,7 +85,7 @@ class TestShape:
         assert [c["id"] for c in body["components"]] == [s.id for s in comp.COMPONENTS]
         for c in body["components"]:
             assert {"id", "label", "weight", "source", "transform", "frequency", "status", "reason",
-                    "first_date", "last_date", "last_fetched_utc", "points", "notes", "unit"} <= set(c)
+                    "first_date", "last_date", "last_fetched_utc", "points", "notes", "unit", "max_gap_days"} <= set(c)
             assert c["status"] in {"ok", "stale", "unavailable", "not_applicable", "no_data"}
         nl = _by_id(body)["net_liquidity"]
         assert nl["status"] == "ok" and nl["points"]
@@ -97,12 +97,12 @@ class TestShape:
         rep, pub = composite["reproduced"], composite["published"]
         assert rep["label"] == "Reproduced tide index (this app)"
         assert rep["normalisation"] == "sign·tanh(impulse/scale); 50 + 50·Σw·x / Σw_present"
-        assert rep["points"] and set(rep["points"][0]) == {"date", "value", "coverage"}
+        assert rep["points"] and set(rep["points"][0]) == {"date", "value", "coverage", "gap_before"}
         assert pub["attribution"] == "Data: LiqTide (liqtide.com)"
         assert pub["status"] == "ok"
         assert pub["points"] == [
-            {"date": "2026-09-22", "value": 48.0, "regime_label": "neutral"},
-            {"date": "2026-09-23", "value": 44.0, "regime_label": "ebbing"},
+            {"date": "2026-09-22", "value": 48.0, "regime_label": "neutral", "gap_before": False},
+            {"date": "2026-09-23", "value": 44.0, "regime_label": "ebbing", "gap_before": False},
         ]
         assert {"overlap_days", "pearson_r", "mean_abs_diff", "full_coverage_days",
                 "full_coverage_mean_abs_diff"} <= set(composite["agreement"])
@@ -123,7 +123,7 @@ class TestNoStandIns:
         for points in lists:
             for p in points:
                 for k, v in p.items():
-                    if k in ("date", "regime_label"):
+                    if k in ("date", "regime_label", "gap_before"):
                         continue
                     assert v is not None and isinstance(v, (int, float)) and math.isfinite(v), (k, p)
 
@@ -240,3 +240,66 @@ class TestAppWiring:
         resp = client.get(URL, headers={"Accept-Encoding": "gzip"})
         assert resp.headers.get("content-encoding") == "gzip"
         assert json.loads(resp.content)["components"]  # httpx decodes transparently
+
+
+def _steps_ok(points: list[dict], max_gap_days: int) -> None:
+    """Every flag must agree with the calendar step from the previous point."""
+    dates = [pd.Timestamp(p["date"]) for p in points]
+    for i, p in enumerate(points):
+        expected = i > 0 and (dates[i] - dates[i - 1]).days > max_gap_days
+        assert p["gap_before"] is expected, p
+
+
+class TestGapFlags:
+    """RFC-005 decision 9: points carry `gap_before`; series carry `max_gap_days`."""
+
+    def test_schema_has_cadence_and_flags(self, client):
+        body = client.get(URL).json()
+        for c in body["components"]:
+            assert c["max_gap_days"] == comp.SPEC_BY_ID[c["id"]].max_gap_days
+            assert all(isinstance(p["gap_before"], bool) for p in c["points"])
+        assert body["composite"]["reproduced"]["max_gap_days"] == comp.REPRODUCED_MAX_GAP_DAYS
+        assert body["composite"]["published"]["max_gap_days"] == comp.PUBLISHED_MAX_GAP_DAYS
+
+    def test_weekly_net_liquidity_on_daily_grid_has_no_gaps(self, client):
+        body = client.get(URL).json()
+        nl = _by_id(body)["net_liquidity"]
+        assert len(nl["points"]) > 5
+        assert not any(p["gap_before"] for p in nl["points"])
+        # Daily grid really is denser than the weekly series.
+        assert len(body["grid_dates"]) > 3 * len(nl["points"])
+        for c in body["components"]:
+            assert not any(p["gap_before"] for p in c["points"]), c["id"]
+
+    @staticmethod
+    def _dollar_with_hole(monkeypatch):
+        frames = _fred_frames()
+        d = frames["DTWEXBGS"]
+        frames["DTWEXBGS"] = d[(d.index < "2026-07-10") | (d.index > "2026-07-31")]
+        _patch_fred(monkeypatch, frames)
+
+    def test_real_hole_flags_first_point_after_it(self, client, monkeypatch):
+        self._dollar_with_hole(monkeypatch)
+        bd = _by_id(client.get(URL).json())["broad_dollar"]
+        flagged = [p["date"] for p in bd["points"] if p["gap_before"]]
+        # 2026-08-01: first point after the hole. 2026-08-31: first point after
+        # the stretch whose 30-day look-back falls inside the hole (no value).
+        assert flagged == ["2026-08-01", "2026-08-31"]
+        _steps_ok(bd["points"], bd["max_gap_days"])
+
+    def test_flag_survives_start_filter(self, client, monkeypatch):
+        self._dollar_with_hole(monkeypatch)
+        bd = _by_id(client.get(URL, params={"start": "2026-08-01"}).json())["broad_dollar"]
+        assert bd["points"][0]["date"] == "2026-08-01" and bd["points"][0]["gap_before"] is True
+        bd = _by_id(client.get(URL, params={"start": "2026-08-02"}).json())["broad_dollar"]
+        assert bd["points"][0]["gap_before"] is False
+
+    def test_composite_coverage_drop_is_flagged(self, client, monkeypatch):
+        df = pd.DataFrame({"date": pd.to_datetime(DAYS, utc=True), "value": np.linspace(3.0e11, 3.1e11, len(DAYS))})
+        df = df[(df["date"] < "2026-08-01") | (df["date"] > "2026-08-20")]
+        monkeypatch.setattr(defillama_adapter, "fetch_stablecoin_supply",
+                            lambda client=None: defillama_adapter.StablecoinSupplyResult(df, "ok"))
+        rep = client.get(URL).json()["composite"]["reproduced"]
+        flagged = [p for p in rep["points"] if p["gap_before"]]
+        assert len(flagged) == 1 and "2026-08-21" <= flagged[0]["date"] <= "2026-08-31"
+        _steps_ok(rep["points"], rep["max_gap_days"])

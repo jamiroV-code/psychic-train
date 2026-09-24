@@ -24,6 +24,7 @@ function component(over: Partial<RegimeComponent> & Pick<RegimeComponent, "id">)
     first_date: GRID[0],
     last_date: GRID[5],
     last_fetched_utc: "2026-09-24T06:00:00Z",
+    max_gap_days: 5,
     points: [],
     ...over,
   };
@@ -41,11 +42,11 @@ function makeResponse(): RegimeComponentsResponse {
         source: "FRED: WALCL − WDTGAL − RRPONTSYD×1000",
         transform: "level(t) − level(t − 28 days); contribution = tanh(Δ / $150bn)",
         points: [
-          { date: GRID[0], value: -41.2e9, raw: 7.1024e12, contribution: -0.27 },
-          { date: GRID[5], value: 12e9, raw: 6e12, contribution: 0.08 },
+          { date: GRID[0], value: -41.2e9, raw: 7.1024e12, contribution: -0.27, gap_before: false },
+          { date: GRID[5], value: 12e9, raw: 6e12, contribution: 0.08, gap_before: false },
         ],
       }),
-      component({ id: "stablecoin_supply", unit: "fraction", status: "stale", reason: "refresh failed; serving cache", points: [{ date: GRID[4], value: 0.01, raw: 2e11, contribution: 0.76 }] }),
+      component({ id: "stablecoin_supply", unit: "fraction", status: "stale", reason: "refresh failed; serving cache", points: [{ date: GRID[4], value: 0.01, raw: 2e11, contribution: 0.76, gap_before: false }] }),
       component({ id: "broad_dollar", unit: "fraction", status: "unavailable", reason: "FRED unreachable and nothing cached", first_date: null, last_date: null, points: [] }),
       component({ id: "rrp_release", status: "no_data", reason: "no points in the requested date range", points: [] }),
       component({
@@ -61,8 +62,8 @@ function makeResponse(): RegimeComponentsResponse {
         first_date: "2025-07-12",
         notes: ["No data before 2025-07-12."],
         points: [
-          { date: GRID[4], value: -0.5, raw: 58.1, contribution: 0.24 },
-          { date: GRID[5], value: 0.3, raw: 57.3, contribution: -0.15 },
+          { date: GRID[4], value: -0.5, raw: 58.1, contribution: 0.24, gap_before: false },
+          { date: GRID[5], value: 0.3, raw: 57.3, contribution: -0.15, gap_before: false },
         ],
       }),
     ],
@@ -70,15 +71,17 @@ function makeResponse(): RegimeComponentsResponse {
       reproduced: {
         label: "Reproduced tide index (this app)",
         normalisation: "sign·tanh(impulse/scale); 50 + 50·Σw·x / Σw_present",
-        points: [{ date: GRID[5], value: 46.8, coverage: 0.8 }],
+        max_gap_days: 5,
+        points: [{ date: GRID[5], value: 46.8, coverage: 0.8, gap_before: false }],
       },
       published: {
         label: "LiqTide tide index (published)",
         attribution: "Data: LiqTide (liqtide.com)",
         status: "ok",
+        max_gap_days: 10,
         points: [
-          { date: GRID[4], value: 55, regime_label: null },
-          { date: GRID[5], value: 52, regime_label: "neutral" },
+          { date: GRID[4], value: 55, regime_label: null, gap_before: false },
+          { date: GRID[5], value: 52, regime_label: "neutral", gap_before: false },
         ],
       },
       agreement: { overlap_days: 380, pearson_r: 0.71, mean_abs_diff: 6.4, full_coverage_days: 90, full_coverage_mean_abs_diff: 2.1 },
@@ -106,7 +109,8 @@ describe("RegimeDashboard", () => {
 
   it("feeds every series grid_dates.length points, whitespace where no value (never 0)", async () => {
     await renderDashboard();
-    const all = mockCharts.flatMap((c) => c.series);
+    // Line series only; dots-only companions (isolated points) are checked separately.
+    const all = mockCharts.flatMap((c) => c.series).filter((s) => s.options.lineVisible !== false);
     expect(all).toHaveLength(8); // 6 components + reproduced + published
     for (const s of all) expect(s.data).toHaveLength(GRID.length);
     const netLiq = mockCharts[0].series[0].data as { time: number; value?: number }[];
@@ -222,5 +226,39 @@ describe("RegimeDashboard", () => {
   it("shows a loading state before data arrives", () => {
     render(<RegimeDashboard fetchData={() => new Promise(() => {})} />);
     expect(screen.getByTestId("regime-loading")).toBeInTheDocument();
+  });
+});
+
+describe("RegimeDashboard data gaps (RFC-005 decision 9)", () => {
+  beforeEach(() => resetMockCharts());
+
+  it("hides only the segment into a gap_before point and keeps weekly series continuous", async () => {
+    const data = makeResponse();
+    const btc = data.components.find((c) => c.id === "btc_dominance")!;
+    btc.points = [
+      { date: GRID[2], value: 0.1, raw: 50, contribution: -0.05, gap_before: false },
+      { date: GRID[3], value: 0.2, raw: 51, contribution: -0.1, gap_before: false },
+      { date: GRID[5], value: 0.3, raw: 57.3, contribution: -0.15, gap_before: true },
+    ];
+    await renderDashboard(vi.fn(async () => data));
+    const btcData = mockCharts[5].series[0].data as { time: number; value?: number; color?: string }[];
+    expect(btcData[3]).toEqual({ time: isoDateToUtcSeconds(GRID[3]), value: 0.2, color: "rgba(0, 0, 0, 0)" });
+    expect(btcData.filter((p) => p.color !== undefined)).toHaveLength(1);
+    // GRID[5] follows a hole and has no later point: it is isolated -> dot series.
+    const dotSeries = mockCharts[5].series[1];
+    expect(dotSeries.options).toMatchObject({ lineVisible: false, pointMarkersVisible: true });
+    expect((dotSeries.data as object[]).filter((p) => "value" in p)).toEqual([
+      { time: isoDateToUtcSeconds(GRID[5]), value: 0.3 },
+    ]);
+    // Net liquidity (no flags) has no hidden segments.
+    expect((mockCharts[0].series[0].data as object[]).some((p) => "color" in p)).toBe(false);
+  });
+
+  it("crosshair sync still targets the line series, not the dots companion", async () => {
+    await renderDashboard();
+    // stablecoin_supply has one point -> it gets a dots series at index 1.
+    expect(mockCharts[1].series).toHaveLength(2);
+    act(() => mockCharts[0].fireCrosshair(isoDateToUtcSeconds(GRID[4])));
+    expect(mockCharts[1].crosshair?.series).toBe(mockCharts[1].series[0]);
   });
 });

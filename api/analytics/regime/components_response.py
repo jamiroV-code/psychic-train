@@ -14,9 +14,12 @@ from datetime import date, datetime, timezone
 import pandas as pd
 
 from api.analytics.regime.components import (
+    PUBLISHED_MAX_GAP_DAYS,
+    REPRODUCED_MAX_GAP_DAYS,
     ComponentSeries,
     RegimeComponentsResult,
     status_for_range,
+    with_gap_flags,
 )
 from api.data import cache, defillama_adapter, fred_adapter
 from api.models.regime import (
@@ -82,12 +85,22 @@ def _iso(d) -> str:
     return pd.Timestamp(d).strftime("%Y-%m-%d")
 
 
+def _flagged(df: pd.DataFrame, cols: tuple[str, ...], max_gap_days: int, start, end) -> pd.DataFrame:
+    """Drop non-finite rows, flag gaps on the WHOLE remaining series, then
+    filter to the window (RFC-005 decision 9): the flags describe the series,
+    not the viewing window."""
+    if df.empty:
+        return df.assign(gap_before=pd.Series(dtype=bool))
+    keep = df[[_finite(*vals) for vals in df[list(cols)].itertuples(index=False, name=None)]]
+    return _in_range(with_gap_flags(keep, max_gap_days), start, end)
+
+
 def _component(c: ComponentSeries, start, end) -> RegimeComponent:
-    rows = _in_range(c.points, start, end)
+    rows = _flagged(c.points, ("value", "raw", "contribution"), c.spec.max_gap_days, start, end)
     points = [
-        ComponentPoint(date=_iso(r.date), value=float(r.value), raw=float(r.raw), contribution=float(r.contribution))
+        ComponentPoint(date=_iso(r.date), value=float(r.value), raw=float(r.raw), contribution=float(r.contribution),
+                       gap_before=bool(r.gap_before))
         for r in rows.itertuples(index=False)
-        if _finite(r.value, r.raw, r.contribution)
     ]
     status, reason = status_for_range(c, end)
     if status == "ok" and not points and not c.points.empty:
@@ -101,6 +114,7 @@ def _component(c: ComponentSeries, start, end) -> RegimeComponent:
         first_date=points[0].date if points else None,
         last_date=points[-1].date if points else None,
         last_fetched_utc=last_fetched_utc(spec.id),
+        max_gap_days=spec.max_gap_days,
         points=points,
     )
 
@@ -123,15 +137,16 @@ def serialize_components(
     e = pd.Timestamp(end) if end is not None else None
 
     reproduced = [
-        ReproducedPoint(date=_iso(r.date), value=float(r.value), coverage=float(r.coverage))
-        for r in _in_range(result.reproduced, s, e).itertuples(index=False)
-        if _finite(r.value, r.coverage)
+        ReproducedPoint(date=_iso(r.date), value=float(r.value), coverage=float(r.coverage),
+                        gap_before=bool(r.gap_before))
+        for r in _flagged(result.reproduced, ("value", "coverage"), REPRODUCED_MAX_GAP_DAYS, s, e)
+        .itertuples(index=False)
     ]
     published = [
         PublishedPoint(date=_iso(r.date), value=float(r.value),
-                       regime_label=r.label if isinstance(r.label, str) and r.label else None)
-        for r in _in_range(result.published, s, e).itertuples(index=False)
-        if _finite(r.value)
+                       regime_label=r.label if isinstance(r.label, str) and r.label else None,
+                       gap_before=bool(r.gap_before))
+        for r in _flagged(result.published, ("value",), PUBLISHED_MAX_GAP_DAYS, s, e).itertuples(index=False)
     ]
     grid = [d for d in result.grid_dates if (s is None or d >= _iso(s)) and (e is None or d <= _iso(e))]
     a = result.agreement
@@ -149,9 +164,10 @@ def serialize_components(
         components=[_component(c, s, e) for c in result.components],
         composite=RegimeComposite(
             reproduced=ReproducedComposite(label=REPRODUCED_LABEL, normalisation=REPRODUCED_NORMALISATION,
-                                           points=reproduced),
+                                           max_gap_days=REPRODUCED_MAX_GAP_DAYS, points=reproduced),
             published=PublishedComposite(label=PUBLISHED_LABEL, attribution=PUBLISHED_ATTRIBUTION,
-                                         status="ok" if published else "unavailable", points=published),
+                                         status="ok" if published else "unavailable",
+                                         max_gap_days=PUBLISHED_MAX_GAP_DAYS, points=published),
             agreement=agreement,
         ),
     )

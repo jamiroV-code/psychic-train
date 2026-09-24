@@ -69,7 +69,7 @@ export function RegimeDashboard({ fetchData = () => fetchRegimeComponents() }: R
 
   const panels = useMemo(() => {
     if (!data || !model) return [];
-    const componentPanels = model.components.map(({ component, values }) => ({
+    const componentPanels = model.components.map(({ component, values, gapBefore }) => ({
       panelId: component.id,
       title: component.label,
       meta: [
@@ -83,7 +83,7 @@ export function RegimeDashboard({ fetchData = () => fetchRegimeComponents() }: R
       notes: component.notes,
       attribution: undefined as string | undefined,
       unit: component.unit,
-      lines: [{ key: component.id, label: component.label, color: COMPONENT_COLOR, values }] as PanelLine[],
+      lines: [{ key: component.id, label: component.label, color: COMPONENT_COLOR, values, gapBefore }] as PanelLine[],
       renderDrillDown: (close: () => void) => <DrillDown kind="component" component={component} onClose={close} />,
     }));
 
@@ -120,8 +120,8 @@ export function RegimeDashboard({ fetchData = () => fetchRegimeComponents() }: R
         attribution: published.attribution,
         unit: "index",
         lines: [
-          { key: "reproduced", label: reproduced.label, color: REPRODUCED_COLOR, values: model.reproduced.values },
-          { key: "published", label: published.label, color: PUBLISHED_COLOR, values: model.published.values },
+          { key: "reproduced", label: reproduced.label, color: REPRODUCED_COLOR, values: model.reproduced.values, gapBefore: model.reproduced.gapBefore },
+          { key: "published", label: published.label, color: PUBLISHED_COLOR, values: model.published.values, gapBefore: model.published.gapBefore },
         ] as PanelLine[],
         renderDrillDown: (close: () => void) => <DrillDown kind="composite" composite={data.composite} onClose={close} />,
       },

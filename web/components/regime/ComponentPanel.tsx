@@ -1,10 +1,11 @@
 "use client";
 
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
-import { createChart, LineSeries, type ISeriesApi, type LineData, type UTCTimestamp, type WhitespaceData } from "lightweight-charts";
+import { createChart, LineSeries, type ISeriesApi } from "lightweight-charts";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
 import type { ChartSync } from "@/lib/regime-chart-sync";
 import { formatRegimeValue } from "@/lib/format-regime-value";
+import { toSegmentedSeriesData } from "@/lib/regime-line-segments";
 
 export interface PanelLine {
   key: string;
@@ -12,6 +13,8 @@ export interface PanelLine {
   color: string;
   /** One entry per grid date; null = whitespace (no value). */
   values: (number | null)[];
+  /** API `gap_before` per grid date: no line is drawn into a flagged point. */
+  gapBefore?: boolean[];
 }
 
 export interface PanelNotice {
@@ -36,14 +39,6 @@ export interface ComponentPanelProps {
   /** Inline drill-down; receives a close callback. */
   renderDrillDown: (close: () => void) => ReactNode;
   height?: number;
-}
-
-function toSeriesData(gridTimes: number[], values: (number | null)[]): (LineData | WhitespaceData)[] {
-  return gridTimes.map((t, i) => {
-    const time = t as UTCTimestamp;
-    const v = values[i];
-    return v === null || v === undefined ? { time } : { time, value: v };
-  });
 }
 
 /**
@@ -85,14 +80,30 @@ function ComponentPanelImpl({
       localization: { priceFormatter: (price: number) => formatRegimeValue(price, unit) },
     });
 
+    // One line series per PanelLine (these drive crosshair sync). Real data
+    // holes (API `gap_before`) are not bridged; isolated points get a
+    // dots-only companion series — see lib/regime-line-segments.ts.
     const seriesList: ISeriesApi<"Line">[] = lines.map((line) => {
+      const { line: lineData, dots } = toSegmentedSeriesData(gridTimes, line.values, line.gapBefore);
       const series = chart.addSeries(LineSeries, {
         color: line.color,
         lineWidth: 2,
         priceLineVisible: false,
         lastValueVisible: false,
       });
-      series.setData(toSeriesData(gridTimes, line.values));
+      series.setData(lineData);
+      if (dots) {
+        const dotSeries = chart.addSeries(LineSeries, {
+          color: line.color,
+          lineVisible: false,
+          pointMarkersVisible: true,
+          pointMarkersRadius: 2,
+          crosshairMarkerVisible: false,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        dotSeries.setData(dots);
+      }
       return series;
     });
 

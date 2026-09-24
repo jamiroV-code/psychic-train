@@ -281,3 +281,48 @@ class TestOrchestrator:
         assert result.grid_dates == sorted(result.grid_dates)
         for c in result.components:
             assert np.isfinite(c.points[["value", "contribution"]].to_numpy(dtype=float)).all()
+
+
+class TestGapFlags:
+    """RFC-005 decision 9: `gap_before` marks a real hole, not a cadence step."""
+
+    def test_first_point_is_never_a_gap(self):
+        assert comp.gap_before_flags(pd.to_datetime(["2026-01-01"]), 5) == [False]
+        assert comp.gap_before_flags([], 5) == []
+
+    def test_weekly_series_is_continuous_at_weekly_tolerance(self):
+        weds = pd.date_range("2026-01-07", "2026-06-24", freq="W-WED")
+        assert not any(comp.gap_before_flags(weds, S["net_liquidity"].max_gap_days))
+
+    def test_multi_week_hole_flags_only_first_point_after_it(self):
+        days = pd.date_range("2026-01-01", "2026-03-31", freq="D")
+        kept = days[(days < "2026-02-01") | (days > "2026-02-28")]
+        flags = comp.gap_before_flags(kept, 4)
+        flagged = [d.strftime("%Y-%m-%d") for d, f in zip(kept, flags) if f]
+        assert flagged == ["2026-03-01"]
+
+    def test_step_equal_to_max_gap_is_not_a_gap(self):
+        dates = pd.to_datetime(["2026-01-01", "2026-01-06", "2026-01-12"])
+        assert comp.gap_before_flags(dates, 5) == [False, False, True]
+
+    def test_business_day_series_holiday_weekend_is_not_a_gap(self):
+        # Thu 2026-11-26 (Thanksgiving) and Fri off: Wed -> Mon is 5 days.
+        dates = pd.to_datetime(["2026-11-24", "2026-11-25", "2026-11-30", "2026-12-01"])
+        assert not any(comp.gap_before_flags(dates, S["broad_dollar"].max_gap_days))
+
+    def test_with_gap_flags_sorts_and_adds_column(self):
+        df = pd.DataFrame({"date": pd.to_datetime(["2026-03-01", "2026-01-01", "2026-01-02"]), "value": [3.0, 1.0, 2.0]})
+        out = comp.with_gap_flags(df, 5)
+        assert list(out["value"]) == [1.0, 2.0, 3.0]
+        assert list(out["gap_before"]) == [False, False, True]
+
+    def test_every_component_declares_a_cadence_and_reason(self):
+        for spec in comp.COMPONENTS:
+            assert spec.max_gap_days >= 1
+            assert spec.id in comp.MAX_GAP_DAYS_REASONS
+
+    def test_btc_dominance_thinned_history_not_flagged_but_real_hole_is(self):
+        # Thinned history: 1-3 day steps; then a months-long hole.
+        dates = pd.to_datetime(["2025-11-01", "2025-11-03", "2025-11-06", "2025-11-07", "2026-08-03", "2026-08-04"])
+        assert comp.gap_before_flags(dates, S["btc_dominance"].max_gap_days) == [
+            False, False, False, False, True, False]

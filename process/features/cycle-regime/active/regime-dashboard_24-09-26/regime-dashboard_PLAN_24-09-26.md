@@ -461,8 +461,10 @@ Query: `start` (ISO date, optional), `end` (ISO date, optional). Default: full h
       "first_date": "2002-12-18",
       "last_date": "2026-09-17",
       "last_fetched_utc": "2026-09-24T06:00:00Z",
+      "max_gap_days": 10,
       "points": [
-        { "date": "2023-09-27", "value": -41200000000.0, "raw": 7102400000000.0, "contribution": -0.27 }
+        { "date": "2023-09-27", "value": -41200000000.0, "raw": 7102400000000.0, "contribution": -0.27,
+          "gap_before": false }
       ]
     }
   ],
@@ -470,13 +472,15 @@ Query: `start` (ISO date, optional), `end` (ISO date, optional). Default: full h
     "reproduced": {
       "label": "Reproduced tide index (this app)",
       "normalisation": "sign·tanh(impulse/scale); 50 + 50·Σw·x / Σw_present",
-      "points": [ { "date": "2023-09-27", "value": 46.8, "coverage": 0.8 } ]
+      "max_gap_days": 5,
+      "points": [ { "date": "2023-09-27", "value": 46.8, "coverage": 0.8, "gap_before": false } ]
     },
     "published": {
       "label": "LiqTide tide index (published)",
       "attribution": "Data: LiqTide (liqtide.com)",
       "status": "ok",
-      "points": [ { "date": "2024-09-02", "value": 52.0, "regime_label": "neutral" } ]
+      "max_gap_days": 10,
+      "points": [ { "date": "2024-09-02", "value": 52.0, "regime_label": "neutral", "gap_before": false } ]
     },
     "agreement": { "overlap_days": 380, "pearson_r": 0.71, "mean_abs_diff": 6.4,
                    "full_coverage_days": 90, "full_coverage_mean_abs_diff": 2.1 }
@@ -497,6 +501,14 @@ window is `no_data`. `composite.published.status` is `ok` when it has points, el
 `last_fetched_utc` = newest cache-file write among the component's inputs (LiqTide-derived:
 latest raw archive file); null only when nothing is cached. Responses are gzip-compressed when
 the client accepts it.
+
+Data gaps (RFC-005 supplement, decision 9; additive): every series carries `max_gap_days` (its
+normal release cadence plus holiday slack — per-component values and reasons in
+`components.MAX_GAP_DAYS_REASONS`; reproduced 5, published 10), and every point carries
+`gap_before: bool` — true when the previous point of the same series is more than `max_gap_days`
+calendar days earlier. Flags are computed on the full series before `start`/`end` filtering, so the
+first point of a window keeps its true flag; the first point of a series is false. Clients must not
+draw a line into a `gap_before` point.
 
 ---
 
@@ -773,6 +785,13 @@ lightweight-charts v5 sync APIs against the installed version; present. STOP.
 6. Value formatting via `web/lib/format-regime-value.ts`, driven by each component's `unit`.
 7. Reserved right column: fixed 280px grid column, empty, `aria-hidden`.
 8. Screener's hard-coded palette; no theme toggle.
+9. (Supplement, 24-09-26 — user chose "option 1: API marks real gaps".) The API marks real data
+   holes via per-series `max_gap_days` and per-point `gap_before` (§11); TS only maps them to
+   rendering. lightweight-charts line series do not break at whitespace, and a point's `color`
+   paints the segment that starts at it (verified in Chromium, 5.2.1), so the last real point
+   before a flagged point gets a transparent colour; isolated points go to a dots-only companion
+   series (`lineVisible: false`, `pointMarkersVisible: true`). Crosshair sync still uses the line
+   series. See the RFC-005 phase report §Supplement: data-gap line breaks.
 Sync is LOGICAL-range (`subscribeVisibleLogicalRangeChange` / `setVisibleLogicalRange`) rather than
 the time-range calls named in ADR-7 — exact on the shared grid, see the RFC-005 phase report.
 

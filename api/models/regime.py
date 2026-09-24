@@ -67,6 +67,11 @@ class ComponentPoint(BaseModel):
     value: float  # impulse, in the component's unit
     raw: float  # underlying level
     contribution: float  # sign·tanh(impulse/scale), in [-1, 1]
+    # True when the previous point of this series is more than the series'
+    # `max_gap_days` calendar days earlier (RFC-005 decision 9). Computed on
+    # the full series, so it survives start/end filtering. Charts must not
+    # draw a line into a point with gap_before = true.
+    gap_before: bool = False
 
 
 class RegimeComponent(BaseModel):
@@ -85,6 +90,8 @@ class RegimeComponent(BaseModel):
     # Most recent fetch among this component's cached inputs (decision 2);
     # null only when nothing is cached.
     last_fetched_utc: str | None = None
+    # Longest normal step between points (release cadence + holiday slack).
+    max_gap_days: int
     points: list[ComponentPoint]
 
 
@@ -92,11 +99,13 @@ class ReproducedPoint(BaseModel):
     date: str
     value: float
     coverage: float
+    gap_before: bool = False
 
 
 class ReproducedComposite(BaseModel):
     label: str
     normalisation: str
+    max_gap_days: int
     points: list[ReproducedPoint]
 
 
@@ -104,12 +113,14 @@ class PublishedPoint(BaseModel):
     date: str
     value: float
     regime_label: str | None = None  # only where LiqTide published one
+    gap_before: bool = False
 
 
 class PublishedComposite(BaseModel):
     label: str
     attribution: str
     status: PublishedStatus
+    max_gap_days: int
     points: list[PublishedPoint]
 
 
