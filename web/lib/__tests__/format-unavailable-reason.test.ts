@@ -5,7 +5,7 @@
 // and its siblings; treat as written-to-spec only until a real `pnpm test`
 // run confirms it.
 import { describe, expect, it } from "vitest";
-import { formatUnavailableReason } from "@/lib/format-unavailable-reason";
+import { formatNarrativeReason, formatUnavailableReason } from "@/lib/format-unavailable-reason";
 
 describe("formatUnavailableReason", () => {
   it("returns distinct copy for each named reason, regardless of context", () => {
@@ -32,5 +32,40 @@ describe("formatUnavailableReason", () => {
       formatUnavailableReason(r, "timeframe")
     );
     expect(new Set(values).size).toBe(values.length);
+  });
+});
+
+describe("formatNarrativeReason (RFC-5)", () => {
+  const generic = formatUnavailableReason("source-unavailable", "window");
+
+  it("returns null only for a null reason", () => {
+    expect(formatNarrativeReason(null)).toBeNull();
+  });
+
+  it("gives credentials-not-configured and no-baseline-yet their own copy", () => {
+    expect(formatNarrativeReason("credentials-not-configured")).toMatch(/credentials not configured/);
+    expect(formatNarrativeReason("no-baseline-yet")).toBe("Not enough history yet to detect new listings");
+    expect(formatNarrativeReason("no-baseline-yet")).not.toBe(generic);
+    expect(formatNarrativeReason("credentials-not-configured")).not.toBe(generic);
+  });
+
+  it("renders an empty-series reason clearly as unavailable", () => {
+    expect(formatNarrativeReason("no-archived-data")).toMatch(/^Unavailable/);
+  });
+
+  it.each([
+    ["no-hyperliquid-market", /Not listed on Hyperliquid/],
+    ["no-composite-data", /Unranked/],
+    ["no-composite-on-as-of", /as-of date/],
+    ["no-baseline-in-window", /7–9 days earlier/],
+    ["last-point-12-days-old", /12 days old/],
+    ["fetch-failed: HTTPError", /fetch failed/],
+    ["legacy-map-count: counts BTC/ETH/HYPE only; excluded from composite", /Legacy-map count/],
+  ])("formats %s", (reason, expected) => {
+    expect(formatNarrativeReason(reason)).toMatch(expected);
+  });
+
+  it("shows an unknown code verbatim instead of hiding it", () => {
+    expect(formatNarrativeReason("brand-new-code")).toBe("Unavailable (brand-new-code)");
   });
 });
