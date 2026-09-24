@@ -21,11 +21,13 @@ fastapi_testclient = pytest.importorskip("fastapi.testclient")
 TestClient = fastapi_testclient.TestClient
 
 from api.data import ccxt_adapter  # noqa: E402
+from api.data import watchlist as watchlist_store  # noqa: E402
 from api.main import app  # noqa: E402
 
+TICKERS = ("BTC", "ETH", "HYPE", "SOL")
 MARKETS = {
     f"{t}/USDC:USDC": {"swap": True, "spot": False, "base": t, "baseName": t, "active": True}
-    for t in ("BTC", "ETH", "HYPE", "SOL")
+    for t in TICKERS
 }
 
 # 90 daily bars — comfortably past MIN_BARS_REQUIRED (60) and SMA_LENGTH, so
@@ -57,6 +59,12 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(ccxt_adapter.cache, "CACHE_ROOT", tmp_path)
     monkeypatch.setattr(ccxt_adapter.ccxt, "hyperliquid", lambda *a, **k: StubExchange())
     ccxt_adapter.reset_exchange_cache()
+    # The real api/data/watchlist.json is gitignored user data (absent on a
+    # fresh checkout), so isolate and seed it like the price cache above —
+    # tests/all-tests.md Standing Lessons #3/#7.
+    monkeypatch.setattr(watchlist_store, "DEFAULT_WATCHLIST_PATH", tmp_path / "watchlist.json")
+    for t in TICKERS:
+        watchlist_store.add_coin(t)
     yield TestClient(app)
     ccxt_adapter.reset_exchange_cache()
 
