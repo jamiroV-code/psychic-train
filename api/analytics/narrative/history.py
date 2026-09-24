@@ -196,8 +196,11 @@ def _exchange_frames(category_id: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     if df.empty:
         return pd.DataFrame(columns=cols), pd.DataFrame(columns=cols)
 
-    def _obj(col: str) -> list:
-        return [None if pd.isna(v) else v for v in df[col]]
+    def _obj(col: str) -> pd.Series:
+        # dtype=object keeps None as None: a plain list of str/None is inferred
+        # as a nan-backed StringDtype, which turns None into NaN and fails the
+        # response model (RFC-6 E2E finding).
+        return pd.Series([None if pd.isna(v) else v for v in df[col]], dtype=object)
 
     dates = df["date"].astype(str).to_list()
     vol = pd.DataFrame({"date": dates, "raw": [None if pd.isna(v) else float(v) for v in df["volume_share"]],
