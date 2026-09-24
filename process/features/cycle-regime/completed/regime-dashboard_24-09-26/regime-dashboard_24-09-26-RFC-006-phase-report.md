@@ -3,7 +3,7 @@ phase: rfc-006-end-to-end-proof
 date: 2026-09-24
 status: COMPLETE_WITH_GAPS
 feature: cycle-regime
-plan: process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md
+plan: process/features/cycle-regime/completed/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md
 ---
 
 # RFC-006 Phase Report — end-to-end proof
@@ -138,7 +138,7 @@ and the web app (`pnpm dev`), then open `http://localhost:3000/regime`:
 
 ## Closeout Packet
 
-- Selected plan: `process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`
+- Selected plan: `process/features/cycle-regime/completed/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`
 - Finished: RFC-006 decisions 1–6 and the vitest flake fix.
 - Verified: every automated gate above. Not verified: the AC-11 user walkthrough on the real cache.
 - Classification: **Keep in active/testing** until you confirm the walkthrough.

@@ -148,7 +148,7 @@ Actual cost class used: `cheap-local`. No container, no live-provider opt-in, no
 automation, and no Cloudflare-worker sandbox were needed — 2 of the allotted ~3 plain HTTP GETs
 resolved the hypothesis fully.
 
-VC-FEASIBILITY-VERDICT-READY: VIABLE — process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dashboard-farside_FEASIBILITY_24-09-26.md
+VC-FEASIBILITY-VERDICT-READY: VIABLE — process/features/cycle-regime/completed/regime-dashboard_24-09-26/regime-dashboard-farside_FEASIBILITY_24-09-26.md
 
 **Status:** DONE
 **Summary:** Farside's ETF-flows table is plain server-rendered HTML reachable by a bare `httpx` client (two live 200s, full 694-row table with a Cloudflare header but no challenge page) — RFC-003's plain-HTTP-adapter approach is VIABLE. One new fact for the plan: no HTML-table parser (`lxml`/`bs4`/`html5lib`) is currently installed in `api`, so RFC-003 needs to add one.

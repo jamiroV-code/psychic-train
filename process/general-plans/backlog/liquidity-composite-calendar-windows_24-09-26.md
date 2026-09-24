@@ -2,7 +2,7 @@
 
 **Date**: 24-09-26
 **Status**: backlog (NEW PLAN REQUIRED)
-**Found by**: VALIDATE of `process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`
+**Found by**: VALIDATE of `process/features/cycle-regime/completed/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`
 
 ## Finding
 

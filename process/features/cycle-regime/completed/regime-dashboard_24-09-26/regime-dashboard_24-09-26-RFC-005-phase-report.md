@@ -3,7 +3,7 @@ phase: rfc-005-regime-page
 date: 2026-09-24
 status: COMPLETE_WITH_GAPS
 feature: cycle-regime
-plan: process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md
+plan: process/features/cycle-regime/completed/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md
 ---
 
 # RFC-005 Phase Report — `/regime` page

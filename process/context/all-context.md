@@ -1,8 +1,9 @@
 # my_site - All Context
 
-Last updated: 2026-09-24 (narrative-mindshare `/narrative` dashboard UPDATE PROCESS closeout — see
-Changes Since Last Update below; the earlier 2026-09-24 version predates the whole `/narrative`
-build and only covers the regime dashboard)
+Last updated: 2026-09-24 (merge of two same-day UPDATE PROCESS closeouts — narrative-mindshare
+`/narrative` dashboard RFC-1..6, and the regime dashboard's AC-11-confirmed 2nd pass with its plan
+archived to `completed/`; see Changes Since Last Update below for both. The 2026-09-20 18:47
+version predates both the `/regime` and `/narrative` builds)
 
 This file is the root context entrypoint for the repo.
 
@@ -89,10 +90,12 @@ ownership/documentation change, not a code relocation.
 
 ## Changes Since Last Update (2026-09-20 → 2026-09-24)
 
-The regime dashboard (`process/features/cycle-regime/active/regime-dashboard_24-09-26/`) shipped
-across six RFCs, all code-complete and committed to `main` (`db8d854`). This is the second real
-feature after the momentum screener, and the first to live in `process/features/cycle-regime/`
-(previously an empty `_GUIDE.md` placeholder).
+The regime dashboard (`process/features/cycle-regime/completed/regime-dashboard_24-09-26/`) shipped
+across six RFCs, all code-complete and committed to `main` (`db8d854`), and all six are now
+✅ VERIFIED — the user confirmed the AC-11 real-cache walkthrough on their PC on 24-09-26 ("all
+seems fine"; see Open Questions for the one clarified item, a BTC-dominance data hole). This is the
+second real feature after the momentum screener, and the first to live in
+`process/features/cycle-regime/` (previously an empty `_GUIDE.md` placeholder).
 
 - `[Product]` New route **`/regime`**: seven synced `lightweight-charts` panels (six liquidity
   components + one composite panel with two labelled lines — reproduced vs. LiqTide-published),
@@ -662,17 +665,25 @@ may be redistributed. See Licensing in `data-sources/all-data-sources.md`.
   the exact overlap window is short (LiqTide's own history is ~2024-09 at best) and the 1/6
   mismatched component hasn't been root-caused — see the RFC-002 phase report for the specific
   component and its residual.
-- **New, 2026-09-24, open: AC-11 real-cache user walkthrough for `/regime` has not run.** All
-  automated gates are green (see Changes Since Last Update), but this cloud container's egress
-  proxy blocks FRED/DefiLlama/stablecoins.llama.fi with a 403, so the walkthrough against real
-  cached data must happen on the user's own PC. The regime-dashboard plan stays in
-  `process/features/cycle-regime/active/` until that confirmation lands. See the plan's Resume and
-  Execution Handoff section for the exact PC steps.
-- **New, 2026-09-24, open: two component depth limits are accepted, not solved.** BTC-dominance
-  history has no free, keyless source deeper than LiqTide's own (~2025-06); spot-ETF flows
-  structurally cannot exist before 2024-01-11 (product launch date). Both panels show honest
-  "no data" / "not applicable" states rather than any fill. Revisit only if a free deeper source
-  for BTC dominance appears — don't invent one.
+- ~~AC-11 real-cache user walkthrough for `/regime` has not run.~~ **Resolved 2026-09-24 (2nd
+  UPDATE PROCESS pass).** The user ran the walkthrough on their own PC against the real cache (3y
+  default range, zoom/hover/drill-down sync, ETF "not applicable before 2024-01-11" note, ~2000+
+  point performance) and confirmed "all seems fine". One question — a blank stretch on the
+  BTC-dominance panel — was explained and accepted as correct honest-gap behaviour, not a bug (see
+  the two-depth-limits entry below). The regime-dashboard plan and its task folder are archived at
+  `process/features/cycle-regime/completed/regime-dashboard_24-09-26/`.
+- **Two component depth limits, accepted, not solved (BTC-dominance limit sharpened 2026-09-24).**
+  BTC-dominance history has no free, keyless source deeper than LiqTide's own `metrics.btc_dom.series`
+  (~2025-06 at best; CoinGecko's historical global market cap, which would let this be reproduced
+  independently like the other five components, is paid-tier only). That series also has a real,
+  permanent 209-day hole, **2025-12-07 → 2026-07-04** (161 points on either side, otherwise 1-3 day
+  steps) — confirmed during the user's AC-11 walkthrough, who noticed the BTC-dominance panel's
+  30-day change resumes only on 2026-08-03 (the as-of value 30 days earlier would be the stale
+  pre-hole December reading). The nightly archive (RFC-001) prevents any *new* hole from forming;
+  this specific historical gap is not backfillable from any known free source and the user chose to
+  leave it. Spot-ETF flows separately, structurally cannot exist before 2024-01-11 (product launch
+  date). Both panels show honest "no data" / "not applicable" states rather than any fill. Revisit
+  only if a free deeper BTC-dominance source appears — don't invent one.
 
 ## References
 
@@ -693,7 +704,7 @@ and `...-183336.json`, a `device_list_dir` of `api/data/cache/liqtide/` (one fil
 `process/general-plans/active/momentum-screener_17-09-26/update-process-closeout_20-09-26.md`.
 
 **Added at the 2026-09-24 UPDATE PROCESS closeout (regime dashboard, RFC-001..006):**
-`process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`
+`process/features/cycle-regime/completed/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`
 (full plan incl. Status Strip, ADRs, Validate Contract, Resume and Execution Handoff), all six
 `regime-dashboard_24-09-26-RFC-00N-phase-report.md` files in that task folder, the Stage-0 reports
 for RFC-001/RFC-002, the Farside `regime-dashboard-farside_FEASIBILITY_24-09-26.md`, the
@@ -711,18 +722,28 @@ and both `*-stage0_REPORT_*.md` files in that task folder,
 narrative-snapshot.yml`, and `git log`/`git status`/`git show --stat` at `7ef8eb3` on branch
 `claude/kind-tesla-tat3vo`.
 
+**Added at the same-day 2nd UPDATE PROCESS pass (AC-11 confirmed, regime plan archived):** the
+plan's Status Strip (all six RFCs ✅ VERIFIED), `regime-dashboard_CLOSEOUT_24-09-26.md` (updated
+classification), and `git log --oneline -- api/data/cache/liqtide/*.parquet` (4 consecutive
+automated `github-actions[bot]` commits, 09-21..09-24, cited as evidence the nightly schedule
+mechanism runs unattended).
+
 ## Scan Metadata
 
 - Generated: 2026-09-20 by `vc-generate-context` (delta update over the 2026-09-17 setup version);
   amended same day after `git init` + the composite availability-floor fix; amended again 18:47
   by `vc-update-process-agent` closing out the ADR-1 leg-boundary and liqtide-snapshot-tooling
   threads; amended again 2026-09-24 by `vc-update-process-agent` closing out the regime dashboard
-  program; amended a second time same day (24-09-26) by `vc-update-process-agent` closing out the
-  narrative-mindshare `/narrative` dashboard program (no `vc-generate-context` re-run for any of
-  these amendments — targeted UPDATE PROCESS edits per this file's own Context Update Protocol)
-- HEAD: `7ef8eb3` (branch `claude/kind-tesla-tat3vo`; the regime dashboard amendment's `db8d854` on
-  `claude/compassionate-goldberg-o2iq49` is a different branch/session — both are captured here as
-  the two most recent UPDATE PROCESS closeouts, not a single linear history)
+  program; amended a further time the same day (2026-09-24, 2nd pass) after the user confirmed
+  AC-11 on their PC and the regime task folder was archived to `completed/`; amended a third time
+  same day (24-09-26) by `vc-update-process-agent` closing out the narrative-mindshare
+  `/narrative` dashboard program (no `vc-generate-context` re-run for any of these amendments —
+  targeted UPDATE PROCESS edits per this file's own Context Update Protocol); this version is
+  further the result of merging two independent same-day sessions' branches together
+- HEAD (pre-merge): `7ef8eb3` (branch `claude/kind-tesla-tat3vo`, narrative-dashboard closeout) and
+  `ecb5e39` (branch `claude/compassionate-goldberg-o2iq49`, regime-dashboard AC-11-confirmed
+  closeout) — two independent branches/sessions, reconciled here via a `git merge` commit rather
+  than a single linear history
 - Mode: delta update from real repo scan (directory listings, `package.json`, `pyproject.toml`,
   `.env.example`, adapter/router/analytics source files, active plan folders) — not a line count.
   18:47 and both 2026-09-24 amendments were targeted reads (the plan file(s), their RFC phase
@@ -741,5 +762,5 @@ narrative-snapshot.yml`, and `git log`/`git status`/`git show --stat` at `7ef8eb
   analytics incl. `regime/`, data incl. `etf_flows_adapter.py`, models, scripts, tests), `web/`
   (app incl. `regime/`, components incl. `regime/`, lib, e2e),
   `process/general-plans/active/momentum-screener_17-09-26/`,
-  `process/features/cycle-regime/active/regime-dashboard_24-09-26/`, `.env.example`,
-  `.github/workflows/liqtide-snapshot.yml`
+  `process/features/cycle-regime/completed/regime-dashboard_24-09-26/`, `process/features/*/` (the
+  other three still placeholder-only), `.env.example`, `.github/workflows/liqtide-snapshot.yml`
