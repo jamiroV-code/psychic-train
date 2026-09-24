@@ -2,7 +2,7 @@
 
 **Date raised**: 19-09-26
 **Raised by**: `getjson-timeout-catch_PLAN_19-09-26.md` EVL — `pnpm test` (full suite)
-**Status**: RESOLVED 24-09-26 — `web/vitest.config.ts` now sets `test.exclude: [...configDefaults.exclude, "e2e/**"]` (regime-dashboard RFC-006, `process/features/cycle-regime/active/regime-dashboard_24-09-26/`). `pnpm --filter web test`: 12 files / 75 tests passed, 0 failed files, 5 consecutive runs.
+**Status**: RESOLVED 24-09-26 — `web/vitest.config.ts` now sets `test.exclude: [...configDefaults.exclude, "e2e/**"]` (regime-dashboard RFC-006, `process/features/cycle-regime/completed/regime-dashboard_24-09-26/`). `pnpm --filter web test`: 12 files / 75 tests passed, 0 failed files, 5 consecutive runs.
 **Origin plan**: `process/general-plans/active/momentum-screener_17-09-26/getjson-timeout-catch_PLAN_19-09-26.md`
 
 ## Why this exists

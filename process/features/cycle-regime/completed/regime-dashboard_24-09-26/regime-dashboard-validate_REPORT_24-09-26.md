@@ -1,7 +1,7 @@
 # Regime Dashboard — VALIDATE Findings (V1–V4)
 
 **Date**: 24-09-26
-**Plan**: `process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`
+**Plan**: `process/features/cycle-regime/completed/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`
 **Mode**: Simple (single feature, 2 packages: `api/`, `web/`; no container/infra lifecycle)
 **Execution of fan-out**: sequential, in-session (Layer 1 + Layer 2 run inline, no sub-agents)
 

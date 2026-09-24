@@ -2,7 +2,7 @@
 
 **Date**: 24-09-26
 **Status**: backlog — revisit only if the "crypto only for now" equities decision changes
-**Raised by**: user suggestion; assessed in `process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dashboard-rfc002-stage0_REPORT_24-09-26.md`
+**Raised by**: user suggestion; assessed in `process/features/cycle-regime/completed/regime-dashboard_24-09-26/regime-dashboard-rfc002-stage0_REPORT_24-09-26.md`
 
 - `ranaroussi/yfinance`: Apache-2.0, no key, actively released (1.7.0 on 2026-08-26). Not
   affiliated with Yahoo; Yahoo's API is "intended for personal use only".

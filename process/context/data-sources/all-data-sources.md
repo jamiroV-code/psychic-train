@@ -129,7 +129,7 @@ flagged (`gap_before: bool` per point) instead of silently interpolated. The aut
 these values and their reasons lives in code, not here — `api/analytics/regime/components.py`'s
 `MAX_GAP_DAYS_REASONS` — because the values are re-checked against live cadence and should not
 drift out of sync with a duplicated doc copy. See `GET /api/regime/components` (§11 of
-`process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`)
+`process/features/cycle-regime/completed/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`)
 for the response shape that carries these flags.
 
 ### Farside Investors — spot-BTC ETF daily flows
