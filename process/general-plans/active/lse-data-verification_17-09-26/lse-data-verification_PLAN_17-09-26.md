@@ -414,10 +414,11 @@ module.
 
 ## Validate Contract
 
-Status: CONDITIONAL
-Date: 24-09-26
+Status: PASS
+Date: 24-09-26 (re-validated, cycle 2)
 date: 2026-09-24
 generated-by: outer-pvl
+supersedes: 2026-09-24 (outer-pvl) — outer PVL has current evidence (post plan-supplement cycle 1: G1/G2/G3 resolved)
 
 Parallel strategy: sequential
 Rationale: 7-signal score for this VALIDATE fan-out = 1/7 (only S7 present — Blast Radius lists
@@ -584,32 +585,30 @@ not dropped as gaps. AC5-live/AC8/AC9/AC10 are Agent-Probe, requiring judgement 
 mechanically asserted, and are proven by the recorded interpretation in `findings.md`/`VERDICT.md`.
 This satisfies the ban on a vacuously-green net gate.
 
-### Dimension findings
+### Dimension findings (re-validated, cycle 2 — 24-09-26)
 
 - Infra fit: PASS — no container/infra/runtime surface touched; scratch script confined to this
-  task folder; the one infra-adjacent gap (scratch-store location vs. an unmodified `.gitignore`)
-  is resolved above as an execute-agent instruction, not a plan change.
-- Test coverage: CONCERN — the plan's own Touchpoints/Verification Evidence text claimed "no
-  test runner / no test surface exists", which was true through 18/19-09-26 and is stale as of
-  this VALIDATE pass (`all-tests.md` records live `pytest`/`vitest`/Playwright). Fixed directly
-  in this pass (see Touchpoints and Verification Evidence above) since it was a factual
-  correction, not a design decision.
+  task folder; the scratch-store location gap is resolved as an execute-agent instruction.
+- Test coverage: PASS — Touchpoints/Verification Evidence text now correctly states real
+  `pytest`/`vitest`/Playwright runners exist for `api/`/`web/` but are inapplicable to this
+  plan's own blast radius; this plan's verification logic gets its own offline pytest suite.
+  Confirmed still accurate on re-read; no drift since first pass.
 - Breaking changes: PASS — no public contract, schema, or API is changed; `Public Contracts`
   section correctly scopes this as a future-constraint only.
-- Security surface: CONCERN — the plan's Assumptions state "no secret goes into any file under
-  `process/`" but did not previously specify where the CLI reads the key from or that
-  `findings.md`/logs must never echo it. Resolved via the Execution Split's execute-agent
-  instructions above (env-var-only, never a CLI flag, never logged).
-- Phase 2/3 feasibility (Execution Brief): CONCERN — the delisted ticker is unnamed and NVDA is
-  used in the split probe without being a member of the fixed symbol set. Both are real
-  inconsistencies, not mechanical gaps; not silently resolved here — see Open Gaps and the
-  SUPPLEMENT REQUEST emitted in the VALIDATE handoff.
-- Phase 4 feasibility (Execution Brief): CONCERN — the 50-symbol universe has no named list or
-  selection rule, so "screener-scale feasibility" is not currently reproducible. Not silently
-  resolved — see Open Gaps and the SUPPLEMENT REQUEST.
-- Phase 5 feasibility (Execution Brief): PASS — the verbatim-quote requirement is already
-  correctly scoped as Agent-Probe and matches the confirmed fact that a search-engine paraphrase
-  is insufficient for AC8.
+- Security surface: PASS — Execution Split's execute-agent instructions (env-var-only key,
+  never a CLI flag, never logged) and Hard Stops ("No secret in `process/`") remain intact and
+  consistent on re-read.
+- Phase 2/3 feasibility (Execution Brief): PASS — plan-supplement cycle 1 named the delisted
+  ticker (SIVB, backup FRC — Phase 2) and added NVDA to the fixed symbol set. Re-checked by
+  direct grep: SIVB/FRC/NVDA appear consistently across Phase 2, Phase 3 supplement note, AC3,
+  AC5, Test Gates AC3-live, Open Gaps, and Resume/Handoff — no stale "5-symbol" or "unnamed"
+  ticker references remain anywhere in the plan.
+- Phase 4 feasibility (Execution Brief): PASS — a frozen, explicit 50-symbol list is now written
+  into Phase 4, read from a `PHASE4_UNIVERSE` constant. Independently verified: exactly 50
+  entries, all unique (script check, no duplicates), and all 6 fixed-set live symbols (`AAPL`,
+  `MSFT`, `SPY`, `XOM`, `KO`, `NVDA`) are members of the universe.
+- Phase 5 feasibility (Execution Brief): PASS — the verbatim-quote requirement remains correctly
+  scoped as Agent-Probe; unaffected by the supplement.
 
 ### What this coverage does NOT prove
 
@@ -624,8 +623,11 @@ This satisfies the ban on a vacuously-green net gate.
   advance.
 - It does NOT prove Stooq's keyless CSV endpoint is currently reachable (this container's egress
   is blocked for it too) — see Stooq Fallback.
-- It does NOT resolve which delisted ticker or which 50 symbols are used — those numbers do not
-  exist yet; see Open Gaps.
+- ~~It does NOT resolve which delisted ticker or which 50 symbols are used~~ **Resolved via
+  plan-supplement cycle 1: both are now named (SIVB/FRC; the frozen 50-symbol list) — see Open
+  Gaps.** What remains unresolved is only whether the *real* LSE/Stooq data for those named
+  symbols behaves as expected — that is exactly the Hybrid/Agent-Probe legs' job, not a gap in
+  this coverage.
 
 ### Open gaps
 
@@ -640,26 +642,28 @@ This satisfies the ban on a vacuously-green net gate.
 - Whether Stooq's keyless CSV endpoint is still reachable is unknown until the user's PC run —
   see Stooq Fallback (not a plan gap, a live-network unknown).
 
-Gate: CONDITIONAL
-Accepted by: pending — this is a first-pass CONDITIONAL result (no prior PVL cycle exists for
-this plan; no `results.tsv` present). Plan-supplement cycle 1 (24-09-26) has now resolved all
-three named gaps (delisted-ticker name, NVDA symbol-set inclusion, 50-symbol universe
-definition) directly in the plan text — see Open Gaps above and Phase 2/Phase 4.
-`PHASE_COMPLETE: VALIDATE` is still intentionally NOT emitted here; vc-validate-agent must
-re-run from V1 to confirm.
+Gate: PASS
+Accepted by: N/A — Gate is PASS, no unresolved CONCERNs remain to accept. All 3 gaps from the
+first-pass CONDITIONAL (G1 delisted ticker, G2 NVDA in fixed set, G3 50-symbol universe) were
+closed by plan-supplement cycle 1 and independently re-verified in this V1–V7 re-run (cycle 2):
+uniqueness/count-checked 50-symbol list, cross-section grep confirming no stale references, and
+re-read of all previously-CONCERN dimensions. `results.tsv` in this task folder records baseline
+(cycle 0, CONDITIONAL) + cycle 1 (supplement applied) — the mechanical `wc -l` ≥ 3 gate for
+EXECUTE eligibility is satisfied independent of this PASS. `PHASE_COMPLETE: VALIDATE` is now
+legal — see V7 verdict below.
 
 ## Autonomous Goal Block
 
 SESSION GOAL: Verify London Strategic Edge as my_site's equity data provider — quality, coverage, corporate actions, quota cost, and redistribution terms — and record an ADOPT / ADOPT-WITH-LIMITS / REJECT verdict.
 Charter + umbrella plan: N/A — single plan (process/general-plans/active/lse-data-verification_17-09-26/lse-data-verification_PLAN_17-09-26.md)
-Autonomy: Standard RIPER-5 gates apply; no standing autonomy granted. ENTER EXECUTE MODE still requires explicit user command, and is not legal yet — see Next phase below.
+Autonomy: Standard RIPER-5 gates apply; no standing autonomy granted. ENTER EXECUTE MODE still requires an explicit user command (now legal to issue — see Next phase below).
 Hard stop conditions / safety constraints:
 - If free registration (LSE or Alpaca) requests payment/card details, stop immediately and report — do not proceed.
 - No secret (API key) is ever written to any file under process/ — environment variable only.
 - No api/data/ adapter work happens in this plan — that is a separate, later plan gated on a written ADOPT verdict.
 - Scratch Parquet data from the Phase 4 backfill is never committed — written outside process/ entirely.
 - Live network verification cannot run in the cloud container (egress proxy blocks londonstrategicedge.com and stooq.com) — those steps run on the user's own PC only; the agent must never attempt them in-container.
-Next phase: Plan-supplement cycle 1 complete (24-09-26) — all 3 gaps resolved directly in the plan text (see Phase 2 and Phase 4). VALIDATE must re-run from V1 to confirm before EXECUTE is legal.
+Next phase: VALIDATE re-run (cycle 2, 24-09-26) confirms Gate: PASS — all 3 gaps closed and independently re-verified. ENTER EXECUTE MODE is now legal.
 Validate contract: inline in plan (## Validate Contract section, this file)
 Execute start: Fully-auto: `uv run --with pytest,pandas,duckdb,pyarrow,pandas_market_calendars pytest process/general-plans/active/lse-data-verification_17-09-26/ -q` | Hybrid/live: user runs `verify_provider.py --phase {1..4}` on their PC per the Execution Split | Agent-Probe: AAPL/NVDA split interpretation, licence verbatim quote, VERDICT.md synthesis | high-risk pack: no (risk class: low; no auth/billing/schema/API/container surface)
 
@@ -669,12 +673,13 @@ Execute start: Fully-auto: `uv run --with pytest,pandas,duckdb,pyarrow,pandas_ma
    `process/general-plans/active/lse-data-verification_17-09-26/lse-data-verification_PLAN_17-09-26.md`
 
 2. **Last completed phase or step**
-   PLAN-SUPPLEMENT cycle 1 (24-09-26): all three VALIDATE-flagged gaps (delisted-ticker name,
-   NVDA symbol-set inclusion, 50-symbol universe definition) resolved directly in the plan text —
-   see Phase 2 and Phase 4. Awaiting VALIDATE re-run from V1.
+   VALIDATE re-run (cycle 2, 24-09-26): confirmed all three plan-supplement cycle 1 fixes
+   (delisted-ticker name, NVDA symbol-set inclusion, 50-symbol universe definition) are closed
+   and internally consistent. Gate: PASS.
 
 3. **Validate-contract status**
-   Written, `## Validate Contract` above, Gate: CONDITIONAL, `generated-by: outer-pvl`.
+   Written, `## Validate Contract` above, Gate: PASS, `generated-by: outer-pvl` (supersedes the
+   24-09-26 first-pass CONDITIONAL contract).
 
 4. **Supporting context files loaded**
    - `process/context/all-context.md`
@@ -682,12 +687,9 @@ Execute start: Fully-auto: `uv run --with pytest,pandas,duckdb,pyarrow,pandas_ma
    - `process/context/tests/all-tests.md`
 
 5. **Next step for a fresh agent picking up mid-execution**
-   Re-run VALIDATE from V1 to confirm plan-supplement cycle 1's resolution (delisted-ticker name,
-   NVDA symbol-set inclusion, 50-symbol universe definition are all now named in the plan text).
-   Only once that re-validation reaches PASS (or the user explicitly accepts remaining gaps as
-   CONDITIONAL) is `ENTER EXECUTE MODE` legal. When EXECUTE does run: read `findings.md` in this
-   task folder first — if it exists, its last completed section tells you which phase to resume;
-   if not, start at Phase 1.
+   VALIDATE has reached Gate: PASS (cycle 2, 24-09-26). `ENTER EXECUTE MODE` is now legal. When
+   EXECUTE does run: read `findings.md` in this task folder first — if it exists, its last
+   completed section tells you which phase to resume; if not, start at Phase 1.
 
    **Do not** begin the `api/data/` adapter from this plan even if the verdict looks favourable
    mid-flight. Adapter work is a separate plan gated on a written ADOPT verdict.
@@ -696,9 +698,11 @@ Execute start: Fully-auto: `uv run --with pytest,pandas,duckdb,pyarrow,pandas_ma
 
 - Use Cursor Plan mode: import the Implementation Checklist above
 - RIPER-5: RESEARCH → INNOVATE → PLAN → VALIDATE (CONDITIONAL, first pass) → PLAN-SUPPLEMENT
-  cycle 1 (complete, 24-09-26) → VALIDATE re-run (pending), then EXECUTE
+  cycle 1 (complete, 24-09-26) → VALIDATE re-run (PASS, cycle 2, complete) → EXECUTE (ready to start)
 - Avoid writing product code during EXECUTE — the deliverable is a verdict, not an adapter
 - After each phase: STOP and record the numbers in `findings.md` before proceeding
 
-**Next Step:** plan-supplement cycle 1 complete — re-run VALIDATE (from V1) to confirm.
-`ENTER EXECUTE MODE` is not yet legal for this plan until re-validation completes.
+**Next Step:** VALIDATE re-run complete — Gate: PASS. Say `ENTER EXECUTE MODE` to begin Phase 1
+of the Execution Split (vc-execute-agent writes `verify_provider.py` + offline fixture tests in
+the cloud workspace; the user then runs the live commands on their own PC per the Execution
+Split above).
