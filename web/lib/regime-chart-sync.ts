@@ -30,6 +30,12 @@ export interface SyncMember {
   series: ISeriesApi<"Line">;
   /** This panel's plotted value at grid index i, or null for whitespace. */
   valueAt(index: number): number | null;
+  /**
+   * Optional DOM node that receives a `data-visible-range` attribute (JSON:
+   * logical from/to plus the grid dates they fall on) on every range change,
+   * so an end-to-end test can observe zoom sync without window globals.
+   */
+  element?: HTMLElement | null;
 }
 
 export interface SyncGuard {
@@ -66,11 +72,32 @@ function crosshairPrice(member: SyncMember, index: number, length: number): numb
   return null;
 }
 
+/** Grid date (YYYY-MM-DD) at a logical index, clamped to the grid; null for an empty grid. */
+function gridDateAt(gridTimes: number[], logical: number): string | null {
+  if (gridTimes.length === 0 || !Number.isFinite(logical)) return null;
+  const i = Math.min(gridTimes.length - 1, Math.max(0, Math.round(logical)));
+  return new Date(gridTimes[i] * 1000).toISOString().slice(0, 10);
+}
+
+/** Serialised value written to `data-visible-range` (display/observability only). */
+export function visibleRangeAttribute(gridTimes: number[], range: { from: number; to: number }): string {
+  return JSON.stringify({
+    from: range.from,
+    to: range.to,
+    fromDate: gridDateAt(gridTimes, range.from),
+    toDate: gridDateAt(gridTimes, range.to),
+  });
+}
+
 export function createChartSync({ gridTimes, initialRange = null, onHover }: ChartSyncOptions): ChartSync {
   const guard: SyncGuard = { isSyncingRange: false, isSyncingCrosshair: false };
   const members = new Map<string, SyncMember>();
   const indexByTime = new Map<number, number>();
   gridTimes.forEach((t, i) => indexByTime.set(t, i));
+
+  function markRange(member: SyncMember, range: { from: number; to: number }) {
+    member.element?.setAttribute("data-visible-range", visibleRangeAttribute(gridTimes, range));
+  }
 
   function fanOutRange(sourceId: string, range: LogicalRange | null) {
     if (guard.isSyncingRange || range === null) return;
@@ -78,6 +105,7 @@ export function createChartSync({ gridTimes, initialRange = null, onHover }: Cha
     try {
       members.forEach((m, id) => {
         if (id !== sourceId) m.chart.timeScale().setVisibleLogicalRange(range);
+        markRange(m, range);
       });
     } finally {
       guard.isSyncingRange = false;
@@ -118,6 +146,7 @@ export function createChartSync({ gridTimes, initialRange = null, onHover }: Cha
         guard.isSyncingRange = true;
         try {
           timeScale.setVisibleLogicalRange(initialRange);
+          markRange(member, initialRange);
         } finally {
           guard.isSyncingRange = false;
         }

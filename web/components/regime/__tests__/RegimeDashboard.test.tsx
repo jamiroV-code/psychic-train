@@ -92,6 +92,8 @@ function makeResponse(): RegimeComponentsResponse {
 async function renderDashboard(fetchData = vi.fn(async () => makeResponse())) {
   const utils = render(<RegimeDashboard fetchData={fetchData} />);
   await waitFor(() => expect(screen.getByTestId("regime-dashboard")).toBeInTheDocument());
+  // Panels create their charts in effects; let them all land before a test reads mockCharts.
+  await waitFor(() => expect(mockCharts.length).toBeGreaterThanOrEqual(7));
   return utils;
 }
 
@@ -103,7 +105,10 @@ describe("RegimeDashboard", () => {
   it("renders one panel per component plus the composite, with exactly seven createChart calls", async () => {
     await renderDashboard();
     for (const id of IDS) expect(screen.getByTestId(`regime-panel-${id}`)).toBeInTheDocument();
-    expect(createChart).toHaveBeenCalledTimes(7);
+    // Chart creation runs in each panel's effect, after the dashboard node is
+    // in the DOM; wait for it rather than racing it on a cold start (EVL saw
+    // 0 of 7 once). Still exactly seven — never more.
+    await waitFor(() => expect(createChart).toHaveBeenCalledTimes(7));
     expect(screen.getByTestId("regime-reserved-column")).toBeEmptyDOMElement();
   });
 
@@ -201,6 +206,25 @@ describe("RegimeDashboard", () => {
     for (const i of [0, 1, 6]) expect(mockCharts[i].crosshair?.time).toBe(t4);
     // …panels with no data at all have nothing to attach to and are cleared.
     for (const i of [2, 3, 4]) expect(mockCharts[i].clearCrosshairPosition).toHaveBeenCalled();
+  });
+
+  it("mirrors the synced visible range onto every panel as data-visible-range (RFC-006 decision 1)", async () => {
+    await renderDashboard();
+    const read = (id: string) => JSON.parse(screen.getByTestId(`regime-chart-${id}`).getAttribute("data-visible-range") ?? "null");
+    for (const id of IDS) expect(read(id)).toEqual({ from: 3, to: 5, fromDate: GRID[3], toDate: GRID[5] });
+    act(() => mockCharts[2].fireRange({ from: 1, to: 4 }));
+    // Source panel included, not only the fanned-out targets.
+    for (const id of IDS) expect(read(id)).toEqual({ from: 1, to: 4, fromDate: GRID[1], toDate: GRID[4] });
+  });
+
+  it("exposes line breaks from gap_before as data-gap-dates (RFC-006 decision 5)", async () => {
+    const res = makeResponse();
+    res.components[0].points[1].gap_before = true;
+    await renderDashboard(vi.fn(async () => res));
+    const el = screen.getByTestId("regime-chart-net_liquidity");
+    expect(el.getAttribute("data-gap-count")).toBe("1");
+    expect(el.getAttribute("data-gap-dates")).toBe(GRID[5]);
+    expect(screen.getByTestId("regime-chart-btc_dominance").getAttribute("data-gap-count")).toBe("0");
   });
 
   it("unsubscribes every sync handler and removes every chart on unmount", async () => {

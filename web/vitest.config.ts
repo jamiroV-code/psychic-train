@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 
@@ -16,6 +16,9 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
+    // Playwright specs live in e2e/ and use @playwright/test's `test`, which
+    // vitest cannot run (backlog vitest-config-e2e-exclude_19-09-26).
+    exclude: [...configDefaults.exclude, "e2e/**"],
   },
   resolve: {
     alias: {

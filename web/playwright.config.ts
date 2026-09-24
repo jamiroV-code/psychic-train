@@ -11,6 +11,8 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 const E2E_CACHE_ROOT = path.join(os.tmpdir(), "screener-e2e-cache");
 const E2E_WATCHLIST = path.join(E2E_CACHE_ROOT, "watchlist.json");
 
+const CHROMIUM_PATH = process.env["PLAYWRIGHT_CHROMIUM_PATH"] || undefined;
+
 const API_PORT = 8001; // NOT 8000 — see the port note below
 const WEB_PORT = 3100; // NOT 3000 — ditto
 const API_BASE_URL = `http://127.0.0.1:${API_PORT}`;
@@ -43,7 +45,18 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
 
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  // PLAYWRIGHT_CHROMIUM_PATH (optional): launch an already-installed Chromium
+  // when the build @playwright/test expects is not downloaded (e.g. a sandbox
+  // with a different pre-installed build). Unset = Playwright's own browser.
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        ...(CHROMIUM_PATH ? { launchOptions: { executablePath: CHROMIUM_PATH } } : {}),
+      },
+    },
+  ],
 
   // Ports deliberately differ from the dev defaults (3000/8000). A dev server
   // already running would otherwise be silently reused, and the E2E would run

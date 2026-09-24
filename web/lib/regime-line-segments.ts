@@ -68,3 +68,20 @@ export function toSegmentedSeriesData(
         });
   return { line, dots };
 }
+
+/**
+ * Grid indices where the drawn line is broken by an API `gap_before` flag:
+ * points that carry the flag AND have an earlier real point (the first point
+ * of a series has nothing to break from). Exposed so the panel can surface the
+ * breaks as a DOM attribute for end-to-end tests; no value is computed.
+ */
+export function lineBreakIndices(values: (number | null | undefined)[], gapBefore: boolean[] = []): number[] {
+  const out: number[] = [];
+  let seenReal = false;
+  values.forEach((v, i) => {
+    if (v === null || v === undefined) return;
+    if (seenReal && gapBefore[i] === true) out.push(i);
+    seenReal = true;
+  });
+  return out;
+}

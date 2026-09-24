@@ -57,7 +57,7 @@ its layout column so adding it later does not move the charts.
 | RFC-003 | Spot-ETF flows adapter (conditional on RFC-001 Stage 0) | 🔨 CODE DONE (24-09-26) — Farside cached 2024-01-11 → 2026-09-23 (677 days); 256 passed; see RFC-003 phase report |
 | RFC-004 | `GET /api/regime/components` endpoint | 🔨 CODE DONE (24-09-26) — 20 endpoint tests green; live run: ETF 8 / BTC-dom 117 pts match RFC-002 |
 | RFC-005 | `/regime` page — stacked synced charts, readout, drill-down | 🔨 CODE DONE (24-09-26) — vitest 63/63 (40 + 23 new), tsc + `next build` clean, E3 sync proven; browser probe screenshot in task folder |
-| RFC-006 | End-to-end proof + user walkthrough | ⏳ PLANNED |
+| RFC-006 | End-to-end proof + user walkthrough | 🔨 CODE DONE (24-09-26) — Playwright 12/12 twice (6 new regime specs + 6 screener), vitest 75/75 ×5, pytest 294 passed; AC-11 walkthrough pending on the PC |
 
 ---
 
@@ -820,6 +820,26 @@ never reaches the network (VALIDATE P8) → `web/e2e/regime.spec.ts` → user wa
 **Acceptance Criteria**: AC-11.
 **What's Functional Now**: the regime dashboard, end to end.
 
+**RFC-006 decisions (user-approved at Stage 0, 24-09-26; implemented):**
+1. Zoom hook: each panel's chart container carries `data-visible-range` (JSON `{from, to, fromDate,
+   toDate}`), written by `lib/regime-chart-sync.ts` for every member (source included) on each range
+   change and on the initial 3-year range. No window globals. Covered by vitest.
+2. Seeding: `api/scripts/seed_e2e_cache.py` (same `_guard()`, isolated `SCREENER_CACHE_ROOT`) also
+   writes synthetic FRED (WALCL, WDTGAL, RRPONTSYD, DTWEXBGS — UTC dates like the adapter),
+   DefiLlama stablecoin supply, 5 LiqTide raw days + daily rows (published index), and the Farside
+   parquet from 2024-01-11 plus today's `<date>|ok` attempt marker. > 4 years, different first dates,
+   one 28-day hole in DTWEXBGS. Facts go in the manifest's `regime` section.
+3. Browser: optional `PLAYWRIGHT_CHROMIUM_PATH` → chromium project `launchOptions.executablePath`;
+   no-op when unset. Documented in `process/context/tests/all-tests.md`.
+4. `web/vitest.config.ts` excludes `e2e/**`; backlog note moved to `general-plans/completed/`.
+5. Gap: API `gap_before` checked on the intercepted response; the panel's chart container carries
+   `data-gap-dates` / `data-gap-count` (from `lineBreakIndices` in `lib/regime-line-segments.ts`).
+6. `web/e2e/regime.spec.ts`: 6 specs — seven panels from a real 200 response with no re-fetch after
+   seeding; 3-year default identical on all panels; wheel-zoom on one panel → all seven equal and
+   narrower; hover → readout date moves and returns; seeded gap flagged + drawn as a break; ETF
+   "Not applicable before 2024-01-11" note; zero console errors (favicon 404 ignored).
+See `regime-dashboard_24-09-26-RFC-006-phase-report.md`.
+
 ---
 
 ## 16. Rules (for this project)
@@ -997,6 +1017,11 @@ the PC (pytest + curl with a populated FRED/DefiLlama cache), then RFC-005 (`/re
 **RFC-005 (24-09-26):** 🔨 CODE DONE — see `regime-dashboard_24-09-26-RFC-005-phase-report.md`.
 Next: user runs the RFC-005 PC checklist (zoom/hover/drill-down/stop-API) with a populated cache;
 then RFC-006 (end-to-end proof, incl. `web/e2e/regime.spec.ts`).
+
+**RFC-006 (24-09-26):** 🔨 CODE DONE — see `regime-dashboard_24-09-26-RFC-006-phase-report.md`.
+Automated boundary proof is green (Playwright 12/12, run twice). Next: user runs the AC-11
+walkthrough in that report against the real cache on the PC; on confirmation mark RFC-006 and
+the plan ✅ VERIFIED, then UPDATE PROCESS (archive the task folder).
 
 **RFC-001 Stage 0 decisions (user, 24-09-26):** Farside = build, personal use only
 (`redistributable=false`, probe first in RFC-003); snapshot at 03:00 Brussels; archive row gains

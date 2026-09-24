@@ -1,11 +1,11 @@
 "use client";
 
-import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createChart, LineSeries, type ISeriesApi } from "lightweight-charts";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
 import type { ChartSync } from "@/lib/regime-chart-sync";
 import { formatRegimeValue } from "@/lib/format-regime-value";
-import { toSegmentedSeriesData } from "@/lib/regime-line-segments";
+import { lineBreakIndices, toSegmentedSeriesData } from "@/lib/regime-line-segments";
 
 export interface PanelLine {
   key: string;
@@ -64,6 +64,17 @@ function ComponentPanelImpl({
 }: ComponentPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  // Grid dates where a line is broken by a real data gap (`gap_before`),
+  // surfaced as `data-gap-dates` for end-to-end tests. Display-only.
+  const gapDates = useMemo(() => {
+    const dates = new Set<string>();
+    for (const line of lines) {
+      for (const i of lineBreakIndices(line.values, line.gapBefore)) {
+        dates.add(new Date(gridTimes[i] * 1000).toISOString().slice(0, 10));
+      }
+    }
+    return [...dates].sort();
+  }, [lines, gridTimes]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -112,6 +123,7 @@ function ComponentPanelImpl({
         ? sync.register(panelId, {
             chart,
             series: seriesList[0],
+            element: container,
             valueAt: (i) => {
               for (const line of lines) {
                 const v = line.values[i];
@@ -181,7 +193,12 @@ function ComponentPanelImpl({
         </div>
       )}
 
-      <div ref={containerRef} data-testid={`regime-chart-${panelId}`} />
+      <div
+        ref={containerRef}
+        data-testid={`regime-chart-${panelId}`}
+        data-gap-count={gapDates.length}
+        data-gap-dates={gapDates.join(",")}
+      />
 
       {open && renderDrillDown(() => setOpen(false))}
     </section>
