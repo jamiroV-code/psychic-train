@@ -54,7 +54,7 @@ its layout column so adding it later does not move the charts.
 |---|---|---|
 | RFC-001 | LiqTide raw archive, history backfill + source research | 🧪 TESTING — live payload replayed OK (24-09-26); awaiting pytest on PC + scheduled task |
 | RFC-002 | Component maths (six impulses + reproduced composite) | 🔨 CODE DONE (24-09-26) — real-data check: 5/6 components exact, r = 0.964 vs published |
-| RFC-003 | Spot-ETF flows adapter (conditional on RFC-001 Stage 0) | ⏳ PLANNED |
+| RFC-003 | Spot-ETF flows adapter (conditional on RFC-001 Stage 0) | 🔨 CODE DONE (24-09-26) — Farside cached 2024-01-11 → 2026-09-23 (677 days); 256 passed; see RFC-003 phase report |
 | RFC-004 | `GET /api/regime/components` endpoint | ⏳ PLANNED |
 | RFC-005 | `/regime` page — stacked synced charts, readout, drill-down | ⏳ PLANNED |
 | RFC-006 | End-to-end proof + user walkthrough | ⏳ PLANNED |
@@ -659,9 +659,9 @@ unless terms say otherwise → wire into RFC-002's ETF builder.
 - Verification query: DuckDB `select min(date), max(date), count(*) from 'api/data/cache/etf_flows/btc_spot.parquet'`.
 
 **Verification Checklist**
-- [ ] Manual test passed
-- [ ] Data verified
-- [ ] Error handling confirmed
+- [x] Manual test passed (one live request, `ok`, 677 rows — 24-09-26)
+- [x] Data verified (DuckDB: min 2024-01-11, max 2026-09-23, 677; only US holidays + today missing)
+- [x] Error handling confirmed (timeout/challenge/layout → `unavailable`, cache → `stale` in tests; real bad-URL run → `unavailable`)
 - [ ] User confirmed working
 
 **Acceptance Criteria**: AC-6.
@@ -923,6 +923,11 @@ needed**; pull before working locally, since the workflow pushes to `main` daily
 
 **RFC-002 (24-09-26):** 🔨 CODE DONE — see `regime-dashboard-rfc002-stage0_REPORT_24-09-26.md` and
 `regime-dashboard_24-09-26-RFC-002-phase-report.md`. Next: user confirms, then RFC-003 (Farside probe).
+
+**RFC-003 (24-09-26):** 🔨 CODE DONE — see `regime-dashboard_24-09-26-RFC-003-phase-report.md`.
+`api/data/etf_flows_adapter.py` (stdlib `html.parser`, `redistributable=false`, at most one request
+per UTC day) feeds `components.build_etf_flows` (Farside first, LiqTide archive fills gaps). Next:
+user confirms (optionally runs `uv run --project api pytest api/ -m integration -k etf`), then RFC-004.
 
 **RFC-001 Stage 0 decisions (user, 24-09-26):** Farside = build, personal use only
 (`redistributable=false`, probe first in RFC-003); snapshot at 03:00 Brussels; archive row gains
