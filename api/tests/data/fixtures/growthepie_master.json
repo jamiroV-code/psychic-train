@@ -1,0 +1,32 @@
+{
+ "chains": {
+  "base": {
+   "name": "Base"
+  }
+ },
+ "metrics": {
+  "daa": {
+   "name": "Active Addresses",
+   "metric_keys": [
+    "daa"
+   ],
+   "supported_chains": [
+    "ethereum",
+    "base",
+    "arbitrum",
+    "optimism",
+    "polygon_pos",
+    "robinhood"
+   ]
+  },
+  "txcount": {
+   "metric_keys": [
+    "txcount"
+   ],
+   "supported_chains": [
+    "ethereum",
+    "base"
+   ]
+  }
+ }
+}

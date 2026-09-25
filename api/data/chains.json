@@ -1,0 +1,100 @@
+{
+  "_comment": "User-editable chain list for the chain participant growth page. Add, remove or disable (\"enabled\": false) a chain here; no code change or restart needed. Each chain has an \"id\" (lowercase, unique), a \"label\", an optional \"launch_date\" (YYYY-MM-DD or null) and optional \"limited_history\" (true for chains too new for long-run comparison). \"metrics\" may contain \"active_addresses\" and \"transactions\". Each metric has \"source\": \"growthepie\" (with \"source_key\" = growthepie's chain key, see https://api.growthepie.xyz/v1/master.json) or \"none\" (with \"unavailable_reason\"; the chain is shown as unavailable, never dropped or zero-filled). Optional \"cross_check\": {\"source\": \"l2beat\", \"source_key\": \"<l2beat project slug>\"} adds an L2BEAT transaction-count sanity check. Never put API keys or secrets in this file. Bad entries are skipped with a warning in the API log.",
+  "chains": [
+    {
+      "id": "ethereum",
+      "label": "Ethereum",
+      "enabled": true,
+      "launch_date": "2015-07-30",
+      "metrics": {
+        "active_addresses": {"source": "growthepie", "source_key": "ethereum"},
+        "transactions": {"source": "growthepie", "source_key": "ethereum"}
+      }
+    },
+    {
+      "id": "base",
+      "label": "Base",
+      "enabled": true,
+      "launch_date": "2023-08-09",
+      "metrics": {
+        "active_addresses": {"source": "growthepie", "source_key": "base"},
+        "transactions": {"source": "growthepie", "source_key": "base"}
+      },
+      "cross_check": {"source": "l2beat", "source_key": "base"}
+    },
+    {
+      "id": "arbitrum",
+      "label": "Arbitrum",
+      "enabled": true,
+      "launch_date": "2021-08-31",
+      "metrics": {
+        "active_addresses": {"source": "growthepie", "source_key": "arbitrum"},
+        "transactions": {"source": "growthepie", "source_key": "arbitrum"}
+      },
+      "cross_check": {"source": "l2beat", "source_key": "arbitrum"}
+    },
+    {
+      "id": "optimism",
+      "label": "Optimism",
+      "enabled": true,
+      "launch_date": "2021-12-16",
+      "metrics": {
+        "active_addresses": {"source": "growthepie", "source_key": "optimism"},
+        "transactions": {"source": "growthepie", "source_key": "optimism"}
+      },
+      "cross_check": {"source": "l2beat", "source_key": "op-mainnet"}
+    },
+    {
+      "id": "polygon",
+      "label": "Polygon",
+      "enabled": true,
+      "launch_date": null,
+      "metrics": {
+        "active_addresses": {"source": "growthepie", "source_key": "polygon_pos"},
+        "transactions": {"source": "growthepie", "source_key": "polygon_pos"}
+      }
+    },
+    {
+      "id": "robinhood",
+      "label": "Robinhood Chain",
+      "enabled": true,
+      "launch_date": "2026-07-01",
+      "limited_history": true,
+      "metrics": {
+        "active_addresses": {"source": "growthepie", "source_key": "robinhood"},
+        "transactions": {"source": "growthepie", "source_key": "robinhood"}
+      },
+      "cross_check": {"source": "l2beat", "source_key": "robinhood"}
+    },
+    {
+      "id": "solana",
+      "label": "Solana",
+      "enabled": true,
+      "launch_date": null,
+      "metrics": {
+        "active_addresses": {"source": "none", "unavailable_reason": "source-unavailable"},
+        "transactions": {"source": "none", "unavailable_reason": "source-unavailable"}
+      }
+    },
+    {
+      "id": "bnb",
+      "label": "BNB Chain",
+      "enabled": true,
+      "launch_date": null,
+      "metrics": {
+        "active_addresses": {"source": "none", "unavailable_reason": "source-unavailable"},
+        "transactions": {"source": "none", "unavailable_reason": "source-unavailable"}
+      }
+    },
+    {
+      "id": "tron",
+      "label": "Tron",
+      "enabled": true,
+      "launch_date": null,
+      "metrics": {
+        "active_addresses": {"source": "none", "unavailable_reason": "source-unavailable"},
+        "transactions": {"source": "none", "unavailable_reason": "source-unavailable"}
+      }
+    }
+  ]
+}
