@@ -1,9 +1,10 @@
 # my_site - All Context
 
-Last updated: 2026-09-24 (merge of two same-day UPDATE PROCESS closeouts — narrative-mindshare
-`/narrative` dashboard RFC-1..6, and the regime dashboard's AC-11-confirmed 2nd pass with its plan
-archived to `completed/`; see Changes Since Last Update below for both. The 2026-09-20 18:47
-version predates both the `/regime` and `/narrative` builds)
+Last updated: 2026-09-25 (narrative trigger keyword-keying fix merged into the narrative
+branch on top of the two same-day 2026-09-24 closeouts — narrative-mindshare `/narrative`
+dashboard RFC-1..6, and the regime dashboard's AC-11-confirmed 2nd pass; see Changes Since Last
+Update below for all three. The 2026-09-20 18:47 version predates both the `/regime` and
+`/narrative` builds)
 
 This file is the root context entrypoint for the repo.
 
@@ -15,6 +16,33 @@ Use it for two things:
 Start here before loading deeper context files.
 
 ---
+
+## Changes Since Last Update (2026-09-24 → 2026-09-25)
+
+Small, self-contained bug fix on branch `claude/narrative-keyword-keying` (task folder now at
+`process/features/narrative-mindshare/completed/narrative-keyword-keying_25-09-26/`) — not part of
+the still-unmerged narrative dashboard work described below, but touches the same reader function.
+
+- `[Correction]` **`api/analytics/narrative/trigger.py`'s `compute_narrative_categories` was
+  reading pytrends/reddit history under the wrong key.** The adapters
+  (`pytrends_adapter.py`/`reddit_adapter.py`) write cached rows keyed by `keywords[0]`, but the
+  reader looked them up by `category_id`, so pytrends/reddit contributed nothing real to
+  `/api/narrative/categories` under real (non-stubbed) conditions — `history.py`'s sibling read
+  path already got this right. Fixed with a small `_source_history_key` helper; coingecko is
+  unaffected (correctly keyed by `category_id`). Production effect confirmed via a before/after
+  diff report: `trust_weight` 0.4→0.6 and `n_available` 1→3 for all 4 seed categories; no
+  screener badge/`narrative_state` changes in the fixture scenarios. Golden contract fixture
+  regenerated and confirmed byte-identical after user sign-off.
+  See `narrative-keyword-keying_25-09-26/narrative-keyword-keying_REPORT_25-09-26.md` in the
+  completed task folder for the full closeout.
+- Testing: counts moved to **381 passed / 3 deselected** pytest, 75 vitest (12 files) — see
+  `tests/all-tests.md` for the fresh-worktree `pnpm install --frozen-lockfile` (run inside `web/`,
+  not the repo root) note discovered during this fix.
+- **Reminder, still open:** the narrative dashboard feature (RFC-1..5 stage-0/plan work under
+  `process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/`) lives on the
+  separate, still-unmerged branch `claude/kind-tesla-tat3vo` (this worktree's branch,
+  `claude/narrative-keyword-keying`, is based on it but is a distinct branch/worktree) — this
+  keyword-keying fix's amendment note was added to that plan's AC-1 section directly.
 
 ## Changes Since Last Update (2026-09-24, narrative-mindshare `/narrative` dashboard)
 
@@ -72,7 +100,8 @@ ownership/documentation change, not a code relocation.
   `None`→`NaN` coercion in `history.py::_exchange_frames` 500'd `/history` from the second nightly
   archive day onward (fixed with `dtype=object`, regression test added). See
   `tests/all-tests.md` for the generalized lesson.
-- `[Correction]` **Known pre-existing bug, found but explicitly not fixed here:**
+- `[Correction]` **Known pre-existing bug, found but not fixed in this program — since FIXED
+  2026-09-25 (see the 2026-09-25 entry above, PR #2):**
   `trigger.py::compute_narrative_categories` reads pytrends/Reddit history by category id, but
   those adapters write under the keyword key (see above) — so `/categories`' own trigger never
   actually sees archived pytrends/Reddit history; it runs on CoinGecko alone. Predates this
@@ -449,7 +478,9 @@ my_site/
     features/               -- feature-scoped plans and guides. `cycle-regime/` and
                                 `narrative-mindshare/` both now have real task folders
                                 (`regime-dashboard_24-09-26/`, `narrative-dashboard_24-09-26/`,
-                                all RFCs code-done, see Changes Since Last Update); still-empty
+                                all RFCs code-done, see Changes Since Last Update);
+                                `narrative-mindshare/completed/` also holds
+                                `narrative-keyword-keying_25-09-26/`; still-empty
                                 `_GUIDE.md` placeholders: charting-indicators,
                                 cointegration-screener
     development-protocols/  -- RIPER-5 methodology docs
@@ -764,3 +795,6 @@ mechanism runs unattended).
   `process/general-plans/active/momentum-screener_17-09-26/`,
   `process/features/cycle-regime/completed/regime-dashboard_24-09-26/`, `process/features/*/` (the
   other three still placeholder-only), `.env.example`, `.github/workflows/liqtide-snapshot.yml`
+- 2026-09-25 amendment: `vc-update-process-agent` closeout of the narrative-keyword-keying
+  fix (targeted edits; `api/analytics/narrative/trigger.py` + its tests), then merged into
+  `claude/kind-tesla-tat3vo`
