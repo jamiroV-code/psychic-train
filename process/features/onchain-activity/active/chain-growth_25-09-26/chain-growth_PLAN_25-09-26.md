@@ -413,6 +413,13 @@ constraint).
 **Stage 0 (present and STOP) — this IS RFC-1's entire content**:
 
 1. **Dune account + API execution probe.**
+   - **Secret-safety rule for every command below (non-negotiable, applies to the user running
+     these on their own machine): never echo, print, log, or paste `$DUNE_API_KEY`'s literal value
+     anywhere — not into the shell history in a form that gets committed, not into the VERDICT
+     artifact, not into any file tracked by git. Set it via `export DUNE_API_KEY=...` in an
+     interactive shell or a gitignored `.env`, reference it only as `$DUNE_API_KEY` in commands, and
+     record only the *findings* (credit cost, timing, pass/fail) in the VERDICT artifact — never the
+     key itself.**
    - Exact commands for the user to run against `https://api.dune.com/api/v1`:
      - `curl -H "X-Dune-API-Key: $DUNE_API_KEY" https://api.dune.com/api/v1/query/{a-known-public-query-id}/results` —
        confirm the free-tier key can read an existing public query's latest result (near-zero credit
@@ -423,12 +430,23 @@ constraint).
      - Record: exact credit cost charged for that one execution (Dune returns this in the
        execution/status response), execution wall-clock time, whether the small (free-tier) engine
        completed within 2 minutes for a chain with Solana's transaction volume.
-   - Compute the **credit budget math**: (credit cost per chain-metric query) × (4 Dune-sourced
-     chains × up to 4 metric-groups incl. new-addresses-for-all-9-chains) × 30 nights, plus the
-     one-off historical backfill pull's estimated cost, against the 2,500/month free-tier ceiling.
-     If this exceeds budget, RFC-1 records which metric/chain combination must drop to a lower
-     cadence (e.g. weekly instead of nightly) or be cut, and that becomes a locked RFC-1 finding,
-     not a later surprise.
+   - Compute the **credit budget math** against the correct query count, not an approximation:
+     4 Dune-sourced chains (Solana, BNB Chain, Tron, Polygon) × 3 metrics each (daa, new_addresses,
+     tx_count) = 12 queries, **plus** new_addresses-only queries for the other 5 chains (Ethereum,
+     Base, Arbitrum, Optimism, Robinhood Chain, which get daa/tx_count from growthepie but still need
+     Dune for new_addresses per ADR-1) = 5 more queries — **17 total Dune queries per night**, not 16.
+     (credit cost per query) × 17 × 30 nights, plus the one-off historical backfill pull's estimated
+     cost, against the 2,500/month free-tier ceiling. If this exceeds budget, RFC-1 records which
+     metric/chain combination must drop to a lower cadence (e.g. weekly instead of nightly) or be
+     cut, and that becomes a locked RFC-1 finding, not a later surprise.
+   - **Locked fallback scope if Dune is NOT-VIABLE entirely** (auth fails outright, the real credit
+     ceiling can't cover even a reduced cadence, or the small-engine 2-minute timeout can't complete
+     a Solana-scale query at all): ship only the 5 growthepie/L2BEAT-covered chains (Ethereum, Base,
+     Arbitrum, Optimism, Robinhood Chain) with `daa`/`tx_count`; Solana, BNB Chain, Tron, and Polygon
+     render an explicit "source unavailable" state per AC-7 rather than being silently dropped from
+     `chains.json`; `new_addresses` is dropped for ALL chains (no fallback source exposes it) until a
+     replacement is researched in a follow-up plan. This is the locked fallback — RFC-1 records
+     whichever of "full design" or "this fallback" applies, it does not invent a third option.
    - Confirm the account predates 2026-07-21 (the user's stated constraint) by checking account
      creation date in the Dune UI/API if exposed; record as a finding either way.
 
@@ -443,9 +461,16 @@ constraint).
      attribution string required.
 
 3. **L2BEAT activity API probe.**
-   - Exact command(s) against L2BEAT's public activity endpoint(s) for the same L2 set — confirm
-     shape (tx count vs UOPS), confirm it's genuinely keyless, and confirm/deny Robinhood Chain
-     coverage as a second data point alongside growthepie's own finding.
+   - This plan does not assert an exact L2BEAT URL — none was confirmed by research. First locate
+     the real, currently-documented endpoint from L2BEAT's own API docs (`https://docs.l2beat.com`)
+     or its public GitHub repo, and record the exact URL found. Do not guess or invent an endpoint
+     path. Only once the real endpoint is identified: run the exact `curl` command against it for
+     the same L2 set as growthepie, confirm shape (tx count vs UOPS), confirm it's genuinely
+     keyless, and confirm/deny Robinhood Chain coverage as a second data point alongside
+     growthepie's own finding. If no documented public endpoint can be found, record that as a
+     finding — L2BEAT drops to "cross-check not available" and RFC-2's cross-check becomes
+     growthepie-only, which does not block RFC-2 (L2BEAT was always a secondary sanity check, not
+     a primary source, per ADR-1).
 
 4. **Terms pages — read, don't assume.**
    - growthepie license page, L2BEAT terms, Dune's terms of service section on API result usage and
@@ -508,9 +533,12 @@ key stays server-side in the adapter's own HTTP call), AC-11 (config-driven chai
 (per-chain query isolation baked into the adapter contract).
 
 **Test gates**: `uv run --project api pytest api/tests/data/test_{growthepie,l2beat,dune}_adapter.py
--q` (Fully-Automated, synthetic-fixture HTTP responses, no network); one opt-in
-`-m integration` test per adapter hitting the real endpoint (Hybrid — same pattern as
-`etf_flows_adapter`'s integration marker).
+-q` (Fully-Automated, synthetic-fixture HTTP responses, no network) — `test_dune_adapter.py` must
+include a dedicated `chain-growth-dune-query-isolation` scenario asserting one chain's query
+raising/erroring does not prevent another chain's query from being attempted or from returning its
+own result (direct AC-12 regression coverage at the adapter layer, ahead of RFC-3's own
+snapshot-script-level isolation test); one opt-in `-m integration` test per adapter hitting the
+real endpoint (Hybrid — same pattern as `etf_flows_adapter`'s integration marker).
 
 **proven by**: chain-growth-adapter-contract-shape, chain-growth-redistribution-flag-per-source,
 chain-growth-no-client-side-secrets (key never in adapter return value), chain-growth-dune-query-
@@ -556,6 +584,17 @@ concurrency group.
 **AC mapping**: AC-7 (honest missing/failed states — a failed chain writes `status=unavailable`,
 never a zero-filled row), AC-12 (single-chain failure isolation — the snapshot script's per-chain
 try/except), AC-9 (redistributable flag persisted alongside each written point).
+
+**Risk-evidence requirement (execute-agent instruction, not optional):** this RFC introduces the
+repo's first `DUNE_API_KEY` secret into a new `contents: write` scheduled workflow — the same
+shape (new secret + `contents: write` snapshot workflow) the narrative-dashboard RFC-4
+(`REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET` + `narrative-snapshot.yml`) treated as high-risk enough
+to require the `vc-risk-evidence-pack` manual-first 5-artifact pack (`risk-gate.json`,
+`context-snippets.json`, `verification.json`, `review-decision.json`) before being called ready
+for finalize. RFC-3 follows the same precedent: the pack lives in this task folder's `harness/`
+subfolder, and RFC-3 may not be marked `🔨 CODE DONE` until the pack exists — per
+`vc-risk-evidence-pack`'s auto-stop rule, say so explicitly if it is missing rather than implying
+the work is proven.
 
 **Test gates**: `uv run --project api pytest api/tests/data/test_cache_chain_growth.py -q`
 (Fully-Automated, isolated-cache-root fixture per `all-tests.md`'s "isolated_cache" convention);
@@ -635,9 +674,14 @@ panel list → comparison overlay → drill-down); stop for go-ahead.
 **Scope**:
 - `web/app/onchain-activity/page.tsx` — new route.
 - `web/components/onchain-activity/{OnchainDashboard,ChainPanel,ComparisonOverlay,DrillDown,
-  SourceMethodBadge,LimitedHistoryFlag}.tsx` — `ChainPanel` reuses the `ComponentPanel` sync/hover
-  pattern (`regime-chart-sync.ts`, `regime-line-segments.ts` as direct precedent for honest-gap
-  line rendering).
+  SourceMethodBadge,LimitedHistoryFlag,SourceAttributionFooter}.tsx` — `ChainPanel` reuses the
+  `ComponentPanel` sync/hover pattern (`regime-chart-sync.ts`, `regime-line-segments.ts` as direct
+  precedent for honest-gap line rendering). **`SourceAttributionFooter` is additive to
+  `SourceMethodBadge`, not a replacement**: `SourceMethodBadge` labels a series' source+method
+  per AC-2 (per-series, per-panel); `SourceAttributionFooter` renders growthepie's CC BY 4.0
+  required attribution string + link (exact text confirmed at RFC-1 Stage 0, e.g. "Source:
+  growthepie, https://www.growthepie.com") once, page-level, whenever any growthepie-sourced
+  series is displayed — a per-series label alone does not satisfy a CC BY link-back requirement.
 - `web/lib/api/onchain-activity.ts`, `web/lib/types/onchain-activity.ts`.
 - `web/lib/format-unavailable-reason.ts` — additive: new `UnavailableReason` variants for
   chain-growth-specific states (e.g. `dune-credit-exhausted`, `insufficient-history`) added to the
@@ -797,9 +841,16 @@ touches, called out explicitly):
   repository secret (`Settings → Secrets and variables → Actions`) and locally in `.env` (not
   committed, matching `.env.example`'s existing pattern) for local dev/testing.
 - **Scheduled job**: `chain-growth-snapshot.yml`, cron `0 22 * * *` (UTC) — offset from
-  `liqtide-snapshot.yml` (23:30) and `narrative-snapshot.yml` (23:00) by at least 60/30 minutes to
+  `liqtide-snapshot.yml` (23:30) and `narrative-snapshot.yml` (23:00) by at least 60/90 minutes to
   avoid runner contention; exact offset confirmed at RFC-3 Stage 0 once the actual runtime of a
-  chain-growth run is known.
+  chain-growth run is known. **Commit/push pattern: model this workflow's push step on
+  `narrative-snapshot.yml`'s 3-attempt `git pull --rebase && git push` retry loop specifically, not
+  `liqtide-snapshot.yml`'s single unretried `git push`** — the two precedent workflows are not
+  identical here, and with a third nightly job now writing to `main`, the retry loop is the one
+  that actually survives a same-minute collision; `chain-growth-snapshot.yml`'s own `permissions:
+  contents: write` scope and `schedule`/`workflow_dispatch`-only triggers (no `pull_request`) must
+  also mirror both precedents exactly, so a fork PR can never trigger a run that has the secret in
+  its env.
 - **Credit monitoring**: RFC-1's computed credit budget is the standing reference; if actual usage
   drifts materially from the RFC-1 estimate (visible in Dune's dashboard), that's a signal to revisit
   ADR-2's per-chain cadence, not a silent problem to ignore.
@@ -847,7 +898,251 @@ the free-tier account cannot be safely exercised repeatedly in CI; revisit at RF
 
 ## Validate Contract
 
-(placeholder — vc-validate-agent writes this section before EXECUTE)
+Status: PASS
+Date: 25-09-26
+date: 2026-09-25
+generated-by: outer-pvl
+
+Parallel strategy: sequential (RFC-1 is a hard dependency gate; RFC-2-6 form one dependency
+chain, not independent concurrent workstreams — see the plan's own §Strategy Recommendation,
+re-confirmed here)
+Rationale: dominant signal is the plan's explicit sequential RFC dependency chain (RFC-1 blocks
+all others; RFC-3 blocks RFC-4; RFC-4 blocks RFC-5/6) — no signal in the 7-signal table
+(`vc-agent-strategy-compare`) favors parallel/workflow/agent-team for the plan AS A WHOLE. Within
+individual RFCs (RFC-2's three adapters, RFC-5's independent components), parallel subagents are
+still the right call per-RFC — see the plan's own per-RFC Strategy Recommendation table, unchanged
+by this validate pass.
+
+### Plan Updates Applied (V6)
+
+| # | What changed | Where in plan | Why |
+|---|---|---|---|
+| P1 | Added explicit secret-safety rule (never echo/log/commit `$DUNE_API_KEY`; findings only in VERDICT, never the key) | RFC-1 Stage 0, item 1 | Focus-risk: RFC-1 probe commands must never print or commit the API key — original text had no such instruction |
+| P2 | Corrected Dune query-count arithmetic (17 queries/night: 4 chains × 3 metrics + 5 chains × 1 new-addresses metric — was ambiguously "4 × up to 4") and added a locked NOT-VIABLE fallback scope (growthepie/L2BEAT-only chains, Dune chains shown unavailable, new_addresses dropped entirely) | RFC-1 Stage 0, item 1 | Focus-risk: credit budget must be arithmetic-checked against the real query count; an explicit fallback scope must exist if Dune fails, not just a generic "record a fallback" instruction |
+| P3 | Replaced the vague "exact command(s) against L2BEAT's ... endpoint(s)" with an explicit two-step (locate the real documented endpoint from L2BEAT's own docs/GitHub first, then probe it) and a defined no-endpoint-found fallback (cross-check becomes growthepie-only) | RFC-1 Stage 0, item 3 | RFC-1 must be exact/copy-pasteable per its own stated purpose; the original L2BEAT step named no real URL |
+| P4 | Added `SourceAttributionFooter` component + explicit requirement to render growthepie's CC BY 4.0 attribution string+link page-level, distinct from the per-series `SourceMethodBadge` | RFC-5 Scope | AC-9/ADR-1 named the exact attribution string but no touchpoint rendered it anywhere — a real compliance gap, not just a nice-to-have |
+| P5 | Added explicit `vc-risk-evidence-pack` requirement (5-artifact manual-first pack) for RFC-3, citing the narrative-dashboard RFC-4 `REDDIT_CLIENT_SECRET` + `narrative-snapshot.yml` precedent | RFC-3 Scope (new AC mapping sub-paragraph) | Focus-risk: new secret + `contents: write` scheduled workflow is the same risk shape this repo already treats as requiring manual evidence; the plan had flagged it "risk-adjacent" but not actually required the pack |
+| P6 | Pinned the new workflow's push-retry to `narrative-snapshot.yml`'s 3-attempt pattern specifically (not `liqtide-snapshot.yml`'s un-retried single push, which the plan had wrongly implied was equivalent), and made trigger/permission scoping (`schedule`/`workflow_dispatch` only, no `pull_request`) explicit | Ops Runbook, Scheduled job bullet | Focus-risk: push races across three nightly jobs — the plan's "same as the two precedent workflows" claim was inaccurate (only one precedent has a retry loop); fork-PR secret exfiltration must be explicitly foreclosed |
+| P7 | Named a dedicated `chain-growth-dune-query-isolation` test scenario inside `test_dune_adapter.py` (adapter-level isolation proof, ahead of RFC-3's script-level isolation test) | RFC-2 Test gates | AC-12 isolation was asserted in prose (ADR-2) but had no adapter-layer test named for it — only a script-layer one in RFC-3 |
+
+No plan section required a design-level (INNOVATE-reopening) change — all 7 fixes are additive
+clarifications/safety instructions inside the existing ADR/RFC structure. No FAIL was found.
+
+### Execute-Agent Instructions
+
+| # | Instruction | Trigger condition |
+|---|---|---|
+| E1 | Before writing `.github/workflows/chain-growth-snapshot.yml`, diff its trigger/permissions block against `narrative-snapshot.yml` line-for-line (schedule + `workflow_dispatch` only, `permissions: contents: write` only, no `pull_request`) — do not invent a broader trigger set. | RFC-3, workflow file creation |
+| E2 | RFC-3 may not be marked `🔨 CODE DONE` until the `vc-risk-evidence-pack` 5-artifact pack exists in this task folder's `harness/` subfolder (per P5) — if it is missing when RFC-3 otherwise looks complete, say so explicitly in the phase report rather than implying the work is proven. | RFC-3 completion claim |
+| E3 | RFC-1's VERDICT artifact must never contain the literal `DUNE_API_KEY` value — if a probe's raw output (e.g. a curl `-v` trace) is pasted into the VERDICT for evidence, redact the `X-Dune-API-Key` header value before saving. | RFC-1 VERDICT authoring |
+| E4 | If RFC-1 finds Dune NOT-VIABLE, apply the locked fallback scope from P2 verbatim (growthepie/L2BEAT chains only; Solana/BNB/Tron/Polygon → explicit unavailable; drop `new_addresses` entirely) — do not improvise a different scope reduction. | RFC-1 VERDICT = NOT-VIABLE for Dune |
+| E5 | If RFC-1 finds no documented L2BEAT endpoint, RFC-2's L2BEAT adapter becomes a stub returning `status: unavailable` always (cross-check silently degrades to growthepie-only per P3) — do not block RFC-2 on this alone. | RFC-1 VERDICT: L2BEAT endpoint not found |
+| E6 | `SourceAttributionFooter`'s exact attribution string must be copied verbatim from RFC-1's Stage-0 finding (the actual license-page text), not from ADR-1's draft guess ("Source: growthepie, https://www.growthepie.com") if RFC-1 finds different required wording. | RFC-5, `SourceAttributionFooter` implementation |
+| E7 | `test_dune_adapter.py`'s isolation test (P7) must assert via two adapter calls in the same test — one forced to raise/error, one forced to succeed — that the second call's result is unaffected by the first's failure; a single-call test with a mocked exception is not sufficient evidence for AC-12 at this layer. | RFC-2, `chain-growth-dune-query-isolation` test authoring |
+
+### Test Gates
+
+C-4 reconciliation: `strategy` column carries only the 3 proving strategies (Fully-Automated /
+Hybrid / Agent-Probe). Known-Gap is not used anywhere in this plan's coverage — every developed
+behavior in scope has a Fully-Automated, Hybrid, or Agent-Probe gate; see "What this coverage does
+NOT prove" below for the genuine residuals (all Agent-Probe, none silently uncovered).
+
+| criterion id | behavior | strategy | proving test | gap-resolution |
+|---|---|---|---|---|
+| chain-growth-dune-credit-budget-probe | Dune account/API can execute a bounded per-chain query within free-tier credit+time limits | Agent-Probe | RFC-1 Stage 0 `curl` sequence against `api.dune.com` (user-run, this container's egress is blocked) | C |
+| chain-growth-growthepie-robinhood-slug-probe | growthepie's `master.json` has (or lacks) a Robinhood Chain key, and its history depth per chain | Agent-Probe | `curl https://api.growthepie.xyz/v1/master.json` (user-run) | C |
+| chain-growth-l2beat-coverage-probe | L2BEAT's real documented endpoint exists, is keyless, and its Robinhood Chain coverage | Agent-Probe | RFC-1 Stage 0 endpoint-discovery + `curl` (user-run) | C |
+| chain-growth-source-terms-confirmed | growthepie/L2BEAT/Dune terms pages permit the intended use and state real redistribution terms | Agent-Probe | RFC-1 Stage 0 manual terms read (user-run) | C |
+| chain-growth-adapter-contract-shape | Each adapter returns the typed `status: ok\|unavailable\|stale` shape, never raises | Fully-Automated | `uv run --project api pytest api/tests/data/test_growthepie_adapter.py api/tests/data/test_l2beat_adapter.py api/tests/data/test_dune_adapter.py -q` | B |
+| chain-growth-redistribution-flag-per-source | Every adapter result carries a `redistributable` flag, default `False` | Fully-Automated | same command as above | B |
+| chain-growth-no-client-side-secrets | No adapter return value or router response contains `DUNE_API_KEY` | Fully-Automated | same command as above, plus `uv run --project api pytest api/tests/routers/test_onchain_activity_router.py -k no_secret -q` | B |
+| chain-growth-dune-query-isolation | One Dune chain-query's failure never blocks another chain's query (P7/E7) | Fully-Automated | `uv run --project api pytest api/tests/data/test_dune_adapter.py -k isolation -q` | B |
+| chain-growth-config-driven-chain-list | `chains.json` edits change the tracked-chain set with no code change; invalid entries skip+warn | Fully-Automated | `uv run --project api pytest api/tests/data/test_chain_growth_config.py -q` | B |
+| chain-growth-honest-missing-states | A failed/missing fetch writes `status=unavailable`, never a zero-filled row | Fully-Automated | `uv run --project api pytest api/tests/data/test_cache_chain_growth.py -q` | B |
+| chain-growth-single-chain-failure-isolation | One chain's snapshot failure doesn't abort the nightly run for other chains | Fully-Automated | `uv run --project api pytest api/tests/scripts/test_snapshot_chain_growth.py -q` | B |
+| chain-growth-append-only-dedup | Cache writes are append-only, deduped on date, no overwrite of prior rows | Fully-Automated | `uv run --project api pytest api/tests/data/test_cache_chain_growth.py -k dedup -q` | B |
+| chain-growth-floor-ramp-marker-history-gate | Floor/ramp rule applies identically per chain; gated on minimum history; constants validated against real backfilled data | Hybrid — rule logic Fully-Automated, "does this look right on real data" is Agent-Probe (RFC-4 Stage 0 evidence table) | `uv run --project api pytest api/tests/analytics/onchain/test_growth.py -q` — precondition: RFC-3 backfill has produced at least one real/backfilled series | B |
+| chain-growth-cross-chain-normalization-boundary | Comparison series dataclass has no raw-value field — AC-13 enforced at the type level | Fully-Automated | `uv run --project api pytest api/tests/analytics/onchain/test_comparison.py -q` | B |
+| chain-growth-existing-routes-unchanged | `/api/regime/*`, `/api/narrative/*`, `/api/screener/*` route registration is byte-unchanged | Fully-Automated | `uv run --project api pytest api/tests/routers/test_onchain_activity_router.py -k routes_unchanged -q` | B |
+| chain-growth-per-chain-three-metrics | Every chain in `chains.json` renders all 3 metrics on its panel | Fully-Automated | `pnpm --filter web test -- ChainPanel` | B |
+| chain-growth-source-method-labelling | Every rendered series shows its source+method label | Fully-Automated | `pnpm --filter web test -- SourceMethodBadge` | B |
+| chain-growth-growthepie-attribution-rendered | `SourceAttributionFooter` renders RFC-1's confirmed attribution string+link whenever a growthepie series is shown (P4) | Fully-Automated | `pnpm --filter web test -- SourceAttributionFooter` | B |
+| chain-growth-normalized-overlay-view | Comparison overlay makes floor-then-ramp visually obvious across chains | Agent-Probe | RFC-5/RFC-6 manual visual-judgment scenario against seeded fixture, then re-confirmed at AC-14 against real data | B |
+| chain-growth-drilldown-raw-values | Hover/drill-down reveals exact raw daily numbers | Agent-Probe | RFC-5/RFC-6 manual scenario against seeded fixture | B |
+| chain-growth-robinhood-chain-launch-flag | Robinhood Chain shows "launched 2026-07-01, limited history" from day one | Fully-Automated | `pnpm --filter web test -- LimitedHistoryFlag` | B |
+| chain-growth-history-depth-disclosure | `history_start_date` is present and correct per chain/metric | Fully-Automated | `uv run --project api pytest api/tests/routers/test_onchain_activity_router.py -k history_start_date -q` | B |
+| chain-growth-real-cache-user-walkthrough | Dashboard renders correctly against real, live-fetched data; a genuinely-failing source shows visibly unavailable | Agent-Probe (user, real machine — this container cannot reach any candidate provider) | RFC-6 Resume/Handoff walkthrough steps (unchanged by this validate pass) | C — deferred to the user's own machine, same precedent as regime AC-11 / narrative AC-12 |
+
+**Full regression baseline (run at RFC-6, and after any later change):**
+- `uv run --project api pytest api/ -q` (Fully-Automated; current baseline per `tests/all-tests.md`: 395 passed, 3 deselected — chain-growth's own new tests are additive to this count)
+- `pnpm --filter web test` (Fully-Automated; current baseline: 110 passed, 16 files)
+- `pnpm --filter web exec tsc --noEmit` (Fully-Automated; must exit 0)
+- `cd web && PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome pnpm test:e2e` (Hybrid — container chromium-path workaround, deterministic once running; run twice per repo convention), including new `web/e2e/onchain-activity.spec.ts`
+
+**Seeded-E2E feasibility (explicit finding, not assumed):** confirmed feasible without network.
+`api/scripts/seed_e2e_cache.py` already has the exact precedent pattern this plan's RFC-6 scope
+calls for (`build_regime_fixture`/`seed_regime`, `build_narrative_fixture`/`seed_narrative` both
+write history through the real `cache.write_*` functions with an isolated cache root) — RFC-6's
+`build_chain_growth_fixture`/`seed_chain_growth` is a mechanical extension of an already-working
+pattern, not a new mechanism. `api/data/cache.py` already has the matching precedent functions
+(`write_liquidity_series`/`read_liquidity_series`, `write_exchange_point`/`read_exchange_series`)
+that RFC-3's `chain_growth_*` functions are modeled on — confirmed present at the cited line
+numbers, not merely assumed from the plan's prose.
+
+Legacy line form (retained for existing validate-contract consumers):
+- RFC-1 (feasibility probes): Agent-Probe: user-run curl/read sequences, this container cannot reach any candidate provider
+- RFC-2 (adapters/config): Fully-Automated: `uv run --project api pytest api/tests/data/test_{growthepie,l2beat,dune,chain_growth_config}_adapter.py -q` | Hybrid: opt-in `-m integration` per adapter
+- RFC-3 (storage/workflow/backfill): Fully-Automated: `uv run --project api pytest api/tests/data/test_cache_chain_growth.py api/tests/scripts/test_snapshot_chain_growth.py -q` | Hybrid: workflow YAML review/actionlint
+- RFC-4 (analytics/API): Fully-Automated: `uv run --project api pytest api/tests/analytics/onchain/ api/tests/routers/test_onchain_activity_router.py -q` | Hybrid: real-data floor/ramp constant validation
+- RFC-5 (frontend): Fully-Automated: `pnpm --filter web test` (ChainPanel/ComparisonOverlay/LimitedHistoryFlag/SourceAttributionFooter) + `pnpm --filter web exec tsc --noEmit` | Agent-Probe: visual comparison-overlay judgment, drill-down judgment
+- RFC-6 (tests/E2E/docs/handoff): Fully-Automated+Hybrid: full regression baseline above | Agent-Probe: AC-14 user walkthrough (deferred)
+
+### TDD Failing Stubs (Fully-Automated rows)
+
+```
+test("adapter returns typed ok|unavailable|stale status, never raises", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: chain-growth-adapter-contract-shape")
+})
+test("adapter result carries redistributable flag defaulting to false", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: chain-growth-redistribution-flag-per-source")
+})
+test("no adapter return value or API response contains DUNE_API_KEY", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: chain-growth-no-client-side-secrets")
+})
+test("one Dune chain query failing does not block another chain's query", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: chain-growth-dune-query-isolation")
+})
+test("editing chains.json changes tracked chains with no code change; invalid entries skip+warn", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: chain-growth-config-driven-chain-list")
+})
+test("a failed/missing fetch writes status=unavailable, never a zero-filled row", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: chain-growth-honest-missing-states")
+})
+test("one chain's snapshot failure does not abort the nightly run for other chains", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: chain-growth-single-chain-failure-isolation")
+})
+test("cache writes are append-only and deduped on date", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: chain-growth-append-only-dedup")
+})
+test("comparison series type has no raw-value field (AC-13 enforced at type level)", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: chain-growth-cross-chain-normalization-boundary")
+})
+test("/api/regime/*, /api/narrative/*, /api/screener/* route list is byte-unchanged", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: chain-growth-existing-routes-unchanged")
+})
+test("every configured chain renders all three metrics on its panel", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: chain-growth-per-chain-three-metrics")
+})
+test("every rendered series shows a source+method label", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: chain-growth-source-method-labelling")
+})
+test("SourceAttributionFooter renders growthepie's confirmed attribution string+link", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: chain-growth-growthepie-attribution-rendered")
+})
+test("Robinhood Chain shows 'launched 2026-07-01, limited history' from day one", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: chain-growth-robinhood-chain-launch-flag")
+})
+test("history_start_date is present and correct per chain/metric", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: chain-growth-history-depth-disclosure")
+})
+```
+
+Hybrid, Agent-Probe, and the RFC-1 probe rows do not receive stubs per the stub-generation rule.
+
+### Dimension Findings
+
+- Infra fit: PASS — new feature folder, new additive router/workflow/config, mirrors the regime
+  and narrative dashboard precedent exactly; cron offsets (22:00/23:00/23:30 UTC) confirmed clear
+  of the two existing nightly jobs; no container/port surface touched.
+- Test coverage: PASS — all four tiers used appropriately; no behavior in the blast radius rests
+  on Known-Gap alone (net-gate vacuous-green check: every AC has at least one Fully-Automated or
+  Agent-Probe gate; AC-14's Agent-Probe is a legitimate proving strategy, not an uncovered gap —
+  see "What this coverage does NOT prove" below for the honest residual).
+- Breaking changes: PASS — additive-only across every touched file; two single-line touches
+  (`api/main.py` router mount, `.gitignore` carve-out) and three additive-function-only touches
+  (`cache.py`, `seed_e2e_cache.py`, `format-unavailable-reason.ts`); contract-snapshot test
+  (`chain-growth-existing-routes-unchanged`) directly protects `/regime`/`/narrative`/`/screener`.
+- Security surface: PASS after plan fixes — the one real surface (`DUNE_API_KEY` in a new
+  `contents: write` scheduled workflow) is now covered by an explicit secret-safety rule (P1),
+  a locked no-key-in-VERDICT instruction (E3), trigger/permission pinning against the two
+  precedent workflows (P6/E1), and a required `vc-risk-evidence-pack` gate before RFC-3 can be
+  called done (P5/E2) — matching the narrative-dashboard's own precedent for a comparable secret.
+  No auth, billing, schema-migration, or destructive-write surface exists anywhere in this plan.
+- RFC-1 (feasibility gate) feasibility: PASS — mechanically sound as a gate structure; all four
+  probes now have exact, copy-pasteable, secret-safe commands (after P1/P2/P3); explicit pass/fail
+  criterion (VERDICT not NOT-VIABLE for depended-on sources) and an explicit, locked fallback scope
+  if Dune fails entirely (P2) — this was the plan's single most load-bearing gap and is now closed.
+- RFC-2 (adapters/config) feasibility: PASS — mechanical precedent confirmed directly (`cache.py`'s
+  `write_liquidity_series`/`write_exchange_point` shape, `narrative_category_map.json`'s
+  skip+warn option-B pattern); no gaps found beyond the isolation-test naming gap now closed by P7.
+- RFC-3 (storage/workflow) feasibility: PASS after plan fixes — cron offset arithmetic checked
+  (60/90 min clearance), push-retry pattern corrected to the actually-robust precedent (P6),
+  risk-evidence-pack now required (P5). Highest-risk edit: the workflow's secret mapping — mitigated
+  by E1's line-for-line diff instruction against `narrative-snapshot.yml`.
+- RFC-4 (analytics/API) feasibility: PASS — dtype discipline for mixed `str`/`None` columns is
+  explicitly named (direct lesson pull from `tests/all-tests.md`'s narrative-dashboard RFC-6 entry);
+  real-data validation step for floor/ramp constants is explicit, not asserted from memory, mirroring
+  the regime dashboard's ADR-1 re-tune discipline exactly.
+- RFC-5 (frontend) feasibility: PASS after plan fix — `ComponentPanel`/`regime-chart-sync.ts`/
+  `regime-line-segments.ts` precedent confirmed reusable; attribution gap closed by P4/E6.
+- RFC-6 (tests/E2E/handoff) feasibility: PASS — seed_e2e_cache.py's builder pattern confirmed to
+  exist and be mechanically extensible (see "Seeded-E2E feasibility" note above); AC-14 handoff
+  steps already mirror the regime/narrative precedent structure correctly.
+
+### Open Gaps
+
+None requiring user acceptance. Residual, expected gaps (not defects) carried forward by design:
+- RFC-1's four probes cannot run in this sandbox (egress blocked) — this is the plan's own designed
+  gate, not a validate finding; EXECUTE begins with the user running RFC-1 per the Resume and
+  Execution Handoff steps (unchanged by this validate pass).
+- AC-14's real-machine walkthrough is deferred to the user's own machine — same structural
+  precedent as regime dashboard AC-11 and narrative dashboard AC-12, both already accepted by this
+  project as the correct shape for a live-provider-dependent AC.
+- The exact `DUNE_API_KEY` credit-budget number and the final chain→source mapping are RFC-1
+  outputs, not yet known — correctly deferred, not assumed, throughout the plan.
+
+### What this coverage does NOT prove
+
+- The Fully-Automated adapter/router/component tests prove contract shape, isolation behavior, and
+  no-secret-leakage against synthetic fixtures — they do NOT prove any of the four providers
+  actually return data in that shape, or that Dune's real credit cost matches RFC-1's estimate.
+  Only RFC-1's live probes (Agent-Probe, user-run) and AC-14's walkthrough close that gap.
+- The Hybrid floor/ramp test proves the rule's logic and history-gate arithmetic are internally
+  consistent — it does NOT prove the chosen constants (window/threshold) are visually correct on
+  real chain data until RFC-4's own real-data evidence-table step is actually run against real
+  backfilled series (deferred to RFC-3/RFC-4 execution, not yet run).
+- The seeded Playwright E2E suite (RFC-6) proves the frontend renders correctly against a
+  synthetic multi-chain fixture including a forced single-source failure — it does NOT prove the
+  same behavior against real, live-fetched data; that is AC-14's sole job, and AC-14 is explicitly
+  not attempted in-sandbox.
+- The `vc-risk-evidence-pack` requirement (P5) proves a manual review happened before RFC-3 is
+  called done — it does NOT itself prove the workflow is secure; it is a documentation/review gate,
+  not a penetration test. No adversarial-validation.json scenario beyond "can a fork PR see the
+  secret" was scoped for this plan (mirrors the narrative-dashboard's own scope for its comparable
+  secret).
+
+Gate: PASS (no FAILs, no unresolved CONCERNs — all 7 findings resolved via plan fixes P1-P7 and
+execute-agent instructions E1-E7; nothing required user acceptance, so no concerns are carried as
+CONDITIONAL)
+
+---
+
+## Autonomous Goal Block
+
+```
+SESSION GOAL: Ship /onchain-activity — chain participant growth dashboard (9 chains, DAA/new-addresses/tx-count, normalized floor/ramp comparison), feasibility-gated on RFC-1.
+Charter + umbrella plan: N/A — single plan (process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md), 6 internal RFCs, not a phase program.
+Autonomy: RFC-1 through RFC-6 run research(Stage 0)->execute->EVL per RFC, no user gate between RFCs except each RFC's own Stage-0 present-and-STOP; RFC-1 requires the USER to run its probes on their own machine (this sandbox's egress is blocked) before RFC-2 can begin.
+Hard stop conditions / safety constraints:
+- RFC-1 VERDICT must not be fabricated or assumed — if the user has not run the probes, EXECUTE halts at RFC-1 Stage 0, it does not guess.
+- DUNE_API_KEY must never be echoed, logged, committed, or included in the VERDICT artifact — findings only.
+- RFC-3 (new secret + contents:write workflow) may not be marked CODE DONE without the vc-risk-evidence-pack 5-artifact pack present.
+- No existing route/behavior (/api/regime/*, /api/narrative/*, /api/screener/*) may change — protected by a contract-snapshot test (chain-growth-existing-routes-unchanged).
+- AC-14 (real-machine walkthrough) requires explicit user execution and confirmation — the plan may reach CODE DONE without it but not VERIFIED.
+Next phase: RFC-1 Stage 0 (feasibility probes — user-run) — see Resume and Execution Handoff below for exact steps.
+Validate contract: inline in plan, see ## Validate Contract above (Gate: PASS, 25-09-26).
+Execute start: RFC-1 user-PC probe commands (Dune curl sequence, growthepie master.json curl, L2BEAT endpoint discovery, terms reads) | AC-14 real-cache walkthrough deferred to RFC-6 completion | high-risk pack: yes (RFC-3, DUNE_API_KEY + contents:write workflow, per vc-risk-evidence-pack)
+```
 
 ---
 
