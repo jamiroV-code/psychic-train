@@ -7,8 +7,9 @@ date: 24-09-26
 
 # my_site - All Tests
 
-Last updated: 2026-09-25 (narrative-keyword-keying fix EVL — counts below; the 2026-09-24 counts
-were the regime dashboard's own RFC-001..006, a separate closed program)
+Last updated: 2026-09-24 (narrative-mindshare RFC-1..6 EVL — final green counts below; supersedes
+the same-day regime dashboard RFC-001..006 EVL counts, which are themselves recorded further down;
+the 2026-09-20 counts were the momentum-screener's own RFC-006, a separate closed program)
 
 Attach this file first when the task involves testing, verification, or test debugging.
 
@@ -23,18 +24,18 @@ Do not load the whole `process/context/tests/` folder by default. Start here, th
 
 ---
 
-## Status: three runners, all green (backend + frontend + E2E) as of the narrative-keyword-keying fix
+## Status: three runners, all green (backend + frontend + E2E) as of the narrative-mindshare EVL
 
 **This file previously said "no test surface exists" and was stale from 18-09-26 to 19-09-26.**
 Its own Update Trigger ("a test runner is added to either `web/` or `api/`") fired when RFC-001
 landed pytest and vitest, and nothing actioned it. Corrected during RFC-005 UPDATE PROCESS.
 
-| Package | Runner | Command | State (25-09-26, narrative-keyword-keying EVL) |
+| Package | Runner | Command | State (24-09-26, narrative-mindshare EVL, final for the day) |
 |---|---|---|---|
-| `api/` | pytest | `uv run --project api pytest api/ -q` | **381 passed, 3 deselected** (final EVL run — deselected are the opt-in `integration`-marked tests) |
-| `api/` (network) | pytest | `uv run --project api pytest api/ -m integration` | opt-in, hits real providers (exchange, Farside) |
-| `web/` | vitest | `pnpm --filter web test` | **75 passed, 12 files, 0 failed files** (same EVL run) — `vitest.config.ts` excludes `e2e/**`, so Playwright specs are never collected by vitest |
-| `web/` (E2E) | Playwright | `cd web && pnpm test:e2e` | **12/12 passed, run twice (24-09-26, regime dashboard RFC-006)** — `e2e/screener.spec.ts` (6) + `e2e/regime.spec.ts` (6, new). The seeder writes every `/api/regime/components` input (FRED, DefiLlama, Farside + today's `.last_attempt` ok marker, LiqTide raw + daily rows) so the API never reaches a real provider. **Cloud-container note (persists — same fix needed every fresh container):** `@playwright/test` 1.63 wants chromium build 1243 but only `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` is present, so set `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` before running (no-op on a machine with a matching browser, e.g. the user's PC after `pnpm exec playwright install chromium`). This container's egress proxy also blocks FRED/DefiLlama/stablecoins.llama.fi (403) — the seeded-fixture E2E run above never needs them, but a real-cache walkthrough (AC-11 in the regime plan) cannot run here at all and must happen on the user's PC |
+| `api/` | pytest | `uv run --project api pytest api/ -q` | **392 passed, 3 deselected** (final EVL run, narrative-dashboard RFC-1..6 — was 294/2 at the regime-dashboard EVL earlier the same day; deselected are the opt-in `integration`-marked tests) |
+| `api/` (network) | pytest | `uv run --project api pytest api/ -m integration` | opt-in, hits real providers (exchange, Farside, Hyperliquid) |
+| `web/` | vitest | `pnpm --filter web test` | **110 passed, 16 files, 0 failed files** (final EVL run, narrative-dashboard — was 75/12 at the regime-dashboard EVL) — `vitest.config.ts` excludes `e2e/**`, so Playwright specs are never collected by vitest. `pnpm --filter web exec tsc --noEmit` exit 0 at the same commit (`web/tsconfig.tsbuildinfo` restored via `git checkout` after) |
+| `web/` (E2E) | Playwright | `cd web && pnpm test:e2e` | **26/26 passed, run twice (24-09-26, narrative-dashboard RFC-6)** — `e2e/screener.spec.ts` (6) + `e2e/regime.spec.ts` (6) + `e2e/narrative.spec.ts` (14, new). The narrative seeder (`seed_e2e_cache.py::build_narrative_fixture`/`seed_narrative`) writes every source's history through the real `cache.write_*` functions (pytrends nightly + backfilled, coingecko legacy + coingecko-narrative, exchange market snapshot + series), keyed exactly as production keys it (pytrends/reddit by keyword, everything else by category id) — no reddit rows, no `coingecko_trending.parquet`, both deliberate. This run **caught a real product bug** (a pandas `None`→`NaN` coercion 500ing `/history` from the second nightly-archive day onward, see the Standing Lesson table below) that no earlier layer's coverage could reach. **Cloud-container note (persists — same fix needed every fresh container):** `@playwright/test` 1.63 wants chromium build 1243 but only `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` is present, so set `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` before running (no-op on a machine with a matching browser, e.g. the user's PC after `pnpm exec playwright install chromium`). This container's egress proxy also blocks Google Trends/Reddit/CoinGecko/Hyperliquid/FRED/DefiLlama/stablecoins.llama.fi — the seeded-fixture E2E runs above never need them, but AC-12's real-cache walkthrough (narrative-dashboard) and AC-11's equivalent (regime dashboard) cannot run here at all and must happen on the user's PC |
 
 Live-cache spot check (reads only, no runner): `uv run --project api python api/scripts/check_weekly_anchor.py`
 — reports the week anchor of every cached `1w` series. The unit tests run against an isolated
@@ -67,7 +68,8 @@ This is the `all-tests.md` entrypoint for the `tests/` context group. Agents rea
 ## Standing Lesson: green does not mean verified
 
 The single most expensive recurring failure in this project is a test suite that passes against
-something other than the real dependency. Eight instances so far. The first five are recorded in
+something other than the real dependency. Ten instances so far (two more added 24-09-26 by the
+narrative-dashboard program, see the last two table rows). The first five are recorded in
 `momentum-screener_PLAN_17-09-26.md` `## Deviations`; the sixth and seventh in
 `weekly-ohlc-anchor_PLAN_19-09-26.md`; the eighth in `playwright-e2e_19-09-26-phase-report.md`:
 
@@ -81,6 +83,8 @@ something other than the real dependency. Eight instances so far. The first five
 | ADR-5 | `_derive_weekly_from_daily` (135 green, incl. a `1w` deadlock test) | the `1w` path had NO test of its output values at all — the suite proved it did not hang, never that it was right. Bars were stamped with the week's close, and the newest one with a date in the future |
 | ADR-6 | ADR-5's 13 golden-value tests, all green | the tests called `_derive_weekly_from_daily` directly on tz-aware UTC fixtures and never crossed the Parquet/DuckDB boundary. DuckDB converts TIMESTAMPTZ to the SESSION timezone on read, so the live cache came back `Europe/Brussels` and the weekly anchor sat on Brussels midnight — Monday locally, **Sunday 22:00 UTC**. The suite could not have caught it: the conversion happens one layer below where every test lived |
 | Playwright E2E | 165 backend tests + 7 vitest suites, all green | none of them ever executed the real frontend/backend boundary at all — vitest injects `fetchBoard`/`fetchScalp` fakes, pytest never runs FastAPI. The actual defect (`seed_e2e_cache.py` wrote the watchlist fixture as a bare JSON array; `watchlist.py` expects `{"coins": [...]}`, raising `AttributeError` on every board request) was in code no existing suite touched at all — a new fixture script, unchecked against a pre-existing reader's format |
+| narrative-dashboard RFC-6 | RFC-3's `test_history.py` (25 tests) + all earlier RFC-1/2 gates, all green | `_exchange_frames` built its columns from Python `str`/`None` lists; current pandas infers a NaN-backed `StringDtype` for such a list, turning `None` into `NaN`. `NarrativeHistoryPoint.reason: str \| None` rejected the resulting NaN — a 500 on `/history` as soon as one exchange series has a day with a listing reason and a day without (i.e. from the **second** nightly-archive day onward). RFC-3's own tests used a single row or all-None reasons, so the two-state case (`no-baseline-yet` day 1, `ok` day 2) never occurred in any pytest fixture; vitest uses injected fetcher fixtures and never builds the real DataFrame at all. Only the E2E run, seeding a real multi-day fixture through the real cache boundary, could reach it. Fixed by building those columns as `pd.Series(..., dtype=object)` instead (preserves `None`); a regression test now pins it. **General lesson: any code building a pandas column from a Python list mixing `str` and `None` should build it with `dtype=object` explicitly** — letting pandas infer the dtype risks a silent `None`→`NaN` coercion whenever a downstream Pydantic model expects `str \| None` |
+| narrative-dashboard RFC-4/5 EVL cycle 1 | all 5 gates green at first EVL pass | mutation testing (deliberately breaking a guard, re-running the suite, confirming it goes red) found ONE missing assertion: the null-delta render path in `RankViews.test.tsx` had no test covering it, so a mutation that broke null-delta rendering left the suite green. One supplement cycle added the missing assertion; the re-confirm run (vitest 110/16, tsc 0, pytest 388/3) then correctly caught the same mutation. **Practical takeaway: a green suite plus a passing mutation check on the OTHER guards in a file does not mean every rendering branch in that file is covered** — mutation-test each meaningfully distinct render branch, not just the branches you remembered to write a test for |
 
 Four of the eight came from RFC-001's sandbox shims (`pandas_ta`, `ccxt`, `duckdb`/`pyarrow`).
 The fifth was a fixture that never isolated anything. The sixth had real coverage of its
@@ -173,8 +177,10 @@ Practical rules that follow:
   real browser + seeded fixture cache. First run found a real defect the rest of the suite
   structurally could not reach (Standing Lesson #8); second run, 6/6 green. See
   `process/general-plans/active/momentum-screener_17-09-26/playwright-e2e_19-09-26-phase-report.md`.
-- **Provider adapter layer** beyond ccxt (liqtide, fred, pytrends, reddit, coingecko, defillama)
-  has mocked-failure contract tests but no real-contract pins.
+- **Provider adapter layer** beyond ccxt (liqtide, fred, pytrends, reddit, coingecko, defillama,
+  hyperliquid) has mocked-failure contract tests but no real-contract pins. The Hyperliquid adapter
+  has one opt-in `integration`-marked test (`-m integration -k hyperliquid`) not yet run against the
+  real exchange (container egress blocked); user-PC step.
 - **`api/analytics/` golden values.** Indicator and cointegration output can be wrong by a factor
   of two and still look plausible on a chart. Still the highest-value first target.
 - ~~**`vitest.config.ts` does not exclude `e2e/` from vitest's collection**~~ **Closed 24-09-26** (regime RFC-006; note moved to `general-plans/completed/`). Was: — `web/e2e/screener.spec.ts`

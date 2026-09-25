@@ -5,3 +5,6 @@ iteration	timestamp	gaps_found	fail_count	concern_count	applied	saturation_statu
 evl-rfc1	2026-09-24T21:45:07Z	0	0	0	0	SATURATED	HALTED_SUCCESS	EVL RFC-1 (vc-tester): pytest 307 passed/2 deselected, targeted 16, vitest 75/12 files; mutation check proves contract snapshot non-vacuous; e2e n/a (no web changes)
 evl-rfc2	2026-09-24T21:57:06Z	0	0	0	0	SATURATED	HALTED_SUCCESS	EVL RFC-2 (vc-tester): pytest 336/3 deselected, RFC-2 29/1, RFC-1 guard 16, vitest 75/12; mutation check proves backfill no-overwrite guard non-vacuous
 evl-rfc3	2026-09-24T22:14:32Z	0	0	0	0	SATURATED	HALTED_SUCCESS	EVL RFC-3 (vc-tester): pytest 378/3 deselected, history 42, contract 3, vitest 75/12; mutation (drop >=2-source rule) broke 3 tests; evidence pack only failure = review-decision PENDING (manual-first)
+evl-rfc45-1	2026-09-24T22:28:36Z	1	0	1	0	ACTIVE	CONTINUE	EVL RFC-4+5: all gates green; mutation shows null-delta render untested in RankViews.test.tsx -> supplement
+evl-rfc45-2	2026-09-24T22:32:26Z	0	0	0	1	SATURATED	HALTED_SUCCESS	EVL re-confirm after fix cycle 1: vitest 110/16, tsc 0, pytest 388/3; null-delta mutation now caught
+evl-rfc6	2026-09-24T22:58:45Z	0	0	0	0	SATURATED	HALTED_SUCCESS	EVL RFC-6 (vc-tester): pytest 392/3, seeder 4, vitest 110/16, tsc 0, e2e 26/26 x2; mutation reverting history.py NaN fix reproduces day-2 500

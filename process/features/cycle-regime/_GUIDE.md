@@ -59,13 +59,14 @@ invented overlays (north-star rule, unchanged from the rest of the app).
 
 ## Current Status
 
-Status: **code-complete, one open item.** All six RFCs (`RFC-001`..`RFC-006`) are implemented and
-committed to `main`. Every automated test gate is green (pytest, vitest, tsc, `next build`,
-Playwright — see `all-tests.md`). The one remaining item is **AC-11**, the real-cache user
-walkthrough, which cannot run in this environment (egress to FRED/DefiLlama is blocked) and must
-be completed on the user's own PC before the plan is archived. See the plan's own "Resume and
-Execution Handoff" section for the exact next steps:
-`process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`.
+Status: **✅ VERIFIED and archived (24-09-26).** All six RFCs (`RFC-001`..`RFC-006`) are implemented,
+committed to `main`, and every automated test gate is green (pytest, vitest, tsc, `next build`,
+Playwright — see `all-tests.md`). AC-11, the real-cache user walkthrough, is confirmed — the user
+ran it on their own PC and reported "all seems fine" (one question about a blank stretch on the
+BTC-dominance panel, explained and accepted as correct honest-gap behaviour — LiqTide's own source
+has a real 209-day hole, 2025-12-07 → 2026-07-04; see `all-context.md` Open Questions). The task
+folder is archived at:
+`process/features/cycle-regime/completed/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`.
 
 A LiqTide raw-JSON archive now runs nightly via `.github/workflows/liqtide-snapshot.yml` (23:30
 UTC, commits to `main`) — no manual scheduling step is needed.
@@ -74,9 +75,9 @@ UTC, commits to `main`) — no manual scheduling step is needed.
 
 ```
 process/features/cycle-regime/
-  active/       -- in-progress plans for this feature (each task lives inside a {slug}_{date}/ task folder)
-    regime-dashboard_24-09-26/  -- the shipped dashboard's plan, RFC phase reports, feasibility doc
+  active/       -- in-progress plans for this feature (each task lives inside a {slug}_{date}/ task folder); currently empty
   completed/    -- archived completed plans
+    regime-dashboard_24-09-26/  -- the shipped dashboard's plan, RFC phase reports, feasibility doc
   backlog/      -- deferred/future plans (e.g. FRED ALFRED point-in-time vintages)
 ```
 

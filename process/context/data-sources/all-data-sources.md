@@ -7,7 +7,8 @@ date: 24-09-26
 
 # Data Sources Context
 
-Last updated: 2026-09-24 (Farside spot-ETF adapter added, `etf_flows_adapter.py`; per-series
+Last updated: 2026-09-24 (Hyperliquid exchange-attention adapter added, `hyperliquid_narrative_adapter.py`
+— narrative-dashboard RFC-2; Farside spot-ETF adapter added, `etf_flows_adapter.py`; per-series
 `max_gap_days` cadence pointer added — regime dashboard, RFC-003)
 
 Canonical entrypoint for the `data-sources` context group in my_site.
@@ -76,6 +77,28 @@ Read this file when:
 **Recommendation:** ccxt against a major exchange for all OHLCV; CoinGecko for cross-sectional
 market data. Both are free and neither requires a key for what my_site needs.
 
+### Hyperliquid — display-only narrative attention proxy (new, 24-09-26)
+
+`api/data/hyperliquid_narrative_adapter.py` (narrative-dashboard RFC-2), a keyless wrapper around
+the existing `ccxt_adapter._exchange()` singleton — no new provider identity, no new credential.
+`fetch_daily_market_snapshot()` calls `_exchange().fetch_tickers(params={"type":"swap"})`, keeps
+only active, non-HIP-3 perps, and never raises. Two derived series: per-category volume share
+(denominator = all active non-HIP-3 perps + an explicit `unmapped` bucket, shares sum to 1) and a
+new-listing count from a day-over-day market-list diff (`no-baseline-yet` on day one, never a bare
+`0`). It is **display-only** — never wired into `trigger.compute_trigger` or
+`GET /api/narrative/categories`, feeds only `GET /api/narrative/history`.
+
+**Ticker keying:** meme perps use a `k`-prefixed base that ccxt upper-cases (`kPEPE` → `KPEPE`);
+the resolver checks `base == SYM` or `baseName == "k"+SYM`. Confirmed against the installed `ccxt`
+4.5.78 source (`parse_ticker` maps `dayNtlVlm` → `quoteVolume`) — not yet confirmed against a real
+live payload (container egress blocks Hyperliquid; user-PC step).
+
+**Licensing:** `redistributable=false`, pending — Hyperliquid's terms of use for redistributing
+market data were not checked (egress blocked at RFC-2 Stage 0). `HYPERLIQUID_REDISTRIBUTABLE` is a
+single constant in the adapter file; flip to `true` only after the user reads Hyperliquid's ToU/API
+docs directly. Until then this data is personal-use-only by default, same posture as London
+Strategic Edge.
+
 ## Macro Liquidity
 
 ### LiqTide (liqtide.com) — recommended for the cycle/regime feature
@@ -129,7 +152,7 @@ flagged (`gap_before: bool` per point) instead of silently interpolated. The aut
 these values and their reasons lives in code, not here — `api/analytics/regime/components.py`'s
 `MAX_GAP_DAYS_REASONS` — because the values are re-checked against live cadence and should not
 drift out of sync with a duplicated doc copy. See `GET /api/regime/components` (§11 of
-`process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`)
+`process/features/cycle-regime/completed/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`)
 for the response shape that carries these flags.
 
 ### Farside Investors — spot-BTC ETF daily flows
@@ -231,6 +254,25 @@ Practical consequences of building on proxies:
 - Proxy series are not comparable across sources. Normalise within a source and compare changes
   over time, not levels across providers.
 - Cache aggressively. These sources are the most likely to rate-limit or disappear without notice.
+
+**pytrends backfill scale caveat (added 24-09-26, narrative-dashboard RFC-2/RFC-3):**
+`api/scripts/backfill_pytrends_history.py` uses `pytrends.interest_over_time()` to pull one
+269-day daily window per category on day one (`pytrends` is not a project dependency — every
+invocation needs `uv run --project api --with pytrends ...`). Each Google Trends request is
+independently rescaled 0-100 on its own request window, so a `backfill-269d` point and a
+`nightly-7d` point (the daily forward-archive window) are **not on the same scale** even though
+both come from the same source. Any consumer (composite maths, UI) must flag values spanning the
+two variants as `mixed_scale` rather than treat them as directly comparable — do not silently mix
+them into one line.
+
+**Reddit-in-CI stance (added 24-09-26, narrative-dashboard RFC-4):** the nightly narrative-snapshot
+workflow deliberately ships with **zero** secrets mapped into its job `env`. When
+`REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET` are unset (the CI default), the nightly script writes
+**no row at all** for Reddit that day — not an explicit `unavailable` row — so downstream readers
+see Reddit's absence as "no archived data", distinct from a fetch that ran and failed. Turning
+Reddit history on later needs **two** manual changes together, not one: adding the two GitHub
+Actions repo secrets, AND a two-line `env:` mapping edit to the workflow file itself. Secrets alone
+do nothing — this is a deliberate two-step gate, not an oversight.
 
 ## Libraries
 

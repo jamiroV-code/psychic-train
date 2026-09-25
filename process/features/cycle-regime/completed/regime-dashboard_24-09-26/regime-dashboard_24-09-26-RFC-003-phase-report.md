@@ -3,7 +3,7 @@ phase: rfc-003-etf-flows-adapter
 date: 2026-09-24
 status: COMPLETE
 feature: cycle-regime
-plan: process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md
+plan: process/features/cycle-regime/completed/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md
 ---
 
 # RFC-003 Phase Report — Spot-BTC ETF flows adapter (Farside)
@@ -62,7 +62,7 @@ None. Known gap (from Stage 0): Farside behaviour from a different network or IP
 
 ## Closeout Packet
 
-- Selected plan: `process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`
+- Selected plan: `process/features/cycle-regime/completed/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`
 - Verified: gates 1–4 above. Unverified: the user's own confirmation, and the opt-in live integration test.
 - Classification: **Keep in active/testing** (RFC-004…006 remain; user confirmation pending).
 - Follow-up plan stubs created: none. CONTEXT_PARTIAL: none.

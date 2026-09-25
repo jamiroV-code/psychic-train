@@ -1,0 +1,68 @@
+name: Narrative daily snapshot
+
+# Forward-archives one point per (source, category) for the /narrative
+# dashboard (narrative dashboard RFC-4). Google Trends' short window, Reddit
+# search and CoinGecko "trending" keep no history we can fetch later, so a
+# day this workflow doesn't capture is gone. Runs at 23:00 UTC, 30 minutes
+# before liqtide-snapshot.yml, so the two pushes to main don't overlap.
+#
+# No secrets: without REDDIT_CLIENT_ID/REDDIT_CLIENT_SECRET the Reddit
+# source is skipped and logged as "credentials-not-configured" (ADR-8).
+on:
+  schedule:
+    - cron: "0 23 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: narrative-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install api/ dependencies
+        run: uv sync --project api
+
+      - name: Run snapshot
+        id: snapshot
+        run: |
+          set +e
+          # pytrends is optional in api/pyproject.toml; add it for this run only.
+          uv run --project api --with pytrends python -m api.scripts.snapshot_narrative
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          # Exit 2 = every source unavailable -- warn, still commit whatever
+          # exists. Only exit 1 (unexpected crash) fails the job.
+          if [ "$code" -eq 1 ]; then
+            exit 1
+          fi
+
+      - name: Warn when every source was unavailable
+        if: steps.snapshot.outputs.exit_code == '2'
+        run: |
+          echo "::warning::snapshot_narrative.py - every narrative source was unavailable, see the job log above"
+
+      - name: Commit archived points
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add api/data/cache/narrative/
+          if git diff --staged --quiet; then
+            echo "nothing new to commit"
+            exit 0
+          fi
+          git commit -m "chore: narrative snapshot $(date -u +%Y-%m-%d)"
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
+            echo "push attempt $attempt failed; retrying"
+            sleep $((attempt * 10))
+          done
+          exit 1

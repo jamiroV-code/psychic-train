@@ -13,13 +13,15 @@ metadata:
 
 ## 1. Selected plan path
 
-`process/features/cycle-regime/active/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`
+`process/features/cycle-regime/completed/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`
 
 ## 2. Closeout classification
 
-**Keep in active/testing.** All six RFCs are code-complete, committed, and every automated gate is
-green. One acceptance criterion (AC-11, the real-cache user walkthrough) has not run and cannot run
-in this environment. Do not archive until AC-11 is confirmed by the user.
+**Ready for UPDATE PROCESS archival — archived 24-09-26.** All six RFCs are code-complete,
+committed, and every automated gate is green. AC-11 (the real-cache user walkthrough) is now
+confirmed: the user ran it on their PC and reported "all seems fine", with one question (a blank
+stretch on the BTC-dominance panel) explained and accepted as correct honest-gap behaviour, not a
+bug. The task folder has been moved from `active/` to `process/features/cycle-regime/completed/`.
 
 ## 3. What was finished
 
@@ -54,14 +56,19 @@ in this environment. Do not archive until AC-11 is confirmed by the user.
 - `cd web && pnpm test:e2e` → 12/12 passed (6 regime + 6 screener), run twice, with
   `PLAYWRIGHT_CHROMIUM_PATH` set for this container's browser mismatch
 
-**Still unverified:**
-- **AC-11** — the real-cache user walkthrough (3y default range, zoom/hover/drill-down sync, ETF
-  "not applicable before 2024-01-11" note, a real rendered gap, ~2000+ point performance) has not
-  run. This container's egress proxy returns 403 for FRED, DefiLlama, and stablecoins.llama.fi, so
-  the API cannot populate a real cache here. Must run on the user's PC.
+**Now verified (24-09-26, user's PC against the real cache):**
+- **AC-11** — the user ran the real-cache walkthrough (3y default range, zoom/hover/drill-down sync,
+  ETF "not applicable before 2024-01-11" note, a real rendered gap, ~2000+ point performance) and
+  confirmed "all seems fine". The one question raised — a blank stretch on the BTC-dominance panel
+  — was explained (LiqTide's own `metrics.btc_dom.series` has a real 209-day hole, 2025-12-07 →
+  2026-07-04) and accepted as correct behaviour, not a defect.
+
+**Still unverified (honest residual, not blocking archival):**
 - AC-1's "next-morning raw file appears without running anything" confirmation — the nightly
-  workflow's existence is confirmed (it already captured several days), but the user has not
-  explicitly confirmed this specific criterion since the raw-JSON write was added in this program.
+  workflow's scheduling mechanism is proven (4 consecutive automated `github-actions[bot]` commits,
+  09-21..09-24, `git log --oneline -- api/data/cache/liqtide/*.parquet`), but the raw-JSON write path
+  was added in this program and has not yet run under the schedule — only one manually-written file
+  exists (`2026-09-24.json`). Self-resolves on the next nightly run (23:30 UTC).
 - RFC-002's 1-of-6 component mismatch against LiqTide's published values has not been root-caused
   (see the RFC-002 phase report).
 
@@ -90,19 +97,29 @@ further PVL cycle was required — the CONDITIONAL was accepted at PLAN time, no
   shipped dashboard and where things live.
 - This closeout packet.
 
-**Still needed (not done this session, deliberately deferred to the user):**
-- AC-11 walkthrough on the user's PC (see plan Resume and Execution Handoff for exact steps).
-- After AC-11 confirms: mark all six RFCs and the plan ✅ VERIFIED, then re-enter UPDATE PROCESS to
-  move `regime-dashboard_24-09-26/` from `active/` to `completed/`.
+**Done this session (2nd UPDATE PROCESS pass, post-AC-11 confirmation):**
+- Plan Status Strip updated: all six RFCs → ✅ VERIFIED; per-RFC Verification Checklists ticked
+  where the user's walkthrough covers them, with honest notes on the two items it doesn't (RFC-001's
+  raw-file-on-schedule sub-criterion; the RFC-002 1/6 mismatch).
+- BTC-dominance gap (2025-12-07 → 2026-07-04) documented in the plan's Gap Analysis and in
+  `all-context.md`'s existing "two component depth limits" entry.
+- Task folder moved: `process/features/cycle-regime/active/regime-dashboard_24-09-26/` →
+  `process/features/cycle-regime/completed/regime-dashboard_24-09-26/`.
+- Stale path references updated across `process/`, `.claude/`, `AGENTS.md`, `CLAUDE.md` (pointers
+  only; historical quotes in archived reports left as-is).
+
+**Still needed (not blocking archival, deferred to a future session):**
 - The RFC-002 1/6 component-mismatch root cause (tracked in the RFC-002 phase report, not yet a
-  backlog note — recommend creating one if the user doesn't want to chase it immediately).
+  backlog note — recommend creating one if the user wants it chased further).
+- AC-1's raw-file-on-schedule confirmation will self-resolve on the next nightly run; no action
+  needed unless the user notices it hasn't appeared after a few more nights.
 
 ## 6. Single best next valid state
 
-**Keep the plan active and continue validation on the same selected plan.** Specifically: the user
-runs the AC-11 walkthrough on their PC per the plan's Resume and Execution Handoff section, then
-says so; a fresh agent then marks the plan ✅ VERIFIED and `ENTER UPDATE PROCESS MODE` again to
-archive the task folder to `process/features/cycle-regime/completed/`.
+**Program closed.** The task folder is archived at
+`process/features/cycle-regime/completed/regime-dashboard_24-09-26/`. Future regime-dashboard work
+(insights text box, divergence/lead-lag scans — plan §21 Future Work) should start a new task
+folder rather than reopening this one.
 
 ## 7. Commit-checkpoint recommendation
 
@@ -134,7 +151,7 @@ inner loop). Scoring against the plan's own AC-1..AC-11:
 | AC | Criterion | Status |
 |---|---|---|
 | AC-1 | Raw JSON written once, never overwritten | **Met** — `test_liqtide_raw_archive.py`, Fully-Automated |
-| AC-1 (Agent-Probe half) | Next-morning file appears via schedule | **Unmet (Known-Gap)** — nightly workflow exists and has produced files, but not explicitly re-confirmed against this program's raw-write change; backlog stub: user to eyeball `api/data/cache/liqtide/raw/` after ≥1 more nightly run |
+| AC-1 (Agent-Probe half) | Next-morning file appears via schedule | **Unmet (Known-Gap, accepted, non-blocking)** — schedule mechanism proven (4 consecutive automated commits, 09-21..09-24), but the raw-write path is new this program and unobserved under the schedule; backlog stub: user to eyeball `api/data/cache/liqtide/raw/` after ≥1 more nightly run |
 | AC-2 | Backfilled history on disk, first/last dates reported | **Met** — `test_backfill_liqtide_series.py` + live DuckDB query (Hybrid) |
 | AC-3 | Six impulses match golden values; calendar windows | **Met** — `test_components.py`, Fully-Automated |
 | AC-3 (sign cross-check) | Sign conventions match LiqTide | **Met** — Hybrid cross-check, 5/6 exact |
@@ -145,11 +162,14 @@ inner loop). Scoring against the plan's own AC-1..AC-11:
 | AC-8 | Seven panels, 3y default, synced zoom/crosshair | **Met** — vitest + `regime.spec.ts` E2E, Fully-Automated |
 | AC-9 | Hover readout, drill-down chain | **Met** — vitest, Fully-Automated |
 | AC-10 | Honest gap states, nothing extra drawn | **Met** — vitest + RFC-005 supplement (gap-flag rendering), Fully-Automated |
-| AC-11 | Real-cache walkthrough, user confirms | **Unmet (Known-Gap)** — Agent-Probe only, blocked by this container's egress policy; backlog stub: run on user's PC per plan Resume and Execution Handoff |
+| AC-11 | Real-cache walkthrough, user confirms | **Met** — Agent-Probe, run on the user's PC against the real cache 24-09-26; user confirmed "all seems fine" (one question, explained and accepted — see §4) |
 
-Two criteria are Known-Gap-only (Agent-Probe, unproven in this environment) per the vacuous-green
-ban: AC-1's schedule confirmation and AC-11. Neither is treated as "met" — both are carried forward
-explicitly as the one blocking condition for archival (§6).
+One criterion remains Known-Gap-only (AC-1's schedule sub-criterion — Agent-Probe, unproven in this
+environment) per the vacuous-green ban: it is not treated as "met", but is accepted as a low-risk,
+self-resolving residual (backlog stub above) and does not block archival, since (a) the write
+function itself is Fully-Automated tested, (b) the schedule mechanism has a proven 4-night
+unattended track record, and (c) it will confirm itself on the next nightly run with no action
+required. AC-11 — the criterion this program was explicitly waiting on before archival — is now Met.
 
 ---
 
@@ -170,15 +190,11 @@ Signals counted:
 - (e) Validate-contract deviation: none — execution matched the accepted CONDITIONAL contract,
   concerns P1-P8/E1-E3 were all folded in as planned — **+0**
 
-**Score: 2 (MEDIUM).** "Recommend UPDATE PROCESS -- significant changes detected."
+**Score (this closeout pass): 2 (MEDIUM) + feature-folder structural change (d, task folder archived)
+= 3 (HIGH).** "Strongly recommend UPDATE PROCESS -- harness/protocol files touched." (triggered by
+signal (d): the task folder moved from `active/` to `completed/` this session, plus stale-path
+reference updates across `process/`, `AGENTS.md`, `CLAUDE.md`.)
 
-(Note: this score reflects the UPDATE PROCESS session's own edits, not the underlying EXECUTE
-program, which was substantially larger — six RFCs, ~20+ new files, a new adapter, a new API
-surface, a new frontend route. That work already happened and was already captured in the phase
-reports and this closeout; the drift score here is about *this session's* durable-capture
-workload, which was moderate because most of the narrative was already well-documented in the RFC
-phase reports.)
-
-**Next valid state:** Keep the plan active and continue validation on the same selected plan — the
-user runs the AC-11 walkthrough on their PC, then a fresh UPDATE PROCESS session archives the task
-folder once confirmed.
+**Next valid state:** Program closed. Task folder archived at
+`process/features/cycle-regime/completed/regime-dashboard_24-09-26/`. No further action needed on
+this plan; future regime-dashboard work opens a new task folder.

@@ -404,3 +404,63 @@ compare "reuse cache.py's existing narrative_series_path as-is" vs. "add a dedic
 aggregation layer" and the exchange-proxy source options directly.
 
 `PHASE_COMPLETE: SPEC` — `process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/narrative-dashboard_SPEC_24-09-26.md` written and locked. Three Open Questions remain (OQ-1, OQ-2, OQ-3) but none require user resolution before INNOVATE can proceed — they are scoped as next-phase design inputs, not blocked intent. Proceed to INNOVATE.
+
+---
+
+## Post-EXECUTE Amendment (UPDATE PROCESS, 24-09-26)
+
+This SPEC is frozen — the User Stories, Behavioral Outcomes, and all 12 Acceptance Criteria above
+are unchanged and unnarrowed. This amendment records how the three Open Questions actually
+resolved and confirms every AC's real disposition after all 6 RFCs shipped (code-complete,
+EVL-confirmed, committed to branch `claude/kind-tesla-tat3vo` @ `7ef8eb3`). Full mechanism detail
+lives in the plan's own `## Post-EXECUTE Amendments` section — this is the SPEC-level summary.
+
+**OQ-1 (category/coin scope) resolved:** no new seed categories were added — the dashboard tracks
+the existing 4 (ai, rwa, l2s, memecoins). The coin-to-category map widened via a new, user-editable
+curated JSON (`api/data/narrative_category_map.json`, 32 entries) used **only** by `/history` and
+`/narrative` — the existing 3-coin legacy map stays frozen and continues to drive
+`/categories`/`/screener` exactly as this SPEC's AC-1 requires. This is "option B", the user's own
+explicit choice once the RFC-1 Stage 0 finding surfaced that the naive design (one shared map)
+would touch `/categories`' output.
+
+**OQ-2 (exchange proxy) resolved:** Hyperliquid, via the existing keyless `ccxt_adapter._exchange()`
+singleton — no new provider identity, no new secret. Volume-share denominator = all active,
+non-HIP-3 perps plus an explicit `unmapped` bucket; new-listing detection diffs today's market list
+against an append-only daily snapshot archive, with an explicit `no-baseline-yet` state on day one
+(AC-7 preserved exactly). `redistributable` is recorded `False` pending the user's own Hyperliquid
+terms check (a user-PC step) — this SPEC's Constraints already required a redistribution flag per
+source; the flag exists and is honest, it simply resolved to the conservative value rather than the
+plan's initial assumption of `true`.
+
+**OQ-3 (Reddit nightly credentials) resolved:** no secret is required to ship — confirmed as this
+SPEC anticipated. The mechanism differs from the plan's original design: when
+`REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET` are unset, the nightly job writes **no row at all** for
+Reddit (rather than an explicit `unavailable` row), so the dashboard shows Reddit's absence as
+"no archived data". This SPEC's "a failed provider degrades to unavailable without taking the page
+down" constraint is still satisfied — the distinction between "fetched and failed" and "never
+attempted" is itself an honest, typed state, consistent with "numbers are never silently wrong".
+
+**AC-1 disposition:** proven exactly as specified — `GET /api/narrative/categories` is
+byte-identical (contract snapshot test, including a newly-mapped-coin-in-trending scenario;
+`git diff` on `trigger.py`/`screener_board.py`/`NarrativeStrip.tsx` is empty). **Not narrowed or
+reinterpreted** — option B is precisely the mechanism that keeps AC-1 strict while still
+satisfying US-5/AC-8's wider-coverage ask through a separate, new code path.
+
+**AC-3 / AC-12 disposition:** both remain exactly what this SPEC always said they'd be — Hybrid /
+Agent-Probe, user-machine-only for their live-provider portions. Their Fully-Automated portions are
+proven (workflow dry-run + no-duplicate-on-rerun tests; `web/e2e/narrative.spec.ts`, 26/26 x2). The
+live portions are pending on the user's own PC — see the plan's Resume and Execution Handoff for
+the exact checklist. Both risk-pack manual-first review decisions (RFC-3's new public API, RFC-4's
+new `contents: write` scheduled workflow) are also `PENDING` for the same reason.
+
+**AC-2, AC-4 through AC-11:** all proven exactly as specified, no reinterpretation. A real defect
+was found and fixed during RFC-6's E2E proof (a pandas `None`→`NaN` coercion bug in
+`history.py`, 500ing `/history` from the second nightly archive day onward) — this is evidence the
+AC-2/AC-9 gates worked as intended, not a scope change.
+
+**One pre-existing backend bug, found but explicitly not fixed under this SPEC:**
+`trigger.py::compute_narrative_categories` reads pytrends/Reddit history by category id, but those
+adapters write under the keyword key — so `/categories`' own trigger effectively never sees
+archived pytrends/Reddit history. This predates this SPEC (it's RFC-003 of momentum-screener) and
+fixing it would change `/categories`' own output, requiring a deliberate, separately-scoped AC-1
+re-baseline. Recorded here as an explicit Out-of-Scope confirmation, not silently absorbed.
