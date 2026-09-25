@@ -1,7 +1,7 @@
 # my_site - All Context
 
-Last updated: 2026-09-24 (regime dashboard UPDATE PROCESS closeout — see Changes Since Last
-Update below; the 2026-09-20 18:47 version predates the whole `/regime` build)
+Last updated: 2026-09-25 (narrative trigger keyword-keying reader fix — see Changes Since Last
+Update below; the 2026-09-24 version predates this fix)
 
 This file is the root context entrypoint for the repo.
 
@@ -13,6 +13,33 @@ Use it for two things:
 Start here before loading deeper context files.
 
 ---
+
+## Changes Since Last Update (2026-09-24 → 2026-09-25)
+
+Small, self-contained bug fix on branch `claude/narrative-keyword-keying` (task folder now at
+`process/features/narrative-mindshare/completed/narrative-keyword-keying_25-09-26/`) — not part of
+the still-unmerged narrative dashboard work described below, but touches the same reader function.
+
+- `[Correction]` **`api/analytics/narrative/trigger.py`'s `compute_narrative_categories` was
+  reading pytrends/reddit history under the wrong key.** The adapters
+  (`pytrends_adapter.py`/`reddit_adapter.py`) write cached rows keyed by `keywords[0]`, but the
+  reader looked them up by `category_id`, so pytrends/reddit contributed nothing real to
+  `/api/narrative/categories` under real (non-stubbed) conditions — `history.py`'s sibling read
+  path already got this right. Fixed with a small `_source_history_key` helper; coingecko is
+  unaffected (correctly keyed by `category_id`). Production effect confirmed via a before/after
+  diff report: `trust_weight` 0.4→0.6 and `n_available` 1→3 for all 4 seed categories; no
+  screener badge/`narrative_state` changes in the fixture scenarios. Golden contract fixture
+  regenerated and confirmed byte-identical after user sign-off.
+  See `narrative-keyword-keying_25-09-26/narrative-keyword-keying_REPORT_25-09-26.md` in the
+  completed task folder for the full closeout.
+- Testing: counts moved to **381 passed / 3 deselected** pytest, 75 vitest (12 files) — see
+  `tests/all-tests.md` for the fresh-worktree `pnpm install --frozen-lockfile` (run inside `web/`,
+  not the repo root) note discovered during this fix.
+- **Reminder, still open:** the narrative dashboard feature (RFC-1..5 stage-0/plan work under
+  `process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/`) lives on the
+  separate, still-unmerged branch `claude/kind-tesla-tat3vo` (this worktree's branch,
+  `claude/narrative-keyword-keying`, is based on it but is a distinct branch/worktree) — this
+  keyword-keying fix's amendment note was added to that plan's AC-1 section directly.
 
 ## Changes Since Last Update (2026-09-20 → 2026-09-24)
 
@@ -358,11 +385,14 @@ my_site/
     context/                -- durable project knowledge (this file + groups)
     general-plans/          -- cross-cutting plans, incl. the momentum-screener feature (see
                                 Changes Since Last Update)
-    features/               -- feature-scoped plans and guides. `cycle-regime/` now has a real
-                                task folder (`regime-dashboard_24-09-26/`, all 6 RFCs code-done,
-                                see Changes Since Last Update); charting-indicators,
-                                cointegration-screener, narrative-mindshare are still only
-                                `_GUIDE.md` placeholders
+    features/               -- feature-scoped plans and guides. `cycle-regime/` has a real
+                                task folder (`regime-dashboard_24-09-26/`, all 6 RFCs code-done);
+                                `narrative-mindshare/` has an active task folder
+                                (`narrative-dashboard_24-09-26/`, RFC-1..5 stage-0/plan work, on
+                                the unmerged branch `claude/kind-tesla-tat3vo`) plus one completed
+                                task folder (`narrative-keyword-keying_25-09-26/`, see Changes
+                                Since Last Update); charting-indicators and cointegration-screener
+                                are still only `_GUIDE.md` placeholders
     development-protocols/  -- RIPER-5 methodology docs
   .github/workflows/        -- liqtide-snapshot.yml (nightly 23:30 UTC snapshot + commit to
                                 main -- new 24-09-26, see Changes Since Last Update)
@@ -599,19 +629,22 @@ for RFC-001/RFC-002, the Farside `regime-dashboard-farside_FEASIBILITY_24-09-26.
   amended same day after `git init` + the composite availability-floor fix; amended again 18:47
   by `vc-update-process-agent` closing out the ADR-1 leg-boundary and liqtide-snapshot-tooling
   threads; amended again 2026-09-24 by `vc-update-process-agent` closing out the regime dashboard
-  program (no `vc-generate-context` re-run for either amendment — targeted UPDATE PROCESS edits
-  per this file's own Context Update Protocol)
-- HEAD: `db8d854` (branch `claude/compassionate-goldberg-o2iq49`, confirmed clean working tree at
-  the 2026-09-24 amendment via `git status`/`git log`)
+  program; amended again 2026-09-25 by `vc-update-process-agent` closing out the
+  narrative-keyword-keying fix (no `vc-generate-context` re-run for any amendment — targeted
+  UPDATE PROCESS edits per this file's own Context Update Protocol)
+- HEAD: `db8d854` at the 2026-09-24 amendment (branch `claude/compassionate-goldberg-o2iq49`); the
+  2026-09-25 amendment ran on a separate worktree/branch (`claude/narrative-keyword-keying`, based
+  on the still-unmerged `claude/kind-tesla-tat3vo`) — see Changes Since Last Update 2026-09-25 for
+  branch details; not yet merged to the branch that produced `db8d854`
 - Mode: delta update from real repo scan (directory listings, `package.json`, `pyproject.toml`,
   `.env.example`, adapter/router/analytics source files, active plan folders) — not a line count.
-  18:47 amendment mode and the 2026-09-24 amendment mode were both targeted reads (the regime
-  plan, its RFC phase reports, `git log`/`git status`, and directory listings of the new
-  `web/app/regime/`, `web/components/regime/`, `api/analytics/regime/`, `api/data/` paths) — not a
-  full repo re-scan
+  18:47, 2026-09-24, and 2026-09-25 amendments were all targeted reads (plan/task-folder files,
+  `git log`/`git status`, and directory listings scoped to the changed paths) — not full repo
+  re-scans
 - Package managers: `pnpm` (web/, lockfile present), `uv` (api/, lockfile present)
-- Source scanned: `api/` (routers, analytics incl. `regime/`, data incl. `etf_flows_adapter.py`,
-  models, scripts, tests), `web/` (app incl. `regime/`, components incl. `regime/`, lib, e2e),
-  `process/general-plans/active/momentum-screener_17-09-26/`,
-  `process/features/cycle-regime/active/regime-dashboard_24-09-26/`, `process/features/*/` (the
-  other three still placeholder-only), `.env.example`, `.github/workflows/liqtide-snapshot.yml`
+- Source scanned: `api/` (routers, analytics incl. `regime/` and `narrative/trigger.py`, data incl.
+  `etf_flows_adapter.py`, models, scripts, tests), `web/` (app incl. `regime/`, components incl.
+  `regime/`, lib, e2e), `process/general-plans/active/momentum-screener_17-09-26/`,
+  `process/features/cycle-regime/active/regime-dashboard_24-09-26/`,
+  `process/features/narrative-mindshare/{active,completed}/`, `.env.example`,
+  `.github/workflows/liqtide-snapshot.yml`

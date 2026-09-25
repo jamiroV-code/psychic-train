@@ -7,8 +7,8 @@ date: 24-09-26
 
 # my_site - All Tests
 
-Last updated: 2026-09-24 (regime dashboard RFC-001..006 EVL — final green counts below; the
-2026-09-20 counts were the momentum-screener's own RFC-006, a separate closed program)
+Last updated: 2026-09-25 (narrative-keyword-keying fix EVL — counts below; the 2026-09-24 counts
+were the regime dashboard's own RFC-001..006, a separate closed program)
 
 Attach this file first when the task involves testing, verification, or test debugging.
 
@@ -23,17 +23,17 @@ Do not load the whole `process/context/tests/` folder by default. Start here, th
 
 ---
 
-## Status: three runners, all green (backend + frontend + E2E) as of the regime dashboard EVL
+## Status: three runners, all green (backend + frontend + E2E) as of the narrative-keyword-keying fix
 
 **This file previously said "no test surface exists" and was stale from 18-09-26 to 19-09-26.**
 Its own Update Trigger ("a test runner is added to either `web/` or `api/`") fired when RFC-001
 landed pytest and vitest, and nothing actioned it. Corrected during RFC-005 UPDATE PROCESS.
 
-| Package | Runner | Command | State (24-09-26, regime dashboard EVL) |
+| Package | Runner | Command | State (25-09-26, narrative-keyword-keying EVL) |
 |---|---|---|---|
-| `api/` | pytest | `uv run --project api pytest api/ -q` | **294 passed, 2 deselected** (final EVL run, regime dashboard RFC-001..006 — deselected are the opt-in `integration`-marked tests) |
+| `api/` | pytest | `uv run --project api pytest api/ -q` | **381 passed, 3 deselected** (final EVL run — deselected are the opt-in `integration`-marked tests) |
 | `api/` (network) | pytest | `uv run --project api pytest api/ -m integration` | opt-in, hits real providers (exchange, Farside) |
-| `web/` | vitest | `pnpm --filter web test` | **75 passed, 12 files, 0 failed files** (final EVL run, regime dashboard) — `vitest.config.ts` excludes `e2e/**`, so Playwright specs are never collected by vitest. `tsc --noEmit` and `next build` both clean at the same commit |
+| `web/` | vitest | `pnpm --filter web test` | **75 passed, 12 files, 0 failed files** (same EVL run) — `vitest.config.ts` excludes `e2e/**`, so Playwright specs are never collected by vitest |
 | `web/` (E2E) | Playwright | `cd web && pnpm test:e2e` | **12/12 passed, run twice (24-09-26, regime dashboard RFC-006)** — `e2e/screener.spec.ts` (6) + `e2e/regime.spec.ts` (6, new). The seeder writes every `/api/regime/components` input (FRED, DefiLlama, Farside + today's `.last_attempt` ok marker, LiqTide raw + daily rows) so the API never reaches a real provider. **Cloud-container note (persists — same fix needed every fresh container):** `@playwright/test` 1.63 wants chromium build 1243 but only `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` is present, so set `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` before running (no-op on a machine with a matching browser, e.g. the user's PC after `pnpm exec playwright install chromium`). This container's egress proxy also blocks FRED/DefiLlama/stablecoins.llama.fi (403) — the seeded-fixture E2E run above never needs them, but a real-cache walkthrough (AC-11 in the regime plan) cannot run here at all and must happen on the user's PC |
 
 Live-cache spot check (reads only, no runner): `uv run --project api python api/scripts/check_weekly_anchor.py`
@@ -42,6 +42,13 @@ cache and say nothing about the real Parquet files.
 
 `uv` must be invoked as `uv run --project api` — `pyproject.toml` and `.venv` live in `api/`,
 not at repo root, while module paths (`api.main:app`) resolve from the root.
+
+**Fresh-worktree frontend install note (found 25-09-26):** `pnpm install` from the repo root does
+NOT work in this repo — there is no root-level `package.json`/`pnpm-workspace.yaml` for it to
+resolve against. Run `pnpm install --frozen-lockfile` **inside `web/`** instead (i.e. `cd web &&
+pnpm install --frozen-lockfile`) before the first `pnpm --filter web test` / `pnpm test:e2e` in a
+fresh worktree. `pnpm --filter web ...` commands themselves resolve fine from the repo root once
+`web/node_modules` exists — only the initial install needs the `cd web` step.
 
 ---
 
