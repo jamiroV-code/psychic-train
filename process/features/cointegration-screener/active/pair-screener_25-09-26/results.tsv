@@ -1,0 +1,5 @@
+iteration	timestamp	gaps_found	fail_count	concern_count	applied	saturation_status	loop_status	notes
+0	2026-09-25T00:00:00Z	2	0	2	0	ACTIVE	baseline	Plan 25-09-26 outer-pvl validate-contract written; first-pass Gate: CONDITIONAL (CONCERN-1 deep-fetch no-op for 4 shallow-cached coins + open ccxt since=None feasibility probe; CONCERN-2 self-pair/case-sensitivity on /api/pairs/{a}/{b})
+1	2026-09-25T01:00:00Z	2	0	2	2	ACTIVE	CONTINUE	Cycle 1: CONCERN-1 fixed via explicit-since deep fetch (feasibility VIABLE, offline); CONCERN-2 self-pair 422 / uppercase / 404. Re-validate from V1.
+2	2026-09-25T02:00:00Z	0	0	0	0	SATURATED	HALTED_SUCCESS	Re-validate from V1 after cycle 1: Gate PASS, CONCERN-1/2 re-verified closed against live source, no regressions.
+evl-1	2026-09-25T04:00:00Z	0	0	0	0	SATURATED	HALTED_SUCCESS	EVL RFC-001: vc-tester re-ran gates, all green (data+scripts 181/2; full 440/3 incl. unrelated concurrent commits; 28 new pair tests). Cache state + backup diff verified. Known-gaps: cap-hit never observed live, 2020-08-19 history floor.
