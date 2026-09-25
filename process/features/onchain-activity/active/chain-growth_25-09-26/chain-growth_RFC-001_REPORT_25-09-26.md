@@ -160,3 +160,69 @@ All three stay `False` until you confirm the text.
 
 ### Dependency Changes
 - None (httpx already a dependency).
+
+---
+
+## RFC-1 Outcome (added 2026-09-25, after the user's real probe run)
+
+**TL;DR** — RFC-1 is **closed**. Dune is NOT-VIABLE, so the locked fallback (P2 / E4) applies.
+growthepie also covers Polygon, which shrinks the unavailable set to Solana, BNB and Tron.
+VERDICT: `chain-growth-feasibility_FEASIBILITY_25-09-26.md` (validator: 0 failures).
+
+**Status change:** this report's frontmatter `status: COMPLETE_WITH_GAPS` still stands. The gaps
+are now the known-gaps listed below, not the unrun probes.
+
+### Verdict per source
+
+| Source | Verdict | Key evidence (`chain-growth-probe-result_25-09-26.json`, commit `93ea023`) |
+|---|---|---|
+| Dune | **NOT-VIABLE** | Every execute HTTP 402 (datapoint limit); usage endpoint 405; 0 credits spent. User's MCP `SELECT 1` also failed; account read-only; user will not pay. |
+| growthepie | **VIABLE** | `growthepie_master` PASS at `https://api.growthepie.xyz`: ethereum, base, arbitrum, optimism, robinhood, polygon_pos; `daa` + `txcount` present. `growthepie_history_depth` UNKNOWN (`fundamentals_full.json` 403 — wrong endpoint). |
+| L2BEAT | **VIABLE** (cross-check only) | Keyless `https://l2beat.com/api/scaling/activity/{project}`; base/arbitrum/robinhood PASS (30 points default, `timestamp`/`count`/`uopsCount`); optimism FAIL (shape/slug). |
+
+### Terms outcomes and `redistributable` flags
+
+| Source | Terms (user-read 2026-09-25) | `redistributable` | Attribution |
+|---|---|---|---|
+| growthepie | CC BY 4.0 | `True` | "Source: growthepie, https://www.growthepie.com." (matches ADR-1 draft; E6 satisfied) |
+| L2BEAT | No data-reuse licence | `False` | — |
+| Dune | Personal/internal use only | `False` (unused) | — |
+
+User note: all current use is personal.
+
+### Fallback applied
+
+Locked fallback, verbatim scope: growthepie/L2BEAT chains only with `daa`/`tx_count`; Dune chains
+kept in `chains.json` with an explicit "source unavailable" state; `new_addresses` dropped for all
+chains. Improvement inside that fallback: Polygon is live via growthepie `polygon_pos`.
+
+| Chain | State | Primary | Cross-check |
+|---|---|---|---|
+| Ethereum | live | growthepie `ethereum` | — |
+| Base | live | growthepie `base` | L2BEAT `base` |
+| Arbitrum | live | growthepie `arbitrum` | L2BEAT `arbitrum` |
+| Optimism | live | growthepie `optimism` | L2BEAT unresolved |
+| Polygon | live | growthepie `polygon_pos` | — (not an L2BEAT scaling project) |
+| Robinhood Chain | live, limited history (launch 2026-07-01) | growthepie `robinhood` | L2BEAT `robinhood` |
+| Solana, BNB Chain, Tron | source unavailable | — | — |
+
+### Known gaps carried to RFC-2
+
+1. growthepie history depth per chain (measure on the per-metric endpoint).
+2. L2BEAT range parameter for more than 30 days.
+3. Optimism on L2BEAT (likely slug `op-mainnet`).
+4. `polygon_pos` launch date not printed by the probe.
+
+### Test gate outcomes (updated)
+
+| Gate | Result |
+|---|---|
+| chain-growth-dune-credit-budget-probe | Done — NOT-VIABLE (HTTP 402) |
+| chain-growth-growthepie-robinhood-slug-probe | Done — PASS, slug `robinhood` |
+| chain-growth-l2beat-coverage-probe | Done — PASS for base/arbitrum/robinhood, optimism unresolved |
+| chain-growth-source-terms-confirmed | Done — user-read, flags above |
+
+### Closeout
+
+- Classification: **RFC-1 closed.** Plan stays in `active/` (RFC-2..6 not built).
+- Next: RFC-2 Stage 0 — `chain-growth_RFC-002-stage0_REPORT_25-09-26.md`.
