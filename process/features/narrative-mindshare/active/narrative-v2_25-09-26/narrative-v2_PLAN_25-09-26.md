@@ -194,7 +194,11 @@ the `/history` and `/narrative` and nightly-snapshot/backfill paths ONLY. `mappi
 exists per narrative once >1 keyword drives the fetch. **Decision: keep archiving under the
 existing keyword key for the FIRST keyword in the list (backward-compatible with all already-archived
 v1 data — zero data loss, zero re-migration of existing Parquet files), and additionally archive a
-new *per-narrative-id* blended composite row** (`cache.write_narrative_series("pytrends-blended", narrative_id, ...)`,
+new *per-narrative-id* blended composite row** using the existing
+`cache.write_narrative_point(source, category_id, date, raw_value, source_status)` function called with
+`source="pytrends-blended"`, `category_id=narrative_id` (confirmed at VALIDATE: this function already
+accepts an arbitrary `source` string — `api/data/cache.py:317` — so no new cache.py write helper is
+needed; the plan text previously named a non-existent `write_narrative_series` function, corrected here),
 new cache_key namespace, does not collide with the existing keyword-keyed rows). `/history` reads
 BOTH: existing keyword-keyed single-term series (labelled per-keyword, shown as before) plus the
 new id-keyed blended series (labelled "blended, N keywords") when a narrative has 2+ keywords.
@@ -368,17 +372,24 @@ new constants (`MIN_SUFFICIENT_POINTS`, `MATURE_POINTS_THRESHOLD` — proposed d
 adjust), (b) the exact new `scoring.normalize_with_sufficiency` signature, (c) the exact new
 `sufficiency` field addition to `NarrativeHistoryPoint`/`SeriesData`, (d) confirmation that
 `normalize_within_source` and `trigger.py` remain byte-identical (grep diff against `git show
-HEAD:api/analytics/narrative/scoring.py` and `trigger.py` before and after). Get explicit
-confirmation before touching `build_composite`.
+HEAD:api/analytics/narrative/scoring.py` and `trigger.py` before and after), (e) confirmation of the
+`api/routers/narrative.py::_history_response()` construction-site update needed for the new
+`sufficiency` field (added at VALIDATE, see Touchpoints below). Get explicit confirmation before
+touching `build_composite`.
 
 **Touchpoints**: `api/analytics/narrative/scoring.py` (add function, do not modify existing),
 `api/analytics/narrative/history.py` (`normalize()`, `_prepare()`, `build_composite()`,
 `SeriesData`, `CategoryHistory`, `NarrativeCompositePoint`-feeding code), `api/models/narrative.py`
-(`NarrativeHistoryPoint.sufficiency` additive field), `web/lib/types/narrative.ts` (additive type),
-`web/components/narrative/CategoryHistoryPanel.tsx` (render insufficient-history marker instead of
-a plotted point).
+(`NarrativeHistoryPoint.sufficiency` additive field), `api/routers/narrative.py`
+(**added at VALIDATE** — `_history_response()` constructs `NarrativeHistoryPoint` explicitly
+field-by-field, not via `**kwargs`/`model_validate`; adding a required field to the pydantic model
+without updating this construction site raises a validation error at request time, it does not fail
+silently — confirmed by reading the current construction site), `web/lib/types/narrative.ts`
+(additive type), `web/components/narrative/CategoryHistoryPanel.tsx` (render insufficient-history
+marker instead of a plotted point).
 
-**Blast radius**: 6 files, 0 packages beyond `api/`+`web/` (already in scope), no schema/auth/API
+**Blast radius**: 7 files (was 6 in the original draft — VALIDATE added `api/routers/narrative.py`,
+see Touchpoints), 0 packages beyond `api/`+`web/` (already in scope), no schema/auth/API
 surface beyond an additive field on an existing response model (backward-compatible — existing
 consumers ignoring an unknown field keep working; `/screener` never calls `/history` at all, so
 AC-13 is unaffected by construction, not just by convention).
@@ -441,21 +452,29 @@ RFC-7's 15-narrative fixture).
 **Stage 0 (present and STOP)**: present the exact batching math (5-per-request, anchor reused,
 worst-case-15-narrative request count), the zero/near-zero-anchor guard behavior, the exact
 cache-key namespace for the new blended series (`pytrends-blended`, keyed by narrative id — must
-not collide with existing keyword-keyed rows), and re-confirmed current pytrends rate-limit
-guidance from `data-sources/all-data-sources.md` (research step, record findings in the phase
-report) before implementing.
+not collide with existing keyword-keyed rows), the exact `HistorySource` Literal extension and
+`_history_response()` construction-site change (added at VALIDATE, see Touchpoints below), and
+re-confirmed current pytrends rate-limit guidance from `data-sources/all-data-sources.md` (research
+step, record findings in the phase report) before implementing.
 
 **Touchpoints**: `api/data/pytrends_adapter.py` (new batched-fetch function, additive — existing
 single-keyword function untouched so any other caller is unaffected), `api/scripts/snapshot_narrative.py`
 (nightly job switches to batched multi-keyword fetch), `api/scripts/backfill_pytrends_history.py`
 (same), `api/analytics/narrative/history.py` (reads the new blended series alongside existing
-keyword-keyed series), `api/data/cache.py` (only if a new write helper is needed for the
-`pytrends-blended` namespace — reuse `write_narrative_series` if its signature already supports an
-arbitrary source string, confirm in Stage 0).
+keyword-keyed series), `api/data/cache.py` (no new helper needed — confirmed at VALIDATE that
+`write_narrative_point(source, category_id, date, raw_value, source_status)` already accepts an
+arbitrary `source` string; RFC-3 calls it with `source="pytrends-blended"`), `api/models/narrative.py`
+(**added at VALIDATE** — extend the `HistorySource` Literal to include `"pytrends-blended"`; additive,
+but required: `NarrativeHistorySeries.source` is a closed Literal type and no existing value covers the
+new blended series — confirmed by reading the current Literal, which has no such member), `api/routers/narrative.py`
+(**added at VALIDATE** — `_history_response()` must be able to construct a `NarrativeHistorySeries`/
+`NarrativeHistoryPoint` for the new blended series; mechanical, same shape as every other series it
+already builds).
 
-**Blast radius**: 5 files, no schema/API/auth surface change (internal batching only; `/history`'s
-existing response shape absorbs the new series as an additional `NarrativeHistorySeries` entry, not
-a breaking change).
+**Blast radius**: 7 files (was 5 in the original draft — VALIDATE added `api/models/narrative.py` and
+`api/routers/narrative.py`, see Touchpoints), no schema/auth surface change (internal batching plus one
+additive Literal value; `/history`'s existing response shape absorbs the new series as an additional
+`NarrativeHistorySeries` entry, not a breaking change).
 
 **AC mapping**: AC-8 (multi-narrative correctness), directly enables AC-9/AC-10/AC-11 (RFC-4/5
 depend on this data existing).
@@ -680,7 +699,223 @@ committed, the script itself is not part of any recurring job.
 
 ## Validate Contract
 
-(placeholder — vc-validate-agent writes this section before EXECUTE)
+Status: PASS
+Date: 25-09-26
+date: 2026-09-25
+generated-by: outer-pvl
+
+Parallel strategy: workflow (EXECUTE), sequential-with-one-parallel-pair internally
+Rationale: 7-signal re-score at VALIDATE = 4/7 (S2 API/auth surface touched: 2 new endpoints +
+1 additive model field; S6 high-risk class present: "public API or external contract changes";
+S7 5+ files in blast radius: ~30 files across api/+web/; S3 3+ independently-buildable RFC
+directions once RFC-3 lands) → HIGH tier, which points to Workflow or Agent-team rather than the
+plan's own self-scored 2/7 MEDIUM (plan counted only S3+S7, missed S2 and S6 — corrected here,
+not silently overridden). Strategy-by-fit still favors the plan's own staged shape over a bare
+Agent-team: RFC-1→2→3 are hard sequential preconditions (sufficiency gating must exist before the
+config file changes what feeds it; the config file must exist before multi-keyword batching can
+read >4 narratives) — exactly what a deterministic Workflow `phase()`/`agent()` pipeline is suited
+for, not parallel/team coordination. RFC-4 and RFC-5 are the one genuinely independent pair
+(disjoint files, momentum.py/MomentumView.tsx vs mindshare.py/MindshareView.tsx, neither's output
+feeds the other) — correct as a `parallel()` step inside that same workflow, not a full Agent-team
+(no mid-run coordination is needed between them). RFC-6/RFC-7 close the pipeline sequentially.
+Recommendation: run EXECUTE as a Workflow with phases [RFC-1] → [RFC-2] → [RFC-3] →
+parallel([RFC-4], [RFC-5]) → [RFC-6] → [RFC-7], all `agent()` calls on **opus** (the execution
+leg, per Model Selection Policy — EXECUTE = opus, every other phase = sonnet). If the orchestrator
+prefers not to stand up a Workflow script for a single-plan (non-phase-program) unit of work, the
+acceptable fallback is exactly the plan's own shape: one sequential vc-execute-agent (opus) for
+RFC-1→2→3, two parallel vc-execute-agent subagents (opus) for RFC-4∥RFC-5, then sequential opus
+spawns for RFC-6 and RFC-7.
+Estimated agent count: ≈5–7 vc-execute-agent invocations total (1 for RFC-1→2→3 run as one
+continuous section-by-section pass, 2 parallel for RFC-4/RFC-5, 1–2 for RFC-6/RFC-7) — well under
+the 30-agent cost guard; no cost guard triggered.
+
+Test gates (C3 5-column table — one row per developed behavior / SPEC acceptance criterion):
+
+| criterion id | behavior | strategy | proving test | gap-resolution |
+|---|---|---|---|---|
+| AC-1 | 0/1-point source series returns explicit insufficient-data, never a numeric value or plotted line | Fully-Automated | `test_normalize_with_sufficiency_zero_points`, `test_normalize_with_sufficiency_one_point` (api/tests/analytics/narrative/test_scoring.py); `CategoryHistoryPanel.test.tsx::renders insufficient-history marker not a line` | B |
+| AC-2 | Composite never produces a same-value tie across categories caused only by insufficient data (reproduces the real 25-09-26 data shape) | Fully-Automated | `test_build_composite_never_uses_insufficient_slot`, `test_composite_no_fake_tie_across_categories` (api/tests/analytics/narrative/test_history.py) | B |
+| AC-3 | Provisional/thin data visibly distinguished from a mature reading | Fully-Automated | `CategoryHistoryPanel.test.tsx::renders provisional marker below mature threshold` | B |
+| AC-4 | Narrative add/rename/remove via config file, reflected without restart (mtime-cache re-read) | Fully-Automated | `test_load_narratives_add_rename_remove_reflected_on_reread`; `e2e/narrative.spec.ts::config file edit reflected without restart` | B |
+| AC-5 | Config-file coins tagged with their narrative wherever coin-level context is shown | Fully-Automated | `test_narrative_coins_tagged_in_history_response` | B |
+| AC-6 | Malformed config entry (empty/duplicate/invalid) produces explicit error, never crashes, never drops silently; malformed top-level file falls back to last-known-good | Fully-Automated | `test_malformed_entry_empty_name_skipped_with_warning`, `test_malformed_entry_duplicate_id_skipped_with_warning`, `test_malformed_top_level_falls_back_to_last_known_good` | B |
+| AC-7 | Rename/remove has stated, non-surprising behavior for already-archived history (id-keyed, label is cosmetic) | Fully-Automated | `test_rename_preserves_archived_history_by_id`, `test_remove_retains_archive_under_old_id` | B |
+| AC-8 | 6–15 simultaneous narratives correct across every cross-narrative view (comparison/ranking/share/momentum), no truncation past 4 | Fully-Automated | `test_batch_5_terms_per_request`, `test_anchor_chaining_rescales_second_batch`, `test_l2s_multi_keyword_blend_not_keywords0_only`, `test_mindshare_correct_at_15_narratives` | B |
+| AC-9 | Momentum view: rising/falling + accelerating/decelerating over a stated window, populated where backfilled history exists | Fully-Automated | `test_momentum_golden_rising_then_flattening`, `test_momentum_golden_falling_then_reversing`, `test_momentum_basis_falls_back_to_composite_when_pytrends_insufficient`; `MomentumView.test.tsx::renders populated view for pytrends-backfilled narrative` | B |
+| AC-10 | Narrative with insufficient history shows explicit "not enough history for momentum yet", never a fabricated trend | Fully-Automated | `test_momentum_insufficient_history_explicit_state` | B |
+| AC-11 | Daily mindshare view: per-source shares + blended headline, correct at mixed availability, labelled proxy, only-one-source/no-sources-available states | Fully-Automated | `test_mindshare_golden_shares_sum_to_one`, `test_mindshare_only_one_source_labelled`, `test_mindshare_no_sources_available_labelled`; `MindshareView.test.tsx::renders proxy-labelled caveat on this view` | B |
+| AC-12 | Data-quality caveat appears exactly once on the page regardless of narrative count | Fully-Automated | `NarrativeDashboard.test.tsx::exactly one caveat instance regardless of narrative count (6 and 15 fixture)` | B |
+| AC-13 | `GET /api/narrative/categories`, `/screener` strip, confidence badge remain byte-/behavior-identical | Fully-Automated | `test_trigger_tripwire_signatures_unchanged` (new); `api/tests/routers/test_narrative_categories_contract.py` (v1's existing test, re-run unmodified) | B |
+| AC-14 | Real-machine walkthrough confirms fixed dashboard against live data (multiple lines, no fake ties, config-edit reflected, momentum populated, mindshare populated) | Agent-Probe | Section 14 "AC-14 Walkthrough Checklist" (this plan) — run on the user's own machine; this sandbox's egress proxy blocks Google Trends/Reddit/CoinGecko/Hyperliquid, same constraint as v1's AC-12 | B |
+
+gap-resolution legend:
+- A — proven now (gate passes in this cycle)
+- B — fixed in this plan (gate added by this plan's checklist)
+- C — deferred to a named later phase/plan
+- D — backlog test-building stub (named residual; keep-active; continue)
+
+C-4 reconciliation: every row above uses a proving strategy (Fully-Automated or Agent-Probe); no
+row is silently resting on Known-Gap — the net-gate vacuous-green ban is satisfied. AC-14 remains
+Agent-Probe, not a Known-Gap demotion: a real, written walkthrough checklist exists in this plan
+(Section 14), it simply cannot execute inside this sandbox.
+
+Failing stubs (one representative stub per Fully-Automated AC row above; see plan Section 1.5's
+per-RFC Verification Evidence tables for the complete scenario list — every row there gets an
+equivalent stub during EXECUTE's Mode-A TDD red-first step):
+
+```
+Failing stub (AC-1):
+test("should return an all-None series and status='insufficient' for fewer than min_points", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub for: normalize_with_sufficiency zero/one point")
+})
+
+Failing stub (AC-2):
+test("should never let an insufficient-history slot produce a fake tied composite value", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub for: build_composite never uses insufficient slot")
+})
+
+Failing stub (AC-3):
+test("should render a distinct provisional marker below the mature-points threshold", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub for: CategoryHistoryPanel provisional marker")
+})
+
+Failing stub (AC-4):
+test("should reflect an add/rename/remove narratives.json edit on next read, no restart", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub for: load_narratives add/rename/remove reread")
+})
+
+Failing stub (AC-5):
+test("should tag a config-file coin with its narrative in the history response", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub for: narrative coins tagged in history response")
+})
+
+Failing stub (AC-6):
+test("should skip a malformed entry with a warning and never crash", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub for: malformed entry skipped with warning")
+})
+
+Failing stub (AC-7):
+test("should retain archived history under the old id after a rename or remove", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub for: rename/remove preserves archived history by id")
+})
+
+Failing stub (AC-8):
+test("should batch 5 pytrends terms per request and rescale via anchor chaining", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub for: batch_5_terms_per_request anchor chaining")
+})
+
+Failing stub (AC-9):
+test("should compute rising-then-flattening momentum/acceleration against a hand-computed fixture", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub for: momentum golden rising-then-flattening")
+})
+
+Failing stub (AC-10):
+test("should return an explicit insufficient-history momentum state, never a fabricated trend", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub for: momentum insufficient history explicit state")
+})
+
+Failing stub (AC-11):
+test("should sum per-source mindshare shares to one on a fixture day with mixed availability", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub for: mindshare golden shares sum to one")
+})
+
+Failing stub (AC-12):
+test("should render exactly one data-quality caveat regardless of narrative count", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub for: NarrativeDashboard single caveat instance")
+})
+
+Failing stub (AC-13):
+test("should keep trigger.py's public symbol names and signatures byte-identical", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub for: trigger.py tripwire signatures unchanged")
+})
+```
+
+Legacy line form (retained so existing validate-contract consumers still parse):
+- RFC-1 (sufficiency gating): Fully-automated: `uv run --project api pytest api/tests/analytics/narrative/test_scoring.py api/tests/analytics/narrative/test_history.py -q`; `pnpm --filter web test -- CategoryHistoryPanel`
+- RFC-2 (config file + loader): Fully-automated: `uv run --project api pytest api/tests/analytics/narrative/test_narrative_config.py -q`
+- RFC-3 (multi-keyword + batching): Fully-automated: `uv run --project api pytest api/tests/data/test_pytrends_adapter.py api/tests/scripts/test_snapshot_narrative.py api/tests/scripts/test_backfill_pytrends_history.py -q` | agent-probe: 15-narrative worst-case request-count check against re-confirmed pytrends rate guidance (RFC-3 Stage 0)
+- RFC-4 (momentum view): Fully-automated: `uv run --project api pytest api/tests/analytics/narrative/test_momentum.py api/tests/routers/test_narrative_momentum.py -q`; `pnpm --filter web test -- MomentumView`
+- RFC-5 (mindshare view): Fully-automated: `uv run --project api pytest api/tests/analytics/narrative/test_mindshare.py api/tests/routers/test_narrative_mindshare.py -q`; `pnpm --filter web test -- MindshareView`
+- RFC-6 (caveat dedup): Fully-automated: `pnpm --filter web test -- NarrativeDashboard DataQualityCaveat`
+- RFC-7 (tripwire/AC-13/E2E/AC-14): Fully-automated: `uv run --project api pytest api/ -q`; `pnpm --filter web test`; `pnpm --filter web exec tsc --noEmit`; `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome cd web && pnpm test:e2e` (run twice) | agent-probe: AC-14 real-machine walkthrough (Section 14)
+- Full-suite regression baseline confirmed at VALIDATE (25-09-26, this run): `uv run --project api pytest api/ -q` → **395 passed, 3 deselected** (matches all-tests.md's post-merge figure). Vitest baseline (confirmed by the prior VALIDATE attempt before the rate-limit cutoff, not re-run here for leanness): **110 passed, 16 files, 0 failed**.
+
+Dimension findings:
+- Infra fit: PASS — no container/infra/worker surface touched; extends existing `api/analytics/narrative/`, `api/data/`, `api/scripts/` patterns exactly as v1 did; no new scheduled workflow (RFC-3 edits the existing `narrative-snapshot.yml`'s own script, does not add a new workflow file).
+- Test coverage: PASS — all 14 SPEC acceptance criteria have a named Fully-Automated or Agent-Probe proving test (see C3 table above); no criterion rests on Known-Gap alone (net-gate vacuous-green ban satisfied). `vc-test-coverage-plan`'s waterfall was already applied by the plan author per-RFC; VALIDATE confirms the tier assignments are correct and complete, and confirms the pytest baseline (395 passed/3 deselected) matches `all-tests.md`'s documented post-merge figure.
+- Breaking changes: CONCERN → fixed in plan. Two mechanical touchpoint gaps found and corrected directly in the plan text during this VALIDATE pass (see `## Post-EXECUTE Amendments`... no — see the inline "added at VALIDATE" markers in RFC-1 and RFC-3's Touchpoints/Stage-0 sections above): (1) RFC-2/RFC-3's ADR-2 text named a non-existent `cache.write_narrative_series` function — the real function is `cache.write_narrative_point(source, category_id, date, raw_value, source_status)`, confirmed at `api/data/cache.py:317`, which already accepts an arbitrary `source` string, so no new cache.py helper is needed; corrected in-plan. (2) RFC-1's new `NarrativeHistoryPoint.sufficiency` field and RFC-3's new `"pytrends-blended"` series both need a construction-site update in `api/routers/narrative.py::_history_response()` (which builds these pydantic models explicitly field-by-field) and, for RFC-3, an additive extension of the closed `HistorySource` Literal in `api/models/narrative.py` — neither file was in the original RFC-1/RFC-3 Touchpoints lists; both added in-plan during this VALIDATE pass. `GET /api/narrative/categories` byte-compatibility (AC-13) is unaffected by either fix — confirmed by direct read of the current `trigger.py`/`mapping.py` (both already carry the 25-09-25 keyword-keying fix, `commit bc64b63`; no stale "bug is open" text remains anywhere in this plan or its SPEC — confirmed by grep).
+- Security surface: PASS — no new auth/secrets/trust-boundary surface. `narratives.json` is a repo-local, server-side-only config file (same trust level as v1's `narrative_category_map.json`); no user-uploaded input, no new redistribution obligation (RFC-3/4/5 consume existing already-flagged adapter outputs). STRIDE quick scan: no new spoofing/tampering/repudiation/info-disclosure/DoS/elevation-of-privilege surface identified.
+- Public API contract [RFC-1/3/4/5]: CONCERN → fixed in plan (see Breaking changes above). Public API surface change (`GET /api/narrative/history` gains one additive field + additional series entries; two new endpoints `/momentum`, `/mindshare`) is one of the six high-risk classes per `orchestration.md` — minimum-hybrid-test-gate requirement is satisfied by the RFC-7 seeded E2E (through the real cache boundary, same pattern that caught v1's real `/history` 500 bug) plus the AC-13 contract-snapshot regression. See Execute-agent instructions for the risk-evidence-pack note.
+- RFC-1 (data-sufficiency gating): PASS — mechanically feasible; `scoring.normalize_within_source` and `trigger.py` confirmed untouched by this plan's design (`compute_narrative_categories` calls `normalize_within_source` directly, unaffected by the new `normalize_with_sufficiency` addition); highest-risk edit is `build_composite`'s per-slot minimum-point check, mitigated by writing the real-data-shape regression test (`test_build_composite_never_uses_insufficient_slot`) before wiring the change into the live read path.
+- RFC-2 (config file + loader + migration): PASS — mechanically feasible; both source files it migrates from (`api/data/narrative_categories.json`, `api/data/narrative_category_map.json`) confirmed present on disk; `mapping.py`'s frozen functions/constants confirmed untouched by this plan's design (only a new sibling loader module is added). Highest-risk edit is the malformed-top-level-file fallback; mitigated by writing that test first, reusing `mapping.py`'s already-proven mtime-cache fallback shape rather than a new mechanism.
+- RFC-3 (multi-keyword blending + anchor-chained batching): PASS with one Execute-agent instruction. Mechanical feasibility of the batching approach confirmed: `pytrends.request.TrendReq.build_payload(self, kw_list, cat=0, timeframe='today 5-y', geo='', gprop='')` accepts a list (`kw_list`) — confirmed via local signature inspection, no network call — so anchor-keyword-chaining across multiple keywords is technically viable at the library level. What is NOT verifiable in this sandbox: Google Trends' real server-side 5-term cap and rate-limit behavior (egress blocked). This is correctly scoped by the plan itself as an Agent-Probe tier gate plus a Stage-0 research re-confirmation step, not a Fully-Automated gate — no `VC-FEASIBILITY-PROBE-NEEDED` halt is warranted here (the plan already treats this as unverifiable-in-CI and routes it to Agent-Probe/AC-14, the correct tier per the Test Tier Waterfall).
+- RFC-4 (momentum view): PASS — all new/additive files, no existing endpoint modified; correctly sequenced after RFC-3 (needs the blended series and RFC-1's sufficiency status for `momentum_basis` fallback).
+- RFC-5 (mindshare view): PASS — formula and labelling rules (`only_one_source`/`no_sources_available`) are unambiguous and directly testable; correctly parallel to RFC-4 (disjoint files: `mindshare.py`/`MindshareView.tsx` vs `momentum.py`/`MomentumView.tsx`).
+- RFC-6 (caveat de-duplication): PASS — pure JSX call-site move, single low-risk test.
+- RFC-7 (tripwire + AC-13 + seeded E2E + AC-14): PASS — tripwire will snapshot the CURRENT (post-keyword-keying-fix) `trigger.py` surface, since RFC-7 runs during EXECUTE, after this plan is already validated against the current file state; test commands match `all-tests.md`'s documented runners/paths exactly, including the `PLAYWRIGHT_CHROMIUM_PATH` env var this sandbox needs.
+
+Execute-agent instructions:
+- E1: At RFC-1 Stage 0, `MATURE_POINTS_THRESHOLD`'s proposed default of 5 is a judgement call flagged by this VALIDATE pass for explicit user confirmation — do not silently proceed with the proposed default; present it and get an explicit answer (matches the plan's own Stage-0 gate requirement, reinforced here, not overridden).
+- E2: At RFC-3 Stage 0, re-confirm current pytrends rate-limit/term-cap guidance against `data-sources/all-data-sources.md` before implementing the batching logic; record the finding in the RFC-3 phase report. Do not assume the "5 terms per request" figure used in ADR-3's math is still accurate without this check.
+- E3: Before UPDATE PROCESS closeout, produce at minimum a `risk-gate.json` (per `vc-risk-evidence-pack`) documenting the public-API-contract risk class for `GET /api/narrative/history`'s additive change and the two new endpoints (`/momentum`, `/mindshare`). The RFC-7 seeded E2E + AC-13 regression already satisfy the minimum hybrid-test-gate requirement for this high-risk class — this instruction is about the evidence-pack paperwork (risk-gate + context-snippets + verification records), not additional testing.
+- E4: Confirm at RFC-1/RFC-3 Stage 0 (added at VALIDATE, see Touchpoints) that `api/routers/narrative.py::_history_response()` is updated to pass the new `sufficiency` field and to construct the new `"pytrends-blended"` series entry — both are mechanical, field-by-field pydantic construction updates, not design decisions, but were missing from the original touchpoint lists and must not be rediscovered mid-EXECUTE as a surprise.
+- E5: Re-run the full regression suite at EVL exactly as Section "Verification Evidence" specifies (`uv run --project api pytest api/ -q` expect ≥395 passed/3 deselected plus new RFC test counts; `pnpm --filter web test` expect ≥110 passed plus new component counts; `tsc --noEmit` exit 0; Playwright run twice with `PLAYWRIGHT_CHROMIUM_PATH` set).
+
+Open gaps:
+- MATURE_POINTS_THRESHOLD=5 is a proposed default, not a decided value — requires explicit user confirmation at RFC-1 Stage 0 (see Execute-agent instruction E1). Flagged, not resolved, per this VALIDATE pass's explicit instruction not to decide it.
+- pytrends' real-world rate-limit/5-term-cap behavior cannot be confirmed in this sandbox (egress blocked to Google Trends). RFC-3 Stage-0 must re-confirm current guidance before implementing (Execute-agent instruction E2); the 15-narrative worst-case request-count check is correctly an Agent-Probe tier gate, not Fully-Automated.
+- AC-14's real-machine walkthrough (plan Section 14) cannot run in this sandbox — same structural constraint as v1's AC-12. Required before the plan can reach `✅ VERIFIED` status per its own Phase Completion Rules; a user-PC step, not a blocker for EXECUTE to begin.
+
+What this coverage does NOT prove:
+- AC-1/AC-2/AC-3's fully-automated tests prove correct behavior on fixture/hand-built series; they do not prove the real archived pytrends/reddit/coingecko cache reaches "mature" status today — that depends on real data accumulating over time and is only observable on the user's own machine / future nightly runs.
+- RFC-2's malformed-file tests prove validate-and-skip logic on the specific synthetic bad-JSON cases enumerated; they do not prove every conceivable real-world config-file typo is caught.
+- RFC-3's batching/anchor-chaining tests prove the math is correct given known/simulated pytrends responses; they do NOT prove Google Trends' real server-side rate limits or term caps in production — explicitly deferred to the Stage-0 research reconfirmation (E2) and the AC-14 real-machine walkthrough.
+- RFC-4/RFC-5's golden-value tests prove momentum/mindshare arithmetic on hand-built fixtures; they do not prove the views look correct/usable in a live browser beyond the seeded Playwright scenarios in RFC-7.
+- The seeded E2E suite (RFC-7) proves the seeded-fixture-through-real-cache-boundary path (the same pattern that caught a real bug in v1); it does NOT prove the AC-14 live-provider walkthrough — this sandbox's egress proxy blocks Google Trends/Reddit/CoinGecko/Hyperliquid, so that remains a manual, unchanged-from-v1 user-machine step.
+- The tripwire test (RFC-7) proves `trigger.py`'s public symbol names/signatures are unchanged; it does not independently re-prove `trigger.py`'s *behavior* beyond what the existing AC-13 contract-snapshot test already covers.
+
+Gate: PASS (no FAILs; two mechanical CONCERNs found during Layer 2 review — non-existent `cache.write_narrative_series` reference and two missing router/model touchpoints — were fixed directly in the plan text during this VALIDATE pass, not deferred; remaining open items are inherent, already-correctly-scoped unknowns — a flagged-not-decided constant and two sandbox-egress-blocked live-provider checks — not gaps in the plan itself)
+
+## Autonomous Goal Block
+
+SESSION GOAL: Ship narrative-v2 (real-data sufficiency gating, file-editable 6-15 narratives,
+momentum view, daily mindshare view) on top of the v1 /narrative dashboard, without touching
+/api/narrative/categories, /screener, or the confidence badge.
+Charter + umbrella plan: N/A — single COMPLEX plan, not a phase program (see plan's own Strategy
+Recommendation section for why: RFC-1→2→3 sequential, RFC-4∥RFC-5 parallel, RFC-6→7 sequential,
+one shared blast radius, one shared validate-contract, same shape v1 used successfully).
+Autonomy: standard /goal autonomous execution rules apply (`orchestration.md` §Autonomous /goal
+Phase Program Execution) — CONDITIONAL findings apply-and-proceed; BLOCKED items go to backlog and
+execution continues with remaining sections; irreversible/outward-facing actions without explicit
+contract instruction are a hard stop.
+Hard stop conditions / safety constraints:
+- Never modify `api/analytics/narrative/trigger.py`, `mapping.py`'s frozen `LEGACY_COIN_CATEGORY_MAP`/
+  `map_coin_to_category` functions, or `api/routers/narrative.py::get_categories` — any diff to
+  these is a hard stop; re-run the tripwire test and RFC-7's contract-snapshot regression
+  immediately if one is detected.
+- `GET /api/narrative/categories` must stay byte-for-byte and behavior-identical (AC-13) — a
+  failing `test_narrative_categories_contract.py` run is a hard stop, not a CONCERN to route past.
+- No paid data vendor, no in-app narrative editor UI, no Reddit-credential wiring — all explicitly
+  out of scope; adding any of these mid-EXECUTE is a hard stop requiring a return to PLAN.
+- MATURE_POINTS_THRESHOLD's default (5) requires explicit user confirmation at RFC-1 Stage 0 before
+  implementation — do not silently proceed with the proposed value (Execute-agent instruction E1).
+- Any live pytrends/Reddit/CoinGecko/Hyperliquid call in this sandbox will fail (egress blocked) —
+  do not treat a live-provider failure here as a real defect; it is the expected sandbox constraint,
+  not a signal to change the adapter code.
+Next phase: EXECUTE — `process/features/narrative-mindshare/active/narrative-v2_25-09-26/narrative-v2_PLAN_25-09-26.md`,
+starting at RFC-1 Stage 0 (present-and-STOP: constants, `normalize_with_sufficiency` signature,
+`sufficiency` field shape, `trigger.py`/`mapping.py` byte-identity grep-diff, and the RFC-1
+`_history_response()` construction-site update — then get explicit confirmation before touching
+`build_composite`).
+Validate contract: inline in plan (this section).
+Execute start: `uv run --project api pytest api/tests/analytics/narrative/test_scoring.py
+api/tests/analytics/narrative/test_history.py -q` (RFC-1 fully-automated gate, run red-first per the
+Failing stubs above) | seeded E2E spec: `web/e2e/narrative.spec.ts` (RFC-7, run after RFC-1–6 land) |
+agent-probe scenario: RFC-3's 15-narrative worst-case request-count check + Section 14's AC-14
+real-machine walkthrough (both user-PC/Stage-0-research steps, not CI-runnable) | high-risk pack:
+yes — risk-gate.json required before UPDATE PROCESS closeout per Execute-agent instruction E3
+(public API contract change class).
+
 
 ## Resume and Execution Handoff
 
