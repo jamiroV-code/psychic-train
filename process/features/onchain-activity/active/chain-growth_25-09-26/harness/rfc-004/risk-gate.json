@@ -1,0 +1,14 @@
+{
+  "riskClass": "public API or external contract changes",
+  "workDescription": "Two new read-only GET endpoints (/api/onchain/growth?metric=&start=, /api/onchain/chains) serving the archived growthepie series, floor/ramp markers, normalised comparison and a display-only L2BEAT divergence summary. One additive router mount in api/main.py; chains.json polygon launch_date set (D4). No existing route changed.",
+  "approver": "pending user review (manual-first)",
+  "mustStopBeforeFinalize": true,
+  "task": "RFC-4: chain-growth floor/ramp analytics + GET /api/onchain/growth, /chains",
+  "planPath": "process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md",
+  "riskLevel": "high",
+  "riskClasses": [
+    "public-api"
+  ],
+  "humanApprovalRequired": true,
+  "why": "New public API contract that RFC-5 builds on; carries redistribution flags and attribution."
+}

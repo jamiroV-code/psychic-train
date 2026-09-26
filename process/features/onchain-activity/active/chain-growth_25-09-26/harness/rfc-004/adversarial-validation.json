@@ -1,0 +1,29 @@
+{
+  "scenarios": [
+    {
+      "scenario": "Query-param injection into file paths (metric used in cache path)",
+      "ruled_out": true,
+      "rationale": "metric is a Literal validated by FastAPI before use; chain ids come from the validated chains.json (_ID_RE), never from the request."
+    },
+    {
+      "scenario": "Endpoint triggers outbound provider calls (cost/rate-limit abuse, SSRF)",
+      "ruled_out": true,
+      "rationale": "response.py imports adapters only for constants; router test blocks httpx.HTTPTransport and passes."
+    },
+    {
+      "scenario": "Endpoint writes/mutates the archive",
+      "ruled_out": true,
+      "rationale": "Only read_onchain_series is called; test compares cache tree mtimes before/after."
+    },
+    {
+      "scenario": "Redistributing non-redistributable L2BEAT data",
+      "ruled_out": true,
+      "rationale": "No L2BEAT values in response; summary flagged display_only/redistributable=false."
+    },
+    {
+      "scenario": "Secrets leaked via /chains",
+      "ruled_out": true,
+      "rationale": "Config loader rejects secret-looking fields; /chains exposes only id/label/enabled/launch_date/limited_history/metric sources."
+    }
+  ]
+}
