@@ -1,0 +1,12 @@
+{
+  "reviewer": "pending \u2014 user (manual-first)",
+  "decision": "PENDING",
+  "rationale": "Not yet reviewed. RFC-3 is not finalize-ready until the user reviews the workflow and the first run's output, then records APPROVE or REJECT here.",
+  "timestamp": null,
+  "task": "RFC-3: chain-growth nightly archive (storage + workflow)",
+  "blockingFindings": [],
+  "nonBlockingFindings": [
+    "L2BEAT REDISTRIBUTABLE=False: archived for personal use; the display layer (RFC-4+) must honour the flag."
+  ],
+  "notes": "Decision deliberately PENDING; the validator's decision check fails until the user records it."
+}

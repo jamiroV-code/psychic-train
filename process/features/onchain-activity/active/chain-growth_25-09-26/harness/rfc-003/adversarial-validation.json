@@ -1,0 +1,39 @@
+{
+  "scenarios": [
+    {
+      "scenario": "Fork PR or other external event triggers a write-capable run",
+      "ruled_out": true,
+      "rationale": "Only schedule and workflow_dispatch triggers; no pull_request/pull_request_target (grep count 0). workflow_dispatch needs repo write access."
+    },
+    {
+      "scenario": "Push collision with narrative (23:00) / liqtide (23:30) jobs on main",
+      "ruled_out": true,
+      "rationale": "22:00 UTC start (60/90 min offset, ~2-3 min runtime), own concurrency group, 3-attempt pull --rebase + push retry; files are disjoint so rebases don't conflict."
+    },
+    {
+      "scenario": "Job commits files outside the archive",
+      "ruled_out": true,
+      "rationale": "git add api/data/cache/onchain/ only; commit skipped when the staged diff is empty."
+    },
+    {
+      "scenario": "Malicious or garbage provider data lands on main",
+      "ruled_out": true,
+      "rationale": "Adapters drop null/NaN/negative values; stored as Parquet numbers only (no executable content); future dates dropped; history older than 14 days is frozen (drift counted, not written); worst case is wrong numbers inside the window, visible via revised/previous_value and revertible via git."
+    },
+    {
+      "scenario": "Supply-chain compromise via third-party actions or deps",
+      "ruled_out": true,
+      "rationale": "Only actions/checkout@v4 and astral-sh/setup-uv@v3, same as existing snapshot workflows; uv sync uses the committed uv.lock; no new dependencies."
+    },
+    {
+      "scenario": "Unbounded repo growth",
+      "ruled_out": true,
+      "rationale": "At most 16 small Parquet files (12 growthepie + 4 L2BEAT); rewritten only when a row is inserted or revised."
+    },
+    {
+      "scenario": "Rate-limit ban of the runner IP",
+      "ruled_out": true,
+      "rationale": "16 requests/night, 6 s spacing (~10 req/min); failures isolate per series and exit 2 just warns."
+    }
+  ]
+}
