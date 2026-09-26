@@ -1,0 +1,5996 @@
+{
+ "N90_R15_M7_S90": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2020-09-16",
+     "ramp": "2020-10-22",
+     "lag_days": 36
+    },
+    {
+     "floor": "2021-10-04",
+     "ramp": "2021-11-04",
+     "lag_days": 31
+    },
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-07-23",
+     "lag_days": 23
+    },
+    {
+     "floor": "2022-11-23",
+     "ramp": "2022-12-15",
+     "lag_days": 22
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-01-03",
+     "lag_days": 158
+    },
+    {
+     "floor": "2024-09-26",
+     "ramp": "2024-11-24",
+     "lag_days": 59
+    },
+    {
+     "floor": "2025-11-24",
+     "ramp": "2026-01-04",
+     "lag_days": 41
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-06-29",
+     "ramp": "2022-08-01",
+     "lag_days": 33
+    },
+    {
+     "floor": "2023-01-03",
+     "ramp": "2023-12-27",
+     "lag_days": 358
+    },
+    {
+     "floor": "2026-06-08",
+     "ramp": "2026-07-19",
+     "lag_days": 41
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-01-11",
+     "ramp": "2021-01-26",
+     "lag_days": 15
+    },
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-03",
+     "lag_days": 65
+    },
+    {
+     "floor": "2023-02-23",
+     "ramp": "2023-03-25",
+     "lag_days": 30
+    },
+    {
+     "floor": "2023-10-10",
+     "ramp": "2023-12-25",
+     "lag_days": 76
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-01-29",
+     "lag_days": 28
+    },
+    {
+     "floor": "2025-09-15",
+     "ramp": "2025-11-09",
+     "lag_days": 55
+    },
+    {
+     "floor": "2026-02-09",
+     "ramp": "2026-03-19",
+     "lag_days": 38
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-03-14",
+     "ramp": "2022-05-01",
+     "lag_days": 48
+    },
+    {
+     "floor": "2022-10-25",
+     "ramp": "2022-12-12",
+     "lag_days": 48
+    },
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-21",
+     "lag_days": 58
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2024-11-19",
+     "lag_days": 44
+    },
+    {
+     "floor": "2025-05-05",
+     "ramp": "2025-06-28",
+     "lag_days": 54
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-01-11",
+     "lag_days": 13
+    },
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-11-22",
+     "lag_days": 27
+    },
+    {
+     "floor": "2024-09-08",
+     "ramp": "2024-10-25",
+     "lag_days": 47
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-04",
+     "lag_days": 17
+    },
+    {
+     "floor": "2026-03-29",
+     "ramp": "2026-04-13",
+     "lag_days": 15
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-01-11",
+     "lag_days": 13
+    },
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-10-07",
+     "lag_days": 20
+    },
+    {
+     "floor": "2024-09-17",
+     "ramp": "2024-11-01",
+     "lag_days": 45
+    },
+    {
+     "floor": "2025-02-23",
+     "ramp": "2025-03-09",
+     "lag_days": 14
+    },
+    {
+     "floor": "2026-01-24",
+     "ramp": "2026-02-06",
+     "lag_days": 13
+    },
+    {
+     "floor": "2026-08-18",
+     "ramp": "2026-09-22",
+     "lag_days": 35
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2023-11-02",
+     "ramp": "2023-11-13",
+     "lag_days": 11
+    },
+    {
+     "floor": "2024-08-20",
+     "ramp": "2024-10-18",
+     "lag_days": 59
+    },
+    {
+     "floor": "2025-04-07",
+     "ramp": "2025-04-21",
+     "lag_days": 14
+    },
+    {
+     "floor": "2025-10-06",
+     "ramp": "2025-10-15",
+     "lag_days": 9
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-13",
+     "lag_days": 8
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-16",
+     "lag_days": 11
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2023-03-07",
+     "ramp": "2023-04-12",
+     "lag_days": 36
+    },
+    {
+     "floor": "2023-11-02",
+     "ramp": "2023-11-20",
+     "lag_days": 18
+    },
+    {
+     "floor": "2024-07-31",
+     "ramp": "2024-09-06",
+     "lag_days": 37
+    },
+    {
+     "floor": "2026-05-17",
+     "ramp": "2026-06-10",
+     "lag_days": 24
+    }
+   ]
+  },
+  "base/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-01-08",
+     "lag_days": 19
+    },
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-15",
+     "lag_days": 22
+    },
+    {
+     "floor": "2026-08-06",
+     "ramp": "2026-09-16",
+     "lag_days": 41
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-01-05",
+     "lag_days": 16
+    },
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-17",
+     "lag_days": 24
+    },
+    {
+     "floor": "2026-05-03",
+     "ramp": "2026-05-28",
+     "lag_days": 25
+    },
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-08-26",
+     "lag_days": 16
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N90_R15_M7_S180": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2020-09-16",
+     "ramp": "2020-10-22",
+     "lag_days": 36
+    },
+    {
+     "floor": "2021-10-04",
+     "ramp": "2021-11-04",
+     "lag_days": 31
+    },
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-07-23",
+     "lag_days": 23
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-01-03",
+     "lag_days": 158
+    },
+    {
+     "floor": "2024-09-26",
+     "ramp": "2024-11-24",
+     "lag_days": 59
+    },
+    {
+     "floor": "2025-11-24",
+     "ramp": "2026-01-04",
+     "lag_days": 41
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-06-29",
+     "ramp": "2022-08-01",
+     "lag_days": 33
+    },
+    {
+     "floor": "2023-01-03",
+     "ramp": "2023-12-27",
+     "lag_days": 358
+    },
+    {
+     "floor": "2026-06-08",
+     "ramp": "2026-07-19",
+     "lag_days": 41
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-01-11",
+     "ramp": "2021-01-26",
+     "lag_days": 15
+    },
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-03",
+     "lag_days": 65
+    },
+    {
+     "floor": "2023-02-23",
+     "ramp": "2023-03-25",
+     "lag_days": 30
+    },
+    {
+     "floor": "2023-10-10",
+     "ramp": "2023-12-25",
+     "lag_days": 76
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-01-29",
+     "lag_days": 28
+    },
+    {
+     "floor": "2025-09-15",
+     "ramp": "2025-11-09",
+     "lag_days": 55
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-03-14",
+     "ramp": "2022-05-01",
+     "lag_days": 48
+    },
+    {
+     "floor": "2022-10-25",
+     "ramp": "2022-12-12",
+     "lag_days": 48
+    },
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-21",
+     "lag_days": 58
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2024-11-19",
+     "lag_days": 44
+    },
+    {
+     "floor": "2025-05-05",
+     "ramp": "2025-06-28",
+     "lag_days": 54
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-01-11",
+     "lag_days": 13
+    },
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-11-22",
+     "lag_days": 27
+    },
+    {
+     "floor": "2024-09-08",
+     "ramp": "2024-10-25",
+     "lag_days": 47
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-04",
+     "lag_days": 17
+    },
+    {
+     "floor": "2026-03-29",
+     "ramp": "2026-04-13",
+     "lag_days": 15
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-01-11",
+     "lag_days": 13
+    },
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-10-07",
+     "lag_days": 20
+    },
+    {
+     "floor": "2024-09-17",
+     "ramp": "2024-11-01",
+     "lag_days": 45
+    },
+    {
+     "floor": "2026-08-18",
+     "ramp": "2026-09-22",
+     "lag_days": 35
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2023-11-02",
+     "ramp": "2023-11-13",
+     "lag_days": 11
+    },
+    {
+     "floor": "2024-08-20",
+     "ramp": "2024-10-18",
+     "lag_days": 59
+    },
+    {
+     "floor": "2025-04-07",
+     "ramp": "2025-04-21",
+     "lag_days": 14
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-13",
+     "lag_days": 8
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-16",
+     "lag_days": 11
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2023-03-07",
+     "ramp": "2023-04-12",
+     "lag_days": 36
+    },
+    {
+     "floor": "2023-11-02",
+     "ramp": "2023-11-20",
+     "lag_days": 18
+    },
+    {
+     "floor": "2024-07-31",
+     "ramp": "2024-09-06",
+     "lag_days": 37
+    },
+    {
+     "floor": "2026-05-17",
+     "ramp": "2026-06-10",
+     "lag_days": 24
+    }
+   ]
+  },
+  "base/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-01-08",
+     "lag_days": 19
+    },
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-15",
+     "lag_days": 22
+    },
+    {
+     "floor": "2026-08-06",
+     "ramp": "2026-09-16",
+     "lag_days": 41
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-01-05",
+     "lag_days": 16
+    },
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-17",
+     "lag_days": 24
+    },
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-08-26",
+     "lag_days": 16
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N90_R15_M14_S90": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2020-09-16",
+     "ramp": "2020-10-29",
+     "lag_days": 43
+    },
+    {
+     "floor": "2021-10-04",
+     "ramp": "2021-11-11",
+     "lag_days": 38
+    },
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-07-30",
+     "lag_days": 30
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-01-20",
+     "lag_days": 175
+    },
+    {
+     "floor": "2024-09-26",
+     "ramp": "2024-12-01",
+     "lag_days": 66
+    },
+    {
+     "floor": "2025-11-24",
+     "ramp": "2026-01-11",
+     "lag_days": 48
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-06-29",
+     "ramp": "2022-08-08",
+     "lag_days": 40
+    },
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-01-25",
+     "lag_days": 387
+    },
+    {
+     "floor": "2026-06-08",
+     "ramp": "2026-07-26",
+     "lag_days": 48
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-01-11",
+     "ramp": "2021-02-02",
+     "lag_days": 22
+    },
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-10",
+     "lag_days": 72
+    },
+    {
+     "floor": "2023-02-23",
+     "ramp": "2023-04-01",
+     "lag_days": 37
+    },
+    {
+     "floor": "2023-10-10",
+     "ramp": "2024-01-01",
+     "lag_days": 83
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-02-05",
+     "lag_days": 35
+    },
+    {
+     "floor": "2025-09-15",
+     "ramp": "2025-11-16",
+     "lag_days": 62
+    },
+    {
+     "floor": "2026-02-09",
+     "ramp": "2026-03-26",
+     "lag_days": 45
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-03-14",
+     "ramp": "2022-05-08",
+     "lag_days": 55
+    },
+    {
+     "floor": "2022-10-25",
+     "ramp": "2022-12-19",
+     "lag_days": 55
+    },
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-28",
+     "lag_days": 65
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2024-11-26",
+     "lag_days": 51
+    },
+    {
+     "floor": "2025-05-05",
+     "ramp": "2025-07-05",
+     "lag_days": 61
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-01-18",
+     "lag_days": 20
+    },
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-11-29",
+     "lag_days": 34
+    },
+    {
+     "floor": "2024-09-08",
+     "ramp": "2024-11-01",
+     "lag_days": 54
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-11",
+     "lag_days": 24
+    },
+    {
+     "floor": "2026-03-29",
+     "ramp": "2026-05-09",
+     "lag_days": 41
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-01-18",
+     "lag_days": 20
+    },
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-11-17",
+     "lag_days": 61
+    },
+    {
+     "floor": "2024-09-17",
+     "ramp": "2024-11-08",
+     "lag_days": 52
+    },
+    {
+     "floor": "2025-02-23",
+     "ramp": "2025-03-16",
+     "lag_days": 21
+    },
+    {
+     "floor": "2026-01-24",
+     "ramp": "2026-02-13",
+     "lag_days": 20
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-07",
+     "lag_days": 37
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-11-02",
+     "ramp": "2023-11-20",
+     "lag_days": 18
+    },
+    {
+     "floor": "2024-08-20",
+     "ramp": "2024-10-25",
+     "lag_days": 66
+    },
+    {
+     "floor": "2025-04-07",
+     "ramp": "2025-04-28",
+     "lag_days": 21
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-20",
+     "lag_days": 15
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-23",
+     "lag_days": 18
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2023-03-07",
+     "ramp": "2023-04-19",
+     "lag_days": 43
+    },
+    {
+     "floor": "2023-11-02",
+     "ramp": "2023-11-27",
+     "lag_days": 25
+    },
+    {
+     "floor": "2024-07-31",
+     "ramp": "2024-09-13",
+     "lag_days": 44
+    },
+    {
+     "floor": "2026-05-17",
+     "ramp": "2026-06-17",
+     "lag_days": 31
+    }
+   ]
+  },
+  "base/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-01-15",
+     "lag_days": 26
+    },
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-22",
+     "lag_days": 29
+    },
+    {
+     "floor": "2026-08-06",
+     "ramp": "2026-09-23",
+     "lag_days": 48
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-01-12",
+     "lag_days": 23
+    },
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-24",
+     "lag_days": 31
+    },
+    {
+     "floor": "2026-05-03",
+     "ramp": "2026-06-04",
+     "lag_days": 32
+    },
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-09-02",
+     "lag_days": 23
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N90_R15_M14_S180": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2020-09-16",
+     "ramp": "2020-10-29",
+     "lag_days": 43
+    },
+    {
+     "floor": "2021-10-04",
+     "ramp": "2021-11-11",
+     "lag_days": 38
+    },
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-07-30",
+     "lag_days": 30
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-01-20",
+     "lag_days": 175
+    },
+    {
+     "floor": "2024-09-26",
+     "ramp": "2024-12-01",
+     "lag_days": 66
+    },
+    {
+     "floor": "2025-11-24",
+     "ramp": "2026-01-11",
+     "lag_days": 48
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-06-29",
+     "ramp": "2022-08-08",
+     "lag_days": 40
+    },
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-01-25",
+     "lag_days": 387
+    },
+    {
+     "floor": "2026-06-08",
+     "ramp": "2026-07-26",
+     "lag_days": 48
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-01-11",
+     "ramp": "2021-02-02",
+     "lag_days": 22
+    },
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-10",
+     "lag_days": 72
+    },
+    {
+     "floor": "2023-02-23",
+     "ramp": "2023-04-01",
+     "lag_days": 37
+    },
+    {
+     "floor": "2023-10-10",
+     "ramp": "2024-01-01",
+     "lag_days": 83
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-02-05",
+     "lag_days": 35
+    },
+    {
+     "floor": "2025-09-15",
+     "ramp": "2025-11-16",
+     "lag_days": 62
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-03-14",
+     "ramp": "2022-05-08",
+     "lag_days": 55
+    },
+    {
+     "floor": "2022-10-25",
+     "ramp": "2022-12-19",
+     "lag_days": 55
+    },
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-28",
+     "lag_days": 65
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2024-11-26",
+     "lag_days": 51
+    },
+    {
+     "floor": "2025-05-05",
+     "ramp": "2025-07-05",
+     "lag_days": 61
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-01-18",
+     "lag_days": 20
+    },
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-11-29",
+     "lag_days": 34
+    },
+    {
+     "floor": "2024-09-08",
+     "ramp": "2024-11-01",
+     "lag_days": 54
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-11",
+     "lag_days": 24
+    },
+    {
+     "floor": "2026-03-29",
+     "ramp": "2026-05-09",
+     "lag_days": 41
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-01-18",
+     "lag_days": 20
+    },
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-11-17",
+     "lag_days": 61
+    },
+    {
+     "floor": "2024-09-17",
+     "ramp": "2024-11-08",
+     "lag_days": 52
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-07",
+     "lag_days": 37
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-11-02",
+     "ramp": "2023-11-20",
+     "lag_days": 18
+    },
+    {
+     "floor": "2024-08-20",
+     "ramp": "2024-10-25",
+     "lag_days": 66
+    },
+    {
+     "floor": "2025-04-07",
+     "ramp": "2025-04-28",
+     "lag_days": 21
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-20",
+     "lag_days": 15
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-23",
+     "lag_days": 18
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2023-03-07",
+     "ramp": "2023-04-19",
+     "lag_days": 43
+    },
+    {
+     "floor": "2023-11-02",
+     "ramp": "2023-11-27",
+     "lag_days": 25
+    },
+    {
+     "floor": "2024-07-31",
+     "ramp": "2024-09-13",
+     "lag_days": 44
+    },
+    {
+     "floor": "2026-05-17",
+     "ramp": "2026-06-17",
+     "lag_days": 31
+    }
+   ]
+  },
+  "base/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-01-15",
+     "lag_days": 26
+    },
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-22",
+     "lag_days": 29
+    },
+    {
+     "floor": "2026-08-06",
+     "ramp": "2026-09-23",
+     "lag_days": 48
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-01-12",
+     "lag_days": 23
+    },
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-24",
+     "lag_days": 31
+    },
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-09-02",
+     "lag_days": 23
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N90_R25_M7_S90": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2020-09-16",
+     "ramp": "2020-11-15",
+     "lag_days": 60
+    },
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-08-01",
+     "lag_days": 32
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-03-08",
+     "lag_days": 223
+    },
+    {
+     "floor": "2024-09-26",
+     "ramp": "2024-12-12",
+     "lag_days": 77
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-03-25",
+     "lag_days": 447
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-01-11",
+     "ramp": "2021-01-27",
+     "lag_days": 16
+    },
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-07",
+     "lag_days": 69
+    },
+    {
+     "floor": "2023-02-23",
+     "ramp": "2023-04-04",
+     "lag_days": 40
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-06-29",
+     "lag_days": 179
+    },
+    {
+     "floor": "2026-02-09",
+     "ramp": "2026-04-09",
+     "lag_days": 59
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-22",
+     "lag_days": 59
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2025-02-06",
+     "lag_days": 123
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-01-26",
+     "lag_days": 28
+    },
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-11-24",
+     "lag_days": 29
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-15",
+     "lag_days": 28
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-06",
+     "lag_days": 12
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-01-22",
+     "lag_days": 24
+    },
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-11-20",
+     "lag_days": 64
+    },
+    {
+     "floor": "2024-09-17",
+     "ramp": "2024-11-17",
+     "lag_days": 61
+    },
+    {
+     "floor": "2025-02-23",
+     "ramp": "2025-04-13",
+     "lag_days": 49
+    },
+    {
+     "floor": "2026-01-24",
+     "ramp": "2026-02-07",
+     "lag_days": 14
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-02",
+     "lag_days": 32
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2023-11-02",
+     "ramp": "2023-11-16",
+     "lag_days": 14
+    },
+    {
+     "floor": "2024-08-20",
+     "ramp": "2024-10-30",
+     "lag_days": 71
+    },
+    {
+     "floor": "2025-04-07",
+     "ramp": "2025-04-21",
+     "lag_days": 14
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-13",
+     "lag_days": 8
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-16",
+     "lag_days": 11
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-03-07",
+     "ramp": "2023-04-14",
+     "lag_days": 38
+    },
+    {
+     "floor": "2023-11-02",
+     "ramp": "2023-12-25",
+     "lag_days": 53
+    },
+    {
+     "floor": "2024-07-31",
+     "ramp": "2024-09-12",
+     "lag_days": 43
+    }
+   ]
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-01-30",
+     "lag_days": 41
+    },
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-17",
+     "lag_days": 24
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-01-30",
+     "lag_days": 41
+    },
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-25",
+     "lag_days": 32
+    },
+    {
+     "floor": "2026-05-03",
+     "ramp": "2026-06-08",
+     "lag_days": 36
+    },
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-08-28",
+     "lag_days": 18
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N90_R25_M7_S180": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2020-09-16",
+     "ramp": "2020-11-15",
+     "lag_days": 60
+    },
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-08-01",
+     "lag_days": 32
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-03-08",
+     "lag_days": 223
+    },
+    {
+     "floor": "2024-09-26",
+     "ramp": "2024-12-12",
+     "lag_days": 77
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-03-25",
+     "lag_days": 447
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-01-11",
+     "ramp": "2021-01-27",
+     "lag_days": 16
+    },
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-07",
+     "lag_days": 69
+    },
+    {
+     "floor": "2023-02-23",
+     "ramp": "2023-04-04",
+     "lag_days": 40
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-06-29",
+     "lag_days": 179
+    },
+    {
+     "floor": "2026-02-09",
+     "ramp": "2026-04-09",
+     "lag_days": 59
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-22",
+     "lag_days": 59
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2025-02-06",
+     "lag_days": 123
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-01-26",
+     "lag_days": 28
+    },
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-11-24",
+     "lag_days": 29
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-15",
+     "lag_days": 28
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-06",
+     "lag_days": 12
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-01-22",
+     "lag_days": 24
+    },
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-11-20",
+     "lag_days": 64
+    },
+    {
+     "floor": "2024-09-17",
+     "ramp": "2024-11-17",
+     "lag_days": 61
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-02",
+     "lag_days": 32
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2023-11-02",
+     "ramp": "2023-11-16",
+     "lag_days": 14
+    },
+    {
+     "floor": "2024-08-20",
+     "ramp": "2024-10-30",
+     "lag_days": 71
+    },
+    {
+     "floor": "2025-04-07",
+     "ramp": "2025-04-21",
+     "lag_days": 14
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-13",
+     "lag_days": 8
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-16",
+     "lag_days": 11
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-03-07",
+     "ramp": "2023-04-14",
+     "lag_days": 38
+    },
+    {
+     "floor": "2023-11-02",
+     "ramp": "2023-12-25",
+     "lag_days": 53
+    },
+    {
+     "floor": "2024-07-31",
+     "ramp": "2024-09-12",
+     "lag_days": 43
+    }
+   ]
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-01-30",
+     "lag_days": 41
+    },
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-17",
+     "lag_days": 24
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-01-30",
+     "lag_days": 41
+    },
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-25",
+     "lag_days": 32
+    },
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-08-28",
+     "lag_days": 18
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N90_R25_M14_S90": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2020-09-16",
+     "ramp": "2020-11-22",
+     "lag_days": 67
+    },
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-08-08",
+     "lag_days": 39
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-03-15",
+     "lag_days": 230
+    },
+    {
+     "floor": "2024-09-26",
+     "ramp": "2024-12-19",
+     "lag_days": 84
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-04-01",
+     "lag_days": 454
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-01-11",
+     "ramp": "2021-02-03",
+     "lag_days": 23
+    },
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-14",
+     "lag_days": 76
+    },
+    {
+     "floor": "2023-02-23",
+     "ramp": "2023-04-11",
+     "lag_days": 47
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-07-06",
+     "lag_days": 186
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-29",
+     "lag_days": 66
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2025-02-13",
+     "lag_days": 130
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-02-02",
+     "lag_days": 35
+    },
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-12-01",
+     "lag_days": 36
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-22",
+     "lag_days": 35
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-13",
+     "lag_days": 19
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-01-29",
+     "lag_days": 31
+    },
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-11-27",
+     "lag_days": 71
+    },
+    {
+     "floor": "2024-09-17",
+     "ramp": "2024-11-24",
+     "lag_days": 68
+    },
+    {
+     "floor": "2025-02-23",
+     "ramp": "2025-07-22",
+     "lag_days": 149
+    },
+    {
+     "floor": "2026-01-24",
+     "ramp": "2026-02-14",
+     "lag_days": 21
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-09",
+     "lag_days": 39
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-11-02",
+     "ramp": "2023-11-23",
+     "lag_days": 21
+    },
+    {
+     "floor": "2024-08-20",
+     "ramp": "2025-02-21",
+     "lag_days": 185
+    },
+    {
+     "floor": "2025-04-07",
+     "ramp": "2025-04-28",
+     "lag_days": 21
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-20",
+     "lag_days": 15
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-23",
+     "lag_days": 18
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-03-07",
+     "ramp": "2023-04-21",
+     "lag_days": 45
+    },
+    {
+     "floor": "2023-11-02",
+     "ramp": "2024-01-01",
+     "lag_days": 60
+    },
+    {
+     "floor": "2024-07-31",
+     "ramp": "2024-09-19",
+     "lag_days": 50
+    }
+   ]
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-02-06",
+     "lag_days": 48
+    },
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-24",
+     "lag_days": 31
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-02-06",
+     "lag_days": 48
+    },
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-06-01",
+     "lag_days": 39
+    },
+    {
+     "floor": "2026-05-03",
+     "ramp": "2026-06-15",
+     "lag_days": 43
+    },
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-09-16",
+     "lag_days": 37
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N90_R25_M14_S180": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2020-09-16",
+     "ramp": "2020-11-22",
+     "lag_days": 67
+    },
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-08-08",
+     "lag_days": 39
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-03-15",
+     "lag_days": 230
+    },
+    {
+     "floor": "2024-09-26",
+     "ramp": "2024-12-19",
+     "lag_days": 84
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-04-01",
+     "lag_days": 454
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-01-11",
+     "ramp": "2021-02-03",
+     "lag_days": 23
+    },
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-14",
+     "lag_days": 76
+    },
+    {
+     "floor": "2023-02-23",
+     "ramp": "2023-04-11",
+     "lag_days": 47
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-07-06",
+     "lag_days": 186
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-29",
+     "lag_days": 66
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2025-02-13",
+     "lag_days": 130
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-02-02",
+     "lag_days": 35
+    },
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-12-01",
+     "lag_days": 36
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-22",
+     "lag_days": 35
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-13",
+     "lag_days": 19
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-01-29",
+     "lag_days": 31
+    },
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-11-27",
+     "lag_days": 71
+    },
+    {
+     "floor": "2024-09-17",
+     "ramp": "2024-11-24",
+     "lag_days": 68
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-09",
+     "lag_days": 39
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-11-02",
+     "ramp": "2023-11-23",
+     "lag_days": 21
+    },
+    {
+     "floor": "2024-08-20",
+     "ramp": "2025-02-21",
+     "lag_days": 185
+    },
+    {
+     "floor": "2025-04-07",
+     "ramp": "2025-04-28",
+     "lag_days": 21
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-20",
+     "lag_days": 15
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-23",
+     "lag_days": 18
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-03-07",
+     "ramp": "2023-04-21",
+     "lag_days": 45
+    },
+    {
+     "floor": "2023-11-02",
+     "ramp": "2024-01-01",
+     "lag_days": 60
+    },
+    {
+     "floor": "2024-07-31",
+     "ramp": "2024-09-19",
+     "lag_days": 50
+    }
+   ]
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-02-06",
+     "lag_days": 48
+    },
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-24",
+     "lag_days": 31
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-02-06",
+     "lag_days": 48
+    },
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-06-01",
+     "lag_days": 39
+    },
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-09-16",
+     "lag_days": 37
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N90_R40_M7_S90": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2020-09-16",
+     "ramp": "2021-03-19",
+     "lag_days": 184
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2025-06-09",
+     "lag_days": 888
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-01-11",
+     "ramp": "2021-01-28",
+     "lag_days": 17
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-11-10",
+     "lag_days": 313
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-22",
+     "lag_days": 59
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2025-08-24",
+     "lag_days": 322
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-02-02",
+     "lag_days": 35
+    },
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-11-29",
+     "lag_days": 34
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-29",
+     "lag_days": 42
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-10",
+     "lag_days": 16
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-01-30",
+     "lag_days": 32
+    },
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-12-01",
+     "lag_days": 75
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-05",
+     "lag_days": 35
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-11-02",
+     "ramp": "2023-11-23",
+     "lag_days": 21
+    },
+    {
+     "floor": "2024-08-20",
+     "ramp": "2025-02-19",
+     "lag_days": 183
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-14",
+     "lag_days": 9
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-19",
+     "lag_days": 14
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-03-07",
+     "ramp": "2023-04-17",
+     "lag_days": 41
+    },
+    {
+     "floor": "2023-11-02",
+     "ramp": "2024-01-02",
+     "lag_days": 61
+    }
+   ]
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-02-12",
+     "lag_days": 54
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-02-10",
+     "lag_days": 52
+    },
+    {
+     "floor": "2026-05-03",
+     "ramp": "2026-06-10",
+     "lag_days": 38
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N90_R40_M7_S180": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2020-09-16",
+     "ramp": "2021-03-19",
+     "lag_days": 184
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2025-06-09",
+     "lag_days": 888
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-01-11",
+     "ramp": "2021-01-28",
+     "lag_days": 17
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-11-10",
+     "lag_days": 313
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-22",
+     "lag_days": 59
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2025-08-24",
+     "lag_days": 322
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-02-02",
+     "lag_days": 35
+    },
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-11-29",
+     "lag_days": 34
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-29",
+     "lag_days": 42
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-10",
+     "lag_days": 16
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-01-30",
+     "lag_days": 32
+    },
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-12-01",
+     "lag_days": 75
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-05",
+     "lag_days": 35
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-11-02",
+     "ramp": "2023-11-23",
+     "lag_days": 21
+    },
+    {
+     "floor": "2024-08-20",
+     "ramp": "2025-02-19",
+     "lag_days": 183
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-14",
+     "lag_days": 9
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-19",
+     "lag_days": 14
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-03-07",
+     "ramp": "2023-04-17",
+     "lag_days": 41
+    },
+    {
+     "floor": "2023-11-02",
+     "ramp": "2024-01-02",
+     "lag_days": 61
+    }
+   ]
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-02-12",
+     "lag_days": 54
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-02-10",
+     "lag_days": 52
+    },
+    {
+     "floor": "2026-05-03",
+     "ramp": "2026-06-10",
+     "lag_days": 38
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N90_R40_M14_S90": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2020-09-16",
+     "ramp": "2021-03-26",
+     "lag_days": 191
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2025-06-16",
+     "lag_days": 895
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-01-11",
+     "ramp": "2021-02-04",
+     "lag_days": 24
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-11-17",
+     "lag_days": 320
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-29",
+     "lag_days": 66
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2025-10-25",
+     "lag_days": 384
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-02-09",
+     "lag_days": 42
+    },
+    {
+     "floor": "2023-10-26",
+     "ramp": "2024-03-27",
+     "lag_days": 153
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-07-06",
+     "lag_days": 49
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-02-06",
+     "lag_days": 39
+    },
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-12-28",
+     "lag_days": 102
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-12",
+     "lag_days": 42
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-11-02",
+     "ramp": "2024-03-06",
+     "lag_days": 125
+    },
+    {
+     "floor": "2024-08-20",
+     "ramp": "2025-02-26",
+     "lag_days": 190
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-21",
+     "lag_days": 16
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-26",
+     "lag_days": 21
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-03-07",
+     "ramp": "2023-04-24",
+     "lag_days": 48
+    },
+    {
+     "floor": "2023-11-02",
+     "ramp": "2024-01-09",
+     "lag_days": 68
+    }
+   ]
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-02-19",
+     "lag_days": 61
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-02-17",
+     "lag_days": 59
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N90_R40_M14_S180": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2020-09-16",
+     "ramp": "2021-03-26",
+     "lag_days": 191
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2025-06-16",
+     "lag_days": 895
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-01-11",
+     "ramp": "2021-02-04",
+     "lag_days": 24
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-11-17",
+     "lag_days": 320
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-29",
+     "lag_days": 66
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2025-10-25",
+     "lag_days": 384
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-02-09",
+     "lag_days": 42
+    },
+    {
+     "floor": "2023-10-26",
+     "ramp": "2024-03-27",
+     "lag_days": 153
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-07-06",
+     "lag_days": 49
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2021-12-29",
+     "ramp": "2022-02-06",
+     "lag_days": 39
+    },
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-12-28",
+     "lag_days": 102
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-12",
+     "lag_days": 42
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-11-02",
+     "ramp": "2024-03-06",
+     "lag_days": 125
+    },
+    {
+     "floor": "2024-08-20",
+     "ramp": "2025-02-26",
+     "lag_days": 190
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-21",
+     "lag_days": 16
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-26",
+     "lag_days": 21
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-03-07",
+     "ramp": "2023-04-24",
+     "lag_days": 48
+    },
+    {
+     "floor": "2023-11-02",
+     "ramp": "2024-01-09",
+     "lag_days": 68
+    }
+   ]
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-02-19",
+     "lag_days": 61
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-12-20",
+     "ramp": "2024-02-17",
+     "lag_days": 59
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N180_R15_M7_S90": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-10-04",
+     "ramp": "2021-11-04",
+     "lag_days": 31
+    },
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-07-23",
+     "lag_days": 23
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-01-03",
+     "lag_days": 158
+    },
+    {
+     "floor": "2024-09-26",
+     "ramp": "2024-11-24",
+     "lag_days": 59
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-06-29",
+     "ramp": "2022-08-01",
+     "lag_days": 33
+    },
+    {
+     "floor": "2023-01-03",
+     "ramp": "2023-12-27",
+     "lag_days": 358
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-03",
+     "lag_days": 65
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-01-29",
+     "lag_days": 28
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-03-14",
+     "ramp": "2022-05-01",
+     "lag_days": 48
+    },
+    {
+     "floor": "2022-10-25",
+     "ramp": "2022-12-12",
+     "lag_days": 48
+    },
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-21",
+     "lag_days": 58
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2024-11-19",
+     "lag_days": 44
+    },
+    {
+     "floor": "2025-05-05",
+     "ramp": "2025-06-28",
+     "lag_days": 54
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-11-22",
+     "lag_days": 27
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-04",
+     "lag_days": 17
+    },
+    {
+     "floor": "2026-03-29",
+     "ramp": "2026-04-13",
+     "lag_days": 15
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-10-07",
+     "lag_days": 20
+    },
+    {
+     "floor": "2026-01-24",
+     "ramp": "2026-02-06",
+     "lag_days": 13
+    },
+    {
+     "floor": "2026-08-18",
+     "ramp": "2026-09-22",
+     "lag_days": 35
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2024-08-20",
+     "ramp": "2024-10-18",
+     "lag_days": 59
+    },
+    {
+     "floor": "2025-04-07",
+     "ramp": "2025-04-21",
+     "lag_days": 14
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-13",
+     "lag_days": 8
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-16",
+     "lag_days": 11
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2026-05-17",
+     "ramp": "2026-06-10",
+     "lag_days": 24
+    }
+   ]
+  },
+  "base/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-15",
+     "lag_days": 22
+    },
+    {
+     "floor": "2026-08-06",
+     "ramp": "2026-09-16",
+     "lag_days": 41
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-05-03",
+     "ramp": "2026-05-28",
+     "lag_days": 25
+    },
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-08-26",
+     "lag_days": 16
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N180_R15_M7_S180": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-10-04",
+     "ramp": "2021-11-04",
+     "lag_days": 31
+    },
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-07-23",
+     "lag_days": 23
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-01-03",
+     "lag_days": 158
+    },
+    {
+     "floor": "2024-09-26",
+     "ramp": "2024-11-24",
+     "lag_days": 59
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-06-29",
+     "ramp": "2022-08-01",
+     "lag_days": 33
+    },
+    {
+     "floor": "2023-01-03",
+     "ramp": "2023-12-27",
+     "lag_days": 358
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-03",
+     "lag_days": 65
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-01-29",
+     "lag_days": 28
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-03-14",
+     "ramp": "2022-05-01",
+     "lag_days": 48
+    },
+    {
+     "floor": "2022-10-25",
+     "ramp": "2022-12-12",
+     "lag_days": 48
+    },
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-21",
+     "lag_days": 58
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2024-11-19",
+     "lag_days": 44
+    },
+    {
+     "floor": "2025-05-05",
+     "ramp": "2025-06-28",
+     "lag_days": 54
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-11-22",
+     "lag_days": 27
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-04",
+     "lag_days": 17
+    },
+    {
+     "floor": "2026-03-29",
+     "ramp": "2026-04-13",
+     "lag_days": 15
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-10-07",
+     "lag_days": 20
+    },
+    {
+     "floor": "2026-08-18",
+     "ramp": "2026-09-22",
+     "lag_days": 35
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2024-08-20",
+     "ramp": "2024-10-18",
+     "lag_days": 59
+    },
+    {
+     "floor": "2025-04-07",
+     "ramp": "2025-04-21",
+     "lag_days": 14
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-13",
+     "lag_days": 8
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-16",
+     "lag_days": 11
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2026-05-17",
+     "ramp": "2026-06-10",
+     "lag_days": 24
+    }
+   ]
+  },
+  "base/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-15",
+     "lag_days": 22
+    },
+    {
+     "floor": "2026-08-06",
+     "ramp": "2026-09-16",
+     "lag_days": 41
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-08-26",
+     "lag_days": 16
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N180_R15_M14_S90": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-10-04",
+     "ramp": "2021-11-11",
+     "lag_days": 38
+    },
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-07-30",
+     "lag_days": 30
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-01-20",
+     "lag_days": 175
+    },
+    {
+     "floor": "2024-09-26",
+     "ramp": "2024-12-01",
+     "lag_days": 66
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-06-29",
+     "ramp": "2022-08-08",
+     "lag_days": 40
+    },
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-01-25",
+     "lag_days": 387
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-10",
+     "lag_days": 72
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-02-05",
+     "lag_days": 35
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-03-14",
+     "ramp": "2022-05-08",
+     "lag_days": 55
+    },
+    {
+     "floor": "2022-10-25",
+     "ramp": "2022-12-19",
+     "lag_days": 55
+    },
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-28",
+     "lag_days": 65
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2024-11-26",
+     "lag_days": 51
+    },
+    {
+     "floor": "2025-05-05",
+     "ramp": "2025-07-05",
+     "lag_days": 61
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-11-29",
+     "lag_days": 34
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-11",
+     "lag_days": 24
+    },
+    {
+     "floor": "2026-03-29",
+     "ramp": "2026-05-09",
+     "lag_days": 41
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-11-17",
+     "lag_days": 61
+    },
+    {
+     "floor": "2026-01-24",
+     "ramp": "2026-02-13",
+     "lag_days": 20
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-07",
+     "lag_days": 37
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2024-08-20",
+     "ramp": "2024-10-25",
+     "lag_days": 66
+    },
+    {
+     "floor": "2025-04-07",
+     "ramp": "2025-04-28",
+     "lag_days": 21
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-20",
+     "lag_days": 15
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-23",
+     "lag_days": 18
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2026-05-17",
+     "ramp": "2026-06-17",
+     "lag_days": 31
+    }
+   ]
+  },
+  "base/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-22",
+     "lag_days": 29
+    },
+    {
+     "floor": "2026-08-06",
+     "ramp": "2026-09-23",
+     "lag_days": 48
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-05-03",
+     "ramp": "2026-06-04",
+     "lag_days": 32
+    },
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-09-02",
+     "lag_days": 23
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N180_R15_M14_S180": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2021-10-04",
+     "ramp": "2021-11-11",
+     "lag_days": 38
+    },
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-07-30",
+     "lag_days": 30
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-01-20",
+     "lag_days": 175
+    },
+    {
+     "floor": "2024-09-26",
+     "ramp": "2024-12-01",
+     "lag_days": 66
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-06-29",
+     "ramp": "2022-08-08",
+     "lag_days": 40
+    },
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-01-25",
+     "lag_days": 387
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-10",
+     "lag_days": 72
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-02-05",
+     "lag_days": 35
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-03-14",
+     "ramp": "2022-05-08",
+     "lag_days": 55
+    },
+    {
+     "floor": "2022-10-25",
+     "ramp": "2022-12-19",
+     "lag_days": 55
+    },
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-28",
+     "lag_days": 65
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2024-11-26",
+     "lag_days": 51
+    },
+    {
+     "floor": "2025-05-05",
+     "ramp": "2025-07-05",
+     "lag_days": 61
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-11-29",
+     "lag_days": 34
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-11",
+     "lag_days": 24
+    },
+    {
+     "floor": "2026-03-29",
+     "ramp": "2026-05-09",
+     "lag_days": 41
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-11-17",
+     "lag_days": 61
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-07",
+     "lag_days": 37
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2024-08-20",
+     "ramp": "2024-10-25",
+     "lag_days": 66
+    },
+    {
+     "floor": "2025-04-07",
+     "ramp": "2025-04-28",
+     "lag_days": 21
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-20",
+     "lag_days": 15
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-23",
+     "lag_days": 18
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2026-05-17",
+     "ramp": "2026-06-17",
+     "lag_days": 31
+    }
+   ]
+  },
+  "base/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-22",
+     "lag_days": 29
+    },
+    {
+     "floor": "2026-08-06",
+     "ramp": "2026-09-23",
+     "lag_days": 48
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-09-02",
+     "lag_days": 23
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N180_R25_M7_S90": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-08-01",
+     "lag_days": 32
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-03-08",
+     "lag_days": 223
+    },
+    {
+     "floor": "2024-09-26",
+     "ramp": "2024-12-12",
+     "lag_days": 77
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-03-25",
+     "lag_days": 447
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-07",
+     "lag_days": 69
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-06-29",
+     "lag_days": 179
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-22",
+     "lag_days": 59
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2025-02-06",
+     "lag_days": 123
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-11-24",
+     "lag_days": 29
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-15",
+     "lag_days": 28
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-06",
+     "lag_days": 12
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-11-20",
+     "lag_days": 64
+    },
+    {
+     "floor": "2026-01-24",
+     "ramp": "2026-02-07",
+     "lag_days": 14
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-02",
+     "lag_days": 32
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2024-08-20",
+     "ramp": "2024-10-30",
+     "lag_days": 71
+    },
+    {
+     "floor": "2025-04-07",
+     "ramp": "2025-04-21",
+     "lag_days": 14
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-13",
+     "lag_days": 8
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-16",
+     "lag_days": 11
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-17",
+     "lag_days": 24
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-05-03",
+     "ramp": "2026-06-08",
+     "lag_days": 36
+    },
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-08-28",
+     "lag_days": 18
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N180_R25_M7_S180": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-08-01",
+     "lag_days": 32
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-03-08",
+     "lag_days": 223
+    },
+    {
+     "floor": "2024-09-26",
+     "ramp": "2024-12-12",
+     "lag_days": 77
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-03-25",
+     "lag_days": 447
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-07",
+     "lag_days": 69
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-06-29",
+     "lag_days": 179
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-22",
+     "lag_days": 59
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2025-02-06",
+     "lag_days": 123
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-11-24",
+     "lag_days": 29
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-15",
+     "lag_days": 28
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-06",
+     "lag_days": 12
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-11-20",
+     "lag_days": 64
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-02",
+     "lag_days": 32
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2024-08-20",
+     "ramp": "2024-10-30",
+     "lag_days": 71
+    },
+    {
+     "floor": "2025-04-07",
+     "ramp": "2025-04-21",
+     "lag_days": 14
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-13",
+     "lag_days": 8
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-16",
+     "lag_days": 11
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-17",
+     "lag_days": 24
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-08-28",
+     "lag_days": 18
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N180_R25_M14_S90": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-08-08",
+     "lag_days": 39
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-03-15",
+     "lag_days": 230
+    },
+    {
+     "floor": "2024-09-26",
+     "ramp": "2024-12-19",
+     "lag_days": 84
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-04-01",
+     "lag_days": 454
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-14",
+     "lag_days": 76
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-07-06",
+     "lag_days": 186
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-29",
+     "lag_days": 66
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2025-02-13",
+     "lag_days": 130
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-12-01",
+     "lag_days": 36
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-22",
+     "lag_days": 35
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-13",
+     "lag_days": 19
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-11-27",
+     "lag_days": 71
+    },
+    {
+     "floor": "2026-01-24",
+     "ramp": "2026-02-14",
+     "lag_days": 21
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-09",
+     "lag_days": 39
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2024-08-20",
+     "ramp": "2025-02-21",
+     "lag_days": 185
+    },
+    {
+     "floor": "2025-04-07",
+     "ramp": "2025-04-28",
+     "lag_days": 21
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-20",
+     "lag_days": 15
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-23",
+     "lag_days": 18
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-24",
+     "lag_days": 31
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-05-03",
+     "ramp": "2026-06-15",
+     "lag_days": 43
+    },
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-09-16",
+     "lag_days": 37
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N180_R25_M14_S180": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-08-08",
+     "lag_days": 39
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-03-15",
+     "lag_days": 230
+    },
+    {
+     "floor": "2024-09-26",
+     "ramp": "2024-12-19",
+     "lag_days": 84
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-04-01",
+     "lag_days": 454
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-14",
+     "lag_days": 76
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-07-06",
+     "lag_days": 186
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-29",
+     "lag_days": 66
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2025-02-13",
+     "lag_days": 130
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-12-01",
+     "lag_days": 36
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-22",
+     "lag_days": 35
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-13",
+     "lag_days": 19
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-11-27",
+     "lag_days": 71
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-09",
+     "lag_days": 39
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2024-08-20",
+     "ramp": "2025-02-21",
+     "lag_days": 185
+    },
+    {
+     "floor": "2025-04-07",
+     "ramp": "2025-04-28",
+     "lag_days": 21
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-20",
+     "lag_days": 15
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-23",
+     "lag_days": 18
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-24",
+     "lag_days": 31
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-09-16",
+     "lag_days": 37
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N180_R40_M7_S90": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-03-26",
+     "lag_days": 241
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2025-06-09",
+     "lag_days": 888
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-15",
+     "lag_days": 77
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-11-10",
+     "lag_days": 313
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-22",
+     "lag_days": 59
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2025-08-24",
+     "lag_days": 322
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-11-29",
+     "lag_days": 34
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-29",
+     "lag_days": 42
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-10",
+     "lag_days": 16
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-12-01",
+     "lag_days": 75
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-05",
+     "lag_days": 35
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2024-08-20",
+     "ramp": "2025-02-19",
+     "lag_days": 183
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-14",
+     "lag_days": 9
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-19",
+     "lag_days": 14
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-20",
+     "lag_days": 27
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-05-03",
+     "ramp": "2026-06-10",
+     "lag_days": 38
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N180_R40_M7_S180": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-03-26",
+     "lag_days": 241
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2025-06-09",
+     "lag_days": 888
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-15",
+     "lag_days": 77
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-11-10",
+     "lag_days": 313
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-22",
+     "lag_days": 59
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2025-08-24",
+     "lag_days": 322
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-10-26",
+     "ramp": "2023-11-29",
+     "lag_days": 34
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-29",
+     "lag_days": 42
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-10",
+     "lag_days": 16
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-12-01",
+     "lag_days": 75
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-05",
+     "lag_days": 35
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2024-08-20",
+     "ramp": "2025-02-19",
+     "lag_days": 183
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-14",
+     "lag_days": 9
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-19",
+     "lag_days": 14
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-20",
+     "lag_days": 27
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-05-03",
+     "ramp": "2026-06-10",
+     "lag_days": 38
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N180_R40_M14_S90": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-04-02",
+     "lag_days": 248
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2025-06-16",
+     "lag_days": 895
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-22",
+     "lag_days": 84
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-11-17",
+     "lag_days": 320
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-29",
+     "lag_days": 66
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2025-10-25",
+     "lag_days": 384
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-10-26",
+     "ramp": "2024-03-27",
+     "lag_days": 153
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-07-06",
+     "lag_days": 49
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-12-28",
+     "lag_days": 102
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-12",
+     "lag_days": 42
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2024-08-20",
+     "ramp": "2025-02-26",
+     "lag_days": 190
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-21",
+     "lag_days": 16
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-26",
+     "lag_days": 21
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-27",
+     "lag_days": 34
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N180_R40_M14_S180": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-04-02",
+     "lag_days": 248
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2025-06-16",
+     "lag_days": 895
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-07-30",
+     "ramp": "2022-10-22",
+     "lag_days": 84
+    },
+    {
+     "floor": "2025-01-01",
+     "ramp": "2025-11-17",
+     "lag_days": 320
+    }
+   ]
+  },
+  "polygon/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-29",
+     "lag_days": 66
+    },
+    {
+     "floor": "2024-10-06",
+     "ramp": "2025-10-25",
+     "lag_days": 384
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-10-26",
+     "ramp": "2024-03-27",
+     "lag_days": 153
+    },
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-07-06",
+     "lag_days": 49
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-09-17",
+     "ramp": "2023-12-28",
+     "lag_days": 102
+    },
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-12",
+     "lag_days": 42
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2024-08-20",
+     "ramp": "2025-02-26",
+     "lag_days": 190
+    },
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-21",
+     "lag_days": 16
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-26",
+     "lag_days": 21
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2025-04-23",
+     "ramp": "2025-05-27",
+     "lag_days": 34
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N365_R15_M7_S90": {
+  "ethereum/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-07-23",
+     "lag_days": 23
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-01-03",
+     "lag_days": 158
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2022-06-29",
+     "ramp": "2022-08-01",
+     "lag_days": 33
+    },
+    {
+     "floor": "2023-01-03",
+     "ramp": "2023-12-27",
+     "lag_days": 358
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "polygon/transactions": {
+   "state": "declining",
+   "events": [
+    {
+     "floor": "2022-10-25",
+     "ramp": "2022-12-12",
+     "lag_days": 48
+    },
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-21",
+     "lag_days": 58
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-04",
+     "lag_days": 17
+    },
+    {
+     "floor": "2026-03-29",
+     "ramp": "2026-04-13",
+     "lag_days": 15
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-18",
+     "ramp": "2026-09-22",
+     "lag_days": 35
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-13",
+     "lag_days": 8
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-16",
+     "lag_days": 11
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "neutral",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-06",
+     "ramp": "2026-09-16",
+     "lag_days": 41
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-08-26",
+     "lag_days": 16
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N365_R15_M7_S180": {
+  "ethereum/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-07-23",
+     "lag_days": 23
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-01-03",
+     "lag_days": 158
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2022-06-29",
+     "ramp": "2022-08-01",
+     "lag_days": 33
+    },
+    {
+     "floor": "2023-01-03",
+     "ramp": "2023-12-27",
+     "lag_days": 358
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "polygon/transactions": {
+   "state": "declining",
+   "events": [
+    {
+     "floor": "2022-10-25",
+     "ramp": "2022-12-12",
+     "lag_days": 48
+    },
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-21",
+     "lag_days": 58
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-04",
+     "lag_days": 17
+    },
+    {
+     "floor": "2026-03-29",
+     "ramp": "2026-04-13",
+     "lag_days": 15
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-18",
+     "ramp": "2026-09-22",
+     "lag_days": 35
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-13",
+     "lag_days": 8
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-16",
+     "lag_days": 11
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "neutral",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-06",
+     "ramp": "2026-09-16",
+     "lag_days": 41
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-08-26",
+     "lag_days": 16
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N365_R15_M14_S90": {
+  "ethereum/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-07-30",
+     "lag_days": 30
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-01-20",
+     "lag_days": 175
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2022-06-29",
+     "ramp": "2022-08-08",
+     "lag_days": 40
+    },
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-01-25",
+     "lag_days": 387
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "polygon/transactions": {
+   "state": "declining",
+   "events": [
+    {
+     "floor": "2022-10-25",
+     "ramp": "2022-12-19",
+     "lag_days": 55
+    },
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-28",
+     "lag_days": 65
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-11",
+     "lag_days": 24
+    },
+    {
+     "floor": "2026-03-29",
+     "ramp": "2026-05-09",
+     "lag_days": 41
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-07",
+     "lag_days": 37
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-20",
+     "lag_days": 15
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-23",
+     "lag_days": 18
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "neutral",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-06",
+     "ramp": "2026-09-23",
+     "lag_days": 48
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-09-02",
+     "lag_days": 23
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N365_R15_M14_S180": {
+  "ethereum/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-07-30",
+     "lag_days": 30
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-01-20",
+     "lag_days": 175
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2022-06-29",
+     "ramp": "2022-08-08",
+     "lag_days": 40
+    },
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-01-25",
+     "lag_days": 387
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "polygon/transactions": {
+   "state": "declining",
+   "events": [
+    {
+     "floor": "2022-10-25",
+     "ramp": "2022-12-19",
+     "lag_days": 55
+    },
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-28",
+     "lag_days": 65
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-11",
+     "lag_days": 24
+    },
+    {
+     "floor": "2026-03-29",
+     "ramp": "2026-05-09",
+     "lag_days": 41
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-07",
+     "lag_days": 37
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-20",
+     "lag_days": 15
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-23",
+     "lag_days": 18
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "neutral",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-06",
+     "ramp": "2026-09-23",
+     "lag_days": 48
+    }
+   ]
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-09-02",
+     "lag_days": 23
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N365_R25_M7_S90": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-08-01",
+     "lag_days": 32
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-03-08",
+     "lag_days": 223
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-03-25",
+     "lag_days": 447
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "polygon/transactions": {
+   "state": "declining",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-22",
+     "lag_days": 59
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-15",
+     "lag_days": 28
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-06",
+     "lag_days": 12
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-02",
+     "lag_days": 32
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-13",
+     "lag_days": 8
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-16",
+     "lag_days": 11
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "neutral",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-08-28",
+     "lag_days": 18
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N365_R25_M7_S180": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-08-01",
+     "lag_days": 32
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-03-08",
+     "lag_days": 223
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-03-25",
+     "lag_days": 447
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "polygon/transactions": {
+   "state": "declining",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-22",
+     "lag_days": 59
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-15",
+     "lag_days": 28
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-06",
+     "lag_days": 12
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-02",
+     "lag_days": 32
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "neutral",
+   "events": [
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-13",
+     "lag_days": 8
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-16",
+     "lag_days": 11
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "neutral",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-08-28",
+     "lag_days": 18
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N365_R25_M14_S90": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-08-08",
+     "lag_days": 39
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-03-15",
+     "lag_days": 230
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-04-01",
+     "lag_days": 454
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "polygon/transactions": {
+   "state": "declining",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-29",
+     "lag_days": 66
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-22",
+     "lag_days": 35
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-13",
+     "lag_days": 19
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-09",
+     "lag_days": 39
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-20",
+     "lag_days": 15
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-23",
+     "lag_days": 18
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "neutral",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-09-16",
+     "lag_days": 37
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N365_R25_M14_S180": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2022-06-30",
+     "ramp": "2022-08-08",
+     "lag_days": 39
+    },
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-03-15",
+     "lag_days": 230
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2024-04-01",
+     "lag_days": 454
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "polygon/transactions": {
+   "state": "declining",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-29",
+     "lag_days": 66
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-22",
+     "lag_days": 35
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-13",
+     "lag_days": 19
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-09",
+     "lag_days": 39
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-20",
+     "lag_days": 15
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-23",
+     "lag_days": 18
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "neutral",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "base/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-08-10",
+     "ramp": "2026-09-16",
+     "lag_days": 37
+    }
+   ]
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N365_R40_M7_S90": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-03-26",
+     "lag_days": 241
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2025-06-09",
+     "lag_days": 888
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "polygon/transactions": {
+   "state": "declining",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-22",
+     "lag_days": 59
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-29",
+     "lag_days": 42
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-10",
+     "lag_days": 16
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-05",
+     "lag_days": 35
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-14",
+     "lag_days": 9
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-19",
+     "lag_days": 14
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "base/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N365_R40_M7_S180": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-03-26",
+     "lag_days": 241
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2025-06-09",
+     "lag_days": 888
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "polygon/transactions": {
+   "state": "declining",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-22",
+     "lag_days": 59
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-06-29",
+     "lag_days": 42
+    },
+    {
+     "floor": "2026-01-25",
+     "ramp": "2026-02-10",
+     "lag_days": 16
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-05",
+     "lag_days": 35
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-14",
+     "lag_days": 9
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-19",
+     "lag_days": 14
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "base/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N365_R40_M14_S90": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-04-02",
+     "lag_days": 248
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2025-06-16",
+     "lag_days": 895
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "polygon/transactions": {
+   "state": "declining",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-29",
+     "lag_days": 66
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-07-06",
+     "lag_days": 49
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-12",
+     "lag_days": 42
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-21",
+     "lag_days": 16
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-26",
+     "lag_days": 21
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "base/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ },
+ "N365_R40_M14_S180": {
+  "ethereum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2023-07-29",
+     "ramp": "2024-04-02",
+     "lag_days": 248
+    }
+   ]
+  },
+  "ethereum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2023-01-03",
+     "ramp": "2025-06-16",
+     "lag_days": 895
+    }
+   ]
+  },
+  "polygon/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "polygon/transactions": {
+   "state": "declining",
+   "events": [
+    {
+     "floor": "2023-09-24",
+     "ramp": "2023-11-29",
+     "lag_days": 66
+    }
+   ]
+  },
+  "arbitrum/active_addresses": {
+   "state": "floor",
+   "events": [
+    {
+     "floor": "2025-05-18",
+     "ramp": "2025-07-06",
+     "lag_days": 49
+    }
+   ]
+  },
+  "arbitrum/transactions": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-05-31",
+     "ramp": "2026-07-12",
+     "lag_days": 42
+    }
+   ]
+  },
+  "optimism/active_addresses": {
+   "state": "ramping",
+   "events": [
+    {
+     "floor": "2026-01-05",
+     "ramp": "2026-01-21",
+     "lag_days": 16
+    },
+    {
+     "floor": "2026-08-05",
+     "ramp": "2026-08-26",
+     "lag_days": 21
+    }
+   ]
+  },
+  "optimism/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "base/active_addresses": {
+   "state": "floor",
+   "events": []
+  },
+  "base/transactions": {
+   "state": "floor",
+   "events": []
+  },
+  "robinhood/active_addresses": {
+   "state": "not-enough-history",
+   "events": []
+  },
+  "robinhood/transactions": {
+   "state": "not-enough-history",
+   "events": []
+  }
+ }
+}
