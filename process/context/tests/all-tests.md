@@ -30,11 +30,11 @@ Do not load the whole `process/context/tests/` folder by default. Start here, th
 Its own Update Trigger ("a test runner is added to either `web/` or `api/`") fired when RFC-001
 landed pytest and vitest, and nothing actioned it. Corrected during RFC-005 UPDATE PROCESS.
 
-| Package | Runner | Command | State (24-09-26, narrative-mindshare EVL, final for the day) |
+| Package | Runner | Command | State (25-09-26, post-merge of the narrative-keyword-keying fix into the narrative branch) |
 |---|---|---|---|
-| `api/` | pytest | `uv run --project api pytest api/ -q` | **392 passed, 3 deselected** (final EVL run, narrative-dashboard RFC-1..6 — was 294/2 at the regime-dashboard EVL earlier the same day; deselected are the opt-in `integration`-marked tests) |
+| `api/` | pytest | `uv run --project api pytest api/ -q` | **395 passed, 3 deselected** (25-09-26 post-merge run: narrative-dashboard's 392 + 3 `TestHistoryKeying` tests from the keyword-keying fix — was 294/2 at the regime-dashboard EVL earlier the same day; deselected are the opt-in `integration`-marked tests) |
 | `api/` (network) | pytest | `uv run --project api pytest api/ -m integration` | opt-in, hits real providers (exchange, Farside, Hyperliquid) |
-| `web/` | vitest | `pnpm --filter web test` | **110 passed, 16 files, 0 failed files** (final EVL run, narrative-dashboard — was 75/12 at the regime-dashboard EVL) — `vitest.config.ts` excludes `e2e/**`, so Playwright specs are never collected by vitest. `pnpm --filter web exec tsc --noEmit` exit 0 at the same commit (`web/tsconfig.tsbuildinfo` restored via `git checkout` after) |
+| `web/` | vitest | `pnpm --filter web test` | **110 passed, 16 files, 0 failed files** (unchanged by the 25-09-26 keyword-keying merge; final EVL run, narrative-dashboard — was 75/12 at the regime-dashboard EVL) — `vitest.config.ts` excludes `e2e/**`, so Playwright specs are never collected by vitest. `pnpm --filter web exec tsc --noEmit` exit 0 at the same commit (`web/tsconfig.tsbuildinfo` restored via `git checkout` after) |
 | `web/` (E2E) | Playwright | `cd web && pnpm test:e2e` | **26/26 passed, run twice (24-09-26, narrative-dashboard RFC-6)** — `e2e/screener.spec.ts` (6) + `e2e/regime.spec.ts` (6) + `e2e/narrative.spec.ts` (14, new). The narrative seeder (`seed_e2e_cache.py::build_narrative_fixture`/`seed_narrative`) writes every source's history through the real `cache.write_*` functions (pytrends nightly + backfilled, coingecko legacy + coingecko-narrative, exchange market snapshot + series), keyed exactly as production keys it (pytrends/reddit by keyword, everything else by category id) — no reddit rows, no `coingecko_trending.parquet`, both deliberate. This run **caught a real product bug** (a pandas `None`→`NaN` coercion 500ing `/history` from the second nightly-archive day onward, see the Standing Lesson table below) that no earlier layer's coverage could reach. **Cloud-container note (persists — same fix needed every fresh container):** `@playwright/test` 1.63 wants chromium build 1243 but only `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` is present, so set `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` before running (no-op on a machine with a matching browser, e.g. the user's PC after `pnpm exec playwright install chromium`). This container's egress proxy also blocks Google Trends/Reddit/CoinGecko/Hyperliquid/FRED/DefiLlama/stablecoins.llama.fi — the seeded-fixture E2E runs above never need them, but AC-12's real-cache walkthrough (narrative-dashboard) and AC-11's equivalent (regime dashboard) cannot run here at all and must happen on the user's PC |
 
 Live-cache spot check (reads only, no runner): `uv run --project api python api/scripts/check_weekly_anchor.py`
@@ -43,6 +43,13 @@ cache and say nothing about the real Parquet files.
 
 `uv` must be invoked as `uv run --project api` — `pyproject.toml` and `.venv` live in `api/`,
 not at repo root, while module paths (`api.main:app`) resolve from the root.
+
+**Fresh-worktree frontend install note (found 25-09-26):** `pnpm install` from the repo root does
+NOT work in this repo — there is no root-level `package.json`/`pnpm-workspace.yaml` for it to
+resolve against. Run `pnpm install --frozen-lockfile` **inside `web/`** instead (i.e. `cd web &&
+pnpm install --frozen-lockfile`) before the first `pnpm --filter web test` / `pnpm test:e2e` in a
+fresh worktree. `pnpm --filter web ...` commands themselves resolve fine from the repo root once
+`web/node_modules` exists — only the initial install needs the `cd web` step.
 
 ---
 

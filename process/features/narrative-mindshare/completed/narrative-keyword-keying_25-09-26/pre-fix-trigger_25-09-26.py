@@ -53,19 +53,6 @@ class TriggerResult:
     source_availability: dict[str, str]
 
 
-KEYWORD_KEYED_SOURCES = ("pytrends", "reddit")
-
-
-def _source_history_key(source: str, category_id: str, primary_keyword: str) -> str:
-    """The narrative-cache key a source's history lives under. pytrends and
-    reddit are fetched (and archived by their adapters) by search keyword,
-    not category id — same convention `history.py` documents; coingecko is
-    archived by this module under `category_id`. Reading with any other key
-    silently returns an empty series.
-    """
-    return primary_keyword if source in KEYWORD_KEYED_SOURCES else category_id
-
-
 def load_seed_categories() -> list[dict]:
     """Shared with `routers/narrative.py` so category metadata (label,
     keywords) is loaded from exactly one place, not duplicated.
@@ -216,7 +203,7 @@ def compute_narrative_categories(as_of: str | None = None) -> list[TriggerResult
 
         series_by_source: dict[str, pd.Series | None] = {}
         for source in TOTAL_SOURCES:
-            history = cache.read_narrative_series(source, _source_history_key(source, category_id, primary_keyword))
+            history = cache.read_narrative_series(source, category_id)
             if history.empty:
                 series_by_source[source] = None
                 continue

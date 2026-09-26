@@ -1,0 +1,13 @@
+{
+ "success": true,
+ "data": {
+  "chart": {
+   "types": [
+    "timestamp",
+    "count",
+    "uopsCount"
+   ],
+   "data": []
+  }
+ }
+}

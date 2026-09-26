@@ -23,6 +23,9 @@ api/data/cache/*
 # not an archive, so it stays ignored (re-ignored after the negation).
 !api/data/cache/narrative/
 api/data/cache/narrative/coingecko_trending.parquet
+# Chain-growth archive (chain-growth RFC-3): provider revisions and possible
+# loss of deep history make the nightly merged series worth keeping.
+!api/data/cache/onchain/
 api/data/watchlist.json
 
 # Node (web/)

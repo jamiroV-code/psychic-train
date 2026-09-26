@@ -1,0 +1,67 @@
+name: Chain-growth daily snapshot
+
+# Archives the full daily active-address and transaction series per chain
+# (chain-growth RFC-3) from growthepie, plus the L2BEAT transactions
+# cross-check. Providers revise recent days and may drop deep history, so the
+# merged series is committed. Runs at 22:00 UTC, 60 minutes before
+# narrative-snapshot.yml and 90 before liqtide-snapshot.yml, so the pushes to
+# main don't overlap.
+#
+# No secrets: both sources are keyless.
+on:
+  schedule:
+    - cron: "0 22 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chain-growth-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install api/ dependencies
+        run: uv sync --project api
+
+      - name: Run snapshot
+        id: snapshot
+        run: |
+          set +e
+          uv run --project api python -m api.scripts.snapshot_chain_growth
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          # Exit 2 = every series unavailable -- warn, still commit whatever
+          # exists. Only exit 1 (unexpected crash) fails the job.
+          if [ "$code" -eq 1 ]; then
+            exit 1
+          fi
+
+      - name: Warn when every series was unavailable
+        if: steps.snapshot.outputs.exit_code == '2'
+        run: |
+          echo "::warning::snapshot_chain_growth.py - every chain-growth series was unavailable, see the job log above"
+
+      - name: Commit archived series
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add api/data/cache/onchain/
+          if git diff --staged --quiet; then
+            echo "nothing new to commit"
+            exit 0
+          fi
+          git commit -m "chore: chain-growth snapshot $(date -u +%Y-%m-%d)"
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
+            echo "push attempt $attempt failed; retrying"
+            sleep $((attempt * 10))
+          done
+          exit 1

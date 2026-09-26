@@ -38,13 +38,18 @@ SCREENER_SYMBOLS = ("BTC", "ETH", "HYPE", "ARB", "FET", "ONDO", "DOGE", "SOMEUNM
 
 
 def _seed_history() -> None:
+    # pytrends/reddit rows are keyed by each category's search keyword
+    # (`keywords[0]`), exactly as the real adapters archive them; coingecko
+    # is keyed by category id, as `trigger.py` archives it.
+    keyword_by_id = {c["id"]: c["keywords"][0] for c in trigger.load_seed_categories()}
     start = date.fromisoformat(AS_OF) - timedelta(days=20)
     for i in range(20):
         d = (start + timedelta(days=i)).isoformat()
         for n, cat in enumerate(SEED_IDS):
             spike = 6.0 if (i >= 16 and n % 2 == 0) else 0.0
-            cache.write_narrative_point("pytrends", cat, d, 10.0 + (i % 3) + spike * 3)
-            cache.write_narrative_point("reddit", cat, d, 5.0 + (i % 2) + spike)
+            keyword = keyword_by_id[cat]
+            cache.write_narrative_point("pytrends", keyword, d, 10.0 + (i % 3) + spike * 3)
+            cache.write_narrative_point("reddit", keyword, d, 5.0 + (i % 2) + spike)
             cache.write_narrative_point("coingecko", cat, d, float(i % 2))
 
 

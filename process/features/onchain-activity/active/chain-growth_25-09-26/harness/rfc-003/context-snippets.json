@@ -1,0 +1,29 @@
+{
+  "snippets": [
+    {
+      "file": ".github/workflows/chain-growth-snapshot.yml",
+      "lines": "11-21",
+      "description": "Triggers, permissions, concurrency: no pull_request, contents: write only, own group",
+      "content": "on:\n  schedule:\n    - cron: \"0 22 * * *\"\n  workflow_dispatch: {}\n\npermissions:\n  contents: write\n\nconcurrency:\n  group: chain-growth-snapshot\n  cancel-in-progress: false"
+    },
+    {
+      "file": ".github/workflows/chain-growth-snapshot.yml",
+      "lines": "52-66",
+      "description": "Commit scope limited to onchain archive; commit only on non-empty diff; 3-attempt rebase retry",
+      "content": "git add api/data/cache/onchain/\nif git diff --staged --quiet; then exit 0; fi\n...for attempt in 1 2 3; do git pull --rebase origin \"${GITHUB_REF_NAME}\" && git push && exit 0; ..."
+    },
+    {
+      "file": ".gitignore",
+      "lines": "26-28",
+      "description": "Negation after the narrative block",
+      "content": "!api/data/cache/onchain/"
+    },
+    {
+      "file": "api/data/cache.py",
+      "lines": "469-576",
+      "description": "merge_onchain_series: insert new, revise in 14-day window with previous_value, freeze older (count drift), never delete, rewrite only on change",
+      "content": "def merge_onchain_series(source, chain_id, metric, points, *, today, now_utc, window_days=14) -> OnchainMergeResult"
+    }
+  ],
+  "task": "RFC-3: chain-growth nightly archive (storage + workflow)"
+}
