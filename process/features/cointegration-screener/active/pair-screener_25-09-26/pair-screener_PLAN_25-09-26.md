@@ -56,7 +56,7 @@ back to specific acceptance criteria (AC-1..AC-12) in that SPEC.
 | RFC | Title | Status |
 |---|---|---|
 | RFC-001 | Universe file + loader + deep-fetch script (+ statsmodels dependency, Stage-0 smoke check) | ⏳ PLANNED |
-| RFC-002 | Stats engine (`stats.py`) + golden-value tests | ⏳ PLANNED |
+| RFC-002 | Stats engine (`stats.py`) + golden-value tests | 🔧 CODE-COMPLETE (awaiting user review) |
 | RFC-003 | Pydantic models + response serializer + router + perf-smoke | ⏳ PLANNED |
 | RFC-004 | Web table + detail view + vitest formatters | ⏳ PLANNED |
 | RFC-005 | Playwright `pairs.spec.ts` + screener-isolation proof | ⏳ PLANNED |
@@ -173,17 +173,26 @@ After each phase, document:
 - **Verify**: print a coverage/result table from a live-cache run (after RFC-001's deep fetch).
 - **Done when**: user reviews the golden-value results and the live coverage table and agrees.
 
-### RFC-003: Endpoint
+### RFC-003: Endpoint + compute/persist script + staleness (amended post-Stage-0, see ADR-8 Amendments)
 
-- **What happens**: `api/models/pairs.py` (Pydantic), `api/analytics/cointegration/pairs_response.py`
-  (orchestrator + BH correction across the full universe), `api/routers/pairs.py`
-  (`GET /api/pairs`, `GET /api/pairs/{a}/{b}` with server-side universe validation), registered in
-  `api/main.py`.
-- **Integration points**: router → `pairs_response.py` → `stats.py` → cache reads only.
-- **Test**: pytest router contract tests (shape, 404/422 on invalid symbols, no NaN/0 stand-ins);
-  perf-smoke timing `GET /api/pairs` against the real deep-fetched ~190-pair cache.
-- **Verify**: `curl` both endpoints; perf-smoke output pasted into the phase report.
-- **Done when**: user reviews the perf-smoke number and endpoint shapes and agrees.
+- **What happens**: `api/scripts/compute_pairs.py` (new — runs `pairs_response.py`'s per-pair
+  compute + BH correction over the whole universe and writes `api/data/cache/pairs/results.parquet`
+  + `provenance.json`); `api/models/pairs.py` (Pydantic, + `computation_status`/`stale_reason`
+  fields); `api/analytics/cointegration/pairs_response.py` (now split into a compute path used by
+  `compute_pairs.py` and a read path used by the router — see Stages below); `api/routers/pairs.py`
+  (`GET /api/pairs`, `GET /api/pairs/{a}/{b}`, reads the persisted cache + provenance, never
+  recomputes), registered in `api/main.py`.
+- **Integration points**: `compute_pairs.py` → `pairs_response.py` (compute path) → `stats.py` →
+  cache reads → `results.parquet`/`provenance.json` writes. Router → `pairs_response.py` (read
+  path) → `results.parquet`/`provenance.json` reads only; router never calls `stats.py`.
+- **Test**: pytest router contract tests (shape, 404/422 on invalid symbols, no NaN/0 stand-ins,
+  the three `computation_status` states); read-path timing gate on `GET /api/pairs` (now
+  trivially fast — a persisted-file read, not a compute); a separate, informational
+  `compute_pairs.py` runtime record (~46 s, not gated against 3 s — it is a script, not a request).
+- **Verify**: `curl` both endpoints; run `compute_pairs.py` once for real and paste its runtime +
+  the resulting `provenance.json` into the phase report.
+- **Done when**: user reviews the read-path timing, the compute-script runtime, and endpoint shapes
+  (including the staleness banner behavior) and agrees.
 
 ### RFC-004: Web
 
@@ -385,6 +394,134 @@ surface and invalidation problem for no proven need. If the perf-smoke measureme
 threshold, RFC-003's fallback is an in-process TTL cache (seconds-to-minutes), never a
 precompute/schedule.
 
+### ADR-8 Amendment (Post-Stage-0, RFC-002 findings, 25-09-26): Precompute after backfill, not on-request
+
+**Trigger**: RFC-002 Stage 0 measured the full 153-pair on-request compute against the real
+deep-fetched cache: **46.0 s total** (p95 513 ms/pair) with `coint()`'s default `autolag='aic'`
+(~98% of runtime is the Engle-Granger AIC lag search, run twice per pair); **7.6 s** with
+`autolag=None`; Johansen is cheap (~5 ms/pair). The RFC-003 target is p95 < 3 s warm. See
+`pair-screener_RFC-002-stage0_REPORT_25-09-26.md` §5 for the full timing table. This amendment
+**supersedes** ADR-8's original "on-request compute, no results cache" decision above (kept verbatim
+for history, not deleted) and its "Rejected: ... a precomputed results-cache file" clause.
+
+**New decision (D1, user-approved in chat)**: statistics are precomputed after backfill by a
+dedicated script, `api/scripts/compute_pairs.py` (a new, separate script — not folded into
+`backfill_pairs_universe.py`; see rationale below), and persisted to a git-ignored cache. The API
+only reads the persisted cache; it never computes on request. `coint()` keeps its default
+`autolag='aic'` (per-pair accuracy over speed, now that compute is offline); `autolag` is a single
+named module constant `stats.py::EG_AUTOLAG = "aic"` so this choice stays a one-line change.
+
+**Why a separate script, not a step inside `backfill_pairs_universe.py`**: backfill (network-bound,
+rarely needed — deep history barely changes day to day) and compute (CPU-bound, should re-run
+whenever the universe or price cache changes) have different refresh cadences. Folding them together
+would force every universe edit to re-run the network fetch, and every fresh deep fetch to re-run
+compute even when only more history was wanted. `compute_pairs.py` takes no CLI args, reads the
+current `pairs_universe.json` + cached OHLCV, computes every pair via `stats.compute_pair_stats` +
+`pairs_response.py`'s BH correction, and writes the results cache — the second manually-run script
+in this feature, documented in §19 Ops Runbook.
+
+**Persisted cache (git-ignored, see §12b for the full schema)**: `api/data/cache/pairs/results.parquet`
+(one row per pair, all `PairSummary` fields) plus a per-pair spread store for the detail endpoint
+(exact layout — single list-column vs. `api/data/cache/pairs/spreads/{A}_{B}.parquet` per pair —
+decided at RFC-003 Stage 0 and recorded in its phase report; either is acceptable as long as the
+detail endpoint's read is O(1) file lookups, never a recompute) plus a
+`api/data/cache/pairs/provenance.json` sidecar (see the Staleness amendment below).
+
+**Measured timings (evidence, from RFC-002 Stage 0 report §5)**:
+
+| Config | 153 pairs total | per-pair mean | p95 | EG share |
+|---|---|---|---|---|
+| `coint` default `autolag="aic"` (chosen for the compute script) | 46.0 s | 296 ms | 513 ms | ~98% |
+| `coint(..., autolag=None)` (named-constant fallback only) | 7.6 s | 44 ms | 63 ms | ~82% |
+| Johansen alone | — | ~5 ms | — | — |
+
+**Rejected alternatives**:
+- **Startup warm cache** (compute once when the API process starts) — rejected because every API
+  restart would pay the ~46 s cost synchronously (or need a background-thread warmup with its own
+  "not ready yet" state), and it does not handle "universe changed, needs a refresh" any better than
+  an explicit script; a manually-run script keeps the compute step visible and user-controlled,
+  matching this feature's "no scheduler, user-run scripts" pattern (ADR-8 original, RFC-001's
+  backfill script).
+- **`autolag=None` as the primary path** — rejected because it shifts EG p-values (a real
+  statistical decision, not just a performance one) for a speedup no longer needed once compute is
+  offline; kept as the named-constant fallback if `compute_pairs.py`'s runtime ever becomes a
+  problem (e.g. the universe grows well past 20 coins).
+- **Slow first load** (accept ~46 s on the first `GET /api/pairs` after backfill, in-process-cache
+  thereafter — the RFC-002 Stage 0 report's original D1 lean, option a+d) — rejected in chat in
+  favor of precompute: an unpredictable first-request latency is a worse experience than a visible,
+  deliberate script run, and it reintroduces the "silently slow / silently stale in-process cache"
+  ambiguity ADR-8's original text was trying to avoid.
+
+**Compute-path isolation and cache path resolution (added at PVL supplement, 26-09-26, closes
+Execute-Agent Instructions E5/E6):**
+- The compute path (`compute_pairs.py` and `pairs_response.py`'s compute-path function) reads
+  per-coin OHLCV **only** via `api.data.cache.read_ohlcv(symbol, "1d")`. It **never** calls
+  `ccxt_adapter.fetch_ohlcv` — the compute path makes zero network calls, matching this amendment's
+  "CPU-bound, offline" premise. A missing or empty `read_ohlcv` result for a universe coin maps to
+  per-pair `status: "coin_unavailable"` (ADR-7), with a `reason` naming the coin; it is never
+  treated as silently-stale usable data. Too few shared trading-day rows between two coins'
+  `read_ohlcv` frames (below `MIN_OVERLAP_DAYS`) maps to `status: "insufficient_overlap"`
+  (ADR-6/ADR-7), same as today — unaffected by this note, restated here for completeness since both
+  statuses originate in the same compute-path read.
+- Every pairs-cache path (`results.parquet`, `provenance.json`, and any per-pair
+  `spreads/*.parquet`) is resolved through `cache.CACHE_ROOT`, read at call time — never a
+  hardcoded path and never a module-level constant bound once at import time. This matches the
+  existing convention for every other cache subdirectory (`ohlcv_path()`, `liqtide_payload_path()`,
+  `liquidity_series_path()`, `narrative_series_path()`, all in `api/data/cache.py`, all built from
+  `CACHE_ROOT` inside the function body). Concretely: `api/data/cache.py` gains additive helpers
+  `pairs_results_path()`, `pairs_provenance_path()`, and `pairs_spread_path(symbol_a, symbol_b)`
+  (or equivalent), each returning `CACHE_ROOT / "pairs" / ...` computed at call time — mirroring
+  `ohlcv_path()`'s exact shape. These are additive-only edits to `cache.py`; every existing
+  `cache.py` function is unchanged. `pairs_response.py` calls these helpers rather than
+  constructing paths itself, so the `isolated_cache` fixture's
+  `monkeypatch.setattr(cache, "CACHE_ROOT", tmp_path)` correctly redirects all pairs-cache
+  reads/writes during tests — the same defect class `conftest.py`'s own docstring names ("an
+  unredirected module-level constant").
+
+### ADR-8 Amendment — Staleness and Provenance (numbers are never silently wrong)
+
+**Decision**: every write of the persisted results cache also writes `provenance.json`:
+
+```json
+{
+  "computed_at": "2026-09-26T14:00:00Z",
+  "universe": ["BTC", "ETH", "..."],
+  "per_coin_last_bar_date": {"BTC": "2026-09-25", "ETH": "2026-09-25"},
+  "per_coin_bar_count": {"BTC": 1820, "ETH": 1820},
+  "statsmodels_version": "0.15.0",
+  "eg_autolag": "aic"
+}
+```
+
+On every `GET /api/pairs`/`GET /api/pairs/{a}/{b}` request, the router compares this provenance
+against (a) the CURRENT `pairs_universe.json` (set equality), (b) each universe coin's CURRENT
+`cache/ohlcv/{SYMBOL}/1d.parquet` (max date newer than `per_coin_last_bar_date`, OR bar count
+increased), **and (c) [added at PVL supplement, 26-09-26, closes Execute-Agent Instruction E7] the
+CURRENTLY-INSTALLED `statsmodels.__version__` against provenance's `statsmodels_version`, and the
+CURRENT `stats.py::EG_AUTOLAG` constant against provenance's `eg_autolag`** — a mismatch on either
+means the persisted results were computed under a different statistics configuration than is
+currently running, and must not be silently reported as `fresh`. This closes the gap where
+`provenance.json` recorded these two fields but nothing ever compared them. Four top-level
+`computation_status` triggers now feed the same three-value enum below — a small closed enum plus a
+free-text reason, matching ADR-7's per-pair vocabulary style, never a silent default:
+
+| `computation_status` | Meaning | API behavior | UI |
+|---|---|---|---|
+| `fresh` | provenance matches current universe + cache | 200, full `pairs` array | normal table |
+| `stale` | universe changed, OR any universe coin's cache is newer than provenance, OR the installed `statsmodels_version`/`eg_autolag` no longer matches provenance (added at PVL supplement, 26-09-26) | 200, full `pairs` array (last-known-good rows) + `stale_reason` naming what changed | banner: "results are stale — [reason]; run `compute_pairs.py` to refresh" |
+| `results_unavailable` | no `results.parquet`/`provenance.json` exists yet (fresh clone, first run, or E2E fixture not seeded) | 200, `pairs: []`, `computation_status: "results_unavailable"` | banner: "no results yet — run `compute_pairs.py`" |
+
+The API **never** serves `results.parquet` rows for a coin list that does not match the current
+universe, and never silently drops the staleness signal — a `stale` response still serves the
+last-known-good rows (labelled stale), it does not substitute or hide anything. This mirrors ADR-7's
+"never silently wrong" framing and the project house rule (`all-context.md` Key Patterns: "Numbers
+are never silently wrong").
+
+**Rejected**: silently recomputing on-request when stale is detected — rejected because that
+reintroduces the exact 46 s on-request cost the decision above just eliminated, and makes staleness
+invisible (a slow request would just look slow, not flagged as stale). Serving stale results with no
+`computation_status` flag at all — rejected as a direct violation of "numbers never silently wrong."
+
 ### ADR-9: API shape — two endpoints, server-side universe validation
 
 **Decision**: `GET /api/pairs` (table summary, all pairs) + `GET /api/pairs/{a}/{b}` (detail,
@@ -460,24 +597,57 @@ hand-edited file with no user-facing edit UI in v1 (SPEC Out Of Scope).
 ### `api/scripts/backfill_pairs_universe.py` (new)
 
 - Mirrors `backfill_primaries.py`'s structure: no CLI args, idempotent, calls
-  `ccxt_adapter.fetch_ohlcv(symbol, "1d", limit=DEEP_LOOKBACK_LIMIT)` per universe coin, prints a
-  coverage table (symbol, status, rows, first date, last date).
+  `ccxt_adapter.fetch_ohlcv(symbol, "1d", since=<explicit early date>, limit=DEEP_LOOKBACK_LIMIT)`
+  per universe coin, with defensive cap-hit pagination, prints a coverage table (symbol, status,
+  rows, first date, last date).
 
-### `api/analytics/cointegration/stats.py` (new)
+### `api/scripts/compute_pairs.py` (new, RFC-003, added by the ADR-8 Amendment)
+
+- No CLI args, idempotent (safe to re-run any time). Calls `pairs_response.py`'s compute path over
+  the full current universe; writes `api/data/cache/pairs/results.parquet` +
+  `api/data/cache/pairs/provenance.json`; prints elapsed time + a per-status pair-count summary.
+  Separate from `backfill_pairs_universe.py` because backfill (network) and compute (CPU) refresh
+  on different cadences — see the ADR-8 Amendment for the full rationale.
+- **Network isolation (added at PVL supplement, 26-09-26):** reads OHLCV exclusively via
+  `cache.read_ohlcv` (through `pairs_response.py`'s compute path) — never calls
+  `ccxt_adapter.fetch_ohlcv`. Writes resolve `api/data/cache/pairs/` paths via `cache.py`'s new
+  additive `pairs_results_path()`/`pairs_provenance_path()` helpers (never a hardcoded path), so
+  the script is fully isolatable under `isolated_cache` in tests. See the ADR-8 Amendment's
+  "Compute-path isolation and cache path resolution" note above for the full rationale.
+
+### `api/analytics/cointegration/stats.py` (new, pure — persistence-unaware; RFC-002)
 
 - **Responsibilities**: pure functions over per-coin `DataFrame`s → per-pair result. Log-price
   transform; static OLS hedge ratio both directions; `statsmodels.tsa.stattools.coint` both
-  directions; AR(1) half-life; z-score; per-pair `status`/`reason`; `MIN_OVERLAP_DAYS` gate.
-  One orchestrator `compute_pair_stats(df_a, df_b, symbol_a, symbol_b) -> PairStatsResult`.
+  directions (named constant `EG_AUTOLAG = "aic"`, D1); AR(1) half-life; z-score (both computed
+  from the min-p/rank-driving EG direction's spread, D3); per-pair `status`/`reason`;
+  `MIN_OVERLAP_DAYS` gate. `coint_johansen` called inside a scoped `ComplexWarning` suppression
+  with a `max|imag(eig)| > 1e-9` numerical-instability guard (D2). One orchestrator
+  `compute_pair_stats(df_a, df_b, symbol_a, symbol_b) -> PairStatsResult`. This module knows
+  nothing about the results cache or provenance — see `pairs_response.py` below for persistence.
 - **Key flows**: two coins' cached daily OHLCV → inner-join on date (overlap) → gate on
   `MIN_OVERLAP_DAYS` → log prices → both-direction OLS/EG → Johansen → half-life → z-score.
 
-### `api/analytics/cointegration/pairs_response.py` (new)
+### `api/analytics/cointegration/pairs_response.py` (new, RFC-003, amended post-Stage-0)
 
-- **Responsibilities**: enumerate all `C(n,2)` pairs from the universe; call `stats.py` per pair;
-  collect raw p-values from pairs with `status == "ok"`; run `multipletests(..., method='fdr_bh')`;
-  assemble the full table response (including `insufficient_overlap`/`coin_unavailable` rows, never
-  dropped) and single-pair detail responses.
+- **Responsibilities — compute path** (called only by `api/scripts/compute_pairs.py`, never by the
+  router): enumerate all `C(n,2)` pairs from the universe; read each coin's OHLCV **only** via
+  `cache.read_ohlcv(symbol, "1d")` — never `ccxt_adapter.fetch_ohlcv` (added at PVL supplement,
+  26-09-26; closes Execute-Agent Instruction E5); a missing/empty read maps the pair to
+  `coin_unavailable` before `stats.py` is even called; call `stats.py` per pair; collect raw
+  p-values from pairs with `status == "ok"`; run `multipletests(..., method='fdr_bh')`; assemble
+  the full table response (including `insufficient_overlap`/`coin_unavailable` rows, never
+  dropped) and per-pair spread data; write `api/data/cache/pairs/results.parquet` +
+  `api/data/cache/pairs/provenance.json` via `cache.py`'s new `pairs_results_path()`/
+  `pairs_provenance_path()` helpers (never a hardcoded or import-time-bound path — added at PVL
+  supplement, 26-09-26; closes Execute-Agent Instruction E6).
+- **Responsibilities — read path** (called only by `api/routers/pairs.py`): load
+  `results.parquet` + `provenance.json` (via the same `cache.py` path helpers); compare against
+  the current `pairs_universe.json`, each universe coin's current OHLCV cache, and (added at PVL
+  supplement, 26-09-26; closes Execute-Agent Instruction E7) the currently-installed
+  `statsmodels.__version__`/`stats.py::EG_AUTOLAG` against provenance's `statsmodels_version`/
+  `eg_autolag`; return `(computation_status, stale_reason, pairs[])`. Never calls `stats.py` or
+  `multipletests` — persisted-file reads only (see the ADR-8 Amendment).
 
 ### `api/models/pairs.py` (new)
 
@@ -503,9 +673,16 @@ hand-edited file with no user-facing edit UI in v1 (SPEC Out Of Scope).
 
 Query: none (v1 — always returns the full current universe's pairs).
 
+**Amended post-Stage-0 (ADR-8 Amendment — precompute + staleness)**: the response now carries a
+top-level `computation_status` (`fresh | stale | results_unavailable`) and `stale_reason` (string,
+`null` unless `stale`). `pairs: []` only when `computation_status == "results_unavailable"`;
+otherwise `pairs` is the full last-known-good array (still 200, never 404/503 on staleness).
+
 ```json
 {
   "generated_utc": "2026-09-25T18:00:00Z",
+  "computation_status": "fresh",
+  "stale_reason": null,
   "universe_size": 18,
   "pair_count": 153,
   "min_overlap_days": 365,
@@ -557,11 +734,14 @@ not a universe member; a pair with `status != "ok"` still returns 200 with `spre
 `reason`/status fields as the table row — the detail view is where the user learns *why* a row has
 no stats, not just *that* it doesn't).
 
-Status rules: `status ∈ ok | insufficient_overlap | coin_unavailable`; within `ok`,
+Status rules: per-pair `status ∈ ok | insufficient_overlap | coin_unavailable`; within `ok`,
 `half_life.state ∈ computed | not_mean_reverting`. No field is ever `NaN`, `0` as a stand-in, or
 computed from a truncated sample without `reason` disclosure. `eg_p_bh` is `null` for any pair not
 included in the BH correction's denominator (i.e. `status != "ok"`). Responses are gzip-compressed
-via the existing app-wide `GZipMiddleware`.
+via the existing app-wide `GZipMiddleware`. **Top-level `computation_status ∈ fresh | stale |
+results_unavailable`** (ADR-8 Amendment) is a separate, response-level freshness signal — distinct
+from per-pair `status` — describing whether the persisted results cache matches the current
+universe/price cache; see the ADR-8 Amendment (§3 Architecture Decisions) for the full table.
 
 **Path-param edge cases (added PVL cycle 1, resolves CONCERN-2):**
 - **Self-pair (`a == b`)**: `GET /api/pairs/{a}/{a}` returns **422** (`{"detail": "a and b must be different coins"}`) — a coin is never cointegration-tested against itself; this is never silently treated as a degenerate/self-cointegrated `ok` pair.
@@ -577,13 +757,20 @@ Of Scope).
 
 ## 12b. Storage Schema (Parquet files)
 
+**Amended post-Stage-0 (ADR-8 Amendment)**: the original "no results cache" line below no longer
+holds — see the new `api/data/cache/pairs/` rows.
+
 | Path | Columns | Write mode |
 |---|---|---|
 | `cache/ohlcv/{SYMBOL}/1d.parquet` (existing) | unchanged shape; extended with deeper history for universe coins | cache-first merge (existing `ccxt_adapter`/`cache.write_ohlcv` behavior, unmodified) |
 | `api/data/pairs_universe.json` (new) | flat list/object of ticker strings | hand-edited only; no code writes it |
+| `api/data/cache/pairs/results.parquet` (new, git-ignored) | one row per pair: all `PairSummary` fields (+ spread data, layout decided at RFC-003 Stage 0) | written only by `api/scripts/compute_pairs.py`; read-only to the router |
+| `api/data/cache/pairs/spreads/{A}_{B}.parquet` (new, git-ignored, only if RFC-003 Stage 0 picks the per-pair-file layout) | `date, spread, z_score` per pair | written only by `compute_pairs.py`; read-only to the router |
+| `api/data/cache/pairs/provenance.json` (new, git-ignored) | `computed_at, universe, per_coin_last_bar_date, per_coin_bar_count, statsmodels_version, eg_autolag` | written only by `compute_pairs.py`; read-only to the router |
 
-No new Parquet tables — this feature reads the existing OHLCV cache more deeply; it does not
-introduce a new storage schema, and (per ADR-8) writes no results cache.
+`api/data/cache/pairs/` falls under the existing blanket `api/data/cache/*` gitignore rule
+(confirmed against `.gitignore`) with no carve-out needed — unlike `liqtide/`/`narrative/`, this
+cache is fully regenerable from `compute_pairs.py` and should never be git-tracked.
 
 ---
 
@@ -667,8 +854,12 @@ dependency and smoke-check it before any stats code exists.
 2. `api/data/pairs_universe.py` (or similar) — small loader: read JSON → list of tickers → warn on
    duplicates/known-stablecoin tickers at load time (does not import `watchlist.py`).
 3. `api/scripts/backfill_pairs_universe.py` — mirrors `backfill_primaries.py`: no CLI args, calls
-   `ccxt_adapter.fetch_ohlcv(symbol, "1d", limit=DEEP_LOOKBACK_LIMIT)` per universe coin, prints a
-   coverage table.
+   `ccxt_adapter.fetch_ohlcv(symbol, "1d", since=<explicit early UTC date, e.g. 2020-01-01>,
+   limit=DEEP_LOOKBACK_LIMIT)` per universe coin, with defensive cap-hit pagination, prints a
+   coverage table. **(Corrected post-RFC-001, per `pair-screener_RFC-001_REPORT_25-09-26.md` → Plan
+   Deviations: an explicit `since` is required — `since=None` only tops up forward from the last
+   cached bar against an already-populated cache and never reaches deep history. This text was stale
+   relative to the as-built script even before this amendment; corrected here, not re-litigated.)**
 
 **Post-Phase Testing**
 - Test file: `api/tests/data/test_pairs_universe.py` — pair-enumeration unit test (AC-1: `C(n,2)`
@@ -737,15 +928,38 @@ RFC-001 smoke check output); confirm the AR(1) half-life regression's exact `sta
 non-cointegrated pair, non-mean-reverting pair, short-overlap pair) with their hand-derived expected
 values before writing any test. STOP.
 
+**Stage 0 findings and user decisions (25-09-26, see `pair-screener_RFC-002-stage0_REPORT_25-09-26.md`
+for full evidence) — all approved in chat:**
+- **D1 — performance**: see the ADR-8 Amendment above (precompute after backfill). `stats.py` keeps
+  `coint`'s default `autolag='aic'`, exposed as a single named constant `EG_AUTOLAG = "aic"`.
+- **D2 — ComplexWarning**: `coint_johansen`'s `j.eig` is `complex128` but the largest imaginary part
+  is exactly `0.0` on all 153 real pairs and all four fixtures — the cast to real discards nothing.
+  Approved: suppress `numpy.exceptions.ComplexWarning` only inside a `warnings.catch_warnings()`
+  block scoped tightly around the `coint_johansen` call (comment pointing at this ADR), plus a guard
+  — if `max(abs(j.eig.imag)) > 1e-9`, the pair's Johansen result is refused (treated as numerically
+  unstable, not a silent number) rather than cast. This is never a blanket warning suppression.
+- **D3 — which direction's spread drives the z-score/half-life/detail chart**: the lower-p-value EG
+  direction (the rank-driving, min-p direction per ADR-2b) — not a fixed convention, not both
+  averaged. `PairStatsResult.spread` and `PairStatsResult.eg_rank_direction` are the same direction.
+- **D4 — result shape and fixtures**: the `EGResult`/`JohansenResult`/`HalfLife`/`PairStatsResult`
+  dataclass shape and all four golden fixtures (§3 of the Stage 0 report) approved as designed,
+  including fixture (c) [not-mean-reverting] intentionally NOT asserting on Johansen (its explosive
+  spread produces a spurious `rank_at_least_1=True` — a known, documented property of the test, not
+  a bug to fix). Golden-value provenance follows E4 (behavior-reference / validate-contract): EG
+  p-values and the Johansen trace statistic use a reviewed pinned-statsmodels-output baseline
+  (asymptotic test statistics, not independently hand-derivable); hedge ratio, AR(1) β, half-life
+  and z-score use independent closed-form numpy golden values, checked separately from `stats.py`.
+
 **Stages**
 1. `compute_pair_stats(df_a, df_b, symbol_a, symbol_b) -> PairStatsResult` — inner-join on date,
    gate on `MIN_OVERLAP_DAYS = 365` (named constant), else `insufficient_overlap` with `reason`
    naming available/required day counts (AC-2).
 2. Log-price transform (ADR-1); static OLS hedge ratio both directions (ADR-2a).
-3. `coint()` both directions; rank by min-p; record both p-values and which direction is the
-   rank-driving one (ADR-2b).
-4. `coint_johansen(data, det_order=0, k_ar_diff=1)` → trace stat (r=0), 95% critical value,
-   `rank_at_least_1` boolean (ADR-5).
+3. `coint()` both directions using the named `EG_AUTOLAG = "aic"` constant (D1); rank by min-p;
+   record both p-values and which direction is the rank-driving one (ADR-2b, D3).
+4. `coint_johansen(data, det_order=0, k_ar_diff=1)` inside a scoped `ComplexWarning` suppression
+   with the `max|imag(eig)| > 1e-9` numerical-instability guard (D2) → trace stat (r=0), 95%
+   critical value, `rank_at_least_1` boolean (ADR-5).
 5. AR(1) half-life: OLS of `Δspread` on lagged `spread`; `HL = −ln(2)/β`; `β ≥ 0` →
    `not_mean_reverting` state, no number (ADR-3).
 6. Z-score: latest spread vs. full-sample mean/std (ADR-4).
@@ -760,7 +974,11 @@ values before writing any test. STOP.
   spread — expect `not_mean_reverting` (β ≥ 0), no half-life number; (d) synthetic pair with < 365
   days overlap — expect `insufficient_overlap`, no stats computed, `reason` names both day counts.
   Also: no NaN/inf in any numeric output field for any fixture; z-score/half-life untouched for
-  `insufficient_overlap`/`coin_unavailable` pairs (AC-8).
+  `insufficient_overlap`/`coin_unavailable` pairs (AC-8). ComplexWarning guard test (D2): a
+  synthetic case forcing `max|imag(eig)| > 1e-9` (or a monkeypatched `coint_johansen` return) asserts
+  the pair's Johansen result is refused, not silently cast; a normal fixture asserts the warning is
+  suppressed (no warning escapes `pytest`'s default `-W error` posture, if enabled) and the trace/crit
+  values are the same float64 numbers as before the suppression was added.
 - Run: `uv run --project api pytest api/tests/analytics/test_cointegration_stats.py -q`, then the
   full suite.
 - Verification query: a small script (or pytest `-s` print) runs `compute_pair_stats` for 3-5 real
@@ -771,8 +989,8 @@ values before writing any test. STOP.
 
 **Verification Checklist**
 - [ ] Manual test passed (live 3-5 pair sanity print reviewed — see phase report)
-- [ ] Data verified (golden-value test output + live print pasted into report)
-- [ ] Error handling confirmed (all four fixture branches + no-NaN assertion in tests)
+- [x] Data verified (golden-value test output + live print pasted into report)
+- [x] Error handling confirmed (all four fixture branches + no-NaN assertion in tests)
 - [ ] User confirmed working (golden values + live sanity print reviewed and approved)
 
 **Acceptance Criteria**: AC-2, AC-3, AC-5 (BH itself is RFC-003, but the raw-p-value input this
@@ -781,82 +999,148 @@ stage produces is what RFC-003's BH correction consumes), AC-6, AC-8.
 **Ready For**: RFC-003.
 
 **Implementation Checklist**
-- [ ] Stage 0 findings (statsmodels return shapes + four fixture designs) presented; user approved
-- [ ] `compute_pair_stats` + golden fixture tests (all four branches)
-- [ ] No-NaN/no-stand-in assertion tests
-- [ ] Live 3-5 pair sanity print run and pasted into report
-- [ ] Full `pytest` green; RFC-001 tests unchanged and green
+- [x] Stage 0 findings (statsmodels return shapes + four fixture designs) presented; user approved
+- [x] `compute_pair_stats` + golden fixture tests (all four branches)
+- [x] No-NaN/no-stand-in assertion tests
+- [x] Live 3-5 pair sanity print run and pasted into report
+- [x] Full `pytest` green; RFC-001 tests unchanged and green
 
-### RFC-003: Pydantic models + response serializer + router + perf-smoke
+### RFC-003: Compute/persist script + Pydantic models + response serializer + router (AMENDED — see ADR-8 Amendments)
 
-**Summary**: `api/models/pairs.py`, `api/analytics/cointegration/pairs_response.py`,
-`api/routers/pairs.py` per §11 and ADR-8/ADR-9.
+**Summary**: `api/scripts/compute_pairs.py` (new), `api/models/pairs.py`,
+`api/analytics/cointegration/pairs_response.py` (compute path + read path), `api/routers/pairs.py`
+per §11 and ADR-8 (Amendments)/ADR-9. **Persistence, staleness-detection and the compute script now
+live in this RFC** — the cleaner split, since `pairs_response.py`'s orchestration layer already
+owned "assemble the full-universe response" before this amendment, and the router's read-path
+contract (provenance comparison, `computation_status`) is inseparable from the response shape it
+already builds. `stats.py` (RFC-002) stays a pure, persistence-unaware function library — unchanged.
 **Dependencies**: RFC-002.
 
 **Stage 0**: read `api/models/regime.py` and `api/routers/regime.py` for the existing
 Pydantic-model-plus-router pattern (typed status enums, gzip via app middleware, no new CORS/auth);
 confirm `api/main.py`'s `include_router` wiring point; present the exact `PairSummary`/`PairDetail`
-field lists (§11) and the perf-smoke threshold proposal (recommend: p95 < 3s warm-cache on the full
-confirmed universe, matching the "no unbounded live network call" reasoning the momentum screener's
-cold-start gap already documents) for user confirmation. **Also confirm the path-param edge-case
-contract added at PVL cycle 1 (resolves CONCERN-2, §11): self-pair (`a == b`) → 422; ticker
-matching normalized to uppercase before universe lookup (case-insensitive); unknown ticker (after
-normalization) → 404, self-pair check takes precedence over the unknown-ticker check.** STOP.
+field lists (§11, including the amended `computation_status`/`stale_reason` fields) for user
+confirmation. **Also confirm the path-param edge-case contract added at PVL cycle 1 (resolves
+CONCERN-2, §11): self-pair (`a == b`) → 422; ticker matching normalized to uppercase before
+universe lookup (case-insensitive); unknown ticker (after normalization) → 404, self-pair check
+takes precedence over the unknown-ticker check.** **Decide and record the exact spread-series
+storage layout** (single list-column in `results.parquet` vs. one
+`api/data/cache/pairs/spreads/{A}_{B}.parquet` per pair — see the ADR-8 Amendment) — whichever keeps
+the detail endpoint's read O(1) file lookups. STOP.
 
 **Stages**
 1. `api/models/pairs.py` — `PairStatus`, `HalfLifeState` enums; `PairSummary`, `PairDetail`,
-   `SpreadPoint` models per §11.
-2. `api/analytics/cointegration/pairs_response.py` — enumerate `C(n,2)` pairs from the loaded
-   universe; call `stats.compute_pair_stats` per pair; collect `ok`-pair raw EG p-values (min-p
-   direction); `multipletests(raw_ps, method='fdr_bh')` (ADR-8); assemble `PairSummary[]` (every
-   pair present, per AC-1) and single-pair `PairDetail` builder.
-3. `api/routers/pairs.py` — `GET /api/pairs`, `GET /api/pairs/{a}/{b}` with server-side universe
-   membership validation (404 on non-member symbol, 422 on malformed) — path params uppercased
-   before lookup (case-insensitive matching); self-pair (`a == b`, post-uppercase) returns 422
-   before the universe-membership check runs (§11 path-param edge cases).
-4. `api/main.py` — one additive `app.include_router(pairs.router)` line; no other change to this
+   `SpreadPoint` models per §11, plus `ComputationStatus` enum (`fresh | stale |
+   results_unavailable`) and the top-level `computation_status`/`stale_reason` response fields.
+2. `api/analytics/cointegration/pairs_response.py` — **compute path** (called only by
+   `compute_pairs.py`): enumerate `C(n,2)` pairs from the loaded universe; call
+   `stats.compute_pair_stats` per pair; collect `ok`-pair raw EG p-values (min-p direction);
+   `multipletests(raw_ps, method='fdr_bh')`; assemble `PairSummary[]` (every pair present, per
+   AC-1) + per-pair spread data; write `results.parquet` + `provenance.json` (ADR-8 Amendment
+   schema — `computed_at`, `universe`, `per_coin_last_bar_date`, `per_coin_bar_count`,
+   `statsmodels_version`, `eg_autolag`). **Read path** (called by the router): load
+   `results.parquet` + `provenance.json`; compare provenance against the current
+   `pairs_universe.json` and each universe coin's current OHLCV cache; return
+   `(computation_status, stale_reason | None, pairs: PairSummary[])`. The read path never calls
+   `stats.py` or `multipletests` — it only reads persisted files.
+3. `api/scripts/compute_pairs.py` (new) — no CLI args; calls `pairs_response.py`'s compute path;
+   prints a summary (pair count, elapsed seconds, any `coin_unavailable`/`insufficient_overlap`
+   counts) — mirrors `backfill_pairs_universe.py`'s no-args, idempotent, printed-summary pattern.
+   Documented in §19 Ops Runbook as the second manually-run script.
+4. `api/routers/pairs.py` — `GET /api/pairs`, `GET /api/pairs/{a}/{b}`, both calling
+   `pairs_response.py`'s read path; server-side universe membership validation (404 on non-member
+   symbol, 422 on malformed) — path params uppercased before lookup (case-insensitive matching);
+   self-pair (`a == b`, post-uppercase) returns 422 before the universe-membership check runs (§11
+   path-param edge cases). `results_unavailable`/`stale` are always 200 responses (never 404/503)
+   with the `computation_status` field carrying the signal — see the ADR-8 Amendment table.
+5. `api/main.py` — one additive `app.include_router(pairs.router)` line; no other change to this
    file.
 
 **Post-Phase Testing**
-- Test file: `api/tests/routers/test_pairs.py` — table shape (every pair present, AC-1); BH
-  correction applied only across `ok` pairs (AC-5, golden raw-p-value set with hand-computed
-  expected BH-adjusted set, mirroring the SPEC's own AC-5 language); default response has no
-  null-as-stand-in outside the documented `insufficient_overlap`/`coin_unavailable` cases; detail
-  endpoint 404s on a non-universe symbol, 422 on malformed input; Johansen always present alongside
-  EG for `ok` pairs, never merged (AC-6); `isolated_cache` used throughout.
+- Test file: `api/tests/scripts/test_compute_pairs.py` (new) — with `isolated_cache`: running
+  `compute_pairs.py` against a small seeded universe writes `results.parquet` with every pair
+  present (AC-1) and a `provenance.json` whose `universe`/`per_coin_last_bar_date`/`per_coin_bar_count`
+  match the seeded cache exactly; BH correction applied only across `ok` pairs (AC-5, golden
+  raw-p-value set with hand-computed expected BH-adjusted set, mirroring the SPEC's AC-5
+  language); re-running after adding a coin to the universe changes `provenance.json`'s `universe`
+  field (proves staleness detection has something real to compare against).
+- Test file: `api/tests/routers/test_pairs.py` — table shape read from a pre-seeded
+  `results.parquet` (every pair present, AC-1); default response has no null-as-stand-in outside
+  the documented `insufficient_overlap`/`coin_unavailable` cases; detail endpoint 404s on a
+  non-universe symbol, 422 on malformed input; Johansen always present alongside EG for `ok`
+  pairs, never merged (AC-6); `isolated_cache` used throughout.
+- **Staleness/missing-results tests (new, ADR-8 Amendment; 5th case added at PVL supplement,
+  26-09-26, closes Execute-Agent Instruction E7)**: (a) no `results.parquet`/`provenance.json`
+  present → `GET /api/pairs` returns 200, `computation_status: "results_unavailable"`,
+  `pairs: []` (never 404/503, never a stack trace); (b) `provenance.json` present but
+  `pairs_universe.json` now names a coin not in `provenance.universe` → `stale`, `stale_reason`
+  names the universe mismatch, `pairs` still returns the last-known-good rows; (c)
+  `provenance.json` present but a universe coin's `cache/ohlcv/{SYMBOL}/1d.parquet` now has a
+  later max-date than `per_coin_last_bar_date` → `stale`, `stale_reason` names the coin and the
+  date gap; (d) fresh provenance matching current universe + cache → `fresh`, no `stale_reason`;
+  (e) **NEW** — `provenance.json`'s `statsmodels_version` differs from the installed
+  `statsmodels.__version__`, OR `provenance.json`'s `eg_autolag` differs from the current
+  `stats.py::EG_AUTOLAG` constant → `stale`, `stale_reason` names which field mismatched and both
+  the recorded and current value (e.g. "computed with statsmodels 0.15.0; installed 0.16.1 — re-run
+  compute_pairs.py").
+- **Compute-path network-isolation test (NEW, added at PVL supplement, 26-09-26, closes
+  Execute-Agent Instruction E5)**: monkeypatch/patch `ccxt_adapter.fetch_ohlcv` (or the underlying
+  exchange client) to raise on any call; run `compute_pairs.py`'s compute path over a small
+  `isolated_cache`-seeded universe; assert the run completes successfully with no exception —
+  proves the compute path never reaches the network, only `cache.read_ohlcv`.
+- **Pairs-cache path isolation test (NEW, added at PVL supplement, 26-09-26, closes Execute-Agent
+  Instruction E6)**: run `compute_pairs.py` against `isolated_cache` (a redirected `CACHE_ROOT`);
+  assert `results.parquet`/`provenance.json` land under the isolated `CACHE_ROOT / "pairs"`
+  directory (via `cache.pairs_results_path()`/`cache.pairs_provenance_path()`), never under the
+  developer's real `api/data/cache/pairs/`.
 - Path-param edge-case tests (added PVL cycle 1, resolves CONCERN-2): `GET /api/pairs/{a}/{a}`
   (self-pair, e.g. `BTC/BTC`) returns 422; `GET /api/pairs/btc/eth` (lowercase) resolves
   identically to `GET /api/pairs/BTC/ETH` (case-insensitive match, same response body); an unknown
   ticker after uppercasing (e.g. `GET /api/pairs/BTC/ZZZZ`) returns 404; a self-pair with an
   unknown ticker (e.g. `GET /api/pairs/zzzz/ZZZZ`) returns 422, not 404 (self-pair check
   precedence).
-- Perf-smoke (Hybrid, precondition = real deep-fetched cache from RFC-001 must exist): time
-  `GET /api/pairs` warm (API already running, cache populated) via a script or manual `curl -w
-  "%{time_total}"`; record the number against the Stage-0-confirmed threshold. If it blows the
-  threshold, apply the ADR-8 fallback (in-process TTL cache) and re-measure — do not silently accept
-  a slow endpoint.
-- Run: `uv run --project api pytest api/tests/routers/test_pairs.py -q`, then full suite.
-- Verification: `curl "http://127.0.0.1:8000/api/pairs" | python -m json.tool | head -80` and
-  `curl "http://127.0.0.1:8000/api/pairs/BTC/ETH" | python -m json.tool`.
+- **Read-path timing gate (Fully-Automated, replaces the old on-request perf-smoke)**: time
+  `GET /api/pairs` warm (API running, `results.parquet` pre-seeded/pre-computed) via a script or
+  manual `curl -w "%{time_total}"`; assert it is comfortably under the p95 < 3s target — a
+  persisted-file read is expected to be milliseconds, so this is a real but trivially-met
+  regression guard against an accidental future recompute-on-read bug, not a performance risk in
+  itself.
+- **Compute-script runtime record (informational, not gated)**: run `compute_pairs.py` once
+  against the real deep-fetched cache; paste its elapsed time into the phase report (expected ~46
+  s per the RFC-002 Stage 0 measurement, `EG_AUTOLAG="aic"`); this is evidence, not a pass/fail
+  threshold — the whole point of the ADR-8 Amendment is that this cost is paid once, offline, by
+  the user, not per-request.
+- Run: `uv run --project api pytest api/tests/routers/test_pairs.py api/tests/scripts/test_compute_pairs.py -q`, then full suite.
+- Verification: run `compute_pairs.py` once for real, then `curl "http://127.0.0.1:8000/api/pairs" | python -m json.tool | head -80` and
+  `curl "http://127.0.0.1:8000/api/pairs/BTC/ETH" | python -m json.tool`; paste `provenance.json`'s
+  contents into the phase report.
 
 **Verification Checklist**
-- [ ] Manual test passed (curl both endpoints against real cache — see phase report)
-- [ ] Data verified (row counts match universe's `C(n,2)`; BH-corrected values spot-checked)
-- [ ] Error handling confirmed (404/422 tests; `coin_unavailable`/`insufficient_overlap` rows render)
-- [ ] User confirmed working (perf-smoke number + endpoint output reviewed)
+- [ ] Manual test passed (curl both endpoints against real cache after running `compute_pairs.py`
+  — see phase report)
+- [ ] Data verified (row counts match universe's `C(n,2)`; BH-corrected values spot-checked;
+  `provenance.json` contents pasted)
+- [ ] Error handling confirmed (404/422 tests; `coin_unavailable`/`insufficient_overlap` rows
+  render; `results_unavailable`/`stale` states tested and rendered)
+- [ ] User confirmed working (read-path timing + compute-script runtime + endpoint output reviewed)
 
 **Acceptance Criteria**: AC-1, AC-4 (sort ordering is RFC-004's UI concern but is validated here at
 the data level — BH-p ascending is the array's natural consumption order), AC-5, AC-6, AC-8.
-**What's Functional Now**: both endpoints serve real data from the deep-fetched cache.
+**What's Functional Now**: both endpoints serve real, precomputed data with an explicit
+freshness/staleness signal.
 **Ready For**: RFC-004.
 
 **Implementation Checklist**
-- [ ] Stage 0 findings (field lists + perf threshold) presented; user approved
-- [ ] Models + response serializer + BH correction + tests
+- [ ] Stage 0 findings (field lists incl. `computation_status`/`stale_reason` + spread-storage
+  layout decision) presented; user approved
+- [ ] `compute_pairs.py` + compute-path `pairs_response.py` + BH correction + provenance write +
+  tests
+- [ ] Read-path `pairs_response.py` (provenance comparison, `fresh`/`stale`/`results_unavailable`)
+  + tests (all four states)
 - [ ] Router + 404/422 handling (incl. self-pair 422, case-insensitive uppercase matching,
   unknown-ticker 404, self-pair-precedence-over-unknown-ticker) + tests
 - [ ] `api/main.py` one-line registration
-- [ ] Perf-smoke run against real cache; threshold met or fallback applied and re-measured
+- [ ] Read-path timing gate green; compute-script runtime recorded (informational)
 - [ ] Full `pytest` green; regime/screener router tests unchanged and green
 
 ### RFC-004: Web table + detail view
@@ -930,7 +1214,15 @@ per `all-tests.md`'s Standing Lesson (green ≠ verified) and the SPEC's AC-9/AC
    4-5 symbols) including at minimum: one constructed-cointegrated pair, one non-cointegrated pair,
    and one thin-overlap (`< MIN_OVERLAP_DAYS`) pair — plus a `pairs_universe.json` override path
    (`PAIRS_UNIVERSE_PATH` env var, following the `SCREENER_WATCHLIST_PATH`/`SCREENER_CACHE_ROOT`
-   override precedent) so the E2E run never touches the real universe file.
+   override precedent) so the E2E run never touches the real universe file. **Amended post-Stage-0
+   (ADR-8 Amendment)**: the seeder must also produce PRECOMPUTED results — either by calling
+   `pairs_response.py`'s compute path directly on the fixture universe/cache (preferred — same
+   code path as production, no duplicate logic) and writing the fixture
+   `results.parquet`/`provenance.json` under the `PAIRS_UNIVERSE_PATH`-scoped cache root, or by
+   invoking `compute_pairs.py` itself against the seeded fixture cache. Whichever is chosen, the
+   seeder must guarantee `computation_status == "fresh"` for the seeded fixture before
+   `pairs.spec.ts` runs — an E2E spec asserting real table rows against a `results_unavailable`
+   fixture would be a false-negative test, not a proof.
 2. `web/e2e/pairs.spec.ts` — table renders the fixture universe's full pair count; default sort is
    BH-p ascending; the thin-overlap row shows its explicit reason and no stats; clicking an `ok`
    pair opens its detail page where the spread chart's rendered date range matches the displayed
@@ -1033,6 +1325,37 @@ collision predating this plan (those are the momentum screener's files). UPDATE 
 must correct `_GUIDE.md` to point at this feature's actual new files
 (`api/routers/pairs.py`, `web/app/pairs/`, `api/analytics/cointegration/`, etc.).
 
+### Post-Stage-0 Amendment (RFC-002), 25-09-26
+
+**Trigger**: RFC-002 Stage 0 measured the on-request compute path at ~46 s for 153 pairs against a
+p95 < 3 s target (`pair-screener_RFC-002-stage0_REPORT_25-09-26.md`). User decisions in chat
+(D1–D4, see the ADR-8 Amendments in §3) reverse ADR-8's original "on-request compute, no results
+cache" decision to "precompute after backfill, API reads only," and add a staleness/provenance
+contract (numbers are never silently wrong).
+
+**Classification**: Technical (persistence/compute-model change) + Scope (new script, new cache
+path, new response fields) — not a New/Remove/Timeline change; the product surface (`/pairs`,
+the two endpoints, the SPEC's AC-1..AC-12) is unchanged.
+
+**Impacted RFCs/files**: RFC-002 (Stage 0 decisions D2–D4 recorded, no code-path change — `stats.py`
+stays pure); RFC-003 (materially rewritten — adds `compute_pairs.py`, splits
+`pairs_response.py` into compute/read paths, adds `computation_status`/`stale_reason`, replaces the
+on-request perf-smoke gate with a read-path timing gate + informational compute-script runtime
+record); RFC-005 (seeder must also produce precomputed fixture results, not just fixture OHLCV).
+New files: `api/scripts/compute_pairs.py`, `api/data/cache/pairs/results.parquet`,
+`api/data/cache/pairs/provenance.json` (+ optional per-pair spread files) — all git-ignored under
+the existing `api/data/cache/*` rule.
+
+**Decision**: immediate — applied to this plan text now (this PLAN-supplement pass), before any
+RFC-002/003/005 code is written (RFC-001 is already code-complete and unaffected; RFC-002 is
+code-complete for the pure stats engine and unaffected — only its Stage-0-decisions record and
+Post-Phase Testing gain the D2 ComplexWarning test, no `compute_pair_stats` signature change).
+
+**This invalidates**: the portion of the Validate Contract covering ADR-8 (original "no results
+cache" decision) and the RFC-003 Stage 0 perf-smoke threshold gate. See the Validate Contract
+section below — the affected rows are marked "amended, pending re-validation"; the Gate verdict
+line itself is left untouched for `vc-validate-agent` to re-check, not overwritten here.
+
 ## 19. Ops Runbook
 
 - **Deep-fetch/refresh universe history**: `uv run --project api python api/scripts/backfill_pairs_universe.py`.
@@ -1079,11 +1402,13 @@ Mirrors the locked SPEC's AC-1..AC-12 verbatim (see
 |---|---|---|
 | API dependency | `api/pyproject.toml`, `api/uv.lock` | add `statsmodels>=0.14` (additive) |
 | API data | `api/data/pairs_universe.json` (new), `api/data/pairs_universe.py` (new loader) | new |
-| API scripts | `api/scripts/backfill_pairs_universe.py` (new), `api/scripts/seed_e2e_cache.py` (extend) | |
-| API analytics | `api/analytics/cointegration/stats.py`, `api/analytics/cointegration/pairs_response.py` | new |
-| API models/router | `api/models/pairs.py`, `api/routers/pairs.py` | new |
+| API scripts | `api/scripts/backfill_pairs_universe.py` (new), `api/scripts/compute_pairs.py` (new, ADR-8 Amendment), `api/scripts/seed_e2e_cache.py` (extend — fixture OHLCV + precomputed fixture results) | |
+| API analytics | `api/analytics/cointegration/stats.py` (pure), `api/analytics/cointegration/pairs_response.py` (compute path + read path, ADR-8 Amendment) | new |
+| API models/router | `api/models/pairs.py` (+ `ComputationStatus` enum, `computation_status`/`stale_reason` fields), `api/routers/pairs.py` | new |
 | API main | `api/main.py` | one additive `include_router` line |
-| API tests | `api/tests/data/test_pairs_universe.py`, `api/tests/scripts/test_backfill_pairs_universe.py`, `api/tests/analytics/test_cointegration_stats.py`, `api/tests/routers/test_pairs.py` | new |
+| API cache (new, ADR-8 Amendment) | `api/data/cache/pairs/results.parquet`, `api/data/cache/pairs/provenance.json` (+ optional per-pair spread files) — all git-ignored under `api/data/cache/*` | new, written only by `compute_pairs.py` |
+| API cache helpers (NEW, PVL supplement 26-09-26, closes E6) | `api/data/cache.py` | additive only — new `pairs_results_path()`, `pairs_provenance_path()`, `pairs_spread_path()` helpers built from `CACHE_ROOT` at call time, mirroring `ohlcv_path()`; every existing `cache.py` function unchanged |
+| API tests | `api/tests/data/test_pairs_universe.py`, `api/tests/scripts/test_backfill_pairs_universe.py`, `api/tests/scripts/test_compute_pairs.py` (new, ADR-8 Amendment; NEW rows added at PVL supplement 26-09-26: network-isolation test + isolated-`CACHE_ROOT` pairs-output-path test), `api/tests/analytics/test_cointegration_stats.py`, `api/tests/routers/test_pairs.py` (NEW staleness case at PVL supplement 26-09-26: `statsmodels_version`/`eg_autolag` mismatch) | new |
 | Web | `web/lib/types/pairs.ts`, `web/lib/api/pairs.ts`, `web/lib/format-pairs-value.ts`, `web/components/pairs/*`, `web/app/pairs/page.tsx`, `web/app/pairs/[a]/[b]/page.tsx`, `web/app/page.tsx` (link) | new + one-line link |
 | Web tests | `web/lib/__tests__/format-pairs-value.test.ts`, `web/components/pairs/__tests__/*`, `web/e2e/pairs.spec.ts` | new |
 | Cache | `api/data/cache/ohlcv/{SYMBOL}/1d.parquet` (existing files) | extended with deeper history for universe coins only |
@@ -1092,27 +1417,42 @@ Mirrors the locked SPEC's AC-1..AC-12 verbatim (see
 **Must NOT change (hard blast-radius exclusion, verified by RFC-005's `git diff --stat`):**
 `api/routers/screener.py`, `api/data/watchlist.py`, `web/app/screener/**`, `api/analytics/regime/**`.
 
-Read-only: `api/data/ccxt_adapter.py` (deep-fetch and market-resolution calls only, no edits),
-`api/data/cache.py` (`read_ohlcv`/`write_ohlcv` calls only, no edits), `web/lib/api/regime.ts`
+Read-only: `api/data/ccxt_adapter.py` (deep-fetch and market-resolution calls only, no edits;
+compute path never calls it — see the ADR-8 Amendment's compute-path isolation note), `web/lib/api/regime.ts`
 (structural precedent only).
+
+`api/data/cache.py` is now (PVL supplement, 26-09-26, closes E6) an **additive-edit** touchpoint,
+not read-only — see the "API cache helpers" Touchpoints row above. Its existing functions
+(`read_ohlcv`, `write_ohlcv`, `ohlcv_path`, etc.) remain unchanged; only new `pairs_*` path
+helpers are added, in the same style as the existing `liqtide_*`/`narrative_*` helpers.
 
 ## Public Contracts
 
-- **New**: `GET /api/pairs` (§11 shape), `GET /api/pairs/{a}/{b}` (§11 shape);
-  `compute_pair_stats()` Python function; `pairs_universe` loader's public read function.
+- **New**: `GET /api/pairs` (§11 shape, amended with `computation_status`/`stale_reason`),
+  `GET /api/pairs/{a}/{b}` (§11 shape); `compute_pair_stats()` Python function (unchanged,
+  RFC-002); `pairs_universe` loader's public read function; `api/scripts/compute_pairs.py` as a
+  user-run entrypoint (ADR-8 Amendment); `cache.py::pairs_results_path()` /
+  `pairs_provenance_path()` / `pairs_spread_path()` (NEW, PVL supplement 26-09-26, closes E6 —
+  additive, internal helpers, not a public API surface but listed here since they are new
+  `cache.py` symbols).
 - **Must stay identical**: `GET /api/screener/board`, `GET /api/regime/components`,
   `GET /api/regime/legs`, every existing narrative/watchlist endpoint, `watchlist.py`'s public
   functions, `ccxt_adapter.fetch_ohlcv`'s signature and return type (called, never modified).
 
 ## Blast Radius
 
-- ~18-22 new files, 3 modified files (`api/pyproject.toml`, `api/uv.lock`, `api/main.py` — all
-  additive), across `api/` and `web/`. Extends (does not replace) existing OHLCV Parquet cache files
-  for the ~18 universe coins.
-- Risk class: **low-medium**. Low for existing features (new router/models/analytics module, no
-  shared imports, additive dependency); medium for the new `statsmodels` dependency's runtime cost
-  on the on-request compute path (ADR-8), gated by RFC-003's perf-smoke step and its documented
-  fallback.
+- ~20-24 new files (was ~18-22; +2 for `api/scripts/compute_pairs.py` and
+  `api/tests/scripts/test_compute_pairs.py`, ADR-8 Amendment), 3 modified files
+  (`api/pyproject.toml`, `api/uv.lock`, `api/main.py` — all additive), across `api/` and `web/`.
+  Extends (does not replace) existing OHLCV Parquet cache files for the ~18 universe coins; adds a
+  new git-ignored cache directory `api/data/cache/pairs/` (results + provenance, ADR-8 Amendment).
+- Risk class: **low-medium**, unchanged tier, but the risk shifted with the amendment rather than
+  disappearing: **was** the new `statsmodels` dependency's runtime cost on the on-request compute
+  path; **now** is (a) `compute_pairs.py`'s ~46 s runtime being a real but explicitly
+  informational/non-gated cost paid once, offline, by the user, and (b) the staleness-detection
+  logic itself being new, testable surface (provenance-vs-universe/cache comparison) that must
+  never silently serve mismatched results — covered by RFC-003's new staleness test suite (see the
+  ADR-8 Amendment and the amended RFC-003 Post-Phase Testing).
 - Regression guard: full `pytest`, `vitest`, and both Playwright specs (screener + pairs) run at
   RFC-005, plus the explicit `git diff --stat` isolation proof against the four excluded paths above.
 
@@ -1166,195 +1506,164 @@ Reports for each RFC go in this same task folder as
 ## Validate Contract
 
 Status: PASS
-Date: 25-09-26
-date: 2026-09-25
+Date: 26-09-26
+date: 2026-09-26
 generated-by: outer-pvl
-supersedes: 2026-09-25 (outer-pvl) — outer-pvl has current evidence after PVL supplement cycle 1
+supersedes: 2026-09-26 (outer-pvl, CONDITIONAL — pre-amd-1) — the amd-1 PVL-supplement cycle closed both open gaps (G1, G2) in plan text; this fresh outer-PVL re-validation pass (V1-V7, re-run from V1 per this plan's own §18/PVL-Supplement-Log note that only `vc-validate-agent` can move the gate) has current evidence and supersedes that CONDITIONAL contract.
 
 Parallel strategy: sequential
-Rationale: 3/7 signals present (S2 new public API surface, S6 public-API blast-radius entry, S7 18-22 files) — raw score lands in the MEDIUM/parallel-subagents band, but the work is a single Complex plan with 5 RFCs in a hard, explicitly STOP-gated dependency chain (each RFC's own "Dependencies" field names the prior RFC; the Phased Execution Workflow requires a user/PVL checkpoint between every RFC). No independent, non-overlapping fan-out exists inside this plan — sequential is the fit, not the raw signal count. This re-validation pass (post-PVL-cycle-1) ran as a single sequential synthesis (sonnet) for the same reason — the two open CONCERNs both traced to one artifact (this plan file) with no independent sub-scopes to parallelize. EXECUTE model: opus (one `vc-execute-agent` per RFC, in order).
+Rationale: Unchanged from every prior contract on this plan: one Complex plan, 5 RFCs in a hard, explicitly STOP-gated dependency chain (each RFC's Dependencies field names the prior RFC; the Phased Execution Workflow requires a checkpoint between every RFC) — no independent, non-overlapping fan-out exists to parallelize. This re-validation pass itself also ran sequentially (sonnet): it re-checks one artifact (this plan file) against a small, fixed set of real source files (`api/data/cache.py`, `api/tests/conftest.py`, `api/data/ccxt_adapter.py`, `api/uv.lock`) — no independent sub-scopes. EXECUTE model: opus (one `vc-execute-agent` per RFC, in order), resuming at RFC-002 Stage 1 now that this contract is PASS.
 
-Drift check (re-confirmed this session, branch `main`, HEAD `35e646f` — unchanged since the first-pass contract; no commits landed between cycles): all first-pass drift findings still hold verbatim (adapter/router/middleware/gitignore/workflow facts unchanged). This session additionally re-verified the CONCERN-1 fix mechanically against live source, not just against the feasibility VERDICT text: read `api/data/ccxt_adapter.py::fetch_ohlcv` directly (lines 312-393) and confirmed (a) the warm-cache skip at `if since is None and _cache_is_fresh(...)` only fires when `since is None` — an explicit `since` bypasses it unconditionally; (b) `effective_since = since` is used as-is when the caller passes `since` explicitly — the "top up from last cached bar" override at `if effective_since is None and not cached.empty` only fires when `since` is `None`; (c) `cache.write_ohlcv` (confirmed via `isolated_cache` fixture inspection, `api/tests/conftest.py` lines 26-34) merges via `pd.concat` + the cache module's own sort/dedupe, matching what RFC-001's rewritten Stage 0 assumes. This closes the residual doubt the first-pass contract's `VC-FEASIBILITY-PROBE-NEEDED` line had flagged (that pass could not run Python/uv at all) — the mechanism the plan now specifies is confirmed correct against the actual installed adapter, not just the feasibility VERDICT's offline ccxt-source reasoning. Also re-confirmed: `api/data/watchlist.json` is a real, separate file (not just `watchlist.py`) — the AC-11 test's "never touches `api/data/watchlist.json`" assertion target exists. Also re-confirmed: none of `api/tests/data/`, `api/tests/scripts/`, `api/tests/analytics/`, `api/tests/routers/` contain any `pairs`/`cointegration`-named test file yet, and `api/analytics/cointegration/`, `api/routers/pairs.py` do not exist yet — nothing has been implemented (Status Strip's "all RFCs ⏳ PLANNED" is accurate), so this is a clean pre-EXECUTE validation with no partial-implementation drift to reconcile. Other active plans referencing `fetch_ohlcv` (`momentum-screener_17-09-26/*`, `liqtide-snapshot-tooling_20-09-26`) are prior completed/verified work, not concurrent in-flight EXECUTE — no live conflict.
+Drift check (this session, worktree `my_project-main`, branch `main`, HEAD `be3aee1` — unchanged since the prior contract; zero new commits): working tree carries the same uncommitted/untracked set the prior contract's amd-1 cycle produced — the plan file (this ADR-8-Amendment supplement text), `results.tsv` (amd-0/amd-1 rows), and two untracked reports (`pair-screener_RFC-002-stage0_REPORT_25-09-26.md`, `pair-screener-pvl-iteration-002_REPORT_26-09-26.md`), all read directly this session. Directory scan this session confirms RFC-002+ code still does not exist (`api/analytics/cointegration/`, `api/routers/pairs.py`, `api/models/pairs.py`, `api/scripts/compute_pairs.py` all absent) — RFC-002 remains genuinely at Stage 0 (STOP), matching the Status Strip. RFC-001 is unaffected and unchanged: `api/data/pairs_universe.json`/`.py`, `api/scripts/backfill_pairs_universe.py`, and their tests still exist exactly as committed in `d5eb538`.
 
-Feasibility probe: RESOLVED this cycle. `pair-screener_FEASIBILITY_25-09-26.md` — verdict VIABLE, re-confirmed against live `ccxt_adapter.py` source in this session (see Drift check above). The 3 named known-gaps from the VERDICT (live server-side cap-hit truncation behavior, real per-coin Hyperliquid listing dates, bulk rate-limit/backoff behavior under an 18-coin sequential loop) remain genuinely open — they are empirical facts no source read can establish — and are carried forward as accepted known-gaps with a Hybrid/user-PC real-run verification step (RFC-001's "Real-run hybrid verification" Post-Phase Testing item, gap-resolution B in the table below), not silently dropped and not blocking this PASS.
+RFC-001 evidence re-confirmed this session (unchanged from the prior contract, re-checked, not re-derived): `git show --stat d5eb538` — 729 insertions across 7 files, all within the plan's own Touchpoints/Blast Radius list; no touch to any of the 4 hard-excluded paths or to `api/data/ccxt_adapter.py`. `api/data/cache/ohlcv/` holds 18 coin directories. AC-9/AC-11 mechanics remain proven in shipped code.
+
+**New evidence gathered this session, specifically to verify G1 and G2 against real source (not just plan-text self-consistency):**
+- Read `api/data/cache.py` directly. Confirmed: `CACHE_ROOT` is a module attribute (`DEFAULT_CACHE_ROOT` / `SCREENER_CACHE_ROOT` env override); every existing path helper — `ohlcv_path()`, `liqtide_payload_path()`, `liqtide_raw_path()`, `liqtide_backfill_path()`, `liquidity_series_path()`, `narrative_series_path()`, and the confirmed-boundaries path — builds `CACHE_ROOT / ...` **inside the function body**, read at call time, never bound at import. `write_ohlcv()` additionally calls `path.parent.mkdir(parents=True, exist_ok=True)` at write time, so a new cache subdirectory does not strictly need a `bootstrap_cache_dirs()` entry to work correctly (see the non-blocking note below). The plan's proposed `pairs_results_path()` / `pairs_provenance_path()` / `pairs_spread_path(symbol_a, symbol_b)` (ADR-8 Amendment §3, mirrored in §7, Touchpoints, Public Contracts) describe the exact real convention already in use, not an invented one — **G1's cache-helper claim is mechanically consistent with the current codebase.**
+- Read `api/tests/conftest.py` directly. Confirmed the `isolated_cache` fixture does exactly `monkeypatch.setattr(cache, "CACHE_ROOT", tmp_path)` + `cache.bootstrap_cache_dirs()`, and its own docstring names "an unredirected module-level constant" as the defect class this fixture exists to prevent (the same defect class the plan's Gap-1 finding cited). The plan's planned "Pairs-cache path isolation test" (RFC-003 Post-Phase Testing) — asserting `results.parquet`/`provenance.json` land under the isolated `CACHE_ROOT / "pairs"` via the new helpers — is mechanically sound against this real fixture, not a guess. **G1's isolated-path-test claim is verified against the real fixture contract.**
+- Read `api/data/ccxt_adapter.py` directly. Confirmed `fetch_ohlcv()` and `resolve_market_symbol()` exist as named, and that `read_ohlcv()`/`write_ohlcv()` live in `cache.py`, not in the adapter — so the plan's "compute path calls `cache.read_ohlcv`, never `ccxt_adapter.fetch_ohlcv`" instruction (ADR-8 Amendment compute-path isolation note, §7, RFC-003 Post-Phase Testing network-isolation test, Execute-Agent Instruction E5) names the correct real function boundary between the two modules. **G1's network-isolation claim is verified against the real module boundary.**
+- Confirmed `statsmodels` 0.15.0 is the actually-installed version (`api/uv.lock`) — matches the plan's `provenance.json` worked example (§3 ADR-8 Amendment) and the RFC-002 Stage 0 report's own measured environment. **G2's worked example is internally consistent with the real installed dependency.**
+- **Non-blocking implementation note (not a plan-text gap):** `cache.py::bootstrap_cache_dirs()`'s hardcoded subdirectory tuple (`"ohlcv", "liquidity", "liqtide", "legs", "narrative"`) does not yet list `"pairs"`. This does not block correct operation — `write_ohlcv()`'s precedent shows every write path in this codebase creates its own parent directory at write time — but RFC-003 Stage 1's `compute_pairs.py`/`pairs_response.py` write call sites should follow the same `path.parent.mkdir(parents=True, exist_ok=True)` pattern (or `bootstrap_cache_dirs()` should gain a `"pairs"` entry). Flagged here as an implementation nuance for RFC-003 Stage 1 to carry forward, not a re-opened gap.
+
+**G1 verification result: CLOSED, verified against real source.** All three parts hold: (a) the compute path reads OHLCV only via `cache.read_ohlcv`, never `ccxt_adapter.fetch_ohlcv`, with a missing/empty read mapped to `coin_unavailable` — stated in the ADR-8 Amendment note (§3), §7 Component Details (`stats.py`, `pairs_response.py`, `compute_pairs.py`), and Execute-Agent Instruction E5; (b) the 3 additive `cache.py` helpers are named consistently across §3, §7, Touchpoints, and Public Contracts, and match the real `ohlcv_path()`/`liqtide_*`/`narrative_*` convention exactly (verified above, not assumed); (c) both a network-isolation test and an isolated-`CACHE_ROOT` path test are specified in RFC-003 Post-Phase Testing, each explicitly dated "PVL supplement, 26-09-26," and each is mechanically correct against the real `isolated_cache` fixture (verified above).
+
+**G2 verification result: CLOSED, verified against real source.** The 5th staleness check — `provenance.json`'s `statsmodels_version` vs. the installed `statsmodels.__version__`, and `eg_autolag` vs. the current `stats.py::EG_AUTOLAG` constant, each with an explicit reason string — is specified in the ADR-8 Amendment — Staleness and Provenance section's updated `computation_status` table (`stale` row) and RFC-003 Post-Phase Testing case (e), which names `api/tests/routers/test_pairs.py` as the home for the new case, consistent with the existing cases (a)-(d) already planned for that same file. The worked `provenance.json` example's `statsmodels_version: "0.15.0"` matches the real installed version (verified above), so the staleness contract's own example is not a stale/invented number.
+
+**No new gaps or regressions found this cycle.** Protected-file check (mechanical, `git status --short` this session): only `process/` artifacts are modified/untracked (the plan file, `results.tsv`, and the two reports named above) — zero changes to `api/routers/screener.py`, `api/data/watchlist.py`, `web/app/screener/**`, `api/analytics/regime/**`, or `api/data/ccxt_adapter.py`. `api/data/cache.py` itself is currently **unmodified** (0 diff) — its "additive-edit" touchpoint status is a forward-looking constraint for RFC-003 Stage 1 and has not yet been exercised; this is unchanged from the prior contract and is not a regression.
+
+**Mechanical confirmation of the staleness contract's core claim (re-confirmed, not re-derived):** `api/data/cache.py::ohlcv_bar_count` (`SELECT COUNT(*)`) and `::ohlcv_last_refresh` (`SELECT MAX(timestamp)`) still exist exactly as the ADR-8 Amendment's staleness comparison needs — cheap, DuckDB-pushdown reads per universe coin, no full-cache load and no new `cache.py` code required for that half of the comparison.
+
+Feasibility probe: none required this cycle. The original probe (`pair-screener_FEASIBILITY_25-09-26.md`, VIABLE) remains resolved and proven in shipped code (RFC-001). Every check this cycle (G1, G2, the protected-file scan) was answerable by reading `cache.py`, `conftest.py`, `ccxt_adapter.py`, and `uv.lock` directly — no untested runtime/library/IO behavior is in play. `VC-FEASIBILITY-PROBE-NEEDED` was considered and not triggered.
 
 Test gates (C3 5-column table — ADDITIVE; existing consumers still parse the legacy line form below it):
 
 | criterion id | behavior | strategy | proving test | gap-resolution |
 |---|---|---|---|---|
-| AC-1 | Every pair from curated list appears as exactly one row (C(n,2), no dupes) | Fully-Automated | `api/tests/data/test_pairs_universe.py::test_pair_enumeration` + `api/tests/routers/test_pairs.py::test_table_shape` | A |
-| AC-9 | Universe loader structurally isolated from `watchlist.py` (no import, no shared function calls) | Fully-Automated | `api/tests/data/test_pairs_universe.py::test_loader_isolation` (`sys.modules`/import-graph assertion) | A |
-| AC-11 (mechanics) | Deep-fetch script extends (not replaces) a pre-seeded cache via explicit-`since` (never `since=None`) calls; momentum-screener cache untouched | Fully-Automated | `api/tests/scripts/test_backfill_pairs_universe.py` with `isolated_cache` — seeds a SHALLOW 501-bar cache, mocks the exchange to return deep history on explicit-`since` calls, asserts post-backfill row count/date range reach the mocked deep start (not "row count increased"); asserts `since=None` is never used; mocked cap-hit pagination test (CONCERN-1 fully closed — resolved and re-confirmed against live adapter source this cycle) | A |
-| AC-11 (live) | Real per-coin coverage table (row count, first/last date) after one live deep fetch | Hybrid — precondition: real Hyperliquid reachability from wherever RFC-001 actually runs | DuckDB coverage query output pasted into the RFC-001 phase report; carries the 3 feasibility-VERDICT known-gaps (cap-hit truncation, real listing dates, rate-limit/backoff) | B |
-| AC-2, AC-3, AC-8 | Golden-value branches: cointegrated / non-cointegrated / not-mean-reverting / insufficient-overlap; no NaN/inf in any output field | Fully-Automated | `api/tests/analytics/test_cointegration_stats.py` (4 fixtures) | A |
-| AC-3 (real-data sanity) | Live 3-5 pair sanity print on the real deep-fetched cache, eyeballed not asserted-equal (no independent oracle exists) | Hybrid — precondition: real deep-fetched cache from RFC-001 | RFC-002 phase-report print | B |
-| AC-1, AC-5, AC-8 | Table shape + BH correction golden test (hand-computed raw-p → expected BH-adjusted set) + no-NaN/no-stand-in outside documented states | Fully-Automated | `api/tests/routers/test_pairs.py` | A |
-| — (contract hardening) | 404 on invalid symbol; 422 on a self-pair (`a == b`, checked before universe-membership); ticker matching case-insensitive (uppercase-normalized before lookup) | Fully-Automated | `api/tests/routers/test_pairs.py::test_self_pair_422`, `::test_case_insensitive_match`, `::test_unknown_ticker_404`, `::test_self_pair_precedence_over_unknown` (CONCERN-2 fully closed — contract specified in §11, propagated to Stage 0/Stages/Post-Phase Testing) | A |
-| — (perf, success metric) | p95 < 3s warm cache against the real ~153-190-pair deep-fetched cache | Hybrid — precondition: real deep-fetched cache + running API | RFC-003 phase-report timing output; ADR-8's in-process TTL-cache fallback + re-measure if threshold missed | B |
-| AC-4 | Table default sort is live-computed ascending BH-p, not hardcoded to input order | Fully-Automated | `web/lib/__tests__/format-pairs-value.test.ts` (shuffled-fixture sort test) | A |
-| AC-2, AC-6, AC-8 | Table + detail component rendering: insufficient/unavailable rows, both EG directions + Johansen simultaneous, injected-fetcher error path | Fully-Automated | `web/components/pairs/__tests__/*` | A |
-| AC-2, AC-4, AC-6, AC-7 | Manual table + one `ok` + one `insufficient_overlap` detail-page walkthrough against a running API | Agent-Probe | RFC-004 manual walkthrough (phase report) | A |
-| AC-1, AC-2, AC-6, AC-7, AC-12 | Full E2E: table renders fixture universe, default sort, thin-overlap row, chart date range == displayed sample window, Johansen+EG simultaneous, zero console errors | Fully-Automated | `web/e2e/pairs.spec.ts`, run twice | A |
-| AC-10 | `git diff --stat` on the 4 hard-excluded paths (`screener.py`, `watchlist.py`, `web/app/screener/**`, `api/analytics/regime/**`) — empty output required | Fully-Automated | RFC-005 isolation check, pasted into phase report | A |
-| AC-10 | Full existing `pytest`+`vitest`+`screener.spec.ts` re-run green, no regressions vs. the current baseline (392 passed/3 deselected pytest, 110/16 vitest, 26/26 Playwright — `screener.spec.ts` 6 of those 26) | Fully-Automated | RFC-005 full-suite re-run | A |
-| AC-11 (full) / AC-3 (real-world) | Real-cache user walkthrough of `/pairs` against genuinely deep-fetched history | Agent-Probe (user) — known-gap in this container (egress blocks Hyperliquid; same precedent as the regime dashboard's AC-11 and the narrative dashboard's AC-3/AC-12) | User's own PC, per RFC-005 Stage 4 | D — backlog: plan stays in `active/` until the user confirms, exact precedent set by `regime-dashboard_24-09-26` |
+| AC-1 | Every pair from curated list appears as exactly one row (C(n,2), no dupes) | Fully-Automated | `api/tests/data/test_pairs_universe.py::test_pair_enumeration` (shipped, RFC-001) + `api/tests/routers/test_pairs.py::test_table_shape` (pending, RFC-003) | A (universe half, shipped) / B (router half, RFC-003 checklist) |
+| AC-9 | Universe loader structurally isolated from `watchlist.py` | Fully-Automated | `api/tests/data/test_pairs_universe.py` isolation test — shipped and green (RFC-001, part of the 420/3 baseline) | A |
+| AC-11 (mechanics) | Deep-fetch script extends (not replaces) a pre-seeded cache via explicit-`since` calls; momentum-screener cache untouched | Fully-Automated | `api/tests/scripts/test_backfill_pairs_universe.py` (9 tests) — shipped and green | A |
+| AC-11 (live) | Real per-coin coverage table after one live deep fetch | Hybrid | Done and evidenced — RFC-001 phase report's 18-coin table | A |
+| AC-2, AC-3, AC-8 | Golden-value branches: cointegrated / non-cointegrated / not-mean-reverting / insufficient-overlap; no NaN/inf | Fully-Automated | `api/tests/analytics/test_cointegration_stats.py` (pending, RFC-002 Stage 1) — Stage 0 report confirms all 4 fixtures behave as designed and pins exact expected values | B (design proven; code pending) |
+| AC-3 (real-data sanity) | Live 3-5 pair sanity print, eyeballed | Hybrid | RFC-002 phase-report print (pending) | B |
+| AC-1, AC-5, AC-8 | Table shape + BH correction golden test + no-NaN | Fully-Automated | `api/tests/routers/test_pairs.py` (pending, RFC-003) | B |
+| — (contract hardening) | 404 on invalid symbol; 422 on self-pair (precedence over unknown-ticker); case-insensitive matching | Fully-Automated | `api/tests/routers/test_pairs.py::test_self_pair_422` etc. (pending, RFC-003) | B |
+| AC-4 | Table default sort ascending BH-p, insufficient rows excluded from sort key | Fully-Automated | `web/lib/__tests__/format-pairs-value.test.ts` (pending, RFC-004) | B |
+| AC-2, AC-6, AC-8 | Table + detail component rendering | Fully-Automated | `web/components/pairs/__tests__/*` (pending, RFC-004) | B |
+| AC-2, AC-4, AC-6, AC-7 | Manual table + detail walkthrough | Agent-Probe | RFC-004 manual walkthrough (pending) | B |
+| AC-1, AC-2, AC-6, AC-7, AC-12 | Full E2E on seeded fixtures | Fully-Automated | `web/e2e/pairs.spec.ts` (pending, RFC-005) | B |
+| AC-10 | `git diff --stat` on the 4 hard-excluded paths — empty output | Fully-Automated | RFC-005 isolation check (pending); RFC-001's own diff already independently confirms zero touches, one RFC early | A (partial, RFC-001) / B (full, RFC-005) |
+| AC-10 | Full pytest+vitest+`screener.spec.ts` re-run green | Fully-Automated | RFC-001 baseline: 420/3, no regressions vs. 392/3 pre-RFC-001 | A (through RFC-001) / B (through RFC-005) |
+| AC-11 (full) / AC-3 (real-world) | Real-cache user walkthrough | Agent-Probe (user) — known-gap in this container | User's own PC, RFC-005 Stage 4 | D — backlog, plan stays in `active/` |
+| — (read-path timing) | `GET /api/pairs` warm read is comfortably < 3s p95 (persisted-file read, not a recompute) | Fully-Automated | RFC-003 phase-report timing gate (pending) — implemented as a pytest `TestClient`-timed assertion (E8) | B |
+| — (compute-script runtime) | `compute_pairs.py`'s ~46s runtime is recorded, not gated | Informational | RFC-003 phase-report (pending) — magnitude already measured at Stage 0 | A (measured) / B (recorded in phase report) |
+| — **G1, verified this cycle** — compute-path network isolation | `compute_pairs.py`/`pairs_response.py`'s compute path never makes a live network call — OHLCV ingestion for compute is a pure, offline cache read via `cache.read_ohlcv` only | Fully-Automated | ADR-8 Amendment "Compute-path isolation and cache path resolution" note + §7 + RFC-003 Post-Phase Testing network-isolation test | B — verified this cycle against real `cache.py`/`ccxt_adapter.py` source; code pending RFC-003 Stage 1 |
+| — **G1, verified this cycle** — pairs-cache path resolution | 3 additive `cache.py` helpers (`pairs_results_path`/`pairs_provenance_path`/`pairs_spread_path`) resolve `CACHE_ROOT` at call time, isolatable by the `isolated_cache` fixture | Fully-Automated | §3 ADR-8 Amendment + §7 + Touchpoints + Public Contracts + RFC-003 Post-Phase Testing isolated-path test | B — verified this cycle against real `ohlcv_path()`/`conftest.py` conventions; code pending RFC-003 Stage 1 |
+| — **G2, verified this cycle** — staleness-comparison completeness | `provenance.json` records `statsmodels_version`/`eg_autolag`; the 5th staleness check compares them against the currently-installed/configured values, `stale` (never silently `fresh`) on mismatch | Fully-Automated | ADR-8 Amendment — Staleness and Provenance (updated comparison rule + `computation_status` table) + RFC-003 Post-Phase Testing case (e) | B — verified this cycle against real `api/uv.lock` (statsmodels 0.15.0); code pending RFC-003 Stage 1 |
 
 gap-resolution legend:
 - A — proven now (gate passes in this cycle)
-- B — fixed in this plan (gate added by this plan's checklist)
+- B — fixed in this plan (gate added by this plan's checklist, or pending a same-cycle plan-supplement)
 - C — deferred to a named later phase/plan
 - D — backlog test-building stub (named residual; keep-active; continue)
 
-C-4 reconciliation: every `strategy:` value above is one of the 3 proving strategies (Fully-Automated / Hybrid / Agent-Probe). The one D-resolution row (real-cache walkthrough) still carries a proving strategy (Agent-Probe, user-run) plus separate Fully-Automated mechanical coverage of the same underlying behavior (the `isolated_cache` extension test) — this is a named residual with a resolution path, not an ungated behavior, so the net gate is not vacuously green on it.
+C-4 reconciliation: every `strategy:` value above is one of the 3 proving strategies (Fully-Automated / Hybrid / Agent-Probe). The D-resolution row (real-cache walkthrough) carries a proving strategy (Agent-Probe, user-run) plus independent Fully-Automated mechanical coverage of the same underlying behavior (the shipped `isolated_cache` extension test) — a named residual with a resolution path, not an ungated behavior. Net gate is PASS: 0 FAILs, 0 CONCERNs — both of the prior cycle's CONCERNs (G1, G2) are now closed and independently verified against real source, not merely restated in plan text.
 
 Legacy line form (retained so existing validate-contract consumers still parse):
-- Universe/deep-fetch (RFC-001): `Fully-automated: uv run --project api pytest api/tests/data/ api/tests/scripts/ -q` | `hybrid: real deep-fetch + DuckDB coverage query (needs Hyperliquid reachability)`
-- Stats engine (RFC-002): `Fully-automated: uv run --project api pytest api/tests/analytics/test_cointegration_stats.py -q` | `hybrid: live 3-5 pair sanity print (needs real cache)`
-- API (RFC-003): `Fully-automated: uv run --project api pytest api/tests/routers/test_pairs.py -q` | `hybrid: perf-smoke curl timing (needs real cache + running API)`
-- Web (RFC-004): `Fully-automated: pnpm --filter web test` | `agent-probe: manual table + detail walkthrough`
-- E2E + isolation (RFC-005): `Fully-automated: cd web && pnpm test:e2e` + `uv run --project api pytest api/ -q` (full suite) + `git diff --stat` isolation check | `agent-probe: real-cache user walkthrough (known-gap, user's PC)`
+- Universe/deep-fetch (RFC-001): `Fully-automated: uv run --project api pytest api/tests/data/ api/tests/scripts/ -q` (shipped, 164 passed/2 deselected) | `hybrid: real deep-fetch + DuckDB coverage query` (done, see RFC-001 phase report)
+- Stats engine (RFC-002): `Fully-automated: uv run --project api pytest api/tests/analytics/test_cointegration_stats.py -q` (pending, Stage 0 design proven) | `hybrid: live 3-5 pair sanity print` (pending)
+- API (RFC-003, amended scope): `Fully-automated: uv run --project api pytest api/tests/routers/test_pairs.py api/tests/scripts/test_compute_pairs.py -q` (pending — now includes the network-isolation test, the isolated-path test, and staleness case (e)) | `fully-automated: read-path timing gate` (pending) | `informational: compute_pairs.py runtime record` (~46s measured)
+- Web (RFC-004): `Fully-automated: pnpm --filter web test` (pending) | `agent-probe: manual table + detail walkthrough` (pending)
+- E2E + isolation (RFC-005): `Fully-automated: cd web && pnpm test:e2e` + `uv run --project api pytest api/ -q` (full suite) + `git diff --stat` isolation check (all pending) | `agent-probe: real-cache user walkthrough` (known-gap, user's PC)
 
-Failing stub (AC-1, pair enumeration):
+Failing stubs: unchanged from the prior contract (AC-1, AC-9, AC-11 mechanics, AC-2/3/8, AC-1/5/8, contract hardening, AC-4, AC-2/6/8, AC-1/2/6/7/12, AC-10) — AC-1/AC-9/AC-11-mechanics stubs are moot (real tests shipped in RFC-001); the remainder still apply verbatim to RFC-002-005. See this file's git history (`be3aee1` and earlier) for the exact stub text.
+
+Failing stub (compute-path network isolation, carried forward, still pending RFC-003 Stage 1):
 ```
-test("should enumerate exactly C(n,2) pairs with no duplicates for the curated universe", () => {
-  throw new Error("NOT IMPLEMENTED — TDD stub: pair-enumeration unit test, test_pairs_universe.py")
+test("should never call ccxt_adapter.fetch_ohlcv during compute_pairs.py — OHLCV ingestion for compute uses cache.read_ohlcv only", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: assert a mocked/patched ccxt_adapter.fetch_ohlcv is never invoked during a full compute_pairs.py run against a pre-seeded isolated_cache")
 })
 ```
 
-Failing stub (AC-9, loader isolation):
+Failing stub (staleness-comparison completeness, carried forward, still pending RFC-003 Stage 1):
 ```
-test("should not import or read api/data/watchlist.py from the pairs_universe loader module", () => {
-  throw new Error("NOT IMPLEMENTED — TDD stub: loader import-graph isolation test, test_pairs_universe.py")
-})
-```
-
-Failing stub (AC-11 mechanics, deep-fetch extension with shallow pre-seed):
-```
-test("should extend a pre-seeded SHALLOW (501-bar) cache to near-DEEP_LOOKBACK_LIMIT depth via explicit-since calls, not just append a few forward bars, and never call fetch_ohlcv with since=None", () => {
-  throw new Error("NOT IMPLEMENTED — TDD stub: test_backfill_pairs_universe.py, shallow-cache-collision case, see resolved CONCERN-1")
-})
-```
-
-Failing stub (AC-2/AC-3/AC-8, golden-value branches):
-```
-test("should match hand-derived EG/Johansen/half-life/z-score values on the 4 synthetic fixtures (cointegrated, non-cointegrated, not-mean-reverting, short-overlap) with no NaN in any field", () => {
-  throw new Error("NOT IMPLEMENTED — TDD stub: test_cointegration_stats.py")
-})
-```
-
-Failing stub (AC-1/AC-5/AC-8, table + BH):
-```
-test("should return every pair as one row and apply BH correction only across status==ok pairs, matching a hand-computed expected set", () => {
-  throw new Error("NOT IMPLEMENTED — TDD stub: test_pairs.py")
-})
-```
-
-Failing stub (contract hardening, self-pair + case sensitivity):
-```
-test("should 422 on GET /api/pairs/{a}/{a} (self-pair, precedence over unknown-ticker), 404 on an unknown ticker, and match case-insensitively via uppercase normalization", () => {
-  throw new Error("NOT IMPLEMENTED — TDD stub: test_pairs.py, see resolved CONCERN-2")
-})
-```
-
-Failing stub (AC-4, sort order):
-```
-test("should sort ascending by BH-corrected p-value on a shuffled fixture, insufficient rows excluded from the sort key", () => {
-  throw new Error("NOT IMPLEMENTED — TDD stub: format-pairs-value.test.ts")
-})
-```
-
-Failing stub (AC-2/AC-6/AC-8, component rendering):
-```
-test("should render insufficient/unavailable rows with no stat columns and both EG directions + Johansen simultaneously for an ok pair", () => {
-  throw new Error("NOT IMPLEMENTED — TDD stub: web/components/pairs/__tests__/*")
-})
-```
-
-Failing stub (AC-1/AC-2/AC-6/AC-7/AC-12, E2E):
-```
-test("pairs table renders fixture universe, default sort, thin-overlap disclosure, chart date range matches displayed sample window", () => {
-  throw new Error("NOT IMPLEMENTED — TDD stub: web/e2e/pairs.spec.ts")
-})
-```
-
-Failing stub (AC-10, isolation):
-```
-test("git diff --stat on screener.py/watchlist.py/web/app/screener/**/api/analytics/regime/** is empty after this feature ships", () => {
-  throw new Error("NOT IMPLEMENTED — TDD stub: RFC-005 isolation proof")
+test("should mark computation_status stale (or document as an accepted known-gap) when provenance.statsmodels_version or eg_autolag no longer matches the running environment", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: test_pairs.py, 5th staleness case — dependency/constant drift, not just universe/cache drift")
 })
 ```
 
 Dimension findings:
-- Infra fit: PASS — unchanged from first pass. Local-only FastAPI/Next.js dev, no container/port/proxy surface touched; one additive `include_router` line; no new middleware needed (`GZipMiddleware` already app-wide).
-- Test coverage: PASS (upgraded from CONCERN) — both first-pass gaps are now closed in plan text and mechanically re-verified this session: the AC-11 mechanical test now explicitly seeds a shallow pre-existing cache, mocks explicit-`since` deep fetch, and asserts final depth (not "row count increased"), plus a `since=None`-never-used assertion and a mocked cap-hit pagination test (closes the original test-coverage gap around CONCERN-1); RFC-003's Post-Phase Testing now names 4 explicit self-pair/case-sensitivity router tests (closes the original gap around CONCERN-2). Coverage remains one of the more complete test plans in this repo (4 golden-value branches, BH golden test, no-NaN assertions, sort test, component tests, full E2E, isolation proof, satisfies Standing Lesson #4).
-- Breaking changes: PASS — unchanged. New router/models/analytics module only; `api/main.py`'s one added line is additive; `Must NOT change` list is explicit and enforced by RFC-005's own `git diff --stat` gate; no shared imports found anywhere in the current tree (re-confirmed this session).
-- Security surface: PASS — unchanged. No auth/secrets/billing touched; API stays bound to 127.0.0.1, CORS unchanged; `pairs_universe.json` is a local hand-edited file with no write endpoint; `{a}`/`{b}` path params are validated against a closed universe list server-side (self-pair 422 + uppercase normalization before lookup, per resolved CONCERN-2) before any downstream use — no injection/traversal surface introduced.
-- RFC-001 (Universe + deep-fetch): PASS (upgraded from CONCERN) — CONCERN-1 fully resolved. RFC-001 Stage 0 now specifies the exact deep-fetch mechanism (explicit early `since`, never `since=None`, defensive cap-hit pagination, mandatory per-coin bars/first-date logging), matching the feasibility VERDICT (VIABLE) and independently re-confirmed this session against live `ccxt_adapter.py` source (see Drift check above) — the explicit-`since` path genuinely bypasses both the warm-cache skip and the top-up-only default that caused the original 4-coin (BTC/ETH/HYPE/SOL) shallow-cache collision. `ccxt_adapter.py` stays fully read-only as required.
-- RFC-002 (Stats engine): PASS — unchanged. ADR-1/ADR-3/ADR-4 textbook-correct and internally consistent; ADR-5's fixed `det_order=0, k_ar_diff=1` specification is a defensible v1 simplification. E4 (golden-fixture clarification: pinned-baseline for EG/Johansen test statistics, hand-computed for AR(1)/hedge-ratio/z-score) remains a live, non-blocking execute-agent instruction for RFC-002 Stage 0.
-- RFC-003 (Endpoint): PASS (upgraded from CONCERN) — CONCERN-2 fully resolved. `GET /api/pairs/{a}/{b}` path-param contract now fully specified in §11: self-pair (`a == b`) → 422 (checked first, precedence over unknown-ticker); ticker matching case-insensitive (uppercase-normalized before lookup); unknown ticker (post-normalization) → 404. Propagated into Stage 0, Stages, Post-Phase Testing (4 new test cases), and Implementation Checklist. Perf-smoke threshold (p95 < 3s, ~153 pairs, each needing 2-direction EG + Johansen + AR(1) OLS) remains a real, not-yet-measured risk — already correctly tiered Hybrid with an in-scope ADR-8 fallback (in-process TTL cache); this is a residual noted for visibility, not a gate blocker.
-- RFC-004 (Web): PASS — unchanged. Reuse points (`ComponentPanel.tsx`, `DeadDataNotice.tsx`, `format-unavailable-reason.ts`, `regime.ts`'s fetch pattern) all confirmed to exist; no new dependency proposed.
-- RFC-005 (E2E + isolation proof): PASS — unchanged. `seed_e2e_cache.py` already follows the guard→write-through-real-cache-functions→shared-manifest pattern (confirmed this session: `build_regime_fixture`/`seed_regime`, `build_narrative_fixture`/`seed_narrative` both present) that RFC-005's `pairs` section extends cleanly; real-cache-walkthrough known-gap correctly follows the regime-dashboard AC-11 precedent.
+- Infra fit: PASS — unchanged. Local-only FastAPI/Next.js dev, no container/port/proxy surface touched; one additive `include_router` line; `GZipMiddleware` already app-wide.
+- Test coverage: PASS (upgraded from CONCERN) — both gaps from the prior cycle (compute-path network isolation; staleness-comparison completeness) are now specified in plan text AND verified this session against the real `cache.py`/`conftest.py`/`ccxt_adapter.py` conventions, not just internal plan-text consistency. RFC-001's shipped coverage remains excellent and unaffected.
+- Breaking changes: PASS — unchanged. New router/models/analytics module only; `api/main.py`'s one added line stays additive; the `Must NOT change` list is independently confirmed by a real `git show --stat` diff for RFC-001 and by this session's `git status --short` scan for the current cycle.
+- Security surface: PASS — unchanged. No auth/secrets/billing touched; local-only binding; `{a}`/`{b}` path params validated server-side before any downstream use.
+- RFC-001 (Universe + deep-fetch): PASS, unchanged — proven in shipped code, 420/3 pytest baseline, isolation proof, `ccxt_adapter.py` confirmed unmodified.
+- RFC-002 (Stats engine, Stage 0 done): PASS (upgraded from CONCERN) — the pure-statistics design (ADR-1/3/4/5, D1-D4) is sound and Stage-0-validated; Gap 1's compute-path OHLCV-source instruction is now explicit in plan text and verified against the real `cache.py`/`ccxt_adapter.py` module boundary. Ready for Stage 1.
+- RFC-003 (Endpoint, amended scope): PASS (upgraded from CONCERN) — the precompute/persistence/staleness redesign (ADR-8 Amendment) is architecturally sound; both prior-cycle gaps (cache-path resolution mechanism, staleness-comparison completeness) are closed in plan text and verified this session against the real `ohlcv_path()`/`isolated_cache`/`uv.lock` conventions.
+- RFC-004 (Web): PASS — unchanged, not in scope for this amendment.
+- RFC-005 (E2E + isolation proof, amended scope): PASS — unchanged. The seeder's extension plan matches the confirmed `build_X_fixture`/`seed_X` pattern already used by the regime/narrative dashboards.
 
 Open gaps:
-- Perf-smoke threshold (p95 < 3s) — not yet measured; already correctly tiered Hybrid with an in-scope ADR-8 fallback (in-process TTL cache) — no action needed beyond what the plan already specifies. Not a CONCERN.
-- Real-cache user walkthrough (AC-11 full, AC-3 real-world) — accepted known-gap per the regime-dashboard AC-11 / narrative-dashboard AC-3/AC-12 precedent (egress-blocked container); plan correctly stays in `active/` until the user confirms on their own PC. Not a CONCERN.
-- 3 feasibility-VERDICT known-gaps (live server-side cap-hit truncation behavior, real per-coin Hyperliquid listing dates, bulk rate-limit/backoff under an 18-coin sequential loop) — accepted known-gaps, empirical facts no source read can establish; carried by RFC-001's Hybrid real-run gate (gap-resolution B), not silently dropped.
-- CONCERN-1 and CONCERN-2 from the first-pass contract are CLOSED this cycle — no longer open gaps (see Dimension findings above and the PVL Supplement Log).
+- None new this cycle. Both of the prior cycle's material gaps (compute-path network isolation; persisted-cache path resolution) and the minor gap (staleness-comparison completeness) are CLOSED and independently verified against real source (see G1/G2 verification results above), not merely restated in plan text.
+- Real-cache user walkthrough (AC-11 full, AC-3 real-world) — accepted known-gap, regime-dashboard precedent. Unaffected by this cycle. Not a CONCERN.
+- 3 feasibility-VERDICT known-gaps (live cap-hit behavior, real listing dates, rate-limit/backoff) — carried forward unchanged, partially narrowed by RFC-001's real run (cap-hit never observed live, 0/18; rate-limit/backoff not stressed but 18/18 calls succeeded with no failures). Not a CONCERN.
+- CONCERN-1 and CONCERN-2 from the original first-pass contract remain CLOSED, unaffected by this cycle.
 
 What this coverage does NOT prove:
-- The `test_cointegration_stats.py` golden-value tests prove statsmodels output matches a pinned fixture computation — they do NOT prove the statistical PROCEDURE (min-of-both-directions EG ranking, then BH across those min-p's) controls the false-discovery rate at its nominal level; ADR-2b's "mild optimism bias" is disclosed in the UI, not statistically corrected, by deliberate v1 design.
-- The strengthened `isolated_cache` deep-fetch test proves the SCRIPT'S cache-write mechanics are correct for a given mocked input (including the explicit-`since`/never-`None` and cap-hit-pagination behaviors) — it does NOT prove ccxt/Hyperliquid's LIVE response shape for those same code paths; that is exactly what RFC-001's Hybrid real-run gate and its 3 named known-gaps cover, not this unit test.
-- The perf-smoke Hybrid gate proves ONE measured timing on ONE run against the real cache at plan-time hardware/network conditions — it does NOT prove the threshold holds under concurrent requests or after the universe grows (Future Work item, explicitly out of scope for v1).
-- `pairs.spec.ts` (seeded-fixture E2E) proves the frontend/backend boundary and the seeded scenarios named in RFC-005 — it does NOT substitute for the real-cache walkthrough (AC-11 full), which is the only gate that exercises genuinely deep, non-synthetic history end to end.
-- The `git diff --stat` isolation proof proves the 4 named paths are byte-unchanged — it does NOT prove the absence of new SHARED RUNTIME state (e.g. a future accidental import); AC-10's "no shared runtime state" claim rests on RFC-001/RFC-010's module-boundary design (ADR-10) plus the loader-isolation unit test, not on the diff check alone.
+- Everything the prior contracts' "What this coverage does NOT prove" sections said still holds unchanged (BH procedure's false-discovery-rate control is not proven, only disclosed; the strengthened `isolated_cache` test proves script mechanics, not Hyperliquid's live response shape; the read-path timing gate proves one measurement, not concurrent-load behavior; `pairs.spec.ts` does not substitute for the real-cache walkthrough; the `git diff --stat` proof does not prove the absence of a future accidental shared import).
+- This cycle's G1/G2 verification proves the PLAN TEXT correctly names real functions, real conventions, and a real installed dependency version — it does NOT prove the not-yet-written RFC-002/RFC-003 code will actually implement what the plan now says. That proof is deferred to RFC-002 Stage 1 (golden-fixture tests) and RFC-003 Stage 1 (network-isolation test, isolated-path test, staleness case (e)) actually running green, per the Test Gates table above (gap-resolution B rows).
+- `bootstrap_cache_dirs()` not yet listing `"pairs"` is a non-blocking implementation nuance (see the drift-check note above) — it does not prove RFC-003's future write call sites will correctly create their own parent directories; that remains an RFC-003 Stage 1 implementation detail to get right.
+- The mechanical confirmation that `cache.py::ohlcv_bar_count`/`ohlcv_last_refresh` are cheap does not prove the router's actual staleness-comparison code (not yet written) correctly interprets "bar count increased" OR "max date newer" (per the ADR-8 Amendment text) — this remains an RFC-003 implementation detail to get right and test explicitly.
 
-Gate: PASS (0 FAILs, 0 CONCERNs — both first-pass CONCERNs [CONCERN-1 material, CONCERN-2 minor] fully closed by PVL supplement cycle 1 and independently re-verified against live source this session; the previously-open feasibility probe is resolved [VIABLE, re-confirmed]; the vacuous-green check holds — every developed behavior in the test gates table carries a Fully-Automated, Hybrid, or Agent-Probe proving gate, with only accepted, named, non-blocking residuals [perf-smoke measurement, real-cache walkthrough, 3 feasibility known-gaps] carried forward as Hybrid/Agent-Probe/known-gap rows, not silent gaps)
-Accepted by: session (autonomous, PVL re-validation) — Gate is PASS, no unresolved CONCERNs requiring acceptance. The 3 residuals above (perf-smoke measurement, real-cache walkthrough, feasibility known-gaps) were already accepted as documented, gated residuals in the first-pass contract and remain accepted unchanged.
+Gate: PASS (0 FAILs, 0 CONCERNs — both prior-cycle CONCERNs (G1 compute-path isolation + cache-path resolution, G2 staleness-comparison completeness) are closed in plan text and independently verified against real source this cycle; RFC-001 remains shipped/PASS; RFC-002-005 remain plan-verified with code pending, each gated by a named Fully-Automated/Hybrid/Agent-Probe test per the Test Gates table; the one accepted known-gap (real-cache walkthrough) is a named residual with a resolution path, not an ungated behavior — net gate is not vacuously green)
+Accepted by: N/A — Gate: PASS, no outstanding CONCERNs require acceptance. (All previously-accepted known-gaps — real-cache walkthrough, cap-hit-never-observed, 2020-08-19 history floor, rate limits — remain accepted, carried forward unchanged from the prior contracts.)
 
 ### Execute-Agent Instructions
 
 | # | Instruction | Trigger condition | Status |
 |---|---|---|---|
-| E1 | ~~Resolve CONCERN-1 before writing `backfill_pairs_universe.py`~~ | RFC-001 Stage 0, before Stage 1 | **APPLIED (PVL cycle 1)** — RFC-001 Stage 0 text now specifies the exact mechanism (explicit early `since`, never `since=None`, defensive cap-hit pagination, per-coin bars/first-date log), re-confirmed against live adapter source this cycle. Execute-agent still pastes the resulting per-coin bar count/date range into the RFC-001 phase report before Stage 0 findings are presented for approval — that evidence step remains live, only the "how" is no longer undetermined. |
-| E2 | ~~Strengthen the AC-11 mechanical test~~ | RFC-001 Post-Phase Testing | **APPLIED (PVL cycle 1)** — plan text's Post-Phase Testing section already specifies the shallow-pre-seed + mocked-deep-history + final-depth-assertion design, plus the `since=None`-never-used and mocked-cap-hit-pagination sub-tests. |
-| E3 | ~~Decide and test self-pair/case-sensitivity at RFC-003 Stage 0~~ | RFC-003 Stage 0 | **APPLIED (PVL cycle 1)** — §11, Stage 0, Stages, and Post-Phase Testing all now specify the full contract (422 self-pair, case-insensitive uppercase match, 404 unknown, self-pair precedence). |
-| E4 | At RFC-002 Stage 0, when presenting the four golden-value fixture designs for `coint()`/`coint_johansen()`, make explicit that a hand-derived expected value means a fixed-seed, comfortably-clear-margin synthetic series (not borderline) with the exact statsmodels output pinned as the reviewed baseline — not independent hand-computation of an asymptotic test statistic. The AR(1) half-life, OLS hedge ratio, and z-score fixtures can and should be independently hand-computed. | RFC-002 Stage 0 | Still live — not yet incorporated into plan text; low-cost process guidance, non-blocking. |
+| E1-E3 | (RFC-001 mechanism, AC-11 test strengthening, self-pair/case-sensitivity contract) | — | **APPLIED AND SHIPPED** — RFC-001 is code-complete. No further action. |
+| E4 | Golden-fixture provenance clarification (pinned baseline for EG/Johansen, hand-computed for AR1/hedge-ratio/z-score) | RFC-002 Stage 1 | **Confirmed correct in practice** — informational only. |
+| E5 | Compute path must use `cache.read_ohlcv`, never `ccxt_adapter.fetch_ohlcv`; add the network-isolation test | Before RFC-002 Stage 1 | **CLOSED — verified against real source this cycle.** Plan text specifies the correct real module boundary (`cache.py` vs. `ccxt_adapter.py`, confirmed by direct read). Code pending RFC-002/RFC-003 Stage 1. |
+| E6 | Decide and record how `api/data/cache/pairs/{results.parquet, provenance.json, spreads/}` paths are resolved (via `cache.py` helpers reading `CACHE_ROOT` at call time) | RFC-003 Stage 0 | **CLOSED — verified against real source this cycle.** `pairs_results_path()`/`pairs_provenance_path()`/`pairs_spread_path()` match the real `ohlcv_path()`/`liqtide_*`/`narrative_*` convention exactly (confirmed by direct read of `cache.py`). Code pending RFC-003 Stage 1. |
+| E7 | Extend the staleness-comparison rule to flag `stale` on a `statsmodels_version`/`eg_autolag` mismatch (5th Post-Phase Testing case), or explicitly accept as known-gap | RFC-003 Stage 0 | **CLOSED — verified against real source this cycle.** The 5th check (case (e)) is specified; the worked `provenance.json` example's `statsmodels_version: "0.15.0"` matches the real installed version (confirmed via `api/uv.lock`). Code pending RFC-003 Stage 1. |
+| E8 | RFC-003's read-path timing gate should be a pytest `TestClient`-timed assertion, not a manual `curl`, so "Fully-Automated" is literally accurate | RFC-003 Stage 0 | Non-blocking, low-cost wording fix — carried forward, still applies at RFC-003 Stage 0. |
+| E9 (NEW, non-blocking) | RFC-003 Stage 1's `compute_pairs.py`/`pairs_response.py` write call sites for `pairs_results_path()`/`pairs_provenance_path()`/`pairs_spread_path()` should call `path.parent.mkdir(parents=True, exist_ok=True)` at write time (matching `write_ohlcv()`'s precedent), since `bootstrap_cache_dirs()` does not yet list a `"pairs"` subdirectory. | RFC-003 Stage 1 | Non-blocking implementation nuance found this cycle (see drift-check note above) — does not affect the Gate: PASS verdict. |
 
 ### Proposed Plan Updates
 
 | # | What changes | Where in plan | Why | Status |
 |---|---|---|---|---|
-| P1 | RFC-001 Stage 0 deep-fetch mechanism | RFC-001, Stage 0 | Prevents a silent partial-sample violation of AC-8 for 4 of 18 universe coins (~40% of pairs) | **APPLIED (PVL cycle 1)**, re-confirmed this cycle against live source |
-| P2 | Self-pair/case-sensitivity contract | RFC-003, Stage 0 | Small, previously-unstated API contract gap | **APPLIED (PVL cycle 1)** |
+| P3 | Name `cache.read_ohlcv` (never `ccxt_adapter.fetch_ohlcv`) as the compute path's OHLCV source | `## 7. Component Details`, `stats.py`/`pairs_response.py`/`compute_pairs.py` responsibilities | Prevents `compute_pairs.py` from silently becoming network-dependent | **APPLIED AND VERIFIED against real source this cycle** |
+| P4 | Specify `api/data/cache/pairs/` path resolution via `cache.CACHE_ROOT` (new `cache.py` helpers) | `## 3. Architecture Decisions (Final)`, ADR-8 Amendment / `## 12b. Storage Schema` | Prevents `isolated_cache` from silently failing to isolate `test_compute_pairs.py`'s writes | **APPLIED AND VERIFIED against real source this cycle** |
+| P5 | Decide and record the statsmodels_version/eg_autolag staleness-comparison scope | `## 3. Architecture Decisions (Final)`, ADR-8 Amendment — Staleness and Provenance | Closes a silent-staleness gap in the mechanism built to prevent silent staleness | **APPLIED AND VERIFIED against real source this cycle** |
+| P1, P2 (prior cycle) | RFC-001 deep-fetch mechanism; self-pair/case-sensitivity contract | RFC-001 Stage 0; RFC-003 Stage 0 | — | **APPLIED and SHIPPED (RFC-001 code-complete)** |
 
 ### Backlog Artifacts
 
 | Artifact | Location | What it tracks |
 |---|---|---|
-| (none required — CONCERN-1/CONCERN-2 were in-plan execute-agent instructions, both applied; no deferred work) | — | — |
+| (none required — all gaps found across every cycle so far were either applied in-plan or are the one accepted known-gap, the real-cache user walkthrough) | — | — |
 
 ### PVL Supplement Log
 
-**Cycle 1 (25-09-26)** — addressed both CONCERNs from the first-pass validate-contract (`Gate: CONDITIONAL`):
+**Cycle 1 (25-09-26)** and **Re-validation (25-09-26)** — unchanged from the prior contract; both CONCERN-1/CONCERN-2 remain closed, proven in shipped code (RFC-001).
 
-- **CONCERN-1 (RFC-001, material)** — resolved using the feasibility VERDICT (`pair-screener_FEASIBILITY_25-09-26.md`, verdict: VIABLE). RFC-001 Stage 0 rewritten with the exact deep-fetch mechanism: explicit early `since` (never `since=None`), `limit=5000`, defensive page-forward pagination on a capped response, mandatory per-coin bars/first-date logging, `ccxt_adapter.py` stays read-only. RFC-001's AC-11 mechanical test strengthened to seed a shallow 501-bar cache, mock deep history, and assert final depth/first-date reaches the mocked deep start (not "row count increased"); added a `since=None`-never-used assertion and a mocked cap-hit pagination test. Added a real-run hybrid gate (bars-per-coin log, user-PC if egress blocked) and recorded the feasibility VERDICT's three uncertainties as named known-gaps, not silently dropped.
-- **CONCERN-2 (RFC-003, minor)** — resolved by specifying the `GET /api/pairs/{a}/{b}` path-param contract in §11 API Surface: self-pair (`a == b`) → 422; ticker matching case-insensitive (uppercase-normalized before universe lookup); unknown ticker (post-normalization) → 404; self-pair check takes precedence over the unknown-ticker check. Propagated into RFC-003's Stage 0, Stages (router description), Post-Phase Testing (4 new test cases), and Implementation Checklist.
-- Proposed Plan Updates P1 and P2 (above) are both marked APPLIED this cycle.
-- Scope: no files outside this plan's existing blast radius were added; no new public API surface beyond the already-planned `GET /api/pairs`/`GET /api/pairs/{a}/{b}` endpoints; no new dependencies.
-- Drift note: baseline test counts current as of `35e646f` (pytest 392/3, vitest 110/16, Playwright 26/26 incl. `screener.spec.ts`/`regime.spec.ts`/`narrative.spec.ts`) — unchanged (no code was written this cycle either).
+**Amendment cycle (26-09-26) — re-validation of the Post-Stage-0 (ADR-8) Amendment:** found 2 new CONCERNs (G1: compute-path network isolation + cache-path resolution; G2: staleness-comparison completeness). Net gate CONDITIONAL. SUPPLEMENT REQUEST issued.
 
-**Re-validation (25-09-26, same session — this pass):** vc-validate-agent re-ran V1–V7 from V1 against the PVL-cycle-1-updated plan. Both CONCERNs independently re-verified as closed — CONCERN-1 by direct re-read of `api/data/ccxt_adapter.py::fetch_ohlcv`'s `since`/`effective_since`/`_cache_is_fresh` logic (not just re-reading the feasibility VERDICT text), CONCERN-2 by direct re-read of §11's path-param contract and its propagation into RFC-003's Stage 0/Stages/Post-Phase Testing. No new gaps found; no regressions found (isolation-relevant files/mechanisms — `main.py` router registration, `seed_e2e_cache.py` fixture pattern, `.gitignore` cache carve-outs, `watchlist.json` existence — all re-confirmed unchanged on disk). Net gate: **PASS**. Plan is ready for EXECUTE.
+**Plan-supplement cycle amd-1 (26-09-26, PVL-supplement mode):** vc-plan-agent closed both gaps in plan text (ADR-8 Amendment note, §7, Touchpoints, Public Contracts, RFC-003 Post-Phase Testing new tests, updated `computation_status` table). `Gate: CONDITIONAL` left unchanged pending re-validation, per protocol.
+
+**Re-validation cycle amd-2 (26-09-26) — this pass, V1-V7 re-run from V1:** independently verified both G1 and G2 against real source (`api/data/cache.py`, `api/tests/conftest.py`, `api/data/ccxt_adapter.py`, `api/uv.lock`), not just plan-text internal consistency — see the "New evidence gathered this session" block above. Both gaps CLOSED. No new gaps or regressions found; protected-file check clean (`git status --short`); all previously-accepted known-gaps carried forward unchanged. One non-blocking implementation nuance noted for RFC-003 Stage 1 (`bootstrap_cache_dirs()` missing a `"pairs"` entry — Execute-Agent Instruction E9, non-blocking). Net gate: **PASS**. RFC-002 Stage 1 may now proceed once `ENTER EXECUTE MODE` is given.
 
 ## Autonomous Goal Block
 
 SESSION GOAL: Ship the pair-screener v1 (/pairs) — cointegration screen for a curated crypto universe.
 Charter + umbrella plan: N/A — single plan, not a phase program. process/features/cointegration-screener/active/pair-screener_25-09-26/pair-screener_PLAN_25-09-26.md
-Autonomy: standard RIPER-5 autonomy per process/development-protocols/orchestration.md — VALIDATE self-decided PASS this cycle (0 FAILs, 0 CONCERNs after PVL supplement cycle 1); EXECUTE still requires explicit ENTER EXECUTE MODE and the plan's own per-RFC STOP-and-approve checkpoints (Phased Execution Workflow) remain mandatory regardless of autonomy state.
+Autonomy: standard RIPER-5 autonomy per process/development-protocols/orchestration.md — VALIDATE re-ran 26-09-26 (amd-2, V1-V7 from V1) after the amd-1 plan-supplement closed both gaps: Gate is PASS. RFC-001 is code-complete and unaffected. RFC-002 Stage 1 may now begin; EXECUTE still requires explicit ENTER EXECUTE MODE and the plan's own per-RFC STOP-and-approve checkpoints remain mandatory regardless of autonomy state.
 Hard stop conditions / safety constraints:
-- Never edit api/routers/screener.py, api/data/watchlist.py, web/app/screener/**, or api/analytics/regime/** (hard blast-radius exclusion, enforced by RFC-005's git diff --stat gate).
-- Never edit api/data/ccxt_adapter.py (read-only; the deep-fetch mechanism lives entirely in the new backfill_pairs_universe.py).
-- Paste the real per-coin bar-count/first-date evidence into the RFC-001 phase report before Stage 0 findings are presented for approval (E1 evidence step, still live even though the mechanism itself is now plan-text-settled).
-- No new market-data provider; crypto-only v1 (equities explicitly out of scope, pending the separate LSE verification plan).
-Next phase: EXECUTE MODE, starting RFC-001 Stage 0 (statsmodels add + smoke check + universe proposal + market-symbol resolution check) — STOP for user approval before writing any code, per the Phased Execution Workflow.
+- Never edit api/routers/screener.py, api/data/watchlist.py, web/app/screener/**, or api/analytics/regime/** (hard blast-radius exclusion, enforced by RFC-005's git diff --stat gate; RFC-001 already confirmed zero touches).
+- Never edit api/data/ccxt_adapter.py (read-only; confirmed unmodified by RFC-001).
+- The compute path (RFC-002/RFC-003) must never call ccxt_adapter.fetch_ohlcv — cache.read_ohlcv only, so compute_pairs.py stays offline/CPU-bound (new this cycle, see Execute-Agent Instruction E5).
+- No new market-data provider; crypto-only v1.
+Next phase: EXECUTE at RFC-002 Stage 1 (statsmodels return-shape confirmation already done at Stage 0 — Stage 1 begins with `compute_pair_stats` + the four golden fixtures), on ENTER EXECUTE MODE.
 Validate contract: inline in this plan file, section "Validate Contract" above.
-Execute start: uv run --project api pytest api/ -q (baseline: 392 passed, 3 deselected) | pnpm --filter web test (baseline: 110 passed, 16 files) | cd web && pnpm test:e2e (baseline: 26/26) — full commands in process/context/tests/all-tests.md | high-risk pack: no (no auth/billing/migration/deploy surface touched)
+Execute start: uv run --project api pytest api/ -q (current baseline: 420 passed, 3 deselected, post-RFC-001) | pnpm --filter web test (baseline: 110 passed, 16 files) | cd web && pnpm test:e2e (baseline: 26/26) — full commands in process/context/tests/all-tests.md | high-risk pack: no (no auth/billing/migration/deploy surface touched)
