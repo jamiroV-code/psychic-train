@@ -78,7 +78,7 @@ def _as_utc(df: pd.DataFrame, column: str = "timestamp") -> pd.DataFrame:
 
 def bootstrap_cache_dirs() -> None:
     """Create the cache/ directory tree if it doesn't exist yet."""
-    for sub in ("ohlcv", "liquidity", "liqtide", "legs", "narrative"):
+    for sub in ("ohlcv", "liquidity", "liqtide", "legs", "narrative", "pairs"):
         (CACHE_ROOT / sub).mkdir(parents=True, exist_ok=True)
 
 
@@ -130,6 +130,65 @@ def ohlcv_last_refresh(symbol: str, timeframe: Timeframe) -> pd.Timestamp | None
     stamp = pd.Timestamp(val)
     return stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp.tz_convert("UTC")
 
+
+
+def ohlcv_footer_stats(symbol: str, timeframe: Timeframe) -> tuple[int, pd.Timestamp | None]:
+    """(bar count, last bar timestamp UTC) read from the Parquet footer — no data scan.
+
+    Pair-screener RFC-003 (Stage 0 decision D-5): the staleness check runs on
+    every request, and `ohlcv_bar_count` + `ohlcv_last_refresh` open two DuckDB
+    connections per coin (~2.6 s for 18 coins). The footer answers both from
+    metadata in a few ms. Same results as those two helpers; `(0, None)` when
+    no cache file exists. A file whose `timestamp` column carries no min/max
+    statistics falls back to the two existing helpers (slow but correct).
+    """
+    import pyarrow.parquet as pq
+
+    path = ohlcv_path(symbol, timeframe)
+    if not path.exists():
+        return 0, None
+    md = pq.ParquetFile(path).metadata
+    if md.num_rows == 0:
+        return 0, None
+    names = md.schema.names
+    col = names.index("timestamp") if "timestamp" in names else None
+    last = None
+    for i in range(md.num_row_groups):
+        stats = md.row_group(i).column(col).statistics if col is not None else None
+        if stats is None or not stats.has_min_max:
+            return ohlcv_bar_count(symbol, timeframe), ohlcv_last_refresh(symbol, timeframe)
+        last = stats.max if last is None else max(last, stats.max)
+    stamp = pd.Timestamp(last)
+    stamp = stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp.tz_convert("UTC")
+    return int(md.num_rows), stamp
+
+
+def ohlcv_footer_stats_many(
+    symbols: list[str], timeframe: Timeframe
+) -> dict[str, tuple[int, pd.Timestamp | None]]:
+    """`ohlcv_footer_stats` for several symbols, keyed by the symbol as given."""
+    return {s: ohlcv_footer_stats(s, timeframe) for s in symbols}
+
+
+# --- Pair screener (cointegration-screener RFC-003) -----------------------
+#
+# Precomputed results written only by `api/scripts/compute_pairs.py`, read
+# only by `api/routers/pairs.py`. Built from CACHE_ROOT at call time.
+
+def pairs_results_path() -> Path:
+    return CACHE_ROOT / "pairs" / "results.parquet"
+
+
+def pairs_provenance_path() -> Path:
+    return CACHE_ROOT / "pairs" / "provenance.json"
+
+
+def pairs_spreads_dir() -> Path:
+    return CACHE_ROOT / "pairs" / "spreads"
+
+
+def pairs_spread_path(symbol_a: str, symbol_b: str) -> Path:
+    return pairs_spreads_dir() / f"{symbol_a.upper()}_{symbol_b.upper()}.parquet"
 
 # --- RFC-002: LiqTide append-only archive (Standing Rule 8) ---------------
 #
