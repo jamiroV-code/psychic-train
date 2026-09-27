@@ -28,6 +28,7 @@ import math
 import os
 import shutil
 import sys
+import time
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -378,6 +379,136 @@ def seed_narrative(today: pd.Timestamp | None = None) -> dict:
     return fixture["facts"]
 
 
+# --- /onchain fixture (chain-growth RFC-6) ---------------------------------
+# Every series ends on a FIXED date, not "now" (RFC-6 Stage 0, decision D1).
+# `chains.json` launch dates are fixed and cannot be redirected, so a
+# now-anchored fixture would let Robinhood pass its 194-day history gate on
+# 2027-01-10 and silently flip the limited-history scenario. Only the fetch
+# stamps (`first_seen_utc`/`as_of_utc`) use the real clock, because the API's
+# stale rule compares them with the real clock.
+ONCHAIN_SEED_TODAY = "2026-09-26"
+ONCHAIN_STALE_CHAIN = "optimism"
+ONCHAIN_STALE_DAYS = 10
+ONCHAIN_GAP = ("base", "2026-05-10", "2026-05-14")  # missing days, inclusive
+ONCHAIN_TX_SCALE = 10.0  # transactions = active_addresses * 10 (same shape)
+ONCHAIN_L2BEAT_FACTOR = 1.02  # l2beat tx = growthepie tx / 1.02 -> +2.0 % divergence
+ONCHAIN_L2BEAT_DAYS = 120
+ONCHAIN_NO_TX_ARCHIVE = "polygon"  # D3: forced per-source failure on the tx metric
+
+# (chain, first seeded date, [(end date inclusive, from, to), ...]) — piecewise
+# linear. The first segment always ends the day before `launch_date`, so every
+# live chain has pre-launch points (D2).
+_ONCHAIN_SHAPES: dict[str, tuple[str, list[tuple[str, float, float]]]] = {
+    # Flat, then a 22 % rise over the last ~6 months: >10 % above the 180-day
+    # low (not `floor`) but <25 % above the flat floor candidate (no event).
+    "ethereum": ("2015-07-01", [("2015-07-29", 20_000, 20_000), ("2026-03-31", 400_000, 400_000),
+                                ("2026-09-26", 400_000, 490_000)]),
+    # Flat with a 5-day hole (ONCHAIN_GAP): exercises gap_before.
+    "base": ("2023-07-10", [("2023-08-08", 25_000, 25_000), ("2026-09-26", 500_000, 500_000)]),
+    # The designed floor-then-ramp: flat, -60 % over 120d, flat 60d, +125 % over 90d, flat.
+    # Segment ends are the last in-segment step (not the next level), matching
+    # the Stage 0 scratch run: floor 2026-03-01, ramp 2026-04-14.
+    "arbitrum": ("2021-08-01", [("2021-08-30", 10_000, 10_000), ("2025-09-01", 200_000, 200_000),
+                                ("2025-12-30", 200_000, 81_000), ("2026-02-28", 80_000, 80_000),
+                                ("2026-05-29", 80_000, 178_888.8889), ("2026-09-26", 180_000, 180_000)]),
+    "optimism": ("2021-11-16", [("2021-12-15", 5_000, 5_000), ("2026-09-26", 100_000, 100_000)]),
+    # Long decline into a flat bottom: current state `floor`.
+    "polygon": ("2020-05-01", [("2020-05-29", 50_000, 50_000), ("2025-12-31", 2_000_000, 800_000),
+                               ("2026-09-26", 800_000, 800_000)]),
+    # Short series, under the 194-day gate.
+    "robinhood": ("2026-06-20", [("2026-06-30", 100, 100), ("2026-09-26", 1_000, 5_000)]),
+}
+# Hand-derived from the shapes above, then confirmed against the real
+# detector by api/tests/scripts/test_seed_onchain_fixture.py.
+_ONCHAIN_EXPECTED_STATES = {
+    "ethereum": "neutral", "base": "floor", "arbitrum": "ramping",
+    "optimism": "floor", "polygon": "floor", "robinhood": "not-enough-history",
+}
+
+
+def _onchain_piecewise(first: str, segments: list[tuple[str, float, float]]) -> list[tuple[str, float]]:
+    out: list[tuple[str, float]] = []
+    seg_start = pd.Timestamp(first)
+    for end, a, b in segments:
+        days = pd.date_range(seg_start, pd.Timestamp(end), freq="D")
+        n = len(days)
+        for i, d in enumerate(days):
+            out.append((d.strftime("%Y-%m-%d"), round(a + (b - a) * (i / max(1, n - 1)), 4)))
+        seg_start = pd.Timestamp(end) + pd.Timedelta(days=1)
+    return out
+
+
+def build_onchain_fixture(seed_today: str = ONCHAIN_SEED_TODAY) -> dict:
+    """Pure: the synthetic onchain rows plus the facts the E2E asserts. Writes nothing.
+
+    rows: list of (source, chain_id, metric, [(date, value), ...], stale)."""
+    from api.data.chain_growth_config import load_chains
+
+    chains = {c.id: c for c in load_chains()}
+    gap_chain, gap_from, gap_to = ONCHAIN_GAP
+    rows: list[tuple[str, str, str, list[tuple[str, float]], bool]] = []
+    facts_chains: dict[str, dict] = {}
+    for cid, (first, segments) in _ONCHAIN_SHAPES.items():
+        pts = [(d, v) for d, v in _onchain_piecewise(first, segments) if d <= seed_today]
+        if cid == gap_chain:
+            pts = [(d, v) for d, v in pts if not (gap_from <= d <= gap_to)]
+        stale = cid == ONCHAIN_STALE_CHAIN
+        tx = [(d, v * ONCHAIN_TX_SCALE) for d, v in pts]
+        rows.append(("growthepie", cid, "active_addresses", pts, stale))
+        if cid != ONCHAIN_NO_TX_ARCHIVE:
+            rows.append(("growthepie", cid, "transactions", tx, stale))
+        launch = chains[cid].launch_date
+        facts_chains[cid] = {
+            "label": chains[cid].label,
+            "launch_date": launch,
+            "first_date": pts[0][0],
+            "points": len(pts),
+            "pre_launch_points": sum(1 for d, _ in pts if launch and d < launch),
+            "state": _ONCHAIN_EXPECTED_STATES[cid],
+            "has_transactions": cid != ONCHAIN_NO_TX_ARCHIVE,
+        }
+    cross_check = [cid for cid in ("base", "arbitrum")]
+    for cid in cross_check:
+        tx = next(r[3] for r in rows if r[1] == cid and r[2] == "transactions")
+        rows.append(("l2beat", cid, "transactions",
+                     [(d, v / ONCHAIN_L2BEAT_FACTOR) for d, v in tx[-ONCHAIN_L2BEAT_DAYS:]], False))
+
+    today = pd.Timestamp(seed_today)
+    facts = {
+        "seed_today": seed_today,
+        "default_start": (today - pd.Timedelta(days=365)).strftime("%Y-%m-%d"),
+        "start_2y": (today - pd.Timedelta(days=730)).strftime("%Y-%m-%d"),
+        "live_ids": list(_ONCHAIN_SHAPES),
+        "unavailable_ids": [c.id for c in chains.values() if c.enabled and c.id not in _ONCHAIN_SHAPES],
+        "chains": facts_chains,
+        "designed": {"chain": "arbitrum", "events": [{"floor_date": "2026-03-01", "ramp_date": "2026-04-14"}]},
+        "gap": {"chain": gap_chain, "gap_before_date": (pd.Timestamp(gap_to) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")},
+        "stale": {"chain": ONCHAIN_STALE_CHAIN, "days": ONCHAIN_STALE_DAYS},
+        "limited": {"chain": "robinhood", "gate_met_on": "2027-01-10", "history_days": 88,
+                    "rebase_date": chains["robinhood"].launch_date},
+        "cross_check": {"chains": cross_check, "divergence_pct": round((ONCHAIN_L2BEAT_FACTOR - 1) * 100, 4)},
+        "no_tx_archive": {"chain": ONCHAIN_NO_TX_ARCHIVE, "reason": "no-archived-data"},
+        "attribution": "Source: growthepie, https://www.growthepie.com.",
+        "attribution_url": "https://www.growthepie.com",
+    }
+    return {"rows": rows, "facts": facts}
+
+
+def seed_onchain(seed_today: str = ONCHAIN_SEED_TODAY, now: pd.Timestamp | None = None) -> dict:
+    """Write the onchain fixture ONLY through `cache.merge_onchain_series`.
+    Caller must already have passed `_guard()`. Returns the manifest facts."""
+    from api.data import cache
+
+    now = now if now is not None else pd.Timestamp.now(tz="UTC")
+    fresh = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    stale = (now - pd.Timedelta(days=ONCHAIN_STALE_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    fixture = build_onchain_fixture(seed_today)
+    for source, cid, metric, pts, is_stale in fixture["rows"]:
+        cache.merge_onchain_series(source, cid, metric, pts, today=seed_today,
+                                   now_utc=stale if is_stale else fresh)
+    return fixture["facts"]
+
+
 def main() -> int:
     root = _guard()
     from api.data import cache, watchlist as watchlist_store
@@ -414,10 +545,14 @@ def main() -> int:
 
     regime = seed_regime()
     narrative = seed_narrative()
+    t0 = time.perf_counter()
+    onchain = seed_onchain()
+    onchain_seconds = round(time.perf_counter() - t0, 2)
 
     manifest = {
         "regime": regime,
         "narrative": narrative,
+        "onchain": onchain,
         "cache_root": str(root),
         "watchlist": WATCHLIST,
         "benchmarks": BENCHMARKS,
@@ -432,6 +567,7 @@ def main() -> int:
     print(f"seeded {len(written)} symbols into {root}")
     print(f"regime     inputs seeded; gap at {regime['gap']['expected_gap_date']}")
     print(f"narrative  {len(narrative['category_ids'])} categories seeded; gap at {narrative['gap']['gap_date']}")
+    print(f"onchain    {len(onchain['live_ids'])} chains seeded in {onchain_seconds}s; designed floor/ramp on {onchain['designed']['chain']}")
     print(f"watchlist  {WATCHLIST} -> {watchlist_path or '(not set)'}")
     print(f"manifest   {MANIFEST_PATH}")
     print(f"store path {watchlist_store.DEFAULT_WATCHLIST_PATH}")
