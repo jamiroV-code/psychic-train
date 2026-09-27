@@ -110,7 +110,7 @@ liqtide.com) is the only stated condition.
 GET https://liqtide.com/data/latest.json
 ```
 
-Refreshes daily around 22:45 UTC. Top-level keys include `generated_utc`, `data_quality`,
+Refreshes daily; observed `generated_utc` falls around 00:25–01:12 UTC (corrected 2026-09-27 — earlier docs said ~22:45 UTC). The nightly archive is keyed by `generated_utc[:10]`; `liqtide-snapshot.yml` runs at 18:47 UTC. Top-level keys include `generated_utc`, `data_quality`,
 `tide_index` (value, label, score, components, weights), `tide_series` (historical date/value
 pairs), `regime`, `regime_plain`, `signals`, `sectors`, `lead_chart`, `fng`, and `metrics` —
 the last carrying time series for net liquidity, WALCL, TGA, RRP, reserves, dollar index,

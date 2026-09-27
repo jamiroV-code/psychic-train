@@ -1,6 +1,7 @@
 # my_site - All Context
 
-Last updated: 2026-09-25 (narrative trigger keyword-keying fix merged into the narrative
+Last updated: 2026-09-27 (snapshot cron timing fix — all three nightly workflows moved earlier to
+absorb GitHub's ~2h scheduler delay; see the 2026-09-27 entry below. Previous: 2026-09-25, narrative trigger keyword-keying fix merged into the narrative
 branch on top of the two same-day 2026-09-24 closeouts — narrative-mindshare `/narrative`
 dashboard RFC-1..6, and the regime dashboard's AC-11-confirmed 2nd pass; see Changes Since Last
 Update below for all three. The 2026-09-20 18:47 version predates both the `/regime` and
@@ -16,6 +17,30 @@ Use it for two things:
 Start here before loading deeper context files.
 
 ---
+
+## Changes Since Last Update (2026-09-25 → 2026-09-27, snapshot cron timing)
+
+Plan: `process/general-plans/active/snapshot-cron-timing_27-09-26/`.
+
+- `[Correction]` **GitHub starts our scheduled workflows ~2h late** (observed up to ~2h20m via
+  `gh run list`). The old slots — chain-growth 22:00, narrative 23:00, liqtide 23:30 UTC — actually
+  started 23:56Z, 01:03–01:07Z and 01:30–01:52Z. Narrative points are dated by the UTC day the run
+  executes, so the post-midnight runs skipped a day: **2026-09-25 has no narrative point and is
+  unrecoverable** (Google Trends' short window, Reddit search and CoinGecko trending keep no history).
+- `[Product]` New schedules, off the top of the hour, same order, 30-min stagger:
+  `chain-growth-snapshot.yml` `47 17 * * *`, `narrative-snapshot.yml` `17 18 * * *`,
+  `liqtide-snapshot.yml` `47 18 * * *`. Even a ~2h20m delay now lands every run before ~21:10 UTC.
+- `[Product]` `liqtide-snapshot.yml` gained the same `concurrency` group and "nothing new to commit" +
+  3-attempt `git pull --rebase`/push retry block the other two workflows already had.
+- `[Correction]` **LiqTide publishes ~00:25–01:12 UTC** (observed `generated_utc`), not "~22:45 UTC"
+  as previously documented. The archive is keyed by `generated_utc[:10]`, so LiqTide had no gap — the
+  earlier schedule just ran only ~40 min after publish; it now runs ~18h after.
+- Testing: new guard `api/tests/scripts/test_snapshot_workflow_schedules.py` (13 tests) pins each
+  cron ≥3h before UTC midnight, ≥20-min stagger, no `pull_request` trigger, `permissions:
+  contents: write` only, a concurrency group, the retry-push block, and per-workflow `git add` scope.
+- `[Finding]` pytrends nightly points can be 0 because `df.iloc[-1]` of the hourly "now 7-d" frame is
+  Google's incomplete `isPartial` hour (e.g. memecoins 34→0, RWA all 0). Not fixed — see Open
+  Questions and `process/general-plans/backlog/pytrends-partial-hour-zeros_NOTE_27-09-26.md`.
 
 ## Changes Since Last Update (2026-09-24 → 2026-09-25)
 
@@ -76,7 +101,8 @@ ownership/documentation change, not a code relocation.
   user terms check, handles `k`-prefixed meme-perp symbols (`kPEPE`→`KPEPE`). See
   `data-sources/all-data-sources.md`.
 - `[Product]` **Second scheduled workflow**: `.github/workflows/narrative-snapshot.yml` (cron
-  `0 23 * * *`, 30 min before `liqtide-snapshot.yml`'s `30 23 * * *`; its own
+  originally `0 23 * * *`, 30 min before `liqtide-snapshot.yml`'s `30 23 * * *` — both moved earlier
+  on 2026-09-27, see that entry; its own
   `concurrency: narrative-snapshot` group) runs `api/scripts/snapshot_narrative.py` nightly,
   forward-archiving one point per (source, category) to `api/data/cache/narrative/` (new
   `.gitignore` carve-out, same per-entry mechanic as `liqtide/`). AC-3 (the cron actually firing) is
@@ -153,7 +179,7 @@ second real feature after the momentum screener, and the first to live in
   manual — see the `.github/workflows/` correction below.
 - `[Correction]` **`.github/workflows/` is no longer empty.** Earlier versions of this file said
   "no CI/deploy config exists" — that was true through 2026-09-20 but is stale now.
-  `.github/workflows/liqtide-snapshot.yml` runs nightly at 23:30 UTC, executes
+  `.github/workflows/liqtide-snapshot.yml` runs nightly (18:47 UTC since 2026-09-27), executes
   `snapshot_liqtide.py`, and commits `api/data/cache/liqtide/` to `main` — discovered mid-session
   on 2026-09-24 (it had already captured 09-21 through 09-24 by the time this was found). This is
   the **only** scheduled fetch of LiqTide; the Windows Task Scheduler step in the regime plan's Ops
@@ -484,9 +510,10 @@ my_site/
                                 `_GUIDE.md` placeholders: charting-indicators,
                                 cointegration-screener
     development-protocols/  -- RIPER-5 methodology docs
-  .github/workflows/        -- liqtide-snapshot.yml (nightly 23:30 UTC), narrative-snapshot.yml
-                                (nightly 23:00 UTC, new 24-09-26) -- both snapshot + commit to
-                                main, see Changes Since Last Update
+  .github/workflows/        -- chain-growth-snapshot.yml (nightly 17:47 UTC), narrative-snapshot.yml
+                                (nightly 18:17 UTC), liqtide-snapshot.yml (nightly 18:47 UTC) --
+                                all snapshot + commit to main; GitHub starts them ~2h late, see
+                                the 2026-09-27 Changes Since Last Update entry
   .claude/ .codex/ .agents/ -- agent + skill surfaces
   .env.example               -- REDDIT_CLIENT_ID/SECRET, LIQTIDE_ATTRIBUTION_URL,
                                  API_BASE_URL, API_PORT (see Environment and Configuration)
@@ -609,6 +636,11 @@ may be redistributed. See Licensing in `data-sources/all-data-sources.md`.
 
 ## Open Questions
 
+- **New, 27-09-26: pytrends nightly points can read 0 from Google's partial hour.**
+  `pytrends_adapter` takes `df.iloc[-1]` of the hourly "now 7-d" frame, which is Google's incomplete
+  `isPartial` hour (observed memecoins 34→0, RWA all 0). Candidate fix: drop `isPartial` rows or use a
+  daily aggregate — changes stored values, so it needs its own plan. See
+  `process/general-plans/backlog/pytrends-partial-hour-zeros_NOTE_27-09-26.md`. Don't fix ad hoc.
 - **Momentum screener lives under `process/general-plans/`, not `process/features/`.** It's
   the first shipped feature, and it draws on macro-liquidity and narrative work that overlaps
   `cycle-regime` and `narrative-mindshare`. **Partially resolved, 24-09-26, for narrative only:**

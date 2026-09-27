@@ -3,14 +3,18 @@ name: Chain-growth daily snapshot
 # Archives the full daily active-address and transaction series per chain
 # (chain-growth RFC-3) from growthepie, plus the L2BEAT transactions
 # cross-check. Providers revise recent days and may drop deep history, so the
-# merged series is committed. Runs at 22:00 UTC, 60 minutes before
-# narrative-snapshot.yml and 90 before liqtide-snapshot.yml, so the pushes to
-# main don't overlap.
+# merged series is committed. Scheduled for 17:47 UTC (off the top of the
+# hour, which GitHub's scheduler handles better). GitHub starts scheduled runs
+# ~2h late in practice (observed up to ~2h20m), so the old 22:00 UTC slot
+# landed within minutes of UTC midnight; 17:47 leaves ~3h+ of margin. Runs 30
+# minutes before narrative-snapshot.yml and 60 before liqtide-snapshot.yml, so
+# the pushes to main don't overlap. Pinned by
+# api/tests/scripts/test_snapshot_workflow_schedules.py.
 #
 # No secrets: both sources are keyless.
 on:
   schedule:
-    - cron: "0 22 * * *"
+    - cron: "47 17 * * *"
   workflow_dispatch: {}
 
 permissions:
