@@ -48,7 +48,7 @@
       "id": "polygon",
       "label": "Polygon",
       "enabled": true,
-      "launch_date": null,
+      "launch_date": "2020-05-30",
       "metrics": {
         "active_addresses": {"source": "growthepie", "source_key": "polygon_pos"},
         "transactions": {"source": "growthepie", "source_key": "polygon_pos"}

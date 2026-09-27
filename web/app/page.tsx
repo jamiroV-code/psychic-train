@@ -15,6 +15,11 @@ export default function HomePage() {
           Open the narrative dashboard
         </Link>
       </p>
+      <p>
+        <Link href="/onchain" data-testid="home-link-onchain">
+          Open the on-chain growth dashboard
+        </Link>
+      </p>
     </main>
   );
 }

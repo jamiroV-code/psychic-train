@@ -20,7 +20,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 # NOTE (RFC-002/RFC-003 scope): routers/regime.py (item 42) and
 # routers/narrative.py (item 56) are now both wired in.
-from api.routers import narrative, regime, screener, watchlist
+from api.routers import narrative, onchain_activity, regime, screener, watchlist
 
 app = FastAPI(title="Momentum Screener API")
 
@@ -54,6 +54,7 @@ app.include_router(screener.router)
 app.include_router(watchlist.router)
 app.include_router(regime.router)
 app.include_router(narrative.router)
+app.include_router(onchain_activity.router)
 
 
 @app.get("/api/health")

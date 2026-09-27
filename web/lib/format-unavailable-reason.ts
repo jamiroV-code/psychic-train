@@ -71,3 +71,20 @@ export function formatNarrativeReason(reason: string | null): string | null {
   if (reason.startsWith("backfilled history")) return "Backfilled history — 269-day Google window, separate scale";
   return `Unavailable (${reason})`;
 }
+
+/**
+ * Chain growth dashboard (/onchain, RFC-5): copy for the reason codes
+ * `GET /api/onchain/growth` emits. A sibling of `formatNarrativeReason`, for
+ * the same reason (the screener union stays closed). An unknown code is shown
+ * verbatim, never hidden; a null reason returns null.
+ */
+const ONCHAIN_REASON_COPY: Record<string, string> = {
+  "source-unavailable": "Source unavailable — no free source for this chain yet",
+  "no-archived-data": "Unavailable — no archived data for this chain yet",
+  stale: "Stale — showing the last archived data",
+};
+
+export function formatOnchainReason(reason: string | null): string | null {
+  if (reason === null) return null;
+  return ONCHAIN_REASON_COPY[reason] ?? `Unavailable (${reason})`;
+}
