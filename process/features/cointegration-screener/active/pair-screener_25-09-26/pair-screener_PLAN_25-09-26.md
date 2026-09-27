@@ -57,7 +57,7 @@ back to specific acceptance criteria (AC-1..AC-12) in that SPEC.
 |---|---|---|
 | RFC-001 | Universe file + loader + deep-fetch script (+ statsmodels dependency, Stage-0 smoke check) | ⏳ PLANNED |
 | RFC-002 | Stats engine (`stats.py`) + golden-value tests | 🔧 CODE-COMPLETE (awaiting user review) |
-| RFC-003 | Pydantic models + response serializer + router + perf-smoke | ⏳ PLANNED |
+| RFC-003 | Pydantic models + response serializer + router + perf-smoke | 🔧 CODE-COMPLETE (awaiting user review — see `pair-screener_RFC-003_REPORT_27-09-26.md`) |
 | RFC-004 | Web table + detail view + vitest formatters | ⏳ PLANNED |
 | RFC-005 | Playwright `pairs.spec.ts` + screener-isolation proof | ⏳ PLANNED |
 
@@ -1116,11 +1116,11 @@ the detail endpoint's read O(1) file lookups. STOP.
   contents into the phase report.
 
 **Verification Checklist**
-- [ ] Manual test passed (curl both endpoints against real cache after running `compute_pairs.py`
+- [x] Manual test passed (curl both endpoints against real cache after running `compute_pairs.py`
   — see phase report)
-- [ ] Data verified (row counts match universe's `C(n,2)`; BH-corrected values spot-checked;
+- [x] Data verified (row counts match universe's `C(n,2)`; BH-corrected values spot-checked;
   `provenance.json` contents pasted)
-- [ ] Error handling confirmed (404/422 tests; `coin_unavailable`/`insufficient_overlap` rows
+- [x] Error handling confirmed (404/422 tests; `coin_unavailable`/`insufficient_overlap` rows
   render; `results_unavailable`/`stale` states tested and rendered)
 - [ ] User confirmed working (read-path timing + compute-script runtime + endpoint output reviewed)
 
@@ -1131,17 +1131,17 @@ freshness/staleness signal.
 **Ready For**: RFC-004.
 
 **Implementation Checklist**
-- [ ] Stage 0 findings (field lists incl. `computation_status`/`stale_reason` + spread-storage
+- [x] Stage 0 findings (field lists incl. `computation_status`/`stale_reason` + spread-storage
   layout decision) presented; user approved
-- [ ] `compute_pairs.py` + compute-path `pairs_response.py` + BH correction + provenance write +
+- [x] `compute_pairs.py` + compute-path `pairs_response.py` + BH correction + provenance write +
   tests
-- [ ] Read-path `pairs_response.py` (provenance comparison, `fresh`/`stale`/`results_unavailable`)
+- [x] Read-path `pairs_response.py` (provenance comparison, `fresh`/`stale`/`results_unavailable`)
   + tests (all four states)
-- [ ] Router + 404/422 handling (incl. self-pair 422, case-insensitive uppercase matching,
+- [x] Router + 404/422 handling (incl. self-pair 422, case-insensitive uppercase matching,
   unknown-ticker 404, self-pair-precedence-over-unknown-ticker) + tests
-- [ ] `api/main.py` one-line registration
-- [ ] Read-path timing gate green; compute-script runtime recorded (informational)
-- [ ] Full `pytest` green; regime/screener router tests unchanged and green
+- [x] `api/main.py` one-line registration
+- [x] Read-path timing gate green; compute-script runtime recorded (informational)
+- [x] Full `pytest` green; regime/screener router tests unchanged and green
 
 ### RFC-004: Web table + detail view
 
