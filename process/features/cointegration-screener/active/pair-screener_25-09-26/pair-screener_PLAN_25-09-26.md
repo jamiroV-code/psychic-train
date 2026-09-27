@@ -58,7 +58,7 @@ back to specific acceptance criteria (AC-1..AC-12) in that SPEC.
 | RFC-001 | Universe file + loader + deep-fetch script (+ statsmodels dependency, Stage-0 smoke check) | ⏳ PLANNED |
 | RFC-002 | Stats engine (`stats.py`) + golden-value tests | 🔧 CODE-COMPLETE (awaiting user review) |
 | RFC-003 | Pydantic models + response serializer + router + perf-smoke | 🔧 CODE-COMPLETE (awaiting user review — see `pair-screener_RFC-003_REPORT_27-09-26.md`) |
-| RFC-004 | Web table + detail view + vitest formatters | ⏳ PLANNED |
+| RFC-004 | Web table + detail view + vitest formatters | 🔧 CODE-COMPLETE (awaiting user review — see `pair-screener_RFC-004_REPORT_27-09-26.md`) |
 | RFC-005 | Playwright `pairs.spec.ts` + screener-isolation proof | ⏳ PLANNED |
 
 ---
@@ -1184,9 +1184,9 @@ shape (`web/app/pairs/[a]/[b]/page.tsx` vs. a query-param route) and the sort/ta
 - Error scenario: stop the API → page shows a clear notice, not a blank table.
 
 **Verification Checklist**
-- [ ] Manual test passed (table + two detail pages reviewed against a running API)
-- [ ] Data verified (row values cross-checked against RFC-003's curl output)
-- [ ] Error handling confirmed (API-down notice; insufficient/unavailable rows render correctly)
+- [x] Manual test passed (table + two detail pages reviewed against a running API) — agent walkthrough 28-09-26: `/pairs` (153 rows) + `/pairs/DOGE/BCH` + 404/422 detail pages; real data has no `insufficient_overlap` pair, so that detail state is covered by vitest only
+- [x] Data verified (row values cross-checked against RFC-003's curl output) — top rows and DOGE/BCH detail match the RFC-003 report and live `GET /api/pairs`
+- [x] Error handling confirmed (API-down notice; insufficient/unavailable rows render correctly) — API-down notice seen live; non-ok rows proven by vitest
 - [ ] User confirmed working (table sort + detail views reviewed and approved)
 
 **Acceptance Criteria**: AC-2 (row rendering), AC-4, AC-6, AC-7 (chart date range vs. displayed
@@ -1194,12 +1194,12 @@ sample window — proven fully in RFC-005's Playwright spec, spot-checked manual
 **Ready For**: RFC-005.
 
 **Implementation Checklist**
-- [ ] Stage 0 findings (reuse points + route shape + table approach) presented; user approved
-- [ ] Types + API client + formatters + tests
-- [ ] `PairsTable` + tests
-- [ ] `PairDetailView` + tests
-- [ ] Pages wired + linked from home; manual walkthrough done
-- [ ] `pnpm --filter web test` green
+- [x] Stage 0 findings (reuse points + route shape + table approach) presented; user approved
+- [x] Types + API client + formatters + tests
+- [x] `PairsTable` + tests
+- [x] `PairDetailView` + tests
+- [x] Pages wired + linked from home; manual walkthrough done
+- [x] `pnpm --filter web test` green (153 passed / 19 files; tsc exit 0)
 
 ### RFC-005: End-to-end proof + isolation proof
 
