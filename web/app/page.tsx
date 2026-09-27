@@ -15,6 +15,11 @@ export default function HomePage() {
           Open the narrative dashboard
         </Link>
       </p>
+      <p>
+        <Link href="/pairs" data-testid="home-link-pairs">
+          Open the pair screener
+        </Link>
+      </p>
     </main>
   );
 }
