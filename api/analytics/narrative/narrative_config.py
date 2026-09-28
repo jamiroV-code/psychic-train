@@ -26,6 +26,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import os
 import re
 import threading
 from pathlib import Path
@@ -35,6 +36,16 @@ from api.analytics.narrative.mapping import LEGACY_COIN_CATEGORY_MAP
 logger = logging.getLogger(__name__)
 
 NARRATIVES_PATH = Path(__file__).resolve().parents[2] / "data" / "narratives.json"
+# Override for tests/E2E (narrative-v2 RFC-7), mirroring PAIRS_UNIVERSE_PATH in
+# api/data/pairs_universe.py. Read on every call; unset = the real file above.
+NARRATIVES_PATH_ENV = "NARRATIVES_PATH"
+
+
+def default_narratives_path() -> Path:
+    """The config file to read when no explicit path is passed: the
+    `NARRATIVES_PATH` env override when set, else `api/data/narratives.json`."""
+    override = os.environ.get(NARRATIVES_PATH_ENV)
+    return Path(override) if override else NARRATIVES_PATH
 
 # ids are used to build cache file paths, so keep them to a safe slug.
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -130,7 +141,7 @@ def _parse(path: Path) -> list[dict]:
 
 def load_all_narratives(path: Path | None = None) -> list[dict]:
     """Every valid entry, including disabled ones, in file order."""
-    path = NARRATIVES_PATH if path is None else path
+    path = default_narratives_path() if path is None else path
     key = (str(path), _mtime(path))
     with _lock:
         if _cache["key"] == key:

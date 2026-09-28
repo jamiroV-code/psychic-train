@@ -42,6 +42,18 @@ interface NarrativeFacts {
   comparison: RankFact[];
   change: RankFact[];
   no_market_category: string;
+  v2: NarrativeV2Facts;
+}
+
+/** narrative-v2 RFC-7: the seeder's disposable NARRATIVES_PATH config + variants. */
+interface NarrativeV2Facts {
+  narratives_path: string;
+  base_path: string;
+  base_ids: string[];
+  variants: Record<string, { path: string; ids: string[] }>;
+  mature: string[];
+  thin: string[];
+  no_data: string[];
 }
 
 interface HistoryPoint {
@@ -213,6 +225,118 @@ test("reddit is unavailable (no archived data) and the other sources still rende
   expect([reddit.status, reddit.reason]).toEqual(["unavailable", "no-archived-data"]);
   await expect(page.getByTestId("narrative-notice-ai-reddit")).toContainText("no archived data");
   await expect(page.getByTestId("narrative-legend-ai-coingecko-narrative")).toBeVisible();
+});
+
+// --- narrative-v2 RFC-7 (ADR-7 item 5) ------------------------------------
+// The API reads NARRATIVES_PATH, a disposable copy of api/data/narratives.json
+// under the E2E cache root (the seeder refuses the real file). Specs that swap
+// the config always restore the base copy in `finally`.
+
+const v2 = facts.v2;
+
+function writeConfig(json: string): void {
+  // Guard: never write outside the seeder's disposable directory.
+  expect(path.resolve(v2.narratives_path)).not.toContain(path.join("api", "data", "narratives.json"));
+  fs.writeFileSync(v2.narratives_path, json, "utf-8");
+}
+
+function restoreBase(): void {
+  writeConfig(fs.readFileSync(v2.base_path, "utf-8"));
+}
+
+async function waitForV2Views(page: Page): Promise<void> {
+  await expect(page.getByTestId("narrative-momentum")).toBeVisible();
+  await expect(page.getByTestId("narrative-mindshare")).toBeVisible();
+}
+
+test("momentum view is populated: every narrative is ranked or shows why not", async ({ page }) => {
+  await openNarrative(page);
+  await waitForV2Views(page);
+  for (const cid of v2.base_ids) {
+    const row = page.getByTestId(`momentum-row-${cid}`);
+    const insufficient = page.getByTestId(`momentum-insufficient-${cid}`);
+    await expect(row.or(insufficient)).toHaveCount(1);
+  }
+  await expect(page.getByTestId("narrative-momentum-error")).toHaveCount(0);
+});
+
+test("mindshare view is populated for the latest seeded day, with an excluded narrative accounted for", async ({ page }) => {
+  await openNarrative(page);
+  await waitForV2Views(page);
+  await expect(page.getByTestId("mindshare-bar")).toBeVisible();
+  for (const cid of ["ai", "l2s", "memecoins"]) {
+    await expect(page.getByTestId(`mindshare-row-${cid}`)).toBeVisible();
+  }
+  await expect(page.getByTestId(`mindshare-excluded-${facts.no_market_category}`)).toBeVisible();
+  await expect(page.getByTestId("mindshare-date-picker")).toHaveValue(facts.today);
+  await expect(page.getByTestId("narrative-mindshare-error")).toHaveCount(0);
+});
+
+test("AC-4: a config file edit (add, rename, remove) shows up without restarting the API", async ({ page }) => {
+  const base = JSON.parse(fs.readFileSync(v2.base_path, "utf-8")) as {
+    narratives: { id: string; label: string }[];
+  };
+  const added = v2.variants[String(Math.min(...Object.keys(v2.variants).map(Number)))]!.ids.find(
+    (id) => !v2.base_ids.includes(id),
+  )!;
+  const edited = JSON.parse(fs.readFileSync(v2.variants["15"]!.path, "utf-8")) as typeof base;
+  edited.narratives = [
+    ...base.narratives
+      .filter((n) => n.id !== "memecoins")
+      .map((n) => (n.id === "ai" ? { ...n, label: "AI (edited)" } : n)),
+    edited.narratives.find((n) => n.id === added)!,
+  ];
+  try {
+    writeConfig(JSON.stringify(edited));
+    const body = await openNarrative(page);
+    expect(body.categories.map((c) => c.category_id)).toEqual(edited.narratives.map((n) => n.id));
+    await expect(page.getByTestId(`narrative-panel-${added}`)).toBeVisible();
+    await expect(page.getByTestId("narrative-panel-memecoins")).toHaveCount(0);
+    await expect(page.getByTestId("narrative-panel-ai")).toContainText("AI (edited)");
+  } finally {
+    restoreBase();
+  }
+  // And back again, still without a restart.
+  const body = await openNarrative(page);
+  expect(body.categories.map((c) => c.category_id)).toEqual(v2.base_ids);
+});
+
+test("AC-8: 15 narratives — every cross-narrative view lists all 15, none silently truncated", async ({ page }) => {
+  const fifteen = v2.variants["15"]!;
+  expect(fifteen.ids).toHaveLength(15);
+  try {
+    writeConfig(fs.readFileSync(fifteen.path, "utf-8"));
+    const body = await openNarrative(page);
+    await waitForV2Views(page);
+    expect(body.categories.map((c) => c.category_id)).toEqual(fifteen.ids);
+    // History panels: 10-panel soft cap + an overflow listing the other 5.
+    await expect(page.getByTestId("narrative-overflow-toggle")).toContainText("+5 more");
+    // Comparison and change-in-attention: one row per narrative.
+    await expect(page.getByTestId("narrative-comparison").locator("tbody tr")).toHaveCount(15);
+    expect(body.change_in_attention.entries).toHaveLength(15);
+    // Momentum: every narrative ranked or explicitly insufficient.
+    for (const cid of fifteen.ids) {
+      await expect(page.getByTestId(`momentum-row-${cid}`).or(page.getByTestId(`momentum-insufficient-${cid}`))).toHaveCount(1);
+    }
+    for (const cid of v2.mature) {
+      await expect(page.getByTestId(`momentum-row-${cid}`)).not.toHaveAttribute("data-rank", "");
+      await expect(page.getByTestId(`momentum-arrow-${cid}`)).not.toBeEmpty();
+    }
+    for (const cid of [...v2.thin, ...v2.no_data]) {
+      await expect(page.getByTestId(`momentum-insufficient-${cid}`)).toBeVisible();
+    }
+    // Mindshare: every narrative has a row or an explicit exclusion.
+    for (const cid of fifteen.ids) {
+      await expect(page.getByTestId(`mindshare-row-${cid}`).or(page.getByTestId(`mindshare-excluded-${cid}`))).toHaveCount(1);
+    }
+    for (const cid of v2.no_data) {
+      await expect(page.getByTestId(`mindshare-excluded-${cid}`)).toBeVisible();
+    }
+    // Still exactly one caveat with 15 narratives (AC-12).
+    await expect(page.getByTestId("narrative-caveat")).toHaveCount(1);
+  } finally {
+    restoreBase();
+  }
 });
 
 test("home page links to the narrative dashboard", async ({ page }) => {
