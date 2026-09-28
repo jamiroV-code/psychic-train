@@ -144,3 +144,29 @@ export interface NarrativeMomentumResponse {
   tolerance_days: number;
   entries: NarrativeMomentumEntry[];
 }
+
+// --- Narrative-v2 RFC-5 (ADR-5): GET /api/narrative/mindshare. Additive only.
+
+export type NarrativeMindshareSource = "pytrends" | "coingecko" | "reddit";
+
+export interface NarrativeMindshareEntry {
+  category_id: string;
+  label: string;
+  /** Headline share of the day (0..1); null when excluded for lack of data. */
+  mindshare: number | null;
+  /** Each source's own same-day share, shown alongside the headline. */
+  sources: Record<NarrativeMindshareSource, number | null>;
+  status: "ok" | "excluded";
+  reason: string | null;
+}
+
+export interface NarrativeMindshareResponse {
+  generated_utc: string;
+  date: string | null;
+  available_dates: string[];
+  sources_present: NarrativeMindshareSource[];
+  n_sources: number;
+  only_one_source: boolean;
+  no_sources_available: boolean;
+  entries: NarrativeMindshareEntry[];
+}

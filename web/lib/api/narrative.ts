@@ -1,4 +1,8 @@
-import type { NarrativeHistoryResponse, NarrativeMomentumResponse } from "@/lib/types/narrative";
+import type {
+  NarrativeHistoryResponse,
+  NarrativeMindshareResponse,
+  NarrativeMomentumResponse,
+} from "@/lib/types/narrative";
 
 // Same getJson pattern as lib/api/regime.ts (base URL fallback, 10 s
 // timeout, readable errors). Kept separate so regime/screener stay untouched.
@@ -42,4 +46,10 @@ export function fetchNarrativeHistory(query: NarrativeHistoryQuery = {}): Promis
 /** GET /api/narrative/momentum — narratives ranked vs each other on recent change (RFC-4). */
 export function fetchNarrativeMomentum(): Promise<NarrativeMomentumResponse> {
   return getJson<NarrativeMomentumResponse>("/api/narrative/momentum");
+}
+
+/** GET /api/narrative/mindshare — daily cross-narrative share, blend + each source (RFC-5). */
+export function fetchNarrativeMindshare(date?: string): Promise<NarrativeMindshareResponse> {
+  const qs = date ? `?date=${encodeURIComponent(date)}` : "";
+  return getJson<NarrativeMindshareResponse>(`/api/narrative/mindshare${qs}`);
 }

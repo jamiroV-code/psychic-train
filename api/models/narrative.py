@@ -184,3 +184,33 @@ class NarrativeMomentumResponse(BaseModel):
     acceleration_window_days: int
     tolerance_days: int
     entries: list[NarrativeMomentumEntry]
+
+
+# --- Narrative-v2 RFC-5 (ADR-5): GET /api/narrative/mindshare. Additive only;
+# no existing model above is changed.
+
+
+class NarrativeMindshareSources(BaseModel):
+    pytrends: float | None
+    coingecko: float | None
+    reddit: float | None
+
+
+class NarrativeMindshareEntry(BaseModel):
+    category_id: str
+    label: str
+    mindshare: float | None  # headline share of the day; None when excluded
+    sources: NarrativeMindshareSources  # per-source same-day share, shown alongside
+    status: Literal["ok", "excluded"]
+    reason: str | None
+
+
+class NarrativeMindshareResponse(BaseModel):
+    generated_utc: str
+    date: str | None
+    available_dates: list[str]
+    sources_present: list[Literal["pytrends", "coingecko", "reddit"]]
+    n_sources: int
+    only_one_source: bool
+    no_sources_available: bool
+    entries: list[NarrativeMindshareEntry]

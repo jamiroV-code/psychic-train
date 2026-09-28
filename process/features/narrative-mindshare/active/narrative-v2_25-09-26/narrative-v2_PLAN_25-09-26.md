@@ -49,7 +49,7 @@ narratives as the design floor/ceiling everywhere cross-narrative comparison hap
 | RFC-2 | Unified narrative config file (`api/data/narratives.json`) + loader + migration off the 2-file seed/map split | ✅ CODE DONE |
 | RFC-3 | Multi-keyword blending + anchor-chained pytrends batching (nightly job + backfill script) | ✅ CODE DONE |
 | RFC-4 | Momentum view (cross-sectional, vs-the-field ranking) | ✅ CODE DONE |
-| RFC-5 | Daily social-mindshare view (blend + show each source) | ⏳ NOT STARTED (depends on RFC-3, parallel to RFC-4) |
+| RFC-5 | Daily social-mindshare view (blend + show each source) | ✅ CODE DONE |
 | RFC-6 | Caveat de-duplication (sticky, once per page) | ⏳ NOT STARTED (no hard dependency — may run anytime after RFC-1) |
 | RFC-7 | Tripwire snapshot + AC-13 re-confirm + seeded Playwright + AC-14 handoff | ⏳ NOT STARTED (depends on all above) |
 
@@ -978,3 +978,26 @@ Trends/Reddit/CoinGecko/Hyperliquid — same constraint as v1's AC-12):
 - **Not wired into `NarrativeDashboard.tsx`**: that file is outside RFC-4's 6-file touchpoint list.
   `MomentumView` + `fetchNarrativeMomentum` are ready; mounting them on `/narrative` is left for RFC-7
   (its seeded E2E already names the momentum view) or a follow-up. Quadrant stretch item not built.
+
+### RFC-5 (daily mindshare) — 2026-09-28
+
+- **Headline renormalisation (within blast radius).** ADR-5 says the headline (skipna mean of present
+  per-source shares) "always sums to 100% by construction". That only holds when every narrative has
+  a value in every present source. `mindshare.blend_day` therefore renormalises the per-narrative
+  skipna means over included narratives. With uniform coverage this changes nothing
+  (`test_uniform_coverage_is_plain_mean`), and with mixed coverage it guarantees the day sums to
+  1.0 (`test_mindshare_golden_shares_sum_to_one`). A narrative with no share in any present source is
+  explicitly `excluded` (mindshare null plus a reason), never 0. This is the AC-11 "explicit
+  accounting" for narratives excluded that day.
+- **Source presence is day-level.** A source is present that day when ≥1 narrative has a value and
+  the total is > 0. `only_one_source` and `no_sources_available` count these day-level sources.
+- **Reddit "gate" = data presence, not the `REDDIT_REDISTRIBUTABLE` flag.** That flag is `False`, so
+  gating on it would drop Reddit forever. Reddit enters the blend whenever rows exist. With no
+  credentials there are no rows, so Reddit is absent. No credential plumbing changed.
+- **pytrends share uses `pytrends-blended` only.** Single-keyword narratives have no blended series
+  (RFC-3), so they have no pytrends share and blend on their other sources. Insufficient blended
+  series are skipped (ADR-1).
+- **Not mounted on `/narrative` yet.** `NarrativeDashboard.tsx` is not in RFC-5's touchpoints.
+  `MindshareView` (with an `onDateChange` callback) and `fetchNarrativeMindshare` are ready to be
+  wired in during RFC-6/RFC-7. The inline proxy label is local to the view, and `DataQualityCaveat`
+  is untouched (RFC-6 owns de-duplication).
