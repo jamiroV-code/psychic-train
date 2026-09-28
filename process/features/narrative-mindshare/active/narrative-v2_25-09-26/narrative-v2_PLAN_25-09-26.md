@@ -10,7 +10,9 @@ feature: narrative-mindshare
 # Narrative Dashboard v2 — Real-Data Fixes, File-Editable Narratives, Momentum & Mindshare
 
 **Date**: 25-09-26
-**Status**: EXECUTE in progress
+**Status**: EXECUTE complete, EVL confirmed (28-09-26 2nd session); RFC-1..6 VERIFIED; RFC-7 VERIFIED
+pending the user's AC-14 real-machine walkthrough (Section 14). Not archived — see Resume and
+Execution Handoff.
 **Complexity**: COMPLEX (single plan, 7-RFC internal breakdown)
 
 ## Overview
@@ -45,13 +47,23 @@ narratives as the design floor/ceiling everywhere cross-narrative comparison hap
 
 | RFC | Scope | Status |
 |---|---|---|
-| RFC-1 | Data-sufficiency gating (history.py + new scoring helper) + chart regression coverage | ✅ CODE DONE |
-| RFC-2 | Unified narrative config file (`api/data/narratives.json`) + loader + migration off the 2-file seed/map split | ✅ CODE DONE |
-| RFC-3 | Multi-keyword blending + anchor-chained pytrends batching (nightly job + backfill script) | ✅ CODE DONE |
-| RFC-4 | Momentum view (cross-sectional, vs-the-field ranking) | ✅ CODE DONE |
-| RFC-5 | Daily social-mindshare view (blend + show each source) | ✅ CODE DONE |
-| RFC-6 | Caveat de-duplication (sticky, once per page) | ✅ CODE DONE |
-| RFC-7 | Tripwire snapshot + AC-13 re-confirm + seeded Playwright + AC-14 handoff | ✅ CODE DONE |
+| RFC-1 | Data-sufficiency gating (history.py + new scoring helper) + chart regression coverage | ✅ VERIFIED |
+| RFC-2 | Unified narrative config file (`api/data/narratives.json`) + loader + migration off the 2-file seed/map split | ✅ VERIFIED |
+| RFC-3 | Multi-keyword blending + anchor-chained pytrends batching (nightly job + backfill script) | ✅ VERIFIED |
+| RFC-4 | Momentum view (cross-sectional, vs-the-field ranking) | ✅ VERIFIED |
+| RFC-5 | Daily social-mindshare view (blend + show each source) | ✅ VERIFIED |
+| RFC-6 | Caveat de-duplication (sticky, once per page) | ✅ VERIFIED |
+| RFC-7 | Tripwire snapshot + AC-13 re-confirm + seeded Playwright + AC-14 handoff | ✅ CODE DONE — AC-14 real-machine walkthrough (Section 14) still required; sandbox egress proxy blocks all four providers, same as v1's AC-11/AC-12 precedent |
+
+**28-09-26, 2nd session (EVL confirmation + RFC-3 scale-drift fix):** independent `vc-tester` EVL
+run confirms all fully-automated gates green (708 passed/5 deselected pytest incl. AC-13; 193
+passed/24-file vitest; `tsc --noEmit` exit 0; Playwright 55/55, 54/55, 55/55 across 3 runs — the one
+E2E fail is a pre-existing, unrelated `screener.spec.ts` flake, see Deviations and the new backlog
+note). RFC-3's named agent-probe (15-narrative worst-case pytrends request-count check) has now been
+run and recorded — see the new `## Agent-Probe Evidence` subsection below. RFC-1/2/3/4/5/6 are
+promoted to `✅ VERIFIED` per the Phase Completion Rules. RFC-7 stays `✅ CODE DONE` — AC-14 is an
+Agent-Probe gate that cannot run in this sandbox and needs the user's own machine. Plan stays in
+`active/` — see `## Resume and Execution Handoff` for the exact remaining step.
 
 Code-only completion is `CODE DONE`, not `VERIFIED`. A phase reaches `✅ VERIFIED` only after its
 own test gates are green AND regression checks against RFC-3's AC-13 contract test still pass.
@@ -600,6 +612,37 @@ cd web && pnpm test:e2e` (run twice per v1's own precedent for flake detection).
 | `e2e/narrative.spec.ts::exactly one caveat on page` | Fully-Automated | AC-12 |
 | AC-14 real-machine walkthrough checklist | Agent-Probe | AC-14 |
 
+## Agent-Probe Evidence (RFC-3, 28-09-26, 2nd session)
+
+RFC-3's named agent-probe — "15-narrative worst-case request-count check against re-confirmed
+pytrends rate guidance" — had not been run or recorded by any prior report (checked: the task
+folder holds only the PLAN + SPEC, no phase reports; grepped RFC-3's commits `6de2559`/`c806b9c` for
+any request-count note — none found). Run now, during UPDATE PROCESS closeout:
+
+1. **Re-confirmed no numeric hard rate-limit/request-count ceiling exists.**
+   `process/context/data-sources/all-data-sources.md`'s pytrends section states only qualitative
+   guidance ("unofficial and breaks periodically", "cache aggressively", the `mixed_scale`
+   caveat) — no numeric requests-per-day/minute ceiling anywhere. Grepped the codebase for a
+   numeric pytrends request-budget constant (`RATE_LIMIT`, `MAX_REQUESTS`, `REQUEST_BUDGET`) —
+   none exists; the only relevant constant is `BATCH_SIZE = 5` in `api/data/pytrends_adapter.py`
+   (the per-request term cap, unrelated to a request-count ceiling).
+2. **Worst-case arithmetic.** At the plan's stated ceiling of 15 simultaneous narratives, 2
+   keywords each = 30 terms: batching (`BATCH_SIZE=5`, 1 slot reserved for the anchor, 4 new terms
+   per batch) → `ceil(29/4)` = 8 batched requests, PLUS — after this session's scale-drift fix
+   (commit `1bec5db`) — one unbatched `_fetch_live` top-up request per narrative's primary keyword
+   = 15 more requests → **23 total requests/night at the 15-narrative ceiling** (corrected from the
+   pre-fix 21-total figure the task prompt estimated, since the fix's batch math is 8 not 6 batched
+   requests at 30 terms — recomputed directly against `api/data/pytrends_adapter.py`'s real
+   `_plan_batches` logic, not assumed). At the **current real config** (4 narratives × up to 2
+   keywords = up to 8 terms): 2 batched requests + 4 top-ups = **6 total requests/night**.
+3. **Conclusion: PASS — no rate-guidance violation.** (a) No documented or coded hard ceiling
+   exists to violate; (b) a failed pytrends fetch already degrades to an explicit `unavailable`
+   state per `all-data-sources.md`'s stated practical consequence — never a hard failure; (c) 6-23
+   requests/night is a small, low-frequency nightly load, consistent with "cache aggressively"
+   guidance and an order of magnitude below anything that would trip an unofficial API's abuse
+   heuristics. This agent-probe scenario is satisfied — RFC-3 is promoted to `✅ VERIFIED`.
+4. No contradiction was found during this check (no undocumented ceiling exists to be violated).
+
 ## 4. High-Level Data Flow
 
 ```
@@ -924,6 +967,22 @@ yes — risk-gate.json required before UPDATE PROCESS closeout per Execute-agent
 > UPDATE PROCESS, which must also decide the flagged RFC-3 primary-keyword scale item. After that,
 > the user runs the AC-14 walkthrough (section 14) on their own machine. Nothing is `✅ VERIFIED`
 > yet. The items below are the original PLAN-time handoff, kept for history.
+>
+> **Update 28-09-26, 2nd session (UPDATE PROCESS closeout):** the RFC-3 primary-keyword scale item
+> is now fixed (commit `1bec5db`) and RFC-3's named agent-probe is run and recorded (see
+> `## Agent-Probe Evidence` above). An independent `vc-tester` EVL confirmation run is green across
+> all fully-automated gates (see the new Deviations entries above). RFC-1 through RFC-6 are now
+> `✅ VERIFIED`. **RFC-7 stays `✅ CODE DONE`** — its named agent-probe, the AC-14 real-machine
+> walkthrough (Section 14), cannot run in this sandbox (egress proxy blocks Google Trends, Reddit,
+> CoinGecko, and Hyperliquid), same structural constraint v1's AC-11/AC-12 hit, both later confirmed
+> by the user on their own PC in a follow-up session (see `process/context/all-context.md`'s
+> existing precedent entries for regime-dashboard and narrative-dashboard v1). **This plan is
+> staying in `active/` and is NOT being archived this session.** Two new backlog notes were written
+> this session (`screener-weekly-bars-flake_NOTE_28-09-26.md`,
+> `mapping-tripwire-gap_NOTE_28-09-26.md`). **Next step for whoever picks this up:** run the AC-14
+> Walkthrough Checklist (Section 14) on your own machine with the real `api/data/narratives.json`
+> and real provider network access, then mark RFC-7 `✅ VERIFIED` and route this plan through
+> UPDATE PROCESS again to archive it to `process/features/narrative-mindshare/completed/`.
 
 1. **Selected plan file path**: `process/features/narrative-mindshare/active/narrative-v2_25-09-26/narrative-v2_PLAN_25-09-26.md`
 2. **Last completed phase or step**: PLAN written, RFC-1 through RFC-7 fully specified; no EXECUTE
@@ -1093,6 +1152,46 @@ Trends/Reddit/CoinGecko/Hyperliquid — same constraint as v1's AC-12):
 
 - **RFC-2 (28-09-26):** the migration dropped the grandfathered legacy `BTC -> store-of-value` map entry: it isn't a seed category, and `/history` never listed it. `mapping.LEGACY_COIN_CATEGORY_MAP` still has BTC for `/categories`/`/screener`. Impact: none on `/history` output. `narrative_categories.json` gained a new `_comment` key. `narrative_category_map.json` got a DEPRECATED prefix added to its existing `_comment`. `trigger.py` reads only `seed_categories`, and the AC-13 contract test still passes.
 - **RFC-3 (28-09-26), flagged not fixed — needs a UPDATE PROCESS decision before this scales further:** ADR-3 names `snapshot_narrative.py` as one of the two call sites RFC-3 batches, and batching correctly folds the primary keyword into the same anchor-chained request as every other keyword for that narrative. The side effect: rows written under the existing keyword key (`pytrends/{keywords[0]}`) now store a value *rescaled through the anchor-chaining formula* rather than the value from an independent single-keyword request — a real scale change in what gets archived under that key from 28-09-26 forward, not just an additive change. `trigger.py::compute_narrative_categories` (the `/categories` path, per the 25-09-26 keying fix) reads archived history under this exact key, so `/categories`' own composite could start drifting in magnitude on newly-archived days even though nothing in `trigger.py`, `mapping.py`, or the router was touched. `test_narrative_categories_contract.py` (AC-13) still passes because it snapshots against already-archived/fixture data, not new nightly writes going forward — so this would not be caught by that gate as new data accrues. Not treated as a hard stop this session because no stated hard-stop condition (AC-13 test failure, frozen-file edit) was actually triggered, and RFC-4/RFC-5 don't depend on the primary-keyword series' absolute scale (they read the blended series or the composite). Needs a deliberate, separately-scoped decision in UPDATE PROCESS or a follow-up plan: either accept the drift as intentional (batching was always going to change this), or give the primary keyword an unbatched top-up request outside the 8-request budget, or split it out for explicit user sign-off — same pattern as the existing 25-09-26 keying-bug follow-up. Do not silently resolve this in RFC-4 or RFC-7 without flagging it first.
+  **RESOLVED, 28-09-26, 2nd session (commit `1bec5db`):** chose the "unbatched top-up" option named
+  above. `snapshot_narrative.py` now writes `pytrends/{keywords[0]}` from a separate unbatched
+  `_fetch_live` call (first-write-wins keyed on its own `as_of`; a failed top-up skips the row —
+  no batched fallback is substituted), so `/categories`' input key is no longer rescaled through
+  the anchor-chaining formula. Batched + blended writes are unchanged. Two new regression tests
+  (`test_primary_keyword_uses_unbatched_value_blend_uses_batched`,
+  `test_primary_topup_failure_skips_row_no_batched_fallback` in
+  `api/tests/scripts/test_snapshot_narrative.py`) confirm this, and are part of the 708-passed EVL
+  count below. This adds 15 extra requests/night at the 15-narrative ceiling (see the new
+  `## Agent-Probe Evidence` section above for the full worst-case arithmetic) — accepted as within
+  pytrends' "cache aggressively, no documented hard ceiling" guidance.
+- **RFC-3, RFC-7 (28-09-26, 2nd session) — independent EVL confirmation.** A separate `vc-tester`
+  agent re-ran the full validate-contract gate set independently (not the PR author's own claim):
+  `uv run --project api pytest api/ -q` → 708 passed, 5 deselected (up from the 395/3 VALIDATE
+  baseline, growth from RFC-1..7's own test additions plus this session's 2 new tests);
+  `api/tests/routers/test_narrative_categories_contract.py` (AC-13) → 3 passed; `pnpm --filter web
+  test` → 193 passed, 24 files; `pnpm --filter web exec tsc --noEmit` → exit 0; full Playwright
+  suite run 3 times → 55/55, 54/55 (one `screener.spec.ts` flake, judged pre-existing/unrelated —
+  see below), 55/55. **Frozen-file check, independently reproduced:** `git diff
+  a86a2f05d0ab6c62f65aeafe12d92c34fa4eb4e0 HEAD -- api/analytics/narrative/trigger.py
+  api/analytics/narrative/mapping.py` is empty — both files byte-unchanged vs. the pre-plan base
+  commit, confirming the hard-stop constraint held across all 7 RFCs plus this session's fix.
+- **`screener.spec.ts` Playwright flake (28-09-26, 2nd session) — judged pre-existing/unrelated, not
+  proven pre-existing.** One run (2 of 3) failed `screener.spec.ts:103` ("weekly bars are Monday
+  00:00 UTC"); an isolated `--repeat-each=15` re-run of just that spec passed 15/15, meaning it only
+  fails inside full-suite runs (resource contention, not a logic bug). This branch touches zero
+  screener files/code/API, and the identical failure signature was already present in PR #7's own
+  pre-this-session description. Judged not a regression from narrative-v2 and does not block any RFC
+  from `✅ VERIFIED`. Unlike the `pair-screener_25-09-26` precedent, this has NOT been proven
+  pre-existing by reproducing it against the base commit in a clean worktree — see the new backlog
+  note `process/general-plans/backlog/screener-weekly-bars-flake_NOTE_28-09-26.md` for the follow-up.
+- **`mapping.py` tripwire coverage gap (28-09-26, 2nd session) — recorded, not fixed this session.**
+  `api/tests/analytics/narrative/test_trigger_tripwire.py` SHA-256-hashes the whole of `trigger.py`
+  and pins its function signatures/constants, but for `mapping.py` it only checks
+  `LEGACY_COIN_CATEGORY_MAP`'s value, that `COIN_CATEGORY_MAP` still points to it, and
+  `map_coin_to_category`'s signature — it does not hash the file and does not cover
+  `map_coin_to_narrative_category` (frozen per this plan's Non-Goals) at all. Today's empty git diff
+  against the base commit closes this gap for the current session only; it would not catch a future
+  edit. Recorded in `process/general-plans/backlog/mapping-tripwire-gap_NOTE_28-09-26.md` — not
+  fixed here (fixing the tripwire test itself is scope creep beyond this closeout).
 
 ### RFC-4 (28-09-26) — within-blast-radius interpretation notes
 
