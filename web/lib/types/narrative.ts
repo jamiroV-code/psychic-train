@@ -115,3 +115,32 @@ export interface NarrativeHistoryResponse {
   comparison: NarrativeComparison;
   change_in_attention: NarrativeChange;
 }
+
+// --- Narrative-v2 RFC-4 (ADR-4): GET /api/narrative/momentum. Additive only.
+
+export type NarrativeMomentumBasis = "pytrends-blended" | "composite" | "insufficient";
+
+export interface NarrativeMomentumEntry {
+  category_id: string;
+  label: string;
+  momentum_basis: NarrativeMomentumBasis;
+  rank: number | null;
+  as_of: string | null;
+  change: number | null;
+  prev_change: number | null;
+  acceleration: number | null;
+  direction: "up" | "down" | "flat" | null;
+  trend: "accelerating" | "decelerating" | "steady" | null;
+  baseline_date: string | null;
+  prior_baseline_date: string | null;
+  status: "ok" | "insufficient";
+  reason: string | null;
+}
+
+export interface NarrativeMomentumResponse {
+  generated_utc: string;
+  window_days: number;
+  acceleration_window_days: number;
+  tolerance_days: number;
+  entries: NarrativeMomentumEntry[];
+}

@@ -155,3 +155,32 @@ class NarrativeHistoryResponse(BaseModel):
     categories: list[NarrativeHistoryCategory]
     comparison: NarrativeComparison
     change_in_attention: NarrativeChange
+
+
+# --- Narrative-v2 RFC-4 (ADR-4): GET /api/narrative/momentum. Additive only;
+# no existing model above is changed.
+
+
+class NarrativeMomentumEntry(BaseModel):
+    category_id: str
+    label: str
+    momentum_basis: Literal["pytrends-blended", "composite", "insufficient"]
+    rank: int | None  # vs-the-field rank on `change`; None when insufficient
+    as_of: str | None
+    change: float | None
+    prev_change: float | None
+    acceleration: float | None
+    direction: Literal["up", "down", "flat"] | None
+    trend: Literal["accelerating", "decelerating", "steady"] | None
+    baseline_date: str | None
+    prior_baseline_date: str | None
+    status: Literal["ok", "insufficient"]
+    reason: str | None
+
+
+class NarrativeMomentumResponse(BaseModel):
+    generated_utc: str
+    window_days: int
+    acceleration_window_days: int
+    tolerance_days: int
+    entries: list[NarrativeMomentumEntry]

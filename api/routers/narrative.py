@@ -129,3 +129,22 @@ def _history_response(result: history.NarrativeHistoryResult) -> NarrativeHistor
 
 def pd_isna(v) -> bool:
     return v is None or (isinstance(v, float) and v != v)
+
+
+# --- Narrative-v2 RFC-4 (ADR-4): GET /api/narrative/momentum. Additive only;
+# shares nothing with `get_categories`/`get_history` above.
+from api.analytics.narrative import momentum  # noqa: E402
+from api.models.narrative import NarrativeMomentumEntry, NarrativeMomentumResponse  # noqa: E402
+
+
+@router.get("/momentum", response_model=NarrativeMomentumResponse)
+def get_momentum() -> NarrativeMomentumResponse:
+    """Cross-sectional momentum ranking of every enabled narrative. Read-only."""
+    result = momentum.build_momentum()
+    return NarrativeMomentumResponse(
+        generated_utc=result.generated_utc,
+        window_days=result.window_days,
+        acceleration_window_days=result.acceleration_window_days,
+        tolerance_days=result.tolerance_days,
+        entries=[NarrativeMomentumEntry(**vars(e)) for e in result.entries],
+    )

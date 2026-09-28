@@ -48,7 +48,7 @@ narratives as the design floor/ceiling everywhere cross-narrative comparison hap
 | RFC-1 | Data-sufficiency gating (history.py + new scoring helper) + chart regression coverage | ✅ CODE DONE |
 | RFC-2 | Unified narrative config file (`api/data/narratives.json`) + loader + migration off the 2-file seed/map split | ✅ CODE DONE |
 | RFC-3 | Multi-keyword blending + anchor-chained pytrends batching (nightly job + backfill script) | ✅ CODE DONE |
-| RFC-4 | Momentum view (cross-sectional, vs-the-field ranking) | ⏳ NOT STARTED (depends on RFC-3) |
+| RFC-4 | Momentum view (cross-sectional, vs-the-field ranking) | ✅ CODE DONE |
 | RFC-5 | Daily social-mindshare view (blend + show each source) | ⏳ NOT STARTED (depends on RFC-3, parallel to RFC-4) |
 | RFC-6 | Caveat de-duplication (sticky, once per page) | ⏳ NOT STARTED (no hard dependency — may run anytime after RFC-1) |
 | RFC-7 | Tripwire snapshot + AC-13 re-confirm + seeded Playwright + AC-14 handoff | ⏳ NOT STARTED (depends on all above) |
@@ -962,3 +962,19 @@ Trends/Reddit/CoinGecko/Hyperliquid — same constraint as v1's AC-12):
 
 - **RFC-2 (28-09-26):** the migration dropped the grandfathered legacy `BTC -> store-of-value` map entry: it isn't a seed category, and `/history` never listed it. `mapping.LEGACY_COIN_CATEGORY_MAP` still has BTC for `/categories`/`/screener`. Impact: none on `/history` output. `narrative_categories.json` gained a new `_comment` key. `narrative_category_map.json` got a DEPRECATED prefix added to its existing `_comment`. `trigger.py` reads only `seed_categories`, and the AC-13 contract test still passes.
 - **RFC-3 (28-09-26), flagged not fixed — needs a UPDATE PROCESS decision before this scales further:** ADR-3 names `snapshot_narrative.py` as one of the two call sites RFC-3 batches, and batching correctly folds the primary keyword into the same anchor-chained request as every other keyword for that narrative. The side effect: rows written under the existing keyword key (`pytrends/{keywords[0]}`) now store a value *rescaled through the anchor-chaining formula* rather than the value from an independent single-keyword request — a real scale change in what gets archived under that key from 28-09-26 forward, not just an additive change. `trigger.py::compute_narrative_categories` (the `/categories` path, per the 25-09-26 keying fix) reads archived history under this exact key, so `/categories`' own composite could start drifting in magnitude on newly-archived days even though nothing in `trigger.py`, `mapping.py`, or the router was touched. `test_narrative_categories_contract.py` (AC-13) still passes because it snapshots against already-archived/fixture data, not new nightly writes going forward — so this would not be caught by that gate as new data accrues. Not treated as a hard stop this session because no stated hard-stop condition (AC-13 test failure, frozen-file edit) was actually triggered, and RFC-4/RFC-5 don't depend on the primary-keyword series' absolute scale (they read the blended series or the composite). Needs a deliberate, separately-scoped decision in UPDATE PROCESS or a follow-up plan: either accept the drift as intentional (batching was always going to change this), or give the primary keyword an unbatched top-up request outside the 8-request budget, or split it out for explicit user sign-off — same pattern as the existing 25-09-26 keying-bug follow-up. Do not silently resolve this in RFC-4 or RFC-7 without flagging it first.
+
+### RFC-4 (28-09-26) — within-blast-radius interpretation notes
+
+- **Composite "mature"**: ADR-1 defines sufficiency per source series, not for the composite. RFC-4
+  treats a composite as mature when it has >= `MATURE_POINTS_THRESHOLD` (5) points.
+- **Windows**: base1 = latest point in [as_of-9d, as_of-7d], base2 = same rule from base1 (reuses
+  `history.rank_change`'s 7-day + 2-day tolerance). `acceleration = change - prev_change`. A mature basis
+  whose windows cannot resolve falls through to the next basis; if none resolves → `insufficient` with
+  reason "not enough history for momentum yet: …".
+- **Arrow**: sign(change) × sign(acceleration) → accelerating/decelerating; zero → `steady`; zero change →
+  direction `flat`. Signs are taken after rounding to `RANK_DECIMALS` so float noise never reads as a trend.
+- **Units**: both bases are within-source normalised (0..1), so cross-narrative ranking compares like units.
+  The keyword-keyed primary pytrends series is never used as a momentum basis (sidesteps the RFC-3 scale concern).
+- **Not wired into `NarrativeDashboard.tsx`**: that file is outside RFC-4's 6-file touchpoint list.
+  `MomentumView` + `fetchNarrativeMomentum` are ready; mounting them on `/narrative` is left for RFC-7
+  (its seeded E2E already names the momentum view) or a follow-up. Quadrant stretch item not built.
