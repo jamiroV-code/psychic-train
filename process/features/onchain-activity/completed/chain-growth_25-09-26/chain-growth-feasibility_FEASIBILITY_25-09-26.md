@@ -154,4 +154,4 @@ fallback's exactly.
   `polygon_pos` was not printed by the probe; (5) Dune account creation date was not recorded (moot
   now). None blocks RFC-2.
 
-VC-FEASIBILITY-VERDICT-READY: NOT-VIABLE — /home/user/psychic-train/process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth-feasibility_FEASIBILITY_25-09-26.md
+VC-FEASIBILITY-VERDICT-READY: NOT-VIABLE — /home/user/psychic-train/process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth-feasibility_FEASIBILITY_25-09-26.md

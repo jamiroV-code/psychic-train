@@ -3,7 +3,7 @@ phase: rfc-003-stage0
 date: 2026-09-25
 status: COMPLETE
 feature: onchain-activity
-plan: process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
+plan: process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
 ---
 
 # chain-growth RFC-3 Stage 0: storage, nightly workflow, backfill (fallback scope, no Dune)

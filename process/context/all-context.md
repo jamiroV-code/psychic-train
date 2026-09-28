@@ -1,10 +1,8 @@
 # my_site - All Context
 
-Last updated: 2026-09-25 (narrative trigger keyword-keying fix merged into the narrative
-branch on top of the two same-day 2026-09-24 closeouts — narrative-mindshare `/narrative`
-dashboard RFC-1..6, and the regime dashboard's AC-11-confirmed 2nd pass; see Changes Since Last
-Update below for all three. The 2026-09-20 18:47 version predates both the `/regime` and
-`/narrative` builds)
+Last updated: 2026-09-28 (onchain-activity `/onchain` chain participant growth page shipped and
+verified — see the first Changes entry below; earlier entries cover the 2026-09-24/25 regime,
+narrative and keyword-keying closeouts)
 
 This file is the root context entrypoint for the repo.
 
@@ -16,6 +14,33 @@ Use it for two things:
 Start here before loading deeper context files.
 
 ---
+
+## Changes Since Last Update (2026-09-25 → 2026-09-28, onchain-activity)
+
+The chain participant growth program (`process/features/onchain-activity/completed/chain-growth_25-09-26/`)
+shipped all 6 RFCs, merged to `main` at `4110e3f`, and is ✅ VERIFIED: the user passed the AC-14
+real-archive walkthrough and approved both risk packs on 2026-09-28. First real code in
+`onchain-activity/`. The plan's `## Post-EXECUTE Amendments` reconciles its original text.
+
+- `[Product]` New route **`/onchain`** (`web/app/onchain/page.tsx`, `web/components/onchain/`,
+  `web/lib/{api,types}/onchain.ts`): six synced per-chain panels (Ethereum, Base, Arbitrum,
+  Optimism, Polygon, Robinhood Chain) with floor/ramp markers, an index-100/log comparison overlay,
+  "source unavailable" cards for Solana/BNB/Tron, and the growthepie CC BY attribution footer.
+- `[Product]` New API: **`GET /api/onchain/growth?metric=&start=`** and **`GET /api/onchain/chains`**
+  (`api/routers/onchain_activity.py`, `api/models/onchain_activity.py`,
+  `api/analytics/onchain/{growth,comparison,response}.py`). Metrics: `active_addresses`,
+  `transactions`. Floor/ramp on EMA28 (N=180, R=0.25, M=14, S=180, 194-day history gate).
+- `[Product]` Two new adapters: **`growthepie_adapter.py`** (primary, keyless, CC BY 4.0,
+  redistributable) and **`l2beat_adapter.py`** (display-only cross-check, `redistributable=False`);
+  chain list in `api/data/chains.json`. Dune was NOT-VIABLE — no API key anywhere. See
+  `data-sources/all-data-sources.md` §On-chain Activity.
+- `[Product]` **Third nightly workflow**: `.github/workflows/chain-growth-snapshot.yml` (`0 22 * * *`)
+  runs `api/scripts/snapshot_chain_growth.py`, merging into `api/data/cache/onchain/` (new
+  `.gitignore` carve-out) via `cache.merge_onchain_series` with a 14-day revision window.
+- Testing: **516 pytest passed / 5 deselected, 138 vitest (19 files), 42/42 Playwright run twice**
+  (new `web/e2e/onchain.spec.ts`, 16 scenarios). See `tests/all-tests.md`.
+- In progress elsewhere, not on this branch: the narrative-v2 program, on branch
+  `claude/narrative-v2`, RFC-1 of 7 done.
 
 ## Changes Since Last Update (2026-09-24 → 2026-09-25)
 
@@ -372,6 +397,7 @@ For most substantial tasks:
 | charting work | `all-context.md` | `process/features/charting-indicators/_GUIDE.md` |
 | pair / cointegration work | `all-context.md` | `process/features/cointegration-screener/_GUIDE.md` |
 | regime or cycle work | `all-context.md` | `process/features/cycle-regime/_GUIDE.md` |
+| on-chain activity / chain growth (`/onchain`) | `all-context.md`, `data-sources/all-data-sources.md` | `process/features/onchain-activity/_GUIDE.md` |
 | narrative / mindshare work | `all-context.md`, `data-sources/all-data-sources.md` | `process/features/narrative-mindshare/_GUIDE.md` |
 | creating a new plan | `all-context.md`, `planning/all-planning.md` | the example PRD that matches the plan size |
 | testing or verification | `all-context.md`, `tests/all-tests.md` | the specific deeper testing doc once one exists |
@@ -428,44 +454,48 @@ Key Patterns below are replaced by observations instead of intentions.
 
 ## Repository Structure
 
-Observed layout (2026-09-24), 2-3 levels deep on the parts that changed since setup:
+Observed layout (2026-09-28), 2-3 levels deep on the parts that changed since setup:
 
 ```
 my_site/
   web/                      -- Next.js 15.0.3 App Router frontend (TypeScript, React 19)
     app/                    -- app/page.tsx, app/layout.tsx, app/screener/page.tsx,
-                                app/regime/page.tsx, app/narrative/page.tsx (charting route not
+                                app/regime/page.tsx, app/narrative/page.tsx, app/onchain/page.tsx
+                                (charting route not
                                 built yet)
     components/             -- chart/, screener/, regime/ (RegimeDashboard, ComponentPanel,
                                 Readout, DrillDown + __tests__/), narrative/ (NarrativeDashboard,
                                 CategoryHistoryPanel, ComparisonView, ChangeInAttentionView,
-                                DataQualityCaveat, RedistributionBadge + __tests__/)
-    lib/                    -- api/ (incl. regime.ts, narrative.ts), types/ (incl. regime.ts,
-                                narrative.ts), format-unavailable-reason.ts,
+                                DataQualityCaveat, RedistributionBadge + __tests__/), onchain/ (OnchainDashboard,
+                                ChainPanel, ComparisonOverlay, UnavailableChainCard, … + __tests__/)
+    lib/                    -- api/ (incl. regime.ts, narrative.ts, onchain.ts), types/ (same), format-unavailable-reason.ts,
                                 format-regime-value.ts, regime-chart-sync.ts,
                                 regime-line-segments.ts, narrative-view-model.ts, __tests__/
-    e2e/                    -- Playwright specs (screener.spec.ts, regime.spec.ts, narrative.spec.ts)
+    e2e/                    -- Playwright specs (screener, regime, narrative, onchain .spec.ts)
   api/                      -- FastAPI service (Python 3.12, uv-managed)
-    routers/                -- screener.py, regime.py, narrative.py, watchlist.py
+    routers/                -- screener.py, regime.py, narrative.py, onchain_activity.py, watchlist.py
     analytics/              -- confidence/, indicators/, screener_board.py,
                                 regime/ (liquidity_composite.py, leg_boundary.py, components.py,
                                 components_response.py -- a second maths path alongside the
                                 composite/leg-boundary one, not a replacement),
                                 narrative/ (scoring.py, trigger.py, mapping.py -- RFC-003
                                 original, unchanged behavior; history.py, exchange_attention.py
-                                -- new 24-09-26, narrative-dashboard RFC-2/RFC-3)
+                                -- new 24-09-26, narrative-dashboard RFC-2/RFC-3),
+                                onchain/ (growth.py, comparison.py, response.py -- 27-09-26)
     data/                   -- ccxt_adapter.py, coingecko_adapter.py, defillama_adapter.py,
                                 fred_adapter.py, liqtide_adapter.py, pytrends_adapter.py,
                                 reddit_adapter.py, etf_flows_adapter.py (8th adapter, Farside),
                                 hyperliquid_narrative_adapter.py (9th adapter, new 24-09-26,
-                                narrative-dashboard RFC-2), cache.py (DuckDB-over-Parquet,
+                                narrative-dashboard RFC-2), growthepie_adapter.py + l2beat_adapter.py
+                                (on-chain, 26-09-26), chains.json, cache.py (DuckDB-over-Parquet,
                                 gained exchange-snapshot helpers 24-09-26), watchlist.py
-    models/                 -- screener.py, regime.py, narrative.py (pydantic schemas;
+    models/                 -- screener.py, regime.py, narrative.py, onchain_activity.py (pydantic schemas;
                                 narrative.py gained additive history models 24-09-26)
     scripts/                -- refresh_cache.py, backfill_primaries.py, backfill_liqtide_series.py,
                                 seed_e2e_cache.py (gained build_narrative_fixture/seed_narrative
                                 24-09-26), snapshot_narrative.py, backfill_pytrends_history.py
-                                (both new 24-09-26, narrative-dashboard RFC-2/RFC-4), and
+                                (both new 24-09-26, narrative-dashboard RFC-2/RFC-4),
+                                snapshot_chain_growth.py, probe_chain_sources.py (on-chain), and
                                 diagnostic/backtest one-offs (backtest_leg_boundaries.py,
                                 check_weekly_anchor.py, snapshot_liqtide.py,
                                 compare_composite_variants.py, etc.)
@@ -480,19 +510,21 @@ my_site/
                                 (`regime-dashboard_24-09-26/`, `narrative-dashboard_24-09-26/`,
                                 all RFCs code-done, see Changes Since Last Update);
                                 `narrative-mindshare/completed/` also holds
-                                `narrative-keyword-keying_25-09-26/`; still-empty
+                                `narrative-keyword-keying_25-09-26/`; `onchain-activity/completed/`
+                                holds `chain-growth_25-09-26/` (verified 28-09-26); still-empty
                                 `_GUIDE.md` placeholders: charting-indicators,
                                 cointegration-screener
     development-protocols/  -- RIPER-5 methodology docs
   .github/workflows/        -- liqtide-snapshot.yml (nightly 23:30 UTC), narrative-snapshot.yml
-                                (nightly 23:00 UTC, new 24-09-26) -- both snapshot + commit to
+                                (nightly 23:00 UTC, new 24-09-26), chain-growth-snapshot.yml
+                                (nightly 22:00 UTC, new 26-09-26) -- all snapshot + commit to
                                 main, see Changes Since Last Update
   .claude/ .codex/ .agents/ -- agent + skill surfaces
   .env.example               -- REDDIT_CLIENT_ID/SECRET, LIQTIDE_ATTRIBUTION_URL,
                                  API_BASE_URL, API_PORT (see Environment and Configuration)
 ```
 
-Deployment CI/CD (beyond the two nightly snapshot workflows -- liqtide-snapshot.yml, narrative-snapshot.yml) remains not present -- see Open Decisions.
+Deployment CI/CD (beyond the three nightly snapshot workflows -- liqtide, narrative, chain-growth) remains not present -- see Open Decisions.
 
 The web/api split is deliberate: see the first entry under Key Patterns.
 
@@ -599,7 +631,7 @@ Carry these into any plan that touches them. Do not resolve them silently.
 | Persistence layer | Settled 2026-09-17, confirmed in use — Parquet + DuckDB (`api/data/cache.py`) |
 | Narrative / mindshare data source | Implemented on the settled approach: CoinGecko, pytrends, Reddit adapters all exist under `api/data/`, feeding `api/analytics/narrative/`. Still free-proxy-only, still labelled low-confidence. Widened 24-09-26 with a 9th adapter (Hyperliquid, keyless, display-only, `redistributable=False` pending user terms check) and a standalone `/narrative` history dashboard — see Changes Since Last Update |
 | Testing strategy | **Resolved** — `pytest` (api, `integration` marker gates real-network tests) + `vitest` + Playwright (web). See `tests/all-tests.md` |
-| Deployment target | Still deliberately deferred — the only CI/scheduling config that exists is two single-purpose nightly workflows, `liqtide-snapshot.yml` and `narrative-snapshot.yml` (see Repository Structure); no app deploy pipeline |
+| Deployment target | Still deliberately deferred — the only CI/scheduling config that exists is three single-purpose nightly workflows, `liqtide-snapshot.yml`, `narrative-snapshot.yml` and `chain-growth-snapshot.yml` (see Repository Structure); no app deploy pipeline |
 | Package managers | Settled 2026-09-17, confirmed in use — pnpm (web) + uv (api) |
 
 **Redistribution is a first-class constraint, not a launch-day detail.** Some free data this
@@ -608,6 +640,13 @@ Because the app is intended to open up later, every provider adapter records whe
 may be redistributed. See Licensing in `data-sources/all-data-sources.md`.
 
 ## Open Questions
+
+- **New, 2026-09-28: Solana, BNB Chain and Tron have no free on-chain activity source.** Dune (the
+  only candidate) is NOT-VIABLE on a free read-only account; Etherscan V2/Artemis are paid. They
+  render as "source unavailable" on `/onchain`. Revisit only if a free keyless source appears.
+- **New, 2026-09-28: GitHub scheduled crons run ~2 hours late** (observed on the nightly snapshot
+  workflows). Harmless today; a suggested follow-up task exists: "Move nightly snapshot crons
+  earlier in the UTC day".
 
 - **Momentum screener lives under `process/general-plans/`, not `process/features/`.** It's
   the first shipped feature, and it draws on macro-liquidity and narrative work that overlaps
@@ -798,3 +837,6 @@ mechanism runs unattended).
 - 2026-09-25 amendment: `vc-update-process-agent` closeout of the narrative-keyword-keying
   fix (targeted edits; `api/analytics/narrative/trigger.py` + its tests), then merged into
   `claude/kind-tesla-tat3vo`
+- 2026-09-28 amendment: `vc-update-process-agent` closeout of the onchain-activity chain-growth
+  program (targeted edits from the plan, its RFC-001..006 reports and the directory listings of
+  the new onchain source paths; `main` at `4110e3f`)

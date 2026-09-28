@@ -3,7 +3,7 @@ phase: rfc-001-feasibility
 date: 2026-09-25
 status: COMPLETE_WITH_GAPS
 feature: onchain-activity
-plan: process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
+plan: process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
 ---
 
 # chain-growth RFC-1 — Feasibility gate: prepared, awaiting user-run probes
@@ -79,7 +79,7 @@ what the probe measures. The Solana query is the costly one. The 50-credit cap k
 small (2% of the monthly 2,500).
 
 **Send back:** the file
-`process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth-probe-result_25-09-26.json`.
+`process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth-probe-result_25-09-26.json`.
 Commit it, or paste its contents into chat. It contains no key: the script refuses to write the
 file if the key's value appears anywhere in it. Also note the credits remaining shown on your
 Dune dashboard, and your Dune account creation date (plan: must predate 2026-07-21).
@@ -139,7 +139,7 @@ All three stay `False` until you confirm the text.
 
 ## Closeout Packet
 
-- Plan: `process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md`
+- Plan: `process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md`
 - Finished: Stage 0 findings, probe script, 17 tests, terms checklist, user instructions.
 - Verified: script logic against fixtures. Unverified: every real provider fact.
 - Classification: **Keep in active/testing**

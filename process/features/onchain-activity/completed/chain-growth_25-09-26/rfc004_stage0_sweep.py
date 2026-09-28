@@ -1,6 +1,6 @@
 """RFC-4 Stage 0 throwaway analysis: floor/ramp rule sweep on the real archived series.
 
-Run from repo root:  cd api && uv run python ../process/features/onchain-activity/active/chain-growth_25-09-26/rfc004_stage0_sweep.py
+Run from repo root:  cd api && uv run python ../process/features/onchain-activity/completed/chain-growth_25-09-26/rfc004_stage0_sweep.py
 Not production code. Reads the cache via api.data.cache.read_onchain_series only.
 """
 from __future__ import annotations

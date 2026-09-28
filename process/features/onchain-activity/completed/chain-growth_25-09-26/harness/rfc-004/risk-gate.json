@@ -4,7 +4,7 @@
   "approver": "pending user review (manual-first)",
   "mustStopBeforeFinalize": true,
   "task": "RFC-4: chain-growth floor/ramp analytics + GET /api/onchain/growth, /chains",
-  "planPath": "process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md",
+  "planPath": "process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md",
   "riskLevel": "high",
   "riskClasses": [
     "public-api"

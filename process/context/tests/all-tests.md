@@ -2,12 +2,13 @@
 name: context:all-tests
 description: "Test runners, commands, verification order, debugging reference, and known gaps"
 keywords: pytest, vitest, playwright, test, e2e, runner, coverage, fixture, debugging, isolated_cache, gate
-date: 24-09-26
+date: 28-09-26
 ---
 
 # my_site - All Tests
 
-Last updated: 2026-09-24 (narrative-mindshare RFC-1..6 EVL — final green counts below; supersedes
+Last updated: 2026-09-28 (onchain-activity chain-growth RFC-6: 516 pytest / 138 vitest / 42 e2e,
+see table; earlier, 2026-09-24: narrative-mindshare RFC-1..6 EVL — final green counts below; supersedes
 the same-day regime dashboard RFC-001..006 EVL counts, which are themselves recorded further down;
 the 2026-09-20 counts were the momentum-screener's own RFC-006, a separate closed program)
 
@@ -30,12 +31,12 @@ Do not load the whole `process/context/tests/` folder by default. Start here, th
 Its own Update Trigger ("a test runner is added to either `web/` or `api/`") fired when RFC-001
 landed pytest and vitest, and nothing actioned it. Corrected during RFC-005 UPDATE PROCESS.
 
-| Package | Runner | Command | State (25-09-26, post-merge of the narrative-keyword-keying fix into the narrative branch) |
+| Package | Runner | Command | State (28-09-26, `main` at `4110e3f`, after the onchain-activity chain-growth program) |
 |---|---|---|---|
-| `api/` | pytest | `uv run --project api pytest api/ -q` | **395 passed, 3 deselected** (25-09-26 post-merge run: narrative-dashboard's 392 + 3 `TestHistoryKeying` tests from the keyword-keying fix — was 294/2 at the regime-dashboard EVL earlier the same day; deselected are the opt-in `integration`-marked tests) |
+| `api/` | pytest | `uv run --project api pytest api/ -q` | **516 passed, 5 deselected** (27-09-26, chain-growth RFC-6; +2 deselected are the opt-in growthepie/L2BEAT integration tests. Earlier, 25-09-26: 395/3 — narrative-dashboard's 392 + 3 `TestHistoryKeying` tests from the keyword-keying fix — was 294/2 at the regime-dashboard EVL earlier the same day; deselected are the opt-in `integration`-marked tests) |
 | `api/` (network) | pytest | `uv run --project api pytest api/ -m integration` | opt-in, hits real providers (exchange, Farside, Hyperliquid) |
-| `web/` | vitest | `pnpm --filter web test` | **110 passed, 16 files, 0 failed files** (unchanged by the 25-09-26 keyword-keying merge; final EVL run, narrative-dashboard — was 75/12 at the regime-dashboard EVL) — `vitest.config.ts` excludes `e2e/**`, so Playwright specs are never collected by vitest. `pnpm --filter web exec tsc --noEmit` exit 0 at the same commit (`web/tsconfig.tsbuildinfo` restored via `git checkout` after) |
-| `web/` (E2E) | Playwright | `cd web && pnpm test:e2e` | **26/26 passed, run twice (24-09-26, narrative-dashboard RFC-6)** — `e2e/screener.spec.ts` (6) + `e2e/regime.spec.ts` (6) + `e2e/narrative.spec.ts` (14, new). The narrative seeder (`seed_e2e_cache.py::build_narrative_fixture`/`seed_narrative`) writes every source's history through the real `cache.write_*` functions (pytrends nightly + backfilled, coingecko legacy + coingecko-narrative, exchange market snapshot + series), keyed exactly as production keys it (pytrends/reddit by keyword, everything else by category id) — no reddit rows, no `coingecko_trending.parquet`, both deliberate. This run **caught a real product bug** (a pandas `None`→`NaN` coercion 500ing `/history` from the second nightly-archive day onward, see the Standing Lesson table below) that no earlier layer's coverage could reach. **Cloud-container note (persists — same fix needed every fresh container):** `@playwright/test` 1.63 wants chromium build 1243 but only `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` is present, so set `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` before running (no-op on a machine with a matching browser, e.g. the user's PC after `pnpm exec playwright install chromium`). This container's egress proxy also blocks Google Trends/Reddit/CoinGecko/Hyperliquid/FRED/DefiLlama/stablecoins.llama.fi — the seeded-fixture E2E runs above never need them, but AC-12's real-cache walkthrough (narrative-dashboard) and AC-11's equivalent (regime dashboard) cannot run here at all and must happen on the user's PC |
+| `web/` | vitest | `pnpm --filter web test` | **138 passed, 19 files** (27-09-26, chain-growth RFC-5/6; was 110/16 — final EVL run, narrative-dashboard — was 75/12 at the regime-dashboard EVL) — `vitest.config.ts` excludes `e2e/**`, so Playwright specs are never collected by vitest. `pnpm --filter web exec tsc --noEmit` exit 0 at the same commit (`web/tsconfig.tsbuildinfo` restored via `git checkout` after) |
+| `web/` (E2E) | Playwright | `cd web && pnpm test:e2e` | **42/42 passed, run twice (27-09-26, chain-growth RFC-6)** — `e2e/screener.spec.ts` (6) + `e2e/regime.spec.ts` (6) + `e2e/narrative.spec.ts` (14) + `e2e/onchain.spec.ts` (16, new; seeded by `seed_e2e_cache.py::build_onchain_fixture`/`seed_onchain` through the real `cache.merge_onchain_series`, data fixed at 2026-09-26, expectations read from `manifest["onchain"]`, Polygon seeded without a transactions archive as the per-source failure proof). Previously 26/26 (24-09-26, narrative-dashboard RFC-6). The narrative seeder (`seed_e2e_cache.py::build_narrative_fixture`/`seed_narrative`) writes every source's history through the real `cache.write_*` functions (pytrends nightly + backfilled, coingecko legacy + coingecko-narrative, exchange market snapshot + series), keyed exactly as production keys it (pytrends/reddit by keyword, everything else by category id) — no reddit rows, no `coingecko_trending.parquet`, both deliberate. This run **caught a real product bug** (a pandas `None`→`NaN` coercion 500ing `/history` from the second nightly-archive day onward, see the Standing Lesson table below) that no earlier layer's coverage could reach. **Cloud-container note (persists — same fix needed every fresh container):** `@playwright/test` 1.63 wants chromium build 1243 but only `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` is present, so set `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` before running (no-op on a machine with a matching browser, e.g. the user's PC after `pnpm exec playwright install chromium`). This container's egress proxy also blocks Google Trends/Reddit/CoinGecko/Hyperliquid/FRED/DefiLlama/stablecoins.llama.fi — the seeded-fixture E2E runs above never need them, but AC-12's real-cache walkthrough (narrative-dashboard) and AC-11's equivalent (regime dashboard) cannot run here at all and must happen on the user's PC |
 
 Live-cache spot check (reads only, no runner): `uv run --project api python api/scripts/check_weekly_anchor.py`
 — reports the week anchor of every cached `1w` series. The unit tests run against an isolated
@@ -134,6 +135,12 @@ Practical rules that follow:
    of them executed FastAPI and the real browser client in the same process. The absence of a test
    at a boundary is itself a finding, not a neutral default; RFC-005/ADR-5/ADR-6 all had *some*
    coverage that was merely misplaced, this one had none at all.
+
+**Generated fixture manifest is output, not input (found 27-09-26, chain-growth RFC-6).**
+`web/e2e/.fixture-manifest.json` is git-ignored and rewritten by `api/scripts/seed_e2e_cache.py`
+at the start of every Playwright run (`playwright.config.ts` webServer command), so editing it by
+hand — e.g. to force a failing expectation during mutation testing — is a no-op: the next run
+overwrites it. To change what a spec expects, change the seeder (`build_*_fixture` / `seed_*`).
 
 ## Default Verification Order
 

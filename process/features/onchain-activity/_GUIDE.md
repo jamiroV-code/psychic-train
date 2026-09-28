@@ -13,32 +13,32 @@ proxies) — this feature is raw, chain-native usage data, not a derived sentime
 
 ## Key Source Files
 
-Not started — no code exists yet. Planned/target locations (final choices are an
-INNOVATE/PLAN decision — see the SPEC's Open Questions):
+Built 2026-09-25..27 (plan `completed/chain-growth_25-09-26/`, all 6 RFCs verified 2026-09-28):
 
-- `api/data/{growthepie,l2beat,etherscan_v2,dune}_adapter.py` (TBD — exact source-per-chain
-  mapping is OQ-1 in the SPEC) — one adapter per provider, common adapter shape, following the
-  project's "providers live behind adapters" pattern
-- `api/analytics/onchain/` (TBD) — normalization, floor/ramp detection, cross-chain comparison
-  maths; Python-only, per the project's "one source of numerical truth" rule
-- `api/routers/onchain_activity.py` (TBD), `api/models/onchain_activity.py` (TBD)
-- `api/data/chain_growth_config.json` (TBD) — user-editable tracked-chain list, same "option B"
-  pattern as `narrative_category_map.json`
-- `web/app/onchain-activity/page.tsx` (TBD)
-- `web/components/onchain-activity/` (TBD) — per-chain panels, normalized comparison/overlay view,
-  drill-down
-- `web/lib/api/onchain-activity.ts`, `web/lib/types/onchain-activity.ts` (TBD)
-- Possible scheduled workflow, `.github/workflows/onchain-activity-snapshot.yml` (TBD — whether a
-  nightly archive is needed is left to INNOVATE, same open question shape as the narrative and
-  regime dashboards' own nightly snapshots)
+- `api/data/chains.json` — user-editable tracked-chain list (9 chains; Solana/BNB/Tron marked
+  source-unavailable), loaded with skip+warn
+- `api/data/growthepie_adapter.py` (primary, keyless, CC BY 4.0) and `api/data/l2beat_adapter.py`
+  (transactions cross-check, display-only, `redistributable=False`)
+- `api/data/cache.py` — `merge_onchain_series` (14-day revision window) writing
+  `api/data/cache/onchain/{source}/{chain}/{metric}.parquet` (git-tracked carve-out)
+- `api/scripts/snapshot_chain_growth.py` + `.github/workflows/chain-growth-snapshot.yml`
+  (nightly, `0 22 * * *`); `api/scripts/probe_chain_sources.py` (RFC-1 feasibility probe)
+- `api/analytics/onchain/{growth,comparison,response}.py` — EMA28 floor/ramp detection
+  (N=180, R=0.25, M=14, S=180, 194-day history gate), index-100/log comparison
+- `api/routers/onchain_activity.py`, `api/models/onchain_activity.py` —
+  `GET /api/onchain/growth?metric=&start=`, `GET /api/onchain/chains`
+- `web/app/onchain/page.tsx`, `web/components/onchain/` (OnchainDashboard, ChainPanel,
+  ComparisonOverlay, UnavailableChainCard, …), `web/lib/{api,types}/onchain.ts`
+- Tests: `api/tests/{data,analytics,routers,scripts}/…onchain…`/`…growthepie…`/`…l2beat…`,
+  `web/components/onchain/__tests__/`, `web/e2e/onchain.spec.ts` (seeded by
+  `seed_onchain` in `api/scripts/seed_e2e_cache.py`)
 
 ## Related Context
 
 - `process/context/all-context.md` — root router, stack decisions, Open Decisions/Questions
 - `process/context/data-sources/all-data-sources.md` — standing rules on free/keyless sources,
-  redistribution flags, adapter conventions; does **not** yet list any chain-activity provider —
-  this feature introduces that provider category (growthepie / L2BEAT / Etherscan V2 / Dune are
-  candidates, none yet added to that file — see the SPEC's Background section)
+  redistribution flags, adapter conventions; has the "On-chain activity" provider section
+  (growthepie, L2BEAT; Dune NOT-VIABLE; Etherscan V2 / Artemis rejected as paid)
 - `process/context/tests/all-tests.md` — runner split (pytest/vitest/Playwright), the Standing
   Lesson table (esp. the narrative-dashboard RFC-6 real-cache-boundary bug, directly relevant to
   why this feature also needs a real-machine walkthrough AC)
@@ -66,23 +66,25 @@ Locked user decisions (2026-09-25) carried forward from the SPEC:
 - Free sources only — no paid vendor, no exception, until a proxy demonstrably earns one (same
   standing bar the narrative feature already uses).
 
-None of the candidate providers (growthepie, L2BEAT activity API, Etherscan V2, Dune) have been
-live-probed yet — this sandbox's egress proxy blocks all of them, same constraint every other
-dashboard feature in this repo has hit. Feasibility and exact per-chain source assignment is
-INNOVATE/PLAN work, not resolved by the SPEC.
+**As built (supersedes the SPEC notes above where they differ):** Dune proved NOT-VIABLE (HTTP 402,
+read-only account), so the plan's fallback shipped: 6 live chains via growthepie (Polygon via
+`polygon_pos`), Solana/BNB/Tron shown as unavailable cards, 2 metrics (active addresses,
+transactions — new addresses dropped), no API key anywhere, route `/onchain`. Full reconciliation:
+the plan's `## Post-EXECUTE Amendments`.
 
 ## Current Status
 
-Status: **Not started.** SPEC written and locked (`chain-growth_25-09-26`); INNOVATE has not run.
-No adapters, endpoints, or UI exist yet.
+Status: **Complete.** `chain-growth_25-09-26` shipped (merged to `main` at `4110e3f`), AC-14
+walkthrough passed and both risk-pack reviews approved by the user on 2026-09-28; task folder
+archived to `completed/`.
 
 ## Folder Contents
 
 ```
 process/features/onchain-activity/
-  active/       -- in-progress plans for this feature (each task lives inside a {slug}_{date}/ task folder)
-    chain-growth_25-09-26/   -- SPEC written; awaiting INNOVATE
-  completed/    -- archived completed plans; currently empty
+  active/       -- in-progress plans (each task in a {slug}_{date}/ folder); currently empty
+  completed/    -- archived plans
+    chain-growth_25-09-26/   -- SPEC, PLAN, FEASIBILITY verdict, RFC reports, harness packs, CLOSEOUT
   backlog/      -- deferred/future plans; currently empty
 ```
 
