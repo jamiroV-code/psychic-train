@@ -201,6 +201,10 @@ def _fetch_batch_live(keywords: list[str], timeframe: str = "now 7-d"):
             df = client.interest_over_time()
             if df is None or df.empty:
                 return None
+            if "isPartial" in df.columns:
+                df = df[~df["isPartial"].astype(bool)]
+                if df.empty:
+                    return None
             return df
         except Exception:
             if attempt == MAX_RETRIES - 1:

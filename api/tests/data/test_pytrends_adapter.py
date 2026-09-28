@@ -150,3 +150,50 @@ def test_fetch_live_no_ispartial_column_unchanged(monkeypatch):
     frame = pd.DataFrame({KEYWORD: [30, 42, 7]}, index=_index())
     _install_fake_pytrends(monkeypatch, frame)
     assert pytrends_adapter._fetch_live(KEYWORD) == (7.0, "2026-09-28")
+
+
+# --- batched path: same isPartial guard as _fetch_live ---------------------
+
+
+def _batch_index() -> pd.DatetimeIndex:
+    return pd.DatetimeIndex(
+        ["2026-09-26 22:00", "2026-09-27 23:00", "2026-09-28 00:00"], name="date"
+    )
+
+
+def test_fetch_batch_live_drops_partial_hour_row(monkeypatch):
+    frame = pd.DataFrame(
+        {"A": [40, 50, 0], "x": [10, 60, 0], "isPartial": [False, False, True]},
+        index=_batch_index(),
+    )
+    _install_fake_pytrends(monkeypatch, frame)
+    df = pa._fetch_batch_live(["A", "x"])
+    assert df is not None and len(df) == 2
+    last = df.iloc[-1]
+    assert float(last["A"]) == 50.0 and float(last["x"]) == 60.0
+    assert df.index[-1].strftime("%Y-%m-%d") == "2026-09-27"
+
+
+def test_fetch_batch_live_all_rows_partial_returns_none_and_batch_unavailable(monkeypatch):
+    frame = pd.DataFrame(
+        {"A": [40, 50, 0], "x": [10, 60, 0], "isPartial": [True, True, True]},
+        index=_batch_index(),
+    )
+    _install_fake_pytrends(monkeypatch, frame)
+    assert pa._fetch_batch_live(["A", "x"]) is None
+
+    res = pa.fetch_trends_batched(["A", "x"], "A")
+    assert res.as_of is None
+    for k in ("A", "x"):
+        assert res.values[k].value is None
+        assert res.values[k].status == "unavailable"
+        assert res.values[k].reason == "batch-fetch-failed"
+
+
+def test_fetch_batch_live_no_ispartial_column_unchanged(monkeypatch):
+    frame = pd.DataFrame({"A": [40, 50, 20], "x": [10, 60, 70]}, index=_batch_index())
+    _install_fake_pytrends(monkeypatch, frame)
+    df = pa._fetch_batch_live(["A", "x"])
+    assert df is not None and len(df) == 3
+    assert df.index[-1].strftime("%Y-%m-%d") == "2026-09-28"
+    assert float(df.iloc[-1]["x"]) == 70.0
