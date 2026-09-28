@@ -4,7 +4,9 @@ Run by `.github/workflows/narrative-snapshot.yml` once a day. For every
 seed category it archives one point per source:
 
   pytrends/{keywords[0]}           Google Trends, "now 7-d" last point,
-                                   anchor-chained batched fetch (v2 RFC-3)
+                                   separate UNBATCHED single-keyword top-up
+                                   fetch (pre-RFC-3 scale, what /categories
+                                   reads) — never the batched value
   pytrends-blended/{narrative id}  mean of ALL the narrative's chained
                                    keywords (v2 RFC-3, 2+ keywords only)
   reddit/{keywords[0]}             1-day mention count (skipped, no row,
@@ -27,8 +29,10 @@ script reads the target series and skips if a row for that date already
 exists — including `backfilled` pytrends rows. `write_narrative_point`'s own
 keep-last semantics are unchanged. pytrends is fetched via the adapter's
 fetch helper (not `fetch_trend`, which writes internally) so the date check
-can happen before the write. (v2 RFC-3: `fetch_trends_batched`, not
-`fetch_trend`.)
+can happen before the write: the primary keyword row comes from
+`pytrends_adapter._fetch_live` (one unbatched call per keyword, same scale as
+before RFC-3); the blended series comes from `fetch_trends_batched` (every
+keyword, including each keywords[0], stays in the anchor-chained batch).
 
 Every source is isolated: one provider failing prints its own summary line
 and never aborts the run.
@@ -108,7 +112,8 @@ def snapshot_pytrends_sources(categories: list[dict], today: str) -> list[Source
     EVERY keyword of every narrative (5 terms per request, anchor reused).
 
     Writes, first-observation-wins:
-      pytrends/{keywords[0]}           primary keyword (ADR-2 backward-compat key)
+      pytrends/{keywords[0]}           primary keyword (ADR-2 backward-compat key),
+                                       from an unbatched `_fetch_live` top-up
       pytrends-blended/{narrative id}  mean of all the narrative's chained
                                        keyword values (2+ keywords only; only
                                        when every keyword is `ok` that day)
@@ -136,17 +141,22 @@ def snapshot_pytrends_sources(categories: list[dict], today: str) -> list[Source
         return [prim, blend_s]
     as_of = res.as_of
 
+    # Primary rows: separate unbatched top-up per keyword so pytrends/{kw}
+    # keeps its pre-RFC-3 single-keyword scale (trigger.py / /categories
+    # reads this key). A failed top-up skips the row — never falls back to
+    # the batched, anchor-rescaled value.
     for cat in need_prim:
         kw = _keyword(cat)
         try:
-            cv = res.values.get(kw)
-            if as_of is None or cv is None or cv.status != "ok":
+            value, top_as_of = pytrends_adapter._fetch_live(kw)
+            if value is None or top_as_of is None:
                 prim.failed += 1
+                prim.errors.append(f"{kw}: fetch-failed")
                 continue
-            if has_row("pytrends", kw, as_of):  # first wins; protects backfilled dates
+            if has_row("pytrends", kw, top_as_of):  # first wins; protects backfilled dates
                 prim.skipped_existing += 1
                 continue
-            cache.write_narrative_point("pytrends", kw, as_of, float(cv.value), source_status="fresh")
+            cache.write_narrative_point("pytrends", kw, top_as_of, float(value), source_status="fresh")
             prim.written += 1
         except Exception as exc:  # per-key isolation
             prim.failed += 1

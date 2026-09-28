@@ -47,7 +47,20 @@ def providers(monkeypatch):
                  hl.PerpMarket(base="ETH", base_name="ETH", quote_volume=300.0)]
         return hl.ExchangeSnapshotResult(status="ok", as_of=TODAY, perps=perps)
 
+    def fake_single(keyword):
+        """Unbatched primary top-up: derives from whatever _fetch_batch_live
+        stub is installed (so per-test overrides of date/failure carry over),
+        offset by +1000 so it is distinguishable from the batched value."""
+        try:
+            df = pytrends_adapter._fetch_batch_live([keyword])
+        except Exception:
+            return None, None
+        if df is None or df.empty or keyword not in df.columns:
+            return None, None
+        return float(df[keyword].iloc[-1]) + 1000.0, df.index[-1].strftime("%Y-%m-%d")
+
     monkeypatch.setattr(pytrends_adapter, "_fetch_batch_live", fake_live)
+    monkeypatch.setattr(pytrends_adapter, "_fetch_live", fake_single)
     monkeypatch.setattr(reddit_adapter, "fetch_mentions", fake_mentions)
     monkeypatch.setattr(coingecko_adapter, "fetch_trending", fake_trending)
     monkeypatch.setattr(hl, "fetch_daily_market_snapshot", fake_hl)
@@ -95,7 +108,8 @@ def test_same_day_rerun_no_duplicates_first_observation_wins(isolated_cache, pro
     assert cache.read_exchange_series("ai")["volume_share"].tolist() == first_ex
     # read-before-write: second run never even called pytrends/reddit
     # 8 keywords -> 2 anchor-chained batched requests on the first run only
-    assert providers["pytrends"] == 2 and providers["reddit"] == 4
+    # (+4 unbatched primary top-ups, counted via the derived stub)
+    assert providers["pytrends"] == 2 + 4 and providers["reddit"] == 4
     assert sn.exit_code(summaries) == 0
 
 
@@ -184,8 +198,9 @@ def test_l2s_multi_keyword_blend_not_keywords0_only(isolated_cache, providers):
     l2s = cache.read_narrative_series("pytrends-blended", "l2s")
     # layer 2 crypto = 14, L2 rollup = 15 (anchor 10 in both batches -> scale 1)
     assert l2s["raw_value"].tolist() == [14.5]
-    # primary keyword series still archived under its keyword key (ADR-2)
-    assert cache.read_narrative_series("pytrends", "layer 2 crypto")["raw_value"].tolist() == [14.0]
+    # primary keyword series still archived under its keyword key (ADR-2),
+    # from the unbatched top-up (14 + 1000 stub offset)
+    assert cache.read_narrative_series("pytrends", "layer 2 crypto")["raw_value"].tolist() == [1014.0]
     # blended rows never land under a keyword key
     assert not (isolated_cache / "narrative" / "pytrends" / "l2s.parquet").exists()
 
@@ -198,7 +213,28 @@ def test_snapshot_zero_anchor_batch_writes_nothing_for_that_batch(isolated_cache
         return _trend_frame(vals, TODAY)
     monkeypatch.setattr(pytrends_adapter, "_fetch_batch_live", fake)
     by = _by_source(sn.run_snapshot())
-    assert cache.read_narrative_series("pytrends", "memecoin").empty
     assert cache.read_narrative_series("pytrends-blended", "memecoins").empty
     assert cache.read_narrative_series("pytrends-blended", "ai")["raw_value"].tolist() == [50.0]
-    assert by["pytrends"].written == 3 and by["pytrends"].failed == 1
+    # primary rows come from the unbatched top-up, unaffected by the anchor collapse
+    assert cache.read_narrative_series("pytrends", "memecoin")["raw_value"].tolist() == [1050.0]
+    assert by["pytrends"].written == 4 and by["pytrends"].failed == 0
+
+
+def test_primary_keyword_uses_unbatched_value_blend_uses_batched(isolated_cache, providers, monkeypatch):
+    """Regresses RFC-3 scale drift: pytrends/{keywords[0]} (read by /categories)
+    must come from the unbatched single-keyword fetch, not the batch."""
+    monkeypatch.setattr(pytrends_adapter, "_fetch_live", lambda keyword: (77.0, TODAY))
+    sn.run_snapshot()
+    for kw in KWS:
+        assert cache.read_narrative_series("pytrends", kw)["raw_value"].tolist() == [77.0], kw
+    # blended still from the anchor-chained batch: layer 2 crypto 14 + L2 rollup 15
+    assert cache.read_narrative_series("pytrends-blended", "l2s")["raw_value"].tolist() == [14.5]
+
+
+def test_primary_topup_failure_skips_row_no_batched_fallback(isolated_cache, providers, monkeypatch):
+    monkeypatch.setattr(pytrends_adapter, "_fetch_live", lambda keyword: (None, None))
+    by = _by_source(sn.run_snapshot())
+    for kw in KWS:
+        assert cache.read_narrative_series("pytrends", kw).empty
+    assert by["pytrends"].failed == 4 and by["pytrends"].written == 0
+    assert by["pytrends-blended"].written == 4
