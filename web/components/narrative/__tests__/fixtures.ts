@@ -17,8 +17,8 @@ export function series(over: Partial<NarrativeHistorySeries> & Pick<NarrativeHis
     max_gap_days: 2,
     in_composite: true,
     points: [
-      { date: "2026-09-20", raw_value: 10, normalized_value: 0.2, point_status: "ok", reason: null, gap_before: false },
-      { date: "2026-09-22", raw_value: 20, normalized_value: 0.8, point_status: "ok", reason: null, gap_before: false },
+      { date: "2026-09-20", raw_value: 10, normalized_value: 0.2, point_status: "ok", reason: null, gap_before: false, sufficiency: "provisional" },
+      { date: "2026-09-22", raw_value: 20, normalized_value: 0.8, point_status: "ok", reason: null, gap_before: false, sufficiency: "provisional" },
     ],
     ...over,
   };

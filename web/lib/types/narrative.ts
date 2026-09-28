@@ -15,6 +15,8 @@ export type NarrativeHistorySource =
 export type NarrativeSeriesStatus = "ok" | "stale" | "unavailable" | "presumed-dead";
 export type NarrativeEntryStatus = "ok" | "unavailable";
 export type PytrendsVariant = "nightly-7d" | "backfill-269d";
+/** Narrative-v2 ADR-1: data sufficiency of the point's owning series. */
+export type NarrativeSufficiency = "insufficient" | "provisional" | "mature";
 
 export interface NarrativeHistoryPoint {
   date: string;
@@ -23,6 +25,7 @@ export interface NarrativeHistoryPoint {
   point_status: string | null;
   reason: string | null;
   gap_before: boolean;
+  sufficiency: NarrativeSufficiency;
 }
 
 export interface NarrativeHistorySeries {

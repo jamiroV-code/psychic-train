@@ -38,6 +38,12 @@ CHANGE_WINDOW_DAYS = 7  # ADR-5
 CHANGE_BASELINE_TOLERANCE_DAYS = 2  # baseline may sit 7..9 days back
 FRESH_MAX_AGE_DAYS = 1  # nightly archive: yesterday's point still counts as fresh
 RANK_DECIMALS = 6
+# Narrative-v2 ADR-1 data-sufficiency gating. A series with fewer than
+# MIN_SUFFICIENT_POINTS real observations is "insufficient": it gets no
+# normalised values and never feeds the composite or a rank. Below
+# MATURE_POINTS_THRESHOLD it is "provisional" (thin, shown distinctly).
+MIN_SUFFICIENT_POINTS = 2
+MATURE_POINTS_THRESHOLD = 5  # user-confirmed at RFC-1 Stage 0
 
 # Redistribution flags. None of these sources is cleared for redistribution;
 # each is a one-line flip once its terms are checked.
@@ -74,6 +80,7 @@ class SeriesData:
     frame: pd.DataFrame = field(default_factory=pd.DataFrame)
     status: str = "unavailable"
     reason: str | None = "no-archived-data"
+    sufficiency: str = scoring.SUFFICIENCY_INSUFFICIENT
 
 
 @dataclass
@@ -129,16 +136,11 @@ def gap_before_flags(dates: list[str], max_gap_days: int = NARRATIVE_MAX_GAP_DAY
     return out
 
 
-def normalize(frame: pd.DataFrame) -> pd.Series:
-    """Within-series min-max over the full stored history; null raw stays null."""
-    raw = pd.to_numeric(frame["raw"], errors="coerce")
-    valid = raw.dropna()
-    out = pd.Series([None] * len(frame), index=frame.index, dtype=object)
-    if not valid.empty:
-        norm = scoring.normalize_within_source(valid.astype(float))
-        for idx, v in norm.items():
-            out[idx] = float(v)
-    return out
+def normalize(frame: pd.DataFrame) -> tuple[pd.Series, str]:
+    """Within-series min-max over the full stored history; null raw stays null.
+    Returns (normalized, sufficiency); an insufficient series is all-None."""
+    return scoring.normalize_with_sufficiency(
+        frame["raw"], MIN_SUFFICIENT_POINTS, mature_points=MATURE_POINTS_THRESHOLD)
 
 
 def competition_rank(values: dict[str, float]) -> dict[str, int]:
@@ -148,11 +150,18 @@ def competition_rank(values: dict[str, float]) -> dict[str, int]:
     return {k: ordered.index(v) + 1 for k, v in rounded.items()}
 
 
-def _prepare(frame: pd.DataFrame) -> pd.DataFrame:
+def _prepare(frame: pd.DataFrame) -> tuple[pd.DataFrame, str]:
     frame = frame.sort_values("date", kind="stable").reset_index(drop=True)
-    frame["normalized"] = normalize(frame) if not frame.empty else pd.Series(dtype=object)
-    frame["gap_before"] = gap_before_flags(list(frame["date"])) if not frame.empty else pd.Series(dtype=bool)
-    return frame
+    if frame.empty:
+        frame["normalized"] = pd.Series(dtype=object)
+        frame["gap_before"] = pd.Series(dtype=bool)
+        frame["sufficiency"] = pd.Series(dtype=object)
+        return frame, scoring.SUFFICIENCY_INSUFFICIENT
+    normalized, sufficiency = normalize(frame)
+    frame["normalized"] = normalized
+    frame["gap_before"] = gap_before_flags(list(frame["date"]))
+    frame["sufficiency"] = sufficiency
+    return frame, sufficiency
 
 
 def _age_status(s: SeriesData, today: date) -> None:
@@ -232,7 +241,7 @@ def load_category_series(category_id: str, keyword: str, today: date) -> list[Se
                    HYPERLIQUID_REDISTRIBUTABLE, False, None, frame=listings),
     ]
     for s in series:
-        s.frame = _prepare(s.frame)
+        s.frame, s.sufficiency = _prepare(s.frame)
         _age_status(s, today)
     return series
 
@@ -242,7 +251,8 @@ def build_composite(series: list[SeriesData]) -> pd.DataFrame:
     only where >= MIN_AVAILABLE_SOURCES slots are present (ADR-5)."""
     by_date: dict[str, dict[str, tuple[float, bool]]] = {}
     for s in series:
-        if not s.in_composite or s.frame.empty:
+        # ADR-1: an insufficient series never contributes a slot value.
+        if not s.in_composite or s.frame.empty or s.sufficiency == scoring.SUFFICIENCY_INSUFFICIENT:
             continue
         for row in s.frame.itertuples(index=False):
             if row.normalized is None:

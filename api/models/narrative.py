@@ -61,6 +61,11 @@ class NarrativeHistoryPoint(BaseModel):
     point_status: str | None  # stored source_status / volume_status / listing_status
     reason: str | None = None
     gap_before: bool
+    # Narrative-v2 ADR-1: the owning series' data sufficiency. "insufficient"
+    # (< history.MIN_SUFFICIENT_POINTS real points) => normalized_value is null
+    # and the series never feeds the composite; "provisional" is thin history
+    # (< history.MATURE_POINTS_THRESHOLD); "mature" otherwise.
+    sufficiency: Literal["insufficient", "provisional", "mature"]
 
 
 class NarrativeHistorySeries(BaseModel):

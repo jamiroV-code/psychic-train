@@ -97,8 +97,10 @@ class TestComposite:
         assert "insufficient-coverage" in cat.composite_reason
 
     def test_trust_weight_capped_when_pytrends_absent(self, isolated_cache):
-        cache.write_narrative_point("reddit", AI_KW, _d(0), 5.0)
-        _exchange("ai", _d(0), 0.2)
+        # two points each: single-point series are insufficient (narrative-v2 ADR-1)
+        for off in (-1, 0):
+            cache.write_narrative_point("reddit", AI_KW, _d(off), 5.0 + off)
+            _exchange("ai", _d(off), 0.2 + off / 10)
         cat = _cat(history.build_narrative_history(["ai"], today=TODAY), "ai")
         assert cat.composite.iloc[0]["trust_weight"] == trigger.REDUCED_SOURCE_TRUST_CAP
 
@@ -139,7 +141,10 @@ class TestComposite:
         assert _composite(cat)[_d(0)] == pytest.approx(0.5)
 
     def test_new_listing_count_display_only(self, isolated_cache):
+        # two points each: single-point series are insufficient (narrative-v2 ADR-1)
+        _exchange("ai", _d(-1), 0.1, count=None, listing_status="unavailable", listing_reason="no-baseline-yet")
         _exchange("ai", _d(0), 0.2, count=None, listing_status="unavailable", listing_reason="no-baseline-yet")
+        cache.write_narrative_point("reddit", AI_KW, _d(-1), 4.0)
         cache.write_narrative_point("reddit", AI_KW, _d(0), 5.0)
         cat = _cat(history.build_narrative_history(["ai"], today=TODAY), "ai")
         nl = _series(cat, "exchange_new_listings")
@@ -247,6 +252,7 @@ class TestRanking:
     def test_change_mixed_scale_when_baseline_backfilled(self, isolated_cache):
         cache.write_narrative_point("pytrends", AI_KW, _d(-7), 10.0, source_status="backfilled")
         cache.write_narrative_point("pytrends", AI_KW, _d(-8), 20.0, source_status="backfilled")
+        cache.write_narrative_point("pytrends", AI_KW, _d(-1), 40.0)  # nightly needs >=2 points (ADR-1)
         cache.write_narrative_point("pytrends", AI_KW, _d(0), 50.0)
         for off in (-8, -7, 0):
             cache.write_narrative_point("reddit", AI_KW, _d(off), float(off))
@@ -280,3 +286,45 @@ class TestBoundaries:
         for rel in ("narrative/trigger.py", "screener_board.py"):
             text = (root / rel).read_text(encoding="utf-8")
             assert "narrative.history" not in text and "import history" not in text
+
+
+class TestSufficiencyGating:
+    """Narrative-v2 ADR-1 / AC-2: insufficient series never feed the composite."""
+
+    def test_build_composite_never_uses_insufficient_slot(self, isolated_cache):
+        # Real 25-09-26 shape: pytrends backfilled (mature), everything else 0-1 point.
+        for i in range(-10, 0):
+            cache.write_narrative_point("pytrends", AI_KW, _d(i), float(20 + i), source_status="backfilled")
+        cache.write_narrative_point("coingecko-narrative", "ai", _d(0), 3.0)
+        _exchange("ai", _d(0), 0.1)
+        cat = _cat(history.build_narrative_history(["ai"], today=TODAY), "ai")
+        assert _series(cat, "pytrends", "backfill-269d").sufficiency == "mature"
+        for src in ("coingecko-narrative", "exchange_volume_share"):
+            s = _series(cat, src)
+            assert s.sufficiency == "insufficient"
+            assert list(s.frame["normalized"]) == [None]
+            assert list(s.frame["sufficiency"]) == ["insufficient"]
+        # only one sufficient slot on any date -> no composite, never a 0.5 reading
+        assert cat.composite.empty
+        assert cat.composite_status == "unavailable"
+
+    def test_composite_no_fake_tie_across_categories(self, isolated_cache):
+        # Pre-fix: each category's 1-point sources normalised to a flat 0.5 and
+        # both composites tied at exactly 0.5.
+        for cid, kw in (("ai", AI_KW), ("l2s", L2_KW)):
+            cache.write_narrative_point("reddit", kw, _d(0), 7.0)
+            cache.write_narrative_point("coingecko-narrative", cid, _d(0), 2.0)
+            _exchange(cid, _d(0), 0.3)
+        result = history.build_narrative_history(["ai", "l2s"], today=TODAY)
+        for cid in ("ai", "l2s"):
+            assert _cat(result, cid).composite.empty
+        assert all(e.rank is None and e.value is None for e in result.comparison)
+        assert not any(e.value == 0.5 for e in result.comparison)
+
+    def test_provisional_series_still_feeds_composite(self, isolated_cache):
+        for i in (-1, 0):
+            cache.write_narrative_point("reddit", AI_KW, _d(i), float(i + 5))
+            cache.write_narrative_point("coingecko-narrative", "ai", _d(i), float(-i))
+        cat = _cat(history.build_narrative_history(["ai"], today=TODAY), "ai")
+        assert _series(cat, "reddit").sufficiency == "provisional"
+        assert len(cat.composite) == 2

@@ -22,7 +22,7 @@ describe("buildPanelAxis", () => {
   it("builds a per-panel date union and keeps pytrends variants as separate lines", () => {
     const c = category("ai", 0.5, {
       series: [
-        series({ source: "pytrends", variant: "backfill-269d", points: [{ date: "2026-01-01", raw_value: 5, normalized_value: 0.3, point_status: "ok", reason: null, gap_before: false }] }),
+        series({ source: "pytrends", variant: "backfill-269d", points: [{ date: "2026-01-01", raw_value: 5, normalized_value: 0.3, point_status: "ok", reason: null, gap_before: false, sufficiency: "provisional" }] }),
         series({ source: "pytrends", variant: "nightly-7d" }),
         series({ source: "coingecko", in_composite: false }),
       ],

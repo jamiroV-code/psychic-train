@@ -81,7 +81,7 @@ def _history_response(result: history.NarrativeHistoryResult) -> NarrativeHistor
                     NarrativeHistoryPoint(
                         date=r.date, raw_value=None if pd_isna(r.raw) else float(r.raw),
                         normalized_value=r.normalized, point_status=r.point_status,
-                        reason=r.reason, gap_before=bool(r.gap_before),
+                        reason=r.reason, gap_before=bool(r.gap_before), sufficiency=r.sufficiency,
                     )
                     for r in s.frame.itertuples(index=False)
                 ],
