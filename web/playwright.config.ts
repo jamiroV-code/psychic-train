@@ -13,6 +13,10 @@ const E2E_WATCHLIST = path.join(E2E_CACHE_ROOT, "watchlist.json");
 // Pair-screener fixture universe (RFC-005). The seeder writes it and refuses
 // to run if this resolves to the real api/data/pairs_universe.json.
 const E2E_PAIRS_UNIVERSE = path.join(E2E_CACHE_ROOT, "pairs_universe.json");
+// narrative-v2 fixture config (RFC-7). The seeder copies the real
+// api/data/narratives.json here and refuses to run if this resolves to the
+// real file, so the AC-4 config-edit spec only ever edits this disposable copy.
+const E2E_NARRATIVES = path.join(E2E_CACHE_ROOT, "narratives.json");
 
 const CHROMIUM_PATH = process.env["PLAYWRIGHT_CHROMIUM_PATH"] || undefined;
 
@@ -24,6 +28,7 @@ const apiEnv = {
   SCREENER_CACHE_ROOT: E2E_CACHE_ROOT,
   SCREENER_WATCHLIST_PATH: E2E_WATCHLIST,
   PAIRS_UNIVERSE_PATH: E2E_PAIRS_UNIVERSE,
+  NARRATIVES_PATH: E2E_NARRATIVES,
   // CORS in api/main.py is origin-exact and hardcoded to localhost:3000. The
   // E2E runs the web server on another port, so the allowed origin has to be
   // widened for this process only — never in main.py itself.

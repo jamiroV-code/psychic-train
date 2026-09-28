@@ -9,12 +9,20 @@ from __future__ import annotations
 from datetime import date
 
 import pandas as pd
+import pytest
 
 from api.analytics.narrative import history, trigger
 from api.data import cache
 from api.scripts.seed_e2e_cache import build_narrative_fixture, seed_narrative
 
 TODAY = pd.Timestamp("2026-09-24")
+
+
+@pytest.fixture(autouse=True)
+def _fixture_narratives_path(tmp_path, monkeypatch):
+    """narrative-v2 RFC-7: the seeder refuses to run without a disposable
+    NARRATIVES_PATH (it writes the config there, never the real file)."""
+    monkeypatch.setenv("NARRATIVES_PATH", str(tmp_path / "cfg" / "narratives.json"))
 
 
 def test_fixture_is_pure_and_keys_pytrends_by_primary_keyword():

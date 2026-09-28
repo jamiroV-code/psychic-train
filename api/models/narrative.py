@@ -49,6 +49,7 @@ class NarrativeCategory(BaseModel):
 HistorySource = Literal[
     "pytrends", "reddit", "coingecko", "coingecko-narrative",
     "exchange_volume_share", "exchange_new_listings",
+    "pytrends-blended",  # narrative-v2 RFC-3: id-keyed multi-keyword blend
 ]
 SeriesStatus = Literal["ok", "stale", "unavailable", "presumed-dead"]
 EntryStatus = Literal["ok", "unavailable"]
@@ -61,6 +62,11 @@ class NarrativeHistoryPoint(BaseModel):
     point_status: str | None  # stored source_status / volume_status / listing_status
     reason: str | None = None
     gap_before: bool
+    # Narrative-v2 ADR-1: the owning series' data sufficiency. "insufficient"
+    # (< history.MIN_SUFFICIENT_POINTS real points) => normalized_value is null
+    # and the series never feeds the composite; "provisional" is thin history
+    # (< history.MATURE_POINTS_THRESHOLD); "mature" otherwise.
+    sufficiency: Literal["insufficient", "provisional", "mature"]
 
 
 class NarrativeHistorySeries(BaseModel):
@@ -149,3 +155,62 @@ class NarrativeHistoryResponse(BaseModel):
     categories: list[NarrativeHistoryCategory]
     comparison: NarrativeComparison
     change_in_attention: NarrativeChange
+
+
+# --- Narrative-v2 RFC-4 (ADR-4): GET /api/narrative/momentum. Additive only;
+# no existing model above is changed.
+
+
+class NarrativeMomentumEntry(BaseModel):
+    category_id: str
+    label: str
+    momentum_basis: Literal["pytrends-blended", "composite", "insufficient"]
+    rank: int | None  # vs-the-field rank on `change`; None when insufficient
+    as_of: str | None
+    change: float | None
+    prev_change: float | None
+    acceleration: float | None
+    direction: Literal["up", "down", "flat"] | None
+    trend: Literal["accelerating", "decelerating", "steady"] | None
+    baseline_date: str | None
+    prior_baseline_date: str | None
+    status: Literal["ok", "insufficient"]
+    reason: str | None
+
+
+class NarrativeMomentumResponse(BaseModel):
+    generated_utc: str
+    window_days: int
+    acceleration_window_days: int
+    tolerance_days: int
+    entries: list[NarrativeMomentumEntry]
+
+
+# --- Narrative-v2 RFC-5 (ADR-5): GET /api/narrative/mindshare. Additive only;
+# no existing model above is changed.
+
+
+class NarrativeMindshareSources(BaseModel):
+    pytrends: float | None
+    coingecko: float | None
+    reddit: float | None
+
+
+class NarrativeMindshareEntry(BaseModel):
+    category_id: str
+    label: str
+    mindshare: float | None  # headline share of the day; None when excluded
+    sources: NarrativeMindshareSources  # per-source same-day share, shown alongside
+    status: Literal["ok", "excluded"]
+    reason: str | None
+
+
+class NarrativeMindshareResponse(BaseModel):
+    generated_utc: str
+    date: str | None
+    available_dates: list[str]
+    sources_present: list[Literal["pytrends", "coingecko", "reddit"]]
+    n_sources: int
+    only_one_source: bool
+    no_sources_available: bool
+    entries: list[NarrativeMindshareEntry]

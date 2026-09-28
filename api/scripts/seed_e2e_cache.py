@@ -276,6 +276,110 @@ NARRATIVE_NEW_AI_PERPS = ["TAO", "WLD"]
 NARRATIVE_BASE_PERPS = ["BTC", "ETH", "HYPE", "SOL", "DOGE", "ARB"]
 
 
+# --- narrative-v2 (RFC-7, ADR-7): 6..15-narrative config fixture -----------
+# The E2E API reads its narrative set from NARRATIVES_PATH (a disposable file
+# under the E2E cache root), never api/data/narratives.json. The base config
+# is a copy of the real file (so every v1 assertion sees the same 4
+# narratives); the 6- and 15-narrative variants append synthetic narratives
+# whose archived data is seeded below. A spec swaps a variant in at runtime —
+# which is itself the AC-4 "edit reflected without restart" path.
+NARRATIVE_V2_MIN = 6
+NARRATIVE_V2_MAX = 15
+NARRATIVE_V2_DAYS = 20        # blended days 0..-19: mature + both momentum windows resolve
+NARRATIVE_V2_THIN_DAYS = 2    # below MATURE/EMERGING -> insufficient momentum basis
+NARRATIVE_V2_THIN_COUNT = 2   # last two extras are thin
+NARRATIVE_V2_NO_DATA = 1      # the very last extra has no data at all (mindshare-excluded)
+
+
+def narrative_extra(i: int) -> dict:
+    nid = f"x{i:02d}"
+    return {"id": nid, "label": f"Extra {i:02d}", "keywords": [f"{nid} crypto", f"{nid} token"],
+            "coins": [], "enabled": True}
+
+
+def build_narrative_v2_configs(base: dict, n_narratives: int = NARRATIVE_V2_MAX) -> dict[int, dict]:
+    """Pure: `{6: cfg, n: cfg}` — the base config plus synthetic extras.
+    `n_narratives` must be within the v2 range 6..15."""
+    if not NARRATIVE_V2_MIN <= n_narratives <= NARRATIVE_V2_MAX:
+        raise ValueError(f"n_narratives must be {NARRATIVE_V2_MIN}..{NARRATIVE_V2_MAX}, got {n_narratives}")
+    n_base = len(base["narratives"])
+    out = {}
+    for n in sorted({NARRATIVE_V2_MIN, n_narratives}):
+        cfg = json.loads(json.dumps(base))
+        cfg["narratives"] += [narrative_extra(i) for i in range(1, n - n_base + 1)]
+        out[n] = cfg
+    return out
+
+
+def build_narrative_v2_points(today: pd.Timestamp, n_extras: int) -> tuple[list[tuple], dict]:
+    """Pure: archived rows for extras x01..x{n_extras} plus their facts."""
+    day = lambda k: (today - pd.Timedelta(days=k)).strftime("%Y-%m-%d")  # noqa: E731
+    points: list[tuple[str, str, str, float, str]] = []
+    thin_from = n_extras - NARRATIVE_V2_THIN_COUNT + 1
+    mature, thin, no_data = [], [], []
+    for i in range(1, n_extras + 1):
+        nid = narrative_extra(i)["id"]
+        if i > n_extras - NARRATIVE_V2_NO_DATA:
+            no_data.append(nid)
+            continue
+        if i >= thin_from:
+            thin.append(nid)
+            for k in range(NARRATIVE_V2_THIN_DAYS):
+                points.append(("pytrends-blended", nid, day(k), float(10 + i), "fresh"))
+            continue
+        mature.append(nid)
+        # Distinct slopes (+/-) so the cross-sectional ranking has real order.
+        slope = (i % 5 + 1) * (1 if i % 2 else -1)
+        for k in range(NARRATIVE_V2_DAYS):
+            points.append(("pytrends-blended", nid, day(k), float(50 + slope * (NARRATIVE_V2_DAYS - k)), "fresh"))
+            points.append(("coingecko-narrative", nid, day(k), float(1 + i), "fresh"))
+    return points, {"mature": mature, "thin": thin, "no_data": no_data}
+
+
+def _narratives_path() -> Path:
+    """Fixture narratives.json the API reads; refuses the real tracked file."""
+    from api.analytics.narrative import narrative_config
+
+    raw = os.environ.get(narrative_config.NARRATIVES_PATH_ENV)
+    if not raw:
+        sys.exit(f"REFUSING: {narrative_config.NARRATIVES_PATH_ENV} is not set.\n"
+                 "Without it the E2E would read (and the AC-4 spec would edit) the real api/data/narratives.json.")
+    path = Path(raw).resolve()
+    if path == narrative_config.NARRATIVES_PATH.resolve():
+        sys.exit(f"REFUSING: {narrative_config.NARRATIVES_PATH_ENV} points at the real narratives.json ({path}).")
+    return path
+
+
+def seed_narrative_v2(today: pd.Timestamp, n_narratives: int = NARRATIVE_V2_MAX) -> dict:
+    """Write the base/6/n config files beside NARRATIVES_PATH and the extras'
+    archived rows through the real cache writer. Returns manifest facts."""
+    from api.analytics.narrative import narrative_config
+    from api.data import cache
+
+    path = _narratives_path()
+    base = json.loads(narrative_config.NARRATIVES_PATH.read_text(encoding="utf-8"))
+    configs = build_narrative_v2_configs(base, n_narratives)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(base, indent=2), encoding="utf-8")
+    path.with_name("narratives_base.json").write_text(json.dumps(base, indent=2), encoding="utf-8")
+    variants = {}
+    for n, cfg in configs.items():
+        vpath = path.with_name(f"narratives_{n}.json")
+        vpath.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+        variants[str(n)] = {"path": str(vpath), "ids": [x["id"] for x in cfg["narratives"]]}
+    n_extras = n_narratives - len(base["narratives"])
+    points, groups = build_narrative_v2_points(today, n_extras)
+    for source, key, when, raw, status in points:
+        cache.write_narrative_point(source, key, when, raw, source_status=status)
+    return {
+        "narratives_path": str(path),
+        "base_path": str(path.with_name("narratives_base.json")),
+        "base_ids": [x["id"] for x in base["narratives"]],
+        "variants": variants,
+        **groups,
+    }
+
+
 def build_narrative_fixture(today: pd.Timestamp) -> dict:
     """Pure: the synthetic narrative rows for UTC `today` (tz-naive date) plus
     the facts the E2E asserts against. Writes nothing."""
@@ -362,7 +466,7 @@ def build_narrative_fixture(today: pd.Timestamp) -> dict:
     }
 
 
-def seed_narrative(today: pd.Timestamp | None = None) -> dict:
+def seed_narrative(today: pd.Timestamp | None = None, n_narratives: int = NARRATIVE_V2_MAX) -> dict:
     """Write the narrative fixture through the real cache writers. Caller must
     already have passed `_guard()`. Returns the manifest facts."""
     from api.data import cache
@@ -376,7 +480,9 @@ def seed_narrative(today: pd.Timestamp | None = None) -> dict:
     for cid, rows in fixture["exchange"].items():
         for row in rows:
             cache.write_exchange_point(cid, row)
-    return fixture["facts"]
+    facts = fixture["facts"]
+    facts["v2"] = seed_narrative_v2(today, n_narratives)
+    return facts
 
 
 # --- /pairs fixture (pair screener RFC-005) --------------------------------

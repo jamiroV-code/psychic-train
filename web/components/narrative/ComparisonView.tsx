@@ -1,4 +1,3 @@
-import { DataQualityCaveat } from "@/components/narrative/DataQualityCaveat";
 import { formatNarrativeReason } from "@/lib/format-unavailable-reason";
 import { orderByRank } from "@/lib/narrative-view-model";
 import type { NarrativeComparison } from "@/lib/types/narrative";
@@ -10,7 +9,6 @@ export function ComparisonView({ comparison, labels }: { comparison: NarrativeCo
     <section data-testid="narrative-comparison">
       <h2>Comparison — current attention rank</h2>
       <div style={{ fontSize: 12, color: "#8a8f98" }}>as of {comparison.as_of ?? "no data"}</div>
-      <DataQualityCaveat view="comparison" />
       {rows.length === 0 ? (
         <div data-testid="narrative-comparison-empty">No categories to compare yet</div>
       ) : (

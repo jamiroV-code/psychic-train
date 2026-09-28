@@ -1,9 +1,9 @@
 /**
- * Plain-language data-quality caveat (ADR-9, AC-11). Static text, rendered at
- * the top of /narrative and again on each of the three views so it is never
- * scrolled out of sight of the numbers it qualifies.
+ * Plain-language data-quality caveat (v1 ADR-9, AC-11). Static text, rendered
+ * exactly once per /narrative page, pinned (sticky) by NarrativeDashboard so it
+ * stays in view while scrolling (v2 ADR-6, AC-12) — not repeated per view.
  */
-export function DataQualityCaveat({ view }: { view: "page" | "history" | "comparison" | "change" }) {
+export function DataQualityCaveat({ view }: { view: "page" }) {
   return (
     <aside
       data-testid={`narrative-caveat-${view}`}
