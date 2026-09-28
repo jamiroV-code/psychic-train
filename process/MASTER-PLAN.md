@@ -10,8 +10,9 @@ metadata:
 
 # my_site — Master Plan
 
-**Last verified:** 2026-09-28 13:40 UTC · **main:** `e3a94bf` · **this branch:** `c02bfd6`
-**Revision 3.** Revision 1 at 05:19 UTC, revision 2 at 12:45 UTC.
+**Last verified:** 2026-09-28 14:47 UTC · **main:** `e9c33fe` · **this branch:** `3a543ff`
+**Revision 3a** (urgent amendment: PR #7 merged with T1b unfixed). Revisions 1/2/3 at 05:19 /
+12:45 / 13:40 UTC.
 
 Every development session should start here: *what needs doing → what comes first → what can run
 independently → which worktree → what can wait.*
@@ -122,14 +123,33 @@ are user-PC steps.
 PR #8 landed the `isPartial` filter in `_fetch_live` plus tests and a SPEC/PLAN/REPORT closeout.
 The single-keyword path is fixed on main. **T1b is the remaining half.**
 
-### T1b — port the `isPartial` guard into `fetch_trends_batched`
+### T1b — port the `isPartial` guard into `fetch_trends_batched` · 🚨 **NOW LIVE ON MAIN**
 
-Without it, narrative-v2's momentum and mindshare views launch on the same zeros T1 removed.
+**PR #7 merged at 14:44:57Z (main `e9c33fe`) with this gap unfixed.** Its merge commit `ca8e68b`
+pulled in PR #8's fix, so the file now *contains* an `isPartial` guard — but only at lines 66–67,
+inside `_fetch_live` (lines 50–80). Verified on main:
 
-- **Worktree:** A · **Files:** `api/data/pytrends_adapter.py` (`_fetch_batch_live` /
-  `fetch_trends_batched`), `api/tests/data/test_pytrends_adapter.py`
-- **Do it inside PR #7's conflict resolution** — that file already needs touching there, and a
-  separate PR would be a third concurrent edit to it.
+| Function (main `e9c33fe`) | Lines | `isPartial` guard |
+|---|---|---|
+| `_fetch_live` | 50–80 | ✅ yes (66–67) |
+| `_fetch_batch_live` | 190–218 | ❌ **none** — returns the raw frame |
+| `fetch_trends_batched` | 219+ | ❌ **none** — takes `df.iloc[-1]` |
+
+The nightly path is live and unguarded:
+`snapshot_narrative.py:137` → `fetch_trends_batched(...)` → line 177
+`cache.write_narrative_point(BLENDED_SOURCE, ...)` → `momentum.py:169` reads `BASIS_BLENDED` as its
+**first-choice** basis; `mindshare.py` reads it too.
+
+**Deadline: the next narrative cron, 18:17 UTC + ~2h GitHub delay ≈ 20:20 UTC**, is the first run
+that writes `pytrends-blended/*`. Whatever it writes from Google's incomplete hour is
+**unrecoverable** — Google Trends keeps no history. Every subsequent night compounds it, and the two
+brand-new views are the consumers.
+
+- **Worktree:** A · **Files:** `api/data/pytrends_adapter.py` (`_fetch_batch_live` — filter there,
+  so `fetch_trends_batched` inherits it), `api/tests/data/test_pytrends_adapter.py`
+- **Shape of the fix:** the same four lines already proven in `_fetch_live` and in
+  `backfill_pytrends_history.py::daily_points` — drop `isPartial=True` rows before selecting, and
+  return `None` when nothing complete survives rather than a fabricated value.
 
 ### T23 — **NEW** — reconcile the six unmerged branches
 
