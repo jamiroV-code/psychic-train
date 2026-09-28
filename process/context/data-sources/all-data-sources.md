@@ -7,9 +7,8 @@ date: 24-09-26
 
 # Data Sources Context
 
-Last updated: 2026-09-24 (Hyperliquid exchange-attention adapter added, `hyperliquid_narrative_adapter.py`
-— narrative-dashboard RFC-2; Farside spot-ETF adapter added, `etf_flows_adapter.py`; per-series
-`max_gap_days` cadence pointer added — regime dashboard, RFC-003)
+Last updated: 2026-09-28 (pair screener v1 — deep-history ccxt/Hyperliquid fetch pattern, apparent
+Hyperliquid history floor; supersedes the 2026-09-24 entry below, which is retained)
 
 Canonical entrypoint for the `data-sources` context group in my_site.
 
@@ -76,6 +75,33 @@ Read this file when:
 
 **Recommendation:** ccxt against a major exchange for all OHLCV; CoinGecko for cross-sectional
 market data. Both are free and neither requires a key for what my_site needs.
+
+### Deep-history fetch pattern + Hyperliquid history floor (new, 28-09-26, pair screener v1)
+
+`ccxt_adapter.fetch_ohlcv(symbol, "1d", since=<explicit early UTC date>, limit=5000)` is the
+pattern for a one-time deep backfill (`DEEP_LOOKBACK_LIMIT = 5000`, first used by
+`api/scripts/backfill_pairs_universe.py`). **The `since` argument must be explicit** — calling with
+`since=None` against an already-populated cache only tops up forward from the last cached bar and
+never reaches deep history, because the adapter is cache-first and merges new bars onto whatever is
+already cached. Hyperliquid's `candleSnapshot` may also silently cap a response below the requested
+window for an old `since`; ccxt has no built-in pagination loop for this exchange, so a deep-fetch
+script must detect a capped-length response and page forward itself (re-call with `since` advanced
+to the last returned bar's timestamp) until either the cap stops triggering or `now` is reached.
+
+**Apparent history floor, unconfirmed:** a real deep fetch of 18 large-cap coins found BTC, ETH,
+DOGE, LTC and ATOM's daily OHLCV all start on exactly the same date, **2026-08-19 minus ~6 years
+(2020-08-19)** — five unrelated coins sharing an identical first bar is much more consistent with a
+server-side history limit on Hyperliquid than five coincident listing dates, but this has not been
+checked against Hyperliquid's own documentation (egress blocked in this container; user-PC step).
+Treat "first cached date" as a possible floor artifact, not a reliable listing date, until
+confirmed. The live cap-hit pagination path above was also never observed in practice (0/18 coins
+hit it on the real run) — proven only by a mocked test — and bulk rate-limit/backoff behaviour
+across 18 sequential deep-fetch calls is unstressed (all 18 succeeded with no throttling seen).
+
+**Redistribution:** ccxt/Hyperliquid OHLCV carries no redistribution restriction for this feature —
+unlike London Strategic Edge (equities) or Farside (ETF flows), crypto exchange OHLCV via ccxt is
+not licensed personal-use-only; see the Crypto Providers table above and the ccxt entry ("MIT
+licence... Recommended default", no redistribution caveat attached).
 
 ### Hyperliquid — display-only narrative attention proxy (new, 24-09-26)
 

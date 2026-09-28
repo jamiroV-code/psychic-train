@@ -1,9 +1,14 @@
 # my_site - All Context
 
-Last updated: 2026-09-24 (merge of two same-day UPDATE PROCESS closeouts — narrative-mindshare
-`/narrative` dashboard RFC-1..6, and the regime dashboard's AC-11-confirmed 2nd pass with its plan
-archived to `completed/`; see Changes Since Last Update below for both. The 2026-09-20 18:47
-version predates both the `/regime` and `/narrative` builds)
+Last updated: 2026-09-28 (pair screener v1 — `/pairs`, `cointegration-screener`'s first shipped
+feature, all 5 RFCs ✅ VERIFIED and archived; see Changes Since Last Update below. The 2026-09-24
+version predates this build.
+
+**Branch note:** this copy of the file lives on `main` (this worktree,
+`my_project-main`). A separate worktree/branch (`claude/kind-tesla-tat3vo`) has newer,
+still-unmerged narrative-v2 and on-chain work with its own further-ahead `all-context.md`. The two
+will need reconciling by hand when that branch merges into `main` — do not assume this file already
+reflects that work.)
 
 This file is the root context entrypoint for the repo.
 
@@ -15,6 +20,77 @@ Use it for two things:
 Start here before loading deeper context files.
 
 ---
+
+## Changes Since Last Update (2026-09-28, pair screener v1 — cointegration-screener)
+
+`cointegration-screener/` moves from an empty `_GUIDE.md` placeholder to a shipped v1 feature: a
+new, independent `/pairs` screen (`process/features/cointegration-screener/completed/
+pair-screener_25-09-26/`), all 5 RFCs code-complete, EVL-confirmed, and user-approved. Zero shared
+code, cache, or runtime state with the momentum screener, regime dashboard, or narrative-mindshare
+— confirmed by an empty `git diff --stat` against those three surfaces at RFC-005.
+
+- `[Product]` New route **`/pairs`**: tests every pair from a hand-curated, 18-coin crypto universe
+  (BTC, ETH, SOL, HYPE, XRP, DOGE, ADA, AVAX, LINK, LTC, BCH, DOT, SUI, NEAR, APT, ARB, OP, ATOM —
+  C(18,2) = 153 pairs) for cointegration — Engle-Granger both directions (BH-corrected, primary
+  rank) plus Johansen as an always-shown second opinion, never merged into one score. A ranked
+  table (`web/app/pairs/page.tsx`) plus a per-pair detail view (`web/app/pairs/[a]/[b]/page.tsx`:
+  spread chart, both EG directions, Johansen, AR(1) half-life or `not_mean_reverting`, current
+  z-score, sample window). All maths is whole-history (in-sample) diagnostic, never a live signal.
+  `web/components/pairs/*`, `web/lib/api/pairs.ts`, `web/lib/types/pairs.ts`,
+  `web/lib/format-pairs-value.ts`.
+- `[Product]` New API: **`GET /api/pairs`** (table, every pair as one row, default sort ascending
+  BH-corrected p-value, tie-break `(eg_p_bh, eg_p_raw, coin_a, coin_b)`) and
+  **`GET /api/pairs/{a}/{b}`** (detail, incl. the full spread series; 404 unknown ticker, 422
+  self-pair). `api/routers/pairs.py`, registered additively in `api/main.py`.
+  `api/analytics/cointegration/{stats.py, pairs_response.py}`, `api/models/pairs.py`.
+- `[Product]` **Precompute, not on-request.** A request-time compute of all 153 pairs measured at
+  ~46s (p95 513ms/pair, `coint`'s `autolag='aic'`) against a p95 < 3s target for the read path —
+  too slow to compute per-request. `api/scripts/compute_pairs.py` (new, manually-run, idempotent)
+  now computes offline after backfill and writes a persisted, git-ignored results cache
+  (`api/data/cache/pairs/results.parquet` + `provenance.json`); the router only reads it, never
+  recomputes. Staleness is detected by comparing provenance against the current universe file,
+  each coin's OHLCV cache, and the installed `statsmodels`/`EG_AUTOLAG` — a mismatch on any of
+  those serves `computation_status: stale` with the last-known-good rows and a named reason, never
+  silently-fresh.
+- `[Product]` **Manual deep-fetch script**: `api/scripts/backfill_pairs_universe.py` — the first
+  real consumer of the previously-unused `DEEP_LOOKBACK_LIMIT=5000` in `ccxt_adapter.py`. Calls
+  `fetch_ohlcv(symbol, "1d", since=<explicit early UTC date>, limit=5000)` with defensive
+  cap-hit pagination; extends (never replaces) the existing shallow `cache/ohlcv/{SYMBOL}/1d.parquet`
+  files the momentum screener also reads. `api/data/pairs_universe.json` (hand-editable, 18 coins,
+  `PAIRS_UNIVERSE_PATH` override for tests) + `api/data/pairs_universe.py` (loader, does not import
+  `api/data/watchlist.py`).
+- `[Product]` **New dependency**: `statsmodels>=0.14` (installed 0.15.0) —
+  `tsa.stattools.coint` (Engle-Granger), `tsa.vector_ar.vecm.coint_johansen` (Johansen),
+  `stats.multitest.multipletests` (Benjamini-Hochberg). `arch` was named in the original project
+  plan for cointegration/regime work but is **deliberately not added** — nothing in this feature or
+  the regime dashboard ended up needing GARCH/volatility modelling.
+- `[Product]` `api/data/cache.py` gained three additive helpers (`pairs_results_path()`,
+  `pairs_provenance_path()`, `pairs_spread_path()`), all resolving `CACHE_ROOT` at call time
+  (mirrors the existing `ohlcv_path()`/`liqtide_*`/`narrative_*` convention) — every existing
+  `cache.py` function is unchanged.
+- `[Product]` `api/scripts/seed_e2e_cache.py` gained a `pairs` fixture section (6 synthetic coins,
+  15 pairs, one of each status) for `web/e2e/pairs.spec.ts` (9 tests) — runs the real
+  `compute_and_persist()` path so the fixture is `fresh` by construction, not hand-rolled.
+- `[Correction]` A pre-existing screener Playwright flake (`toBeVisible()` 5s timeout on
+  `coin-panel-BTC`, cold-start latency) was proven pre-existing (reproduced against the pre-feature
+  commit `35e646f` in a temporary worktree) and mitigated with a config-only 15s
+  `playwright.config.ts` `expect.timeout` — no test logic changed.
+- Testing: **486 passed / 3 deselected** pytest (was 420 after RFC-001, 484 after RFC-005's first
+  pass, +2 for the tie-break fix's new cases); **153 passed / 19 files** vitest (3 consecutive green
+  runs — one earlier run reported an unreproduced 152/1 fail, not a regression from this feature);
+  `tsc --noEmit` exit 0; **35/35 Playwright, run twice** (26 existing + 9 new `pairs.spec.ts`), plus
+  a `pairs.spec.ts`-only repeat-each run at 90/90.
+- **Real-data result (18-coin universe, 153 pairs, all `ok`):** 21 pairs have raw EG p < 0.05; 0 are
+  significant after BH correction at the 5% level (closest is DOGE/BCH, raw 0.00057 → BH-corrected
+  0.087). `compute_pairs.py` takes ~56s; the read-path (`GET /api/pairs`) p95 is 135-232ms.
+- **Known gap, carried forward, not closed this session:** Hyperliquid appears to have a
+  daily-history floor around **2020-08-19** (BTC/ETH/DOGE/LTC/ATOM all start exactly there) — likely
+  a server-side limit, not five coincident listing dates; unconfirmed against Hyperliquid's own
+  docs. Live cap-hit pagination (the 5000-bar response cap) and bulk rate-limit/backoff behaviour
+  across 18 sequential deep-fetch calls were never observed on real data (18/18 succeeded with no
+  throttling) — both remain mocked-test-only known-gaps from the original feasibility VERDICT. The
+  Johansen-refused row and the "no pair significant" banner are unit-tested only, not reachable in
+  the current E2E fixture set.
 
 ## Changes Since Last Update (2026-09-24, narrative-mindshare `/narrative` dashboard)
 
@@ -405,39 +481,54 @@ Observed layout (2026-09-24), 2-3 levels deep on the parts that changed since se
 my_site/
   web/                      -- Next.js 15.0.3 App Router frontend (TypeScript, React 19)
     app/                    -- app/page.tsx, app/layout.tsx, app/screener/page.tsx,
-                                app/regime/page.tsx, app/narrative/page.tsx (charting route not
-                                built yet)
+                                app/regime/page.tsx, app/narrative/page.tsx, app/pairs/page.tsx
+                                (new 28-09-26), app/pairs/[a]/[b]/page.tsx (new 28-09-26; charting
+                                route not built yet)
     components/             -- chart/, screener/, regime/ (RegimeDashboard, ComponentPanel,
                                 Readout, DrillDown + __tests__/), narrative/ (NarrativeDashboard,
                                 CategoryHistoryPanel, ComparisonView, ChangeInAttentionView,
-                                DataQualityCaveat, RedistributionBadge + __tests__/)
-    lib/                    -- api/ (incl. regime.ts, narrative.ts), types/ (incl. regime.ts,
-                                narrative.ts), format-unavailable-reason.ts,
-                                format-regime-value.ts, regime-chart-sync.ts,
+                                DataQualityCaveat, RedistributionBadge + __tests__/), pairs/ (new
+                                28-09-26: PairsTable, PairDetailView + __tests__/)
+    lib/                    -- api/ (incl. regime.ts, narrative.ts, pairs.ts -- new 28-09-26),
+                                types/ (incl. regime.ts, narrative.ts, pairs.ts -- new 28-09-26),
+                                format-unavailable-reason.ts, format-regime-value.ts,
+                                format-pairs-value.ts (new 28-09-26), regime-chart-sync.ts,
                                 regime-line-segments.ts, narrative-view-model.ts, __tests__/
-    e2e/                    -- Playwright specs (screener.spec.ts, regime.spec.ts, narrative.spec.ts)
+    e2e/                    -- Playwright specs (screener.spec.ts, regime.spec.ts,
+                                narrative.spec.ts, pairs.spec.ts -- new 28-09-26, 9 tests)
   api/                      -- FastAPI service (Python 3.12, uv-managed)
-    routers/                -- screener.py, regime.py, narrative.py, watchlist.py
+    routers/                -- screener.py, regime.py, narrative.py, pairs.py (new 28-09-26),
+                                watchlist.py
     analytics/              -- confidence/, indicators/, screener_board.py,
                                 regime/ (liquidity_composite.py, leg_boundary.py, components.py,
                                 components_response.py -- a second maths path alongside the
                                 composite/leg-boundary one, not a replacement),
                                 narrative/ (scoring.py, trigger.py, mapping.py -- RFC-003
                                 original, unchanged behavior; history.py, exchange_attention.py
-                                -- new 24-09-26, narrative-dashboard RFC-2/RFC-3)
+                                -- new 24-09-26, narrative-dashboard RFC-2/RFC-3),
+                                cointegration/ (stats.py -- pure per-pair stats engine,
+                                pairs_response.py -- compute path + read path; both new 28-09-26)
     data/                   -- ccxt_adapter.py, coingecko_adapter.py, defillama_adapter.py,
                                 fred_adapter.py, liqtide_adapter.py, pytrends_adapter.py,
                                 reddit_adapter.py, etf_flows_adapter.py (8th adapter, Farside),
                                 hyperliquid_narrative_adapter.py (9th adapter, new 24-09-26,
                                 narrative-dashboard RFC-2), cache.py (DuckDB-over-Parquet,
-                                gained exchange-snapshot helpers 24-09-26), watchlist.py
+                                gained exchange-snapshot helpers 24-09-26, gained pairs_results_path/
+                                pairs_provenance_path/pairs_spread_path helpers 28-09-26),
+                                watchlist.py, pairs_universe.json + pairs_universe.py (new 28-09-26,
+                                hand-editable 18-coin universe + loader, does not import
+                                watchlist.py)
     models/                 -- screener.py, regime.py, narrative.py (pydantic schemas;
-                                narrative.py gained additive history models 24-09-26)
+                                narrative.py gained additive history models 24-09-26),
+                                pairs.py (new 28-09-26)
     scripts/                -- refresh_cache.py, backfill_primaries.py, backfill_liqtide_series.py,
                                 seed_e2e_cache.py (gained build_narrative_fixture/seed_narrative
-                                24-09-26), snapshot_narrative.py, backfill_pytrends_history.py
-                                (both new 24-09-26, narrative-dashboard RFC-2/RFC-4), and
-                                diagnostic/backtest one-offs (backtest_leg_boundaries.py,
+                                24-09-26, gained build_pairs_fixture/seed_pairs 28-09-26),
+                                snapshot_narrative.py, backfill_pytrends_history.py
+                                (both new 24-09-26, narrative-dashboard RFC-2/RFC-4),
+                                backfill_pairs_universe.py, compute_pairs.py (both new 28-09-26,
+                                pair screener v1 -- manual deep-fetch + manual offline compute),
+                                and diagnostic/backtest one-offs (backtest_leg_boundaries.py,
                                 check_weekly_anchor.py, snapshot_liqtide.py,
                                 compare_composite_variants.py, etc.)
     tests/                  -- analytics/, data/, routers/, scripts/ -- pytest,
@@ -449,9 +540,11 @@ my_site/
     features/               -- feature-scoped plans and guides. `cycle-regime/` and
                                 `narrative-mindshare/` both now have real task folders
                                 (`regime-dashboard_24-09-26/`, `narrative-dashboard_24-09-26/`,
-                                all RFCs code-done, see Changes Since Last Update); still-empty
-                                `_GUIDE.md` placeholders: charting-indicators,
-                                cointegration-screener
+                                all RFCs code-done, see Changes Since Last Update);
+                                `cointegration-screener/` now also has one, shipped v1
+                                (`pair-screener_25-09-26/`, archived to `completed/`, see Changes
+                                Since Last Update); still-empty `_GUIDE.md` placeholder:
+                                charting-indicators
     development-protocols/  -- RIPER-5 methodology docs
   .github/workflows/        -- liqtide-snapshot.yml (nightly 23:30 UTC), narrative-snapshot.yml
                                 (nightly 23:00 UTC, new 24-09-26) -- both snapshot + commit to
@@ -474,9 +567,11 @@ Confirmed installed/configured as of 2026-09-20 (versions from `web/package.json
 - **Charts:** `lightweight-charts` ^5.0.0 (Apache-2.0, canvas-based)
 - **Backend:** Python >=3.12 with FastAPI >=0.115, uvicorn[standard]
 - **Data/analytics libs in use:** `pandas`>=2.2, `numpy`>=1.26, `pandas-ta-classic`>=0.8.32,
-  `pydantic`>=2.8, `httpx`>=0.27. `statsmodels`/`arch` (for cointegration/regime work) are named
-  in the original plan but not yet in `api/pyproject.toml` — add them when that analytics work
-  actually starts, don't assume they're installed.
+  `pydantic`>=2.8, `httpx`>=0.27, `statsmodels`>=0.14 (installed 0.15.0, added 28-09-26 for the
+  pair screener — `tsa.stattools.coint`, `tsa.vector_ar.vecm.coint_johansen`,
+  `stats.multitest.multipletests`). `arch` was named in the original project plan for
+  cointegration/regime work and is **deliberately not added** — neither the regime dashboard nor
+  the pair screener ended up needing GARCH/volatility modelling; don't add it speculatively.
 - **Market data access:** `ccxt`>=4.3 (MIT) as the unified crypto exchange client — no API key
   for public OHLCV
 - **Storage:** Parquet files queried with DuckDB (`duckdb`>=1.0, `pyarrow`>=17.0) via
@@ -578,6 +673,14 @@ may be redistributed. See Licensing in `data-sources/all-data-sources.md`.
 
 ## Open Questions
 
+- **New, 2026-09-28: Hyperliquid's apparent daily-history floor (~2020-08-19) is unconfirmed.**
+  BTC/ETH/DOGE/LTC/ATOM's deep-fetched OHLCV all start on exactly the same date
+  (`api/scripts/backfill_pairs_universe.py`'s real run) — consistent with a server-side history
+  limit rather than five coincident listing dates, but this has not been checked against
+  Hyperliquid's own documentation. Also unverified on real data: whether the adapter's mocked
+  cap-hit pagination test matches Hyperliquid's actual capped-response behaviour, and whether bulk
+  rate-limit/backoff kicks in past the 18 sequential deep-fetch calls this feature made (0 failures
+  observed so far). See `process/context/data-sources/all-data-sources.md`.
 - **Momentum screener lives under `process/general-plans/`, not `process/features/`.** It's
   the first shipped feature, and it draws on macro-liquidity and narrative work that overlaps
   `cycle-regime` and `narrative-mindshare`. **Partially resolved, 24-09-26, for narrative only:**
@@ -728,6 +831,15 @@ classification), and `git log --oneline -- api/data/cache/liqtide/*.parquet` (4 
 automated `github-actions[bot]` commits, 09-21..09-24, cited as evidence the nightly schedule
 mechanism runs unattended).
 
+**Added at the 2026-09-28 UPDATE PROCESS closeout (pair screener v1, RFC-001..005):**
+`process/features/cointegration-screener/completed/pair-screener_25-09-26/pair-screener_PLAN_25-09-26.md`
+(full plan incl. Status Strip, ADRs, ADR-8 Amendments, Validate Contract, Post-EXECUTE Amendments),
+`pair-screener_SPEC_25-09-26.md` (incl. its AC-4 Post-EXECUTE amendment),
+`pair-screener_FEASIBILITY_25-09-26.md`, all five `pair-screener_RFC-00N_REPORT_25-09-26.md` /
+`_28-09-26.md` files and their `-stage0` counterparts, both PVL iteration reports, both EVL
+iteration reports (incl. EVL cycle 6's tie-break fix), `results.tsv`, and `git log --oneline` on
+`main` at `b2d0fd5`.
+
 ## Scan Metadata
 
 - Generated: 2026-09-20 by `vc-generate-context` (delta update over the 2026-09-17 setup version);
@@ -739,7 +851,12 @@ mechanism runs unattended).
   same day (24-09-26) by `vc-update-process-agent` closing out the narrative-mindshare
   `/narrative` dashboard program (no `vc-generate-context` re-run for any of these amendments —
   targeted UPDATE PROCESS edits per this file's own Context Update Protocol); this version is
-  further the result of merging two independent same-day sessions' branches together
+  further the result of merging two independent same-day sessions' branches together; amended a
+  fourth time on 2026-09-28 on the `main` worktree (`my_project-main`, distinct from the
+  `claude/kind-tesla-tat3vo` worktree referenced in the pre-merge HEAD note below, which has since
+  progressed further with unmerged narrative-v2/on-chain work not reflected here) closing out the
+  pair screener v1 (`cointegration-screener`) program — targeted UPDATE PROCESS edit, no
+  `vc-generate-context` re-run
 - HEAD (pre-merge): `7ef8eb3` (branch `claude/kind-tesla-tat3vo`, narrative-dashboard closeout) and
   `ecb5e39` (branch `claude/compassionate-goldberg-o2iq49`, regime-dashboard AC-11-confirmed
   closeout) — two independent branches/sessions, reconciled here via a `git merge` commit rather
