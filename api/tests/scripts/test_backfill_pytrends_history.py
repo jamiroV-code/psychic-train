@@ -99,3 +99,61 @@ def test_dry_run_writes_nothing(isolated_cache):
     out = bf.backfill_category("ai", "AI crypto", TODAY, lambda: FakeTrendReq(frame("AI crypto")), dry_run=True)
     assert out.written == 4
     assert cache.read_narrative_series("pytrends", "AI crypto").empty
+
+
+# --- narrative-v2 RFC-3: batched blended backfill ---------------------------
+
+from api.data import pytrends_adapter  # noqa: E402
+
+ALL_KWS = ["AI crypto", "artificial intelligence crypto", "RWA crypto", "tokenized real world assets",
+           "layer 2 crypto", "L2 rollup", "memecoin", "meme coin crypto"]
+
+
+def _batched_factory(seen, anchor_in_second=20.0):
+    def factory():
+        class F(FakeTrendReq):
+            def build_payload(self, kw_list, timeframe):
+                seen.append(list(kw_list))
+                idx = pd.date_range("2026-09-26", periods=4, freq="D", name="date")
+                second = "memecoin" in kw_list
+                cols = {t: [(anchor_in_second if second else 40.0) if t == "AI crypto" else 10.0 + ALL_KWS.index(t)]
+                        * 4 for t in kw_list}
+                self.df = pd.DataFrame({**cols, "isPartial": [False, False, False, True]}, index=idx)
+        return F()
+    return factory
+
+
+def test_backfill_batching_matches_nightly_batching_logic(isolated_cache):
+    seen = []
+    outs = bf.run_blended(today=TODAY, trendreq_factory=_batched_factory(seen), start_date="2026-09-27")
+    # same batch plan the nightly job uses
+    assert seen == pytrends_adapter.plan_batches(ALL_KWS, "AI crypto")
+    assert [o.category_id for o in outs] == ["ai", "rwa", "l2s", "memecoins"]
+    assert all(o.status == "ok" and o.written == 2 and o.requests == 2 for o in outs)  # 09-26 < start, 09-29 partial
+    l2s = cache.read_narrative_series("pytrends-blended", "l2s")
+    assert list(l2s["date"].astype(str)) == ["2026-09-27", "2026-09-28"]
+    assert set(l2s["source_status"]) == {"backfilled"}
+    # layer 2 crypto=14 (batch 1); L2 rollup=15 rescaled by 40/20 = 30 -> mean 22
+    assert l2s["raw_value"].tolist() == [22.0, 22.0]
+
+
+def test_backfill_blend_zero_anchor_days_are_insufficient(isolated_cache):
+    outs = {o.category_id: o for o in bf.run_blended(today=TODAY, trendreq_factory=_batched_factory([], 0.0),
+                                                      start_date="2026-09-27")}
+    assert outs["memecoins"].written == 0 and outs["memecoins"].insufficient_days == 2
+    assert cache.read_narrative_series("pytrends-blended", "memecoins").empty
+    assert outs["ai"].written == 2
+
+
+def test_backfill_blend_never_overwrites_forward_rows(isolated_cache):
+    cache.write_narrative_point("pytrends-blended", "ai", "2026-09-28", 77.0, source_status="fresh")
+    outs = {o.category_id: o for o in bf.run_blended(today=TODAY, trendreq_factory=_batched_factory([]),
+                                                      start_date="2026-09-27")}
+    assert outs["ai"].skipped_forward == 1
+    df = cache.read_narrative_series("pytrends-blended", "ai").set_index("date")
+    assert float(df.loc["2026-09-28", "raw_value"]) == 77.0
+
+
+def test_primary_backfill_untouched_by_blend(isolated_cache):
+    bf.run_blended(today=TODAY, trendreq_factory=_batched_factory([]), start_date="2026-09-27")
+    assert cache.read_narrative_series("pytrends", "AI crypto").empty

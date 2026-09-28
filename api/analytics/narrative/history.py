@@ -220,7 +220,11 @@ def _exchange_frames(category_id: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     return vol, lst
 
 
-def load_category_series(category_id: str, keyword: str, today: date) -> list[SeriesData]:
+PYTRENDS_BLENDED_SOURCE = "pytrends-blended"
+
+
+def load_category_series(category_id: str, keyword: str, today: date,
+                         keywords: list[str] | None = None) -> list[SeriesData]:
     py = _narrative_frame("pytrends", keyword)
     backfilled = py["point_status"] == BACKFILLED_STATUS
     vol, listings = _exchange_frames(category_id)
@@ -241,6 +245,13 @@ def load_category_series(category_id: str, keyword: str, today: date) -> list[Se
         SeriesData("exchange_new_listings", "Hyperliquid new listings (display only)", category_id,
                    HYPERLIQUID_REDISTRIBUTABLE, False, None, frame=listings),
     ]
+    if keywords and len(keywords) >= 2:
+        # narrative-v2 RFC-3 (ADR-2/ADR-3): id-keyed blend of every keyword.
+        # Display-only here (not a composite slot) — RFC-4/RFC-5 consume it.
+        series.append(SeriesData(
+            PYTRENDS_BLENDED_SOURCE, f"Google Trends (blended, {len(keywords)} keywords)", category_id,
+            PYTRENDS_REDISTRIBUTABLE, False, None,
+            frame=_narrative_frame(PYTRENDS_BLENDED_SOURCE, category_id)))
     for s in series:
         s.frame, s.sufficiency = _prepare(s.frame)
         _age_status(s, today)
@@ -393,7 +404,7 @@ def build_narrative_history(
     for cid in wanted:
         seed = seed_by_id[cid]
         keyword = narrative_config.primary_keyword(seed)
-        series = load_category_series(cid, keyword, today)
+        series = load_category_series(cid, keyword, today, list(seed.get("keywords", [])))
         composite = build_composite(series)
         # Rankings see composites up to `end` only (the viewing window's as-of).
         full_composites[cid] = _in_range(composite, None, end)

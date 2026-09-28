@@ -49,6 +49,7 @@ class NarrativeCategory(BaseModel):
 HistorySource = Literal[
     "pytrends", "reddit", "coingecko", "coingecko-narrative",
     "exchange_volume_share", "exchange_new_listings",
+    "pytrends-blended",  # narrative-v2 RFC-3: id-keyed multi-keyword blend
 ]
 SeriesStatus = Literal["ok", "stale", "unavailable", "presumed-dead"]
 EntryStatus = Literal["ok", "unavailable"]

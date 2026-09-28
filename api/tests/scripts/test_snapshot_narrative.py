@@ -2,6 +2,7 @@
 and stub every provider — no network."""
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 
 from api.data import cache, coingecko_adapter, pytrends_adapter, reddit_adapter
@@ -13,6 +14,12 @@ from api.scripts import snapshot_narrative as sn
 TODAY = sn.utc_today()
 CATS = ["ai", "rwa", "l2s", "memecoins"]
 KWS = ["AI crypto", "RWA crypto", "layer 2 crypto", "memecoin"]
+ALL_KWS = ["AI crypto", "artificial intelligence crypto", "RWA crypto", "tokenized real world assets",
+           "layer 2 crypto", "L2 rollup", "memecoin", "meme coin crypto"]
+
+
+def _trend_frame(values: dict, day: str) -> pd.DataFrame:
+    return pd.DataFrame({k: [v] for k, v in values.items()}, index=pd.DatetimeIndex([day], name="date"))
 
 
 @pytest.fixture
@@ -20,9 +27,9 @@ def providers(monkeypatch):
     """Healthy stubs; individual tests override pieces."""
     calls = {"pytrends": 0, "reddit": 0, "trending": 0, "exchange": 0}
 
-    def fake_live(kw):
-        calls["pytrends"] += 1
-        return 10.0 + calls["pytrends"], TODAY
+    def fake_live(terms, timeframe="now 7-d"):
+        calls["pytrends"] += 1  # one call per batched request
+        return _trend_frame({t: 10.0 + ALL_KWS.index(t) for t in terms}, TODAY)
 
     def fake_mentions(kw, *a, **k):
         calls["reddit"] += 1
@@ -40,7 +47,7 @@ def providers(monkeypatch):
                  hl.PerpMarket(base="ETH", base_name="ETH", quote_volume=300.0)]
         return hl.ExchangeSnapshotResult(status="ok", as_of=TODAY, perps=perps)
 
-    monkeypatch.setattr(pytrends_adapter, "_fetch_live", fake_live)
+    monkeypatch.setattr(pytrends_adapter, "_fetch_batch_live", fake_live)
     monkeypatch.setattr(reddit_adapter, "fetch_mentions", fake_mentions)
     monkeypatch.setattr(coingecko_adapter, "fetch_trending", fake_trending)
     monkeypatch.setattr(hl, "fetch_daily_market_snapshot", fake_hl)
@@ -87,14 +94,16 @@ def test_same_day_rerun_no_duplicates_first_observation_wins(isolated_cache, pro
         assert len(cache.read_narrative_series("reddit", kw)) == 1
     assert cache.read_exchange_series("ai")["volume_share"].tolist() == first_ex
     # read-before-write: second run never even called pytrends/reddit
-    assert providers["pytrends"] == 4 and providers["reddit"] == 4
+    # 8 keywords -> 2 anchor-chained batched requests on the first run only
+    assert providers["pytrends"] == 2 and providers["reddit"] == 4
     assert sn.exit_code(summaries) == 0
 
 
 def test_backfilled_pytrends_date_is_never_overwritten(isolated_cache, providers, monkeypatch):
     yesterday = "2000-01-01"
     cache.write_narrative_point("pytrends", "AI crypto", yesterday, 55.0, source_status="backfilled")
-    monkeypatch.setattr(pytrends_adapter, "_fetch_live", lambda kw: (99.0, yesterday))
+    monkeypatch.setattr(pytrends_adapter, "_fetch_batch_live",
+                        lambda terms, timeframe="now 7-d": _trend_frame({t: 99.0 for t in terms}, yesterday))
     by = _by_source(sn.run_snapshot())
     df = cache.read_narrative_series("pytrends", "AI crypto")
     assert df["raw_value"].tolist() == [55.0]
@@ -114,9 +123,9 @@ def test_reddit_credentials_unset_writes_no_row_and_reports_reason(isolated_cach
 
 
 def test_partial_provider_failure_isolated(isolated_cache, providers, monkeypatch):
-    def boom(kw):
+    def boom(terms, timeframe="now 7-d"):
         raise RuntimeError("google 429")
-    monkeypatch.setattr(pytrends_adapter, "_fetch_live", boom)
+    monkeypatch.setattr(pytrends_adapter, "_fetch_batch_live", boom)
     monkeypatch.setattr(hl, "fetch_daily_market_snapshot",
                         lambda exchange=None, now=None: hl.ExchangeSnapshotResult(status="unavailable", as_of=TODAY,
                                                                                   reason="fetch-failed"))
@@ -137,7 +146,7 @@ def test_stale_trending_snapshot_is_not_archived_as_today(isolated_cache, provid
 
 
 def test_all_sources_down_exit_2(isolated_cache, providers, monkeypatch):
-    monkeypatch.setattr(pytrends_adapter, "_fetch_live", lambda kw: (None, None))
+    monkeypatch.setattr(pytrends_adapter, "_fetch_batch_live", lambda terms, timeframe="now 7-d": None)
     monkeypatch.delenv("REDDIT_CLIENT_ID", raising=False)
     monkeypatch.setattr(coingecko_adapter, "fetch_trending",
                         lambda *a, **k: TrendingResult(symbols=[], as_of=None, status="unavailable"))
@@ -164,3 +173,32 @@ def test_verify_only_reports_counts_without_fetching(isolated_cache, providers, 
     assert "pytrends/AI crypto: rows=1" in out and "coingecko-narrative/ai: rows=1" in out
     assert "exchange/ai: rows=1" in out
     assert providers == counts
+
+
+# --- narrative-v2 RFC-3: batched multi-keyword blend ------------------------
+
+def test_l2s_multi_keyword_blend_not_keywords0_only(isolated_cache, providers):
+    """Regresses the SPEC bug: only keywords[0] was ever fetched."""
+    by = _by_source(sn.run_snapshot())
+    assert by["pytrends-blended"].written == 4
+    l2s = cache.read_narrative_series("pytrends-blended", "l2s")
+    # layer 2 crypto = 14, L2 rollup = 15 (anchor 10 in both batches -> scale 1)
+    assert l2s["raw_value"].tolist() == [14.5]
+    # primary keyword series still archived under its keyword key (ADR-2)
+    assert cache.read_narrative_series("pytrends", "layer 2 crypto")["raw_value"].tolist() == [14.0]
+    # blended rows never land under a keyword key
+    assert not (isolated_cache / "narrative" / "pytrends" / "l2s.parquet").exists()
+
+
+def test_snapshot_zero_anchor_batch_writes_nothing_for_that_batch(isolated_cache, providers, monkeypatch):
+    def fake(terms, timeframe="now 7-d"):
+        vals = {t: 50.0 for t in terms}
+        if "memecoin" in terms:  # second batch: anchor collapses to 0
+            vals["AI crypto"] = 0.0
+        return _trend_frame(vals, TODAY)
+    monkeypatch.setattr(pytrends_adapter, "_fetch_batch_live", fake)
+    by = _by_source(sn.run_snapshot())
+    assert cache.read_narrative_series("pytrends", "memecoin").empty
+    assert cache.read_narrative_series("pytrends-blended", "memecoins").empty
+    assert cache.read_narrative_series("pytrends-blended", "ai")["raw_value"].tolist() == [50.0]
+    assert by["pytrends"].written == 3 and by["pytrends"].failed == 1

@@ -157,6 +157,122 @@ def run(today: date | None = None, trendreq_factory: Callable | None = None,
     return [backfill_category(cid, kw, today, trendreq_factory, dry_run) for cid, kw in load_seed_keywords(seeds_path)]
 
 
+# --- narrative-v2 RFC-3 (ADR-3): batched blended backfill -----------------
+#
+# The per-narrative primary-keyword backfill above is preserved exactly
+# (already-backfilled 269-day history stays as-is). The blended series
+# (`pytrends-blended/{narrative id}`) uses the SAME batching/anchor-chaining
+# helpers as the nightly job (`pytrends_adapter.plan_batches` +
+# `chain_batches`), applied per date, and only writes dates on/after
+# BLEND_START_DATE — net-new keywords backfill only from the day RFC-3 first
+# ran (v1's "grows forward only" precedent).
+
+BLENDED_SOURCE = "pytrends-blended"
+BLEND_START_DATE = "2026-09-28"
+
+
+@dataclass
+class BlendOutcome:
+    category_id: str
+    status: str  # "ok" | "unavailable"
+    reason: str | None = None
+    written: int = 0
+    skipped_forward: int = 0
+    insufficient_days: int = 0
+    requests: int = 0
+
+
+def _batch_daily(df: pd.DataFrame | None, terms: list[str]) -> dict[str, dict[str, float]] | None:
+    """date -> {term: value} with isPartial rows dropped; None when unusable."""
+    if df is None or df.empty:
+        return None
+    work = df
+    if "isPartial" in work.columns:
+        work = work[~work["isPartial"].astype(bool)]
+    idx = pd.to_datetime(work.index)
+    if len(idx) > 1 and pd.Series(idx).diff().dropna().max() > pd.Timedelta(days=1):
+        return None  # non-daily: never stored as daily
+    out: dict[str, dict[str, float]] = {}
+    for pos, ts in enumerate(idx):
+        row = {}
+        for t in terms:
+            if t in work.columns and not pd.isna(work[t].iloc[pos]):
+                row[t] = float(work[t].iloc[pos])
+        out[ts.strftime("%Y-%m-%d")] = row
+    return out
+
+
+def chained_daily(narratives: list[dict], today: date, trendreq_factory: Callable | None = None,
+                  ) -> tuple[dict[str, dict[str, "pytrends_adapter.ChainedValue"]], int]:
+    """date -> keyword -> ChainedValue over the 269-day window, using the same
+    batch plan and anchor as the nightly job (anchor = first narrative's
+    primary keyword)."""
+    from api.data import pytrends_adapter
+
+    keywords = [kw for n in narratives for kw in n["keywords"]]
+    anchor = narratives[0]["keywords"][0] if narratives else None
+    batches = pytrends_adapter.plan_batches(keywords, anchor)
+    if not batches:
+        return {}, 0
+    anchor = batches[0][0]
+    per_batch: list[dict[str, dict[str, float]] | None] = []
+    factory = trendreq_factory or _default_trendreq_factory
+    for terms in batches:
+        try:
+            client = factory()
+            client.build_payload(list(terms), timeframe=window_timeframe(today))
+            per_batch.append(_batch_daily(client.interest_over_time(), terms))
+        except Exception:
+            per_batch.append(None)
+    dates = sorted({d for b in per_batch if b for d in b})
+    chained = {
+        d: pytrends_adapter.chain_batches([None if b is None else b.get(d) for b in per_batch], batches, anchor)
+        for d in dates
+    }
+    return chained, len(batches)
+
+
+def run_blended(today: date | None = None, trendreq_factory: Callable | None = None, dry_run: bool = False,
+                seeds_path: Path = SEEDS_PATH, start_date: str = BLEND_START_DATE) -> list[BlendOutcome]:
+    from api.analytics.narrative import narrative_config
+    from api.data import pytrends_adapter
+
+    today = today or datetime.now(timezone.utc).date()
+    narratives = narrative_config.load_narratives(seeds_path)
+    multi = [n for n in narratives if len(n["keywords"]) >= 2]
+    if not multi:
+        return []
+    chained, requests = chained_daily(narratives, today, trendreq_factory)
+    outcomes = []
+    for n in multi:
+        o = BlendOutcome(n["id"], "ok", requests=requests)
+        if not chained:
+            o.status, o.reason = "unavailable", "fetch-failed"
+            outcomes.append(o)
+            continue
+        existing = cache.read_narrative_series(BLENDED_SOURCE, n["id"])
+        forward: set[str] = set()
+        if not existing.empty:
+            forward = set(existing.loc[existing["source_status"].astype(str) != BACKFILLED, "date"].astype(str))
+        for d, vals in chained.items():
+            if d < start_date:
+                continue
+            cvs = [vals.get(kw) for kw in n["keywords"]]
+            if any(cv is None or cv.status != "ok" for cv in cvs):
+                o.insufficient_days += 1
+                continue
+            if d in forward:
+                o.skipped_forward += 1
+                continue
+            if not dry_run:
+                cache.write_narrative_point(BLENDED_SOURCE, n["id"], d,
+                                            pytrends_adapter.blend([cv.value for cv in cvs]),
+                                            source_status=BACKFILLED)
+            o.written += 1
+        outcomes.append(o)
+    return outcomes
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--dry-run", action="store_true", help="fetch and report, write nothing")
@@ -171,6 +287,9 @@ def main(argv: list[str] | None = None) -> int:
     for o in outcomes:
         tail = f"{o.first_date}..{o.last_date}" if o.status == "ok" else o.reason
         print(f"{o.category_id:<12} {str(o.keyword):<24} {o.status:<12} {o.written:>7} {o.skipped_forward:>7} {o.dropped_partial:>7}  {tail}")
+    for b in run_blended(dry_run=args.dry_run):
+        print(f"blended {b.category_id:<12} {b.status:<12} written={b.written} skipped={b.skipped_forward} "
+              f"insufficient-days={b.insufficient_days} requests={b.requests} {b.reason or ''}")
     return 0 if any(o.status == "ok" for o in outcomes) else 1
 
 

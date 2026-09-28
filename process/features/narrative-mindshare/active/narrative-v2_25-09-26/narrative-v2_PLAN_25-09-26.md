@@ -47,7 +47,7 @@ narratives as the design floor/ceiling everywhere cross-narrative comparison hap
 |---|---|---|
 | RFC-1 | Data-sufficiency gating (history.py + new scoring helper) + chart regression coverage | ✅ CODE DONE |
 | RFC-2 | Unified narrative config file (`api/data/narratives.json`) + loader + migration off the 2-file seed/map split | ✅ CODE DONE |
-| RFC-3 | Multi-keyword blending + anchor-chained pytrends batching (nightly job + backfill script) | ⏳ NOT STARTED (depends on RFC-2) |
+| RFC-3 | Multi-keyword blending + anchor-chained pytrends batching (nightly job + backfill script) | ✅ CODE DONE |
 | RFC-4 | Momentum view (cross-sectional, vs-the-field ranking) | ⏳ NOT STARTED (depends on RFC-3) |
 | RFC-5 | Daily social-mindshare view (blend + show each source) | ⏳ NOT STARTED (depends on RFC-3, parallel to RFC-4) |
 | RFC-6 | Caveat de-duplication (sticky, once per page) | ⏳ NOT STARTED (no hard dependency — may run anytime after RFC-1) |
