@@ -14,6 +14,15 @@ narrative point at all and cannot be recovered. Neither is fixed. Found during
 
 ## Finding 1 — partial-hour zeros
 
+**RESOLVED 2026-09-28** — see
+`process/features/narrative-mindshare/completed/pytrends-partial-hour-fix_28-09-26/`. Fixed via a
+full RESEARCH → SPEC → INNOVATE → PLAN → VALIDATE → EXECUTE → EVL cycle (SIMPLE plan, `Gate:
+PASS`), not ad hoc. Chose the first suggested follow-up option below (drop `isPartial` rows); the
+daily-aggregate alternative was considered and explicitly not chosen (larger semantic change, no
+proven precedent needed since the drop-partial-rows pattern already existed in
+`backfill_pytrends_history.py`). Existing archived zeros (09-24 through 09-28) were left as-is,
+honestly dated, per the original suggestion below.
+
 - Observed: memecoins dropped 34 → 0 between nightly points; RWA is 0 on every nightly point.
 - Cause: `api/data/pytrends_adapter.py` takes `df.iloc[-1]` of the "now 7-d" `interest_over_time()`
   frame. That frame is hourly, and its last row is Google's current, incomplete hour (flagged
