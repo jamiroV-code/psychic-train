@@ -10,390 +10,295 @@ metadata:
 
 # my_site — Master Plan
 
-**Last verified:** 2026-09-28 · **HEAD:** `a86a2f0` (branch `claude/pensive-dijkstra-ko69oi`, based on `main`)
+**Last verified:** 2026-09-28 12:45 UTC · **main:** `a86a2f0` · **this branch:** `8b34573`
+**Revision 2** — first UPDATE. Revision 1 was written at 05:19 UTC.
 
 This is the planning state for the whole project. Every development session should start here:
 *what needs doing → what comes first → what can run in parallel → which worktree → what can wait.*
 
-This file is **not** a RIPER-5 plan artifact. It does not replace `*_PLAN_*.md` files — it points at
-them and tracks what has no plan yet. It is maintained by the master planning session (see
-[§Maintaining this file](#maintaining-this-file)).
+This file is **not** a RIPER-5 plan artifact. It points at those and tracks what has no plan yet.
+Maintained by the master planning session (see [§Maintaining this file](#maintaining-this-file)).
+
+---
+
+## ⚠️ Read This First — Three PRs Are In Flight
+
+Since revision 1, three other sessions opened draft PRs. **Nothing has merged.** `main` is still at
+`a86a2f0`. Merge order and one semantic gap now matter more than any individual task below.
+
+| PR | Branch | Scope | Size | State |
+|---|---|---|---|---|
+| [#5](https://github.com/jamiroV-code/psychic-train/pull/5) | `claude/inspiring-pasteur-awqxk3` | chain-growth closeout → `completed/`, both review decisions recorded `approved`, context docs | 36 files | draft, clean vs main |
+| [#7](https://github.com/jamiroV-code/psychic-train/pull/7) | `fix/narrative-sufficiency-gating-rfc1` | narrative-v2 RFC-1–7 | 51 files, +3663/-130 | draft, clean vs main; RFC-1–6 ✅ VERIFIED, RFC-7 CODE DONE |
+| [#8](https://github.com/jamiroV-code/psychic-train/pull/8) | `claude/vigilant-hamilton-grr18c` | pytrends `isPartial` fix (T1) | 7 files | draft, clean vs main |
+| [#6](https://github.com/jamiroV-code/psychic-train/pull/6) | `claude/pensive-dijkstra-ko69oi` | this file | 1 file | draft, clean vs main |
+
+### 🔴 The gap: T1's fix does not cover narrative-v2's new fetch path
+
+This is the single most important finding of this revision. Verified by reading both diffs.
+
+- **PR #8** adds an `isPartial` filter — but **only inside `_fetch_live`**, the single-keyword path.
+- **PR #7** adds a *second*, independent fetch path: `fetch_trends_batched` →
+  `_fetch_batch_live` (RFC-3 anchor-chained batching). `grep isPartial` over PR #7's
+  `pytrends_adapter.py` returns **nothing**. It does the same `df.iloc[-1]` on the same raw hourly
+  frame that causes the bug.
+- `api/scripts/snapshot_narrative.py:137` routes the nightly job through
+  `fetch_trends_batched`, writing the `pytrends-blended/{narrative id}` namespace.
+- `momentum.py` reads `pytrends-blended` as its **primary basis** (`BASIS_BLENDED`, falling back to
+  composite); `mindshare.py` reads it for its pytrends source.
+
+**Net effect if both PRs merge as they stand:** the two headline new views of narrative-v2 —
+momentum and mindshare — would be built on exactly the partial-hour zeros that T1 exists to
+eliminate. The old keyword-keyed path would be fixed; the new blended path would not.
+
+**→ New task T1b below.** Do not merge PR #7 without it.
+
+### Merge conflicts (simulated with `git merge-tree`, not assumed)
+
+| Pair | Conflicts |
+|---|---|
+| #7 ↔ #8 | `api/tests/data/test_pytrends_adapter.py` (add/add), `process/context/all-context.md` (content). **`api/data/pytrends_adapter.py` auto-merges cleanly** — the two edits touch different regions. |
+| #5 ↔ #8 | `all-context.md`, `data-sources/all-data-sources.md`, `tests/all-tests.md` |
+
+All three PRs edit `process/context/all-context.md`. Whoever merges second and third resolves it.
+
+### Recommended merge order
+
+1. **PR #5** — onchain closeout. Smallest blast radius, unblocks T6/T11/T19.
+2. **PR #8** — the targeted pytrends fix. Small, and stops the nightly loss sooner.
+3. **PR #7** — largest. Rebase onto main after #8, resolve the two conflicts, and **fold T1b into
+   that resolution** rather than shipping the gap and fixing it later.
 
 ---
 
 ## Verified Ground Truth
 
-Measured directly on 2026-09-28 at `a86a2f0` — **not** copied from context docs, which are stale.
+Measured on `main` at 12:45 UTC 2026-09-28. Unchanged from revision 1.
 
 | Check | Command | Result |
 |---|---|---|
-| Backend tests | `uv run --project api pytest api/ -q` | **623 passed, 5 deselected** (131s) |
+| Backend tests | `uv run --project api pytest api/ -q` | **623 passed, 5 deselected** (138s) |
 | Frontend unit | `cd web && pnpm test` | **181 passed, 22 files** |
 | Typecheck | `pnpm --filter web exec tsc --noEmit` | exit 0 |
 | Working tree | `git status` | clean |
 
-`process/context/tests/all-tests.md` claims 486 / 153 — **off by 137 pytest and 28 vitest**. See T8.
+PR #7 reports **708 / 193** on its branch — that is the post-merge figure to expect, not today's.
+`process/context/tests/all-tests.md` still claims 486 / 153.
 
-**Shipped surfaces:** `/screener`, `/regime`, `/narrative`, `/pairs`, `/onchain` (5 routes,
-13 endpoints, 10 provider adapters, 3 nightly snapshot workflows).
+**Shipped on main:** `/screener`, `/regime`, `/narrative`, `/pairs`, `/onchain` — 5 routes,
+13 endpoints, 10 adapters, 3 nightly workflows.
 
-**Container notes:** `web/node_modules` is absent on a fresh container — run
-`cd web && pnpm install --frozen-lockfile` before any frontend command. Egress blocks Google
-Trends, Reddit, CoinGecko, Hyperliquid, FRED and DefiLlama, so every real-cache walkthrough is a
-user-PC step.
+**Container notes:** `web/node_modules` is absent on a fresh container — `cd web && pnpm install
+--frozen-lockfile` first. Egress blocks Google Trends, Reddit, CoinGecko, Hyperliquid, FRED and
+DefiLlama, so every real-cache walkthrough is a user-PC step.
 
 ---
 
 ## 🔴 URGENT
 
-### T1 — Fix pytrends partial-hour zeros (live, ongoing data loss)
+### T1 — pytrends partial-hour zeros · **PR #8 open, covers half**
 
-`_fetch_live` takes `df.iloc[-1]` of the hourly `now 7-d` frame. That last row is Google's current,
-incomplete hour (`isPartial=True`), which is usually 0.
+`_fetch_live` takes `df.iloc[-1]` of the hourly `now 7-d` frame — Google's incomplete `isPartial`
+hour, usually 0. Still live in the archive as of this revision:
 
-**Verified in the live archive**, not inferred:
-
-| Keyword | Recent nightly values |
+| Keyword | Last three nightly points |
 |---|---|
 | `AI crypto` | 23, 51, **0** |
-| `RWA crypto` | **0, 0, 0** — every nightly point |
-| `layer 2 crypto` | **0, 0** |
+| `RWA crypto` | **0, 0, 0** |
+| `layer 2 crypto` | 8, **0, 0** |
 | `memecoin` | 34, **0, 0** |
 
-Google Trends keeps no history, so **every night this runs, another day is destroyed and cannot be
-recovered.** A backlog note was filed 27-09-26 and never actioned.
+Google keeps no history, so every affected night is unrecoverable. The next narrative snapshot
+fires at 18:17 UTC (+~2h GitHub scheduler delay ≈ **20:20 UTC**).
 
-- **Worktree:** A · **Depends on:** — · **Blocks:** T7
-- **Files:** `api/data/pytrends_adapter.py` (`_fetch_live`), `api/scripts/snapshot_narrative.py`,
-  `api/scripts/backfill_pytrends_history.py`, `api/tests/data/`
-- **Existing note:** `process/general-plans/backlog/pytrends-partial-hour-zeros_NOTE_27-09-26.md`
-- **Candidate fixes (from the note):** drop `isPartial` rows before taking the last point, or store
-  a daily aggregate over the last complete 24h. Either changes stored values → needs its own plan.
+- **Status:** fix written in PR #8 (4-line `isPartial` filter + tests + SPEC/PLAN/REPORT closeout)
+- **Worktree:** — (in PR) · **Depends on:** — · **Blocks:** T7
 
-### T2 — Fix `normalize_within_source` flat-0.5
+### T1b — **NEW** — port the `isPartial` guard into `fetch_trends_batched`
 
-An all-constant series (including an all-zero one) returns a literal `0.5`, which `history.py` then
-consumes as a real composite reading.
+PR #7's batched path has no partial-hour handling (see §The gap above). Without this, narrative-v2's
+momentum and mindshare views launch on zero-contaminated data.
 
-**This compounds T1.** Right now `/narrative` displays a fabricated `0.50` for the three
-zero-filled categories instead of admitting insufficient data. It directly violates the repo's own
-*"numbers are never silently wrong"* principle.
+- **Worktree:** A · **Depends on:** PR #8's approach (reuse the same filter)
+- **Files:** `api/data/pytrends_adapter.py` (`_fetch_batch_live` or `fetch_trends_batched`),
+  `api/tests/data/test_pytrends_adapter.py`
+- **Do it as part of PR #7's rebase** — a separate PR would be a third edit to the same file.
 
-- **Worktree:** A · **Depends on:** land together with T1 so `/narrative` re-baselines once, not twice
-- **Files:** `api/analytics/narrative/scoring.py`, `api/analytics/narrative/history.py`,
-  `web/components/narrative/`
-- **Already planned as:** narrative-v2 RFC-1 (see T3)
+### T2 — `normalize_within_source` flat-0.5 · ✅ **FIXED in PR #7 (RFC-1, VERIFIED)**
+
+`normalize_with_sufficiency()` added alongside the untouched original; `insufficient` /
+`provisional` / `mature` threaded through API, model and UI so thin data never renders as a fake
+`0.50`. Closes on PR #7 merge.
 
 ---
 
 ## 🟠 HIGH PRIORITY
 
-### T3 — VALIDATE + EXECUTE the narrative-v2 plan
+### T3 — narrative-v2 · **PR #7, nearly done**
 
-959-line COMPLEX plan, 7 RFCs, **status DRAFT — awaiting VALIDATE** since 25-09-26. RFC-1 is T2.
-RFC-2→7 add a unified narrative config file, multi-keyword blending, a momentum view, a daily
-mindshare view, and caveat de-duplication.
+RFC-1–6 ✅ VERIFIED, RFC-7 ✅ CODE DONE. Remaining: the AC-14 real-machine walkthrough (user PC,
+checklist in the plan's Section 14), then RFC-7 → VERIFIED and the plan archives to `completed/`.
 
-- **Worktree:** A · **Depends on:** T1/T2 fold into RFC-1
-- **Plan:** `process/features/narrative-mindshare/active/narrative-v2_25-09-26/narrative-v2_PLAN_25-09-26.md`
-- **Sequencing (from the plan's own strategy recommendation):** RFC-1→2→3 sequential, then RFC-4 and
-  RFC-5 as two parallel execute agents (disjoint files), then RFC-6, RFC-7.
+- **Depends on:** T1b folded in first · **Then:** unblocks T7, T10
 
-### T4 — Reddit has never archived a single data point
+### T4 — Reddit has never archived a single point
 
-There is no `api/data/cache/narrative/reddit/` directory at all. `narrative-snapshot.yml` has no
-`REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET`, so the source is skipped nightly and logged as
-`credentials-not-configured`. The composite has silently been running on fewer sources than designed
-since day one.
+Still true at this revision: no `api/data/cache/narrative/reddit/` directory exists.
+`narrative-snapshot.yml` has no `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET`, so the source is
+skipped nightly as `credentials-not-configured`. PR #7's mindshare view lists `reddit` as one of
+three sources — it will render permanently empty until this is resolved.
 
-- **Worktree:** none — **user action** · **Depends on:** —
-- **Decide:** add the two secrets to the GitHub repo, or formally drop Reddit from the composite and
-  update `data-sources/all-data-sources.md`.
+- **Worktree:** none — **user action** · Add the secrets, or formally drop Reddit and update
+  `data-sources/all-data-sources.md`.
 
 ### T5 — `/pairs` has zero automation
 
-`backfill_pairs_universe.py` and `compute_pairs.py` are manual-only. `api/data/cache/pairs/` is
-gitignored and absent from the repo. Consequences:
+`backfill_pairs_universe.py` and `compute_pairs.py` are manual-only; `api/data/cache/pairs/` is
+gitignored and empty. A fresh checkout serves `results_unavailable`, and the cache silently rots as
+new daily bars arrive. The other three domains all have nightly workflows.
 
-1. A fresh checkout (including the user's PC after a clone) serves `computation_status:
-   results_unavailable` until both scripts are run by hand.
-2. The results cache silently goes stale as new daily bars arrive — the staleness check catches it,
-   but nothing ever refreshes it.
+- **Worktree:** B · **Files:** new `.github/workflows/pairs-recompute.yml`,
+  `api/scripts/compute_pairs.py` · ~56s compute for 153 pairs, fine for Actions.
 
-The other three data domains (liqtide, narrative, onchain) all have nightly workflows. Pairs does not.
+### T6 — chain-growth closeout · ✅ **DONE in PR #5**
 
-- **Worktree:** B · **Depends on:** —
-- **Files:** new `.github/workflows/pairs-recompute.yml`, `api/scripts/compute_pairs.py`,
-  `api/scripts/backfill_pairs_universe.py`, `.gitignore`
-- **Note:** ~56s compute for 153 pairs — comfortably within an Actions run.
+The user ran the AC-14 real-archive `/onchain` walkthrough on their own PC on 2026-09-28 and
+approved both review gates ("looks good, approve both"). Both `review-decision.json` files now read
+`"decision": "approved"`; the task folder moved to `completed/`. Closes on PR #5 merge.
 
-### T6 — Close out chain-growth (`/onchain`)
+### T7 — narrative-dashboard v1 closeout · still open
 
-The feature shipped (6 RFCs code-done, EVL-confirmed, merged) but its plan still says
-**"📋 PLANNED — no code exists yet."** Blocking its archival:
+Two `review-decision.json` files remain `PENDING`
+(`harness/review-decision.json`, `harness/rfc-004/review-decision.json`). AC-3 (cron firing) and
+AC-12 (real-cache walkthrough) have never run. PR #5 closed out onchain only, not this.
 
-- AC-14 real-cache walkthrough — **user PC only** (egress blocked here). Checklist is in
-  `chain-growth_RFC-006_REPORT_25-09-26.md` §"AC-14 user-PC checklist".
-- `harness/rfc-003/review-decision.json` — `"decision": "PENDING"`
-- `harness/rfc-004/review-decision.json` — `"decision": "PENDING"`
+- **Worktree:** none — **user PC** · **Depends on: T1 + T1b + T2** — a walkthrough against
+  zero-contaminated, fabricated-0.50 data proves nothing.
 
-- **Worktree:** none — **user PC** · **Depends on:** — · **Then:** T11, T19
-- **Folder:** `process/features/onchain-activity/active/chain-growth_25-09-26/`
+### T8 — refresh the context docs · partially covered, now contended
 
-### T7 — Close out narrative-dashboard v1
+All three in-flight PRs edit `all-context.md`, and #5 also edits `data-sources/` and `tests/`.
+Between them most of revision 1's staleness (the missing `/onchain` route, the growthepie/L2BEAT
+adapters, `chain_growth_config`, `api/analytics/onchain/`) gets addressed — but only after conflict
+resolution, and the test counts will need a final pass once all three land.
 
-Stuck in `active/` since 24-09-26. AC-3 (cron actually firing) and AC-12 (real-cache walkthrough)
-have never run; two `review-decision.json` files sit at `PENDING`.
-
-- **Worktree:** none — **user PC** · **Depends on: T1 + T2** — a walkthrough against fabricated
-  `0.50` readings proves nothing
-- **Folder:** `process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/`
-
-### T8 — Refresh the context docs
-
-`process/context/all-context.md` has **no mention anywhere** of work that has already shipped and
-merged:
-
-- the `/onchain` route and the whole `onchain-activity` feature folder
-- `api/data/growthepie_adapter.py`, `api/data/l2beat_adapter.py` (adapters 9 and 10)
-- `api/data/chain_growth_config.py`, `api/data/chains.json`
-- `api/analytics/onchain/` (`growth.py`, `comparison.py`, `response.py`)
-- `api/analytics/regime/benchmark.py`
-- `.github/workflows/chain-growth-snapshot.yml`
-- the `narrative-v2` plan
-
-Test counts in `tests/all-tests.md` are wrong by 137 pytest / 28 vitest.
-
-- **Worktree:** C · **Depends on:** — (re-run after each worktree merges)
-- **Files:** `process/context/all-context.md`, `process/context/tests/all-tests.md`,
-  `process/context/data-sources/all-data-sources.md`
-- **Route:** `vc-update-process-agent` / `vc-generate-context`, then `vc-audit-context`
+- **Worktree:** C · **Do last**, after the three PRs merge · **Then:** `vc-audit-context`
 
 ---
 
 ## 🟡 NORMAL
 
-### T9 — charting-indicators has zero code
-
-The 4th of the four stated product areas, described in its own guide as *"the visual core of my_site
-and the surface every other feature renders into."* Nothing exists: no `api/routers/indicators.py`,
-no `web/app/charts/`. `api/analytics/indicators/` exists but only serves the screener.
-
-- **Worktree:** queue after A · **Depends on:** T14 (shared UI shell) recommended first
-- **Needs:** RESEARCH → SPEC before any plan
-- **Guide:** `process/features/charting-indicators/_GUIDE.md` (status: not-started)
-
-### T10 — No cross-signal confidence view
-
-The project's stated north star is *"turn separate signals into a confidence level that drives
-position sizing."* Today there are five siloed dashboards; the only thing that combines signals is
-`api/analytics/confidence/badge.py` (142 lines), and it is scoped to the screener board alone.
-
-- **Worktree:** queue after A · **Depends on:** T3
-- **Needs:** SPEC. Note `badge.py` is deliberately locked against numeric accumulation (guard test
-  asserts it) — any combining surface must be a new module, not a `badge.py` refactor.
-
-### T11 — Fix lying plan status strips
-
-| Plan | Says | Reality |
-|---|---|---|
-| `chain-growth_PLAN_25-09-26.md` | "PLANNED — no code exists yet" | shipped, merged, `/onchain` live |
-| `momentum-screener_PLAN_17-09-26.md` | "PLANNED" | first shipped feature |
-| `liqtide-snapshot-tooling_PLAN_20-09-26.md` | "EXECUTE pending approval" | executed, report written |
-
-- **Worktree:** C · **Depends on:** T6 (chain-growth's true final status)
-
-### T12 — Equity data provider still unresolved
-
-`lse-data-verification` has sat at ⏳ PLANNED since 17-09-26. No equity adapter exists in
-`api/data/`. London Strategic Edge is personal-use-only, which collides with the "open to others
-later" goal. A `yfinance` alternative note sits unread in backlog.
-
-- **Worktree:** none — **decision** · Blocks every equity feature
-- **Files:** `process/general-plans/active/lse-data-verification_17-09-26/`,
-  `process/general-plans/backlog/yfinance-equity-source_24-09-26.md`
-
-### T13 — No app CI, no linter, no formatter
-
-The only automation is three snapshot crons. Nothing runs pytest / vitest / tsc on push. And there
-is **no linter or formatter anywhere in the project** — `grep` for eslint, prettier, ruff, black
-across `web/package.json` and `api/pyproject.toml` returns zero hits.
-
-- **Worktree:** B · **Depends on:** —
-- **Files:** new `.github/workflows/ci.yml`, `web/package.json`, `api/pyproject.toml`
-
-### T14 — No shared UI shell
-
-Five routes, no navigation component, no global stylesheet, no design tokens. `web/app/page.tsx` is
-a bare `<ul>` of links; `layout.tsx` is 14 lines. 24 files use inline `style={{}}` against 9 using
-`className`. Every dashboard reimplements its own layout.
-
-- **Worktree:** queue after A · **Depends on:** — · **Blocks:** T9 (recommended)
-- **Files:** `web/app/layout.tsx`, new global CSS, all of `web/components/*`
-- **Route:** `vc-ui-ux-designer` / `vc-frontend-design`
-
-### T15 — Redistribution flags on only 4 of 10 adapters
-
-Standing Rule 7 (*"tag redistribution rights at the adapter boundary"*) is half-implemented. Tagged:
-`etf_flows`, `growthepie`, `hyperliquid_narrative`, `l2beat`. Untagged: `ccxt`, `coingecko`,
-`defillama`, `fred`, `liqtide`, `pytrends`, `reddit`. This is the mechanism that is supposed to make
-the public-launch decision a config question rather than an audit.
-
-- **Worktree:** C · **Depends on:** —
-- **Files:** `api/data/*_adapter.py`, `process/context/data-sources/all-data-sources.md`
-
-### T16 — No root README
-
-No `README.md` anywhere — not at root, not in `api/`, not in `web/`. A fresh clone has no documented
-way to start either service, and there is no runbook for the ~8 manual scripts
-(`backfill_pairs_universe`, `compute_pairs`, `refresh_cache`, `backfill_primaries`,
-`backfill_liqtide_series`, `backfill_pytrends_history`, `seed_e2e_cache`, `snapshot_*`).
-`CLAUDE.md` / `AGENTS.md` document the agent harness, not the application.
-
-- **Worktree:** B · **Depends on:** —
+| # | Task | Worktree | Depends on | Notes |
+|---|---|---|---|---|
+| T9 | **charting-indicators has zero code** — the 4th product area, its own guide calls it "the visual core." No `api/routers/indicators.py`, no `web/app/charts/`. | after A | T14 | needs RESEARCH → SPEC |
+| T10 | **No cross-signal confidence view** — the stated north star. Five siloed dashboards; only `confidence/badge.py` (142 lines, screener-only) combines anything, and it is deliberately locked against numeric accumulation, so this must be a new module. | after A | T3 | needs SPEC |
+| T11 | **Lying plan status strips** — `chain-growth_PLAN` "no code exists yet" (fixed by PR #5), `momentum-screener_PLAN` "PLANNED", `liqtide-snapshot-tooling` "EXECUTE pending approval". | C | PR #5 | 2 of 3 remain |
+| T12 | **Equity provider unresolved** since 17-09-26 (`lse-data-verification` ⏳PLANNED). LSE is personal-use-only, colliding with the public-later goal. `yfinance` alternative sits unread in backlog. | — decision | — | blocks all equity work |
+| T13 | **No app CI, no linter, no formatter.** Nothing runs pytest/vitest/tsc on push; zero hits for eslint/prettier/ruff/black. With 4 PRs now in flight, this is more costly than at revision 1. | B | — | new `.github/workflows/ci.yml` |
+| T14 | **No shared UI shell** — 5 routes, no nav, no global CSS; 24 files use inline `style={{}}` vs 9 using `className`. PR #7 adds 2 more views to the same pattern. | after A | — | blocks T9 |
+| T15 | **Redistribution flags on 4 of 10 adapters** — Standing Rule 7 half-implemented. Untagged: ccxt, coingecko, defillama, fred, liqtide, pytrends, reddit. | C | — | matters for public-later |
+| T16 | **No root README** — no documented way to start either service, no runbook for the ~8 manual scripts. | B | — | |
 
 ---
 
 ## 🟢 LOW PRIORITY / HOUSEKEEPING
 
-### T17 — `.agents/skills` is a 17 MB byte-identical duplicate of `.claude/skills`
+| # | Task | Worktree | Notes |
+|---|---|---|---|
+| T17 | **`.agents/skills` is a byte-identical 17 MB duplicate** of `.claude/skills` (`diff -rq` → no differences). Fails `validate-skills.mjs` and `validate-context-discovery.mjs` with *".agents/skills does not resolve to .claude/skills"*. Should be a symlink. | C | |
+| T18 | **Dead code:** `cache.write_confirmed_boundaries` / `read_confirmed_boundaries` — zero production callers, tests only. Flagged in `all-context.md` and never removed. | C | |
+| T19 | **Archive stale plans out of `active/`** — `momentum-screener_17-09-26/` holds 5 ✅VERIFIED sub-plans plus `dead-data-notice-unification` (DRAFT, abandoned since 20-09-26). | C | after T11 |
+| T20 | **`web/tsconfig.tsbuildinfo` is committed** — must be `git checkout`-ed after every `tsc`; already caused one documented race. | B | `git rm --cached` |
+| T21 | **`cache.py` refactor** — 634 lines, six near-identical per-domain path/read/write triplets. Every feature adds another. | **SOLO** | after everything merges |
+| T22 | **NEW — latent cache-isolation trap.** `isolated_cache` is opt-in, not autouse, and `conftest.py` documents why ("that change has not been run"). `write_ohlcv` replaces the whole series, so a future test that forgets the fixture would destroy the user's OHLCV cache — which on their PC holds the expensive 18-coin deep-fetch history. **Checked: no current test trips this** — all 5 unisolated files monkeypatch `fetch_ohlcv` with a fake. A guard (autouse fixture, or a test asserting `CACHE_ROOT != DEFAULT_CACHE_ROOT`) would close it. | C | not a live bug |
 
-`diff -rq` returns zero differences across 35 directories; 34 MB of duplicated harness content is
-committed. It fails two harness validators:
-
-```
-validate-skills.mjs            → ".agents/skills does not resolve to .claude/skills"
-validate-context-discovery.mjs → ".agents/skills does not resolve to .claude/skills"
-```
-
-Should be a symlink. · **Worktree:** C
-
-### T18 — Dead code in `cache.py`
-
-`write_confirmed_boundaries` and `read_confirmed_boundaries` have **zero production callers** —
-referenced only by their own tests. Already flagged in `all-context.md` ("has no caller") and never
-removed. · **Worktree:** C · **Files:** `api/data/cache.py`
-
-### T19 — Archive 7 stale plans out of `active/`
-
-`process/general-plans/active/momentum-screener_17-09-26/` holds four ✅ VERIFIED sub-plans
-(`ccxt-symbol-resolution`, `getjson-timeout-catch`, `reason-value-rendering`, `weekly-ohlc-anchor`,
-`playwright-e2e`) plus `dead-data-notice-unification` — DRAFT, abandoned since 20-09-26.
-
-- **Worktree:** C · **Depends on:** T11 · **Route:** `vc-audit-plans`
-
-### T20 — `web/tsconfig.tsbuildinfo` is committed
-
-Tracked in git, so it must be `git checkout`-ed after every `tsc --noEmit`. This already caused one
-documented race (see the pair-screener RFC-005 deviations note). Gitignore it.
-
-- **Worktree:** B · **Files:** `.gitignore`, `git rm --cached web/tsconfig.tsbuildinfo`
-
-### T21 — `cache.py` refactor
-
-634 lines containing six near-identical per-domain `*_path` / `read_*` / `write_*` triplets (ohlcv,
-pairs, liqtide, liquidity-series, narrative, exchange, onchain). Every new feature adds another. A
-generic series-store would collapse most of it.
-
-- **Worktree: SOLO** — `cache.py` is touched by every feature; this must not run in parallel with
-  anything · **Depends on:** A and B merged first
+New backlog notes filed by PR #7, carried here so they are not lost:
+`screener-weekly-bars-flake_NOTE_28-09-26.md`, `mapping-tripwire-gap_NOTE_28-09-26.md`.
 
 ---
 
 ## Worktree Plan
 
-Three active worktrees maximum, chosen so their file sets do not intersect.
+Revision 1's WT-A is now essentially delivered inside PRs #7 and #8. The active shape has changed.
 
-### WT-A — `narrative-correctness` ← **start here**
-
-**Tasks:** T1 → T2 → T3
-**Owns:** `api/analytics/narrative/*`, `api/data/pytrends_adapter.py`,
-`api/scripts/{snapshot_narrative,backfill_pytrends_history}.py`, `web/components/narrative/*`,
-`web/lib/narrative-view-model.ts`
-**Why first:** it is the only bug actively destroying unrecoverable data.
+### WT-A — `narrative-landing` ← **start here**
+**Tasks:** T1b, then drive PRs #8 → #7 to merge in order
+**Owns:** `api/data/pytrends_adapter.py`, `api/analytics/narrative/*`, `web/components/narrative/*`
+**Note:** this is now mostly *merge and conflict-resolution* work, not fresh implementation.
 
 ### WT-B — `ops-and-automation`
-
 **Tasks:** T5, T13, T16, T20
-**Owns:** `.github/workflows/`, `api/scripts/compute_pairs.py`,
-`api/scripts/backfill_pairs_universe.py`, root `README.md`, `.gitignore`, `web/package.json`,
-`api/pyproject.toml`
-**Overlap with A:** none.
+**Owns:** `.github/workflows/`, `api/scripts/compute_pairs.py`, root `README.md`, `.gitignore`,
+`web/package.json`, `api/pyproject.toml`
+**Overlap with A:** none. Safe to run concurrently with the PR landings.
 
 ### WT-C — `docs-and-housekeeping`
-
-**Tasks:** T8, T11, T15, T17, T18, T19
-**Owns:** `process/`, `.agents/`, adapter module constants, two dead functions in `cache.py`
-**Overlap with A or B:** none. T18's `cache.py` edit is a two-function deletion — if WT-A or WT-B
-ever needs to touch `cache.py`, do T18 last.
+**Tasks:** T8, T11, T15, T17, T18, T19, T22
+**Owns:** `process/`, `.agents/`, adapter constants, two dead functions in `cache.py`
+**⚠️ Changed:** T8 must now wait until PRs #5/#7/#8 land — all three edit `all-context.md`, so doing
+it earlier guarantees a fourth conflict on the same file. The rest of WT-C can start immediately.
 
 ### Deliberately NOT parallelised
-
 | Task | Why |
 |---|---|
-| T21 (`cache.py` refactor) | central file, every feature depends on it — **solo**, after A + B merge |
-| T9, T10, T14 | all heavily rewrite `web/` — would collide with each other; all need SPEC first |
+| T21 (`cache.py`) | central file — **solo**, after everything merges |
+| T9, T10, T14 | all heavily rewrite `web/`; would collide with each other and with PR #7 |
 
-### Not worktree work at all
-
-| Task | Kind |
-|---|---|
-| T4 | GitHub repo secrets, or a decision to drop Reddit |
-| T6, T7 | user-PC walkthroughs (container egress is blocked) + recording review decisions |
-| T12 | a product decision, not code |
+### Not worktree work
+T4 (repo secrets or a drop decision) · T7 (user-PC walkthrough + 2 review decisions) ·
+T12 (product decision) · AC-14 for narrative-v2 (user PC)
 
 ---
 
 ## Dependency Graph
 
 ```
-T1 ─┬─> T2 ──> T3 ──> T10
-    │           │
-    └──────────>T7 (needs real data, not 0.50s)
+PR#5 ──> T6 ✅ ──> T11 ──> T19
+                      │
+PR#8 (T1, half) ──────┼──> T8 (context, after all three land)
+                      │
+T1b ──> PR#7 (T2 ✅, T3) ──> AC-14 (user PC) ──> T7 ──> T10
+                      │
+                      └──> T14 ──> T9
 
-T6 ──> T11 ──> T19
+(everything merged) ──> T21
 
-T14 ──> T9
-
-(A + B merged) ──> T21
-
-T5, T13, T16, T20, T8, T15, T17, T18, T4, T12  —  no blockers
+T5, T13, T16, T20, T15, T17, T18, T22, T4, T12  —  no blockers
 ```
 
 ---
 
 ## Recommended Order
 
-1. **T1 + T2** — stop the data loss. Every day of delay costs a permanently unrecoverable day of
-   Google Trends history.
-2. **T8** — refresh context so the next agent is not planning against a repo state two features out
-   of date.
-3. **T5** — `/pairs` is the newest shipped feature and it has no path to staying current.
-4. **T3** — the rest of narrative-v2.
-5. **T6, T7** in parallel on the user's PC — unblocks two archivals and T11/T19.
-6. Housekeeping (T11, T15, T17, T18, T19, T20) whenever a worktree has slack.
-7. **T14 → T9 → T10** — the remaining product build-out, each needing its own SPEC.
-8. **T21** last, solo.
+1. **T1b** — close the batched-path gap before PR #7 lands, not after.
+2. **Land PR #5 → #8 → #7**, resolving `all-context.md` each time.
+3. **T5** — `/pairs` still has no path to staying current.
+4. **AC-14 walkthrough** for narrative-v2 (user PC) → archives the plan.
+5. **T7** — the last two PENDING review decisions, once the data is trustworthy.
+6. **T8** — one final context pass with real post-merge test counts.
+7. Housekeeping (T11, T15, T17, T18, T19, T20, T22) in any slack.
+8. **T14 → T9 → T10** — remaining product build-out, each needing its own SPEC.
+9. **T21** last, solo.
 
 ---
 
 ## Known Gaps Carried Forward (accepted, not tasks)
 
-These are documented, understood, and deliberately not being fixed. Do not re-discover them as bugs.
+Documented, understood, deliberately unfixed. Do not re-discover these as bugs.
 
-- **2026-09-25 narrative gap** — unrecoverable; cause (cron timing) already fixed on 27-09-26.
-- **BTC-dominance 209-day hole**, 2025-12-07 → 2026-07-04 — no free source deeper than LiqTide
-  exists; user chose to leave it.
+- **2026-09-25 narrative gap** — unrecoverable; cause (cron timing) fixed 27-09-26.
+- **BTC-dominance 209-day hole**, 2025-12-07 → 2026-07-04 — no free source deeper than LiqTide.
 - **Spot-ETF flows cannot exist before 2024-01-11** — product launch date, structural.
-- **2017 leg-boundary backtest window is untestable** — reduced composite has no ≥60%-coverage date
-  before 2018-01-11.
-- **Full-vs-reduced liquidity composite agreement** — LiqTide has no historical endpoint; the
-  archive grows one day at a time and currently holds 8 days.
-- **Hyperliquid daily-history floor ~2020-08-19** — apparent, unconfirmed against Hyperliquid's docs.
+- **2017 leg-boundary backtest window untestable** — no ≥60%-coverage date before 2018-01-11.
+- **Full-vs-reduced composite agreement** — LiqTide has no historical endpoint; archive grows one
+  day at a time (8 days held).
+- **Hyperliquid daily-history floor ~2020-08-19** — apparent, unconfirmed against their docs.
 - **Hyperliquid redistribution terms unverified** — `HYPERLIQUID_REDISTRIBUTABLE = False` pending a
   user terms read.
-- **No pair is BH-significant** on the current 18-coin universe (closest: DOGE/BCH, raw 0.00057 →
-  BH 0.087). This is a real result, not a bug.
+- **No pair is BH-significant** on the 18-coin universe (closest DOGE/BCH, raw 0.00057 → BH 0.087).
+  A real result, not a bug.
+- **`screener.spec.ts:103` flake** — 1 of 3 full Playwright runs on PR #7's branch; isolated
+  re-run passed 15/15. Judged pre-existing but *not* proven against a clean base worktree.
 
 ---
 
@@ -403,11 +308,15 @@ The master planning session owns this file. On **`UPDATE`**:
 
 1. Re-verify ground truth — run both suites and `tsc`, re-read `git log`, re-list
    `process/*/active/`. Never copy numbers from context docs; they drift.
-2. Inspect live cache archives directly (`api/data/cache/**/*.parquet`) — several of the findings
-   above were only visible in the data, not in the code or the docs.
-3. Remove completed tasks. Add newly discovered ones. Re-prioritise. Re-check dependencies.
-4. Reorganise worktrees if file sets now intersect — **3 active maximum**.
-5. Update the `Last verified` line and HEAD.
-6. Keep the answer in chat concise; this file carries the detail.
+2. **List open PRs and diff their branches.** Revision 2's most important finding came only from
+   reading two PR diffs against each other — neither PR's own description revealed it.
+3. Inspect live cache archives directly (`api/data/cache/**/*.parquet`) — several findings were
+   visible only in the data, not in the code or the docs.
+4. Simulate merges with `git merge-tree` before claiming a conflict. Revision 2 corrected an
+   assumed `pytrends_adapter.py` conflict that does not actually exist.
+5. Remove completed tasks. Add new ones. Re-prioritise. Re-check dependencies.
+6. Reorganise worktrees if file sets now intersect — **3 active maximum**.
+7. Update the `Last verified` line, the revision number, and both SHAs.
+8. Keep the chat answer concise; this file carries the detail.
 
 **Standing rule:** a task earns a place here only if it has real project impact. Do not pad the list.
