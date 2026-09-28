@@ -1,0 +1,758 @@
+<title>Three Directions for my_site</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --page-bg:      #fbfaf8;
+    --page-surface: #ffffff;
+    --page-ink:     #1a1917;
+    --page-ink-2:   #57544e;
+    --page-ink-3:   #8a8578;
+    --page-rule:    #e3e0d8;
+    --page-accent:  #3a4b6b;
+    --page-warn-bg: #fdf4e3;
+    --page-warn-ed: #d9a441;
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page-bg:      #141413;
+      --page-surface: #1d1d1b;
+      --page-ink:     #eceae4;
+      --page-ink-2:   #b3afa5;
+      --page-ink-3:   #7d7a72;
+      --page-rule:    #32312d;
+      --page-accent:  #9fb4d8;
+      --page-warn-bg: #2b2415;
+      --page-warn-ed: #b98a2e;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page-bg:      #141413;
+    --page-surface: #1d1d1b;
+    --page-ink:     #eceae4;
+    --page-ink-2:   #b3afa5;
+    --page-ink-3:   #7d7a72;
+    --page-rule:    #32312d;
+    --page-accent:  #9fb4d8;
+    --page-warn-bg: #2b2415;
+    --page-warn-ed: #b98a2e;
+  }
+
+  body {
+    margin: 0;
+    background: var(--page-bg);
+    color: var(--page-ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; }
+  h1, h2, h3 { text-wrap: balance; margin: 0; }
+  h1 { font-size: clamp(28px, 4.4vw, 42px); font-weight: 600; letter-spacing: -0.02em; line-height: 1.12; }
+  h2 { font-size: clamp(21px, 3vw, 27px); font-weight: 600; letter-spacing: -0.01em; }
+  h3 { font-size: 16px; font-weight: 600; }
+  p { margin: 0; }
+  a { color: var(--page-accent); }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; font-weight: 500;
+    letter-spacing: 0.13em; text-transform: uppercase; color: var(--page-ink-3);
+  }
+  .lede { font-size: 17px; color: var(--page-ink-2); max-width: 66ch; }
+  .stack { display: flex; flex-direction: column; gap: 14px; }
+
+  .banner {
+    display: flex; gap: 12px; align-items: flex-start;
+    background: var(--page-warn-bg);
+    border: 1px solid var(--page-warn-ed);
+    border-radius: 6px; padding: 13px 15px;
+    font-size: 14px; color: var(--page-ink);
+    margin-block: 28px 44px;
+  }
+  .banner strong { font-weight: 600; }
+  .banner-mark {
+    font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .1em;
+    color: var(--page-warn-ed); flex: none; padding-top: 2px;
+  }
+
+  /* ---- Specimen scaffolding (page chrome, NOT part of any proposal) ---- */
+  .specimen { margin-block: 56px; }
+  .specimen-head { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .specimen-title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .specimen-tag {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    border: 1px solid var(--page-rule); border-radius: 3px;
+    padding: 2px 7px; color: var(--page-ink-2); flex: none;
+  }
+  .device {
+    border: 1px solid var(--page-rule);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .device-label {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--page-ink-3); background: var(--page-surface);
+    border-bottom: 1px solid var(--page-rule);
+    padding: 6px 12px;
+  }
+  .scroller { overflow-x: auto; }
+
+  .spec-table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 14px; }
+  .spec-table th, .spec-table td {
+    text-align: left; vertical-align: top;
+    padding: 9px 12px 9px 0; border-bottom: 1px solid var(--page-rule);
+  }
+  .spec-table th { width: 150px; font-weight: 600; color: var(--page-ink-2); font-size: 13px; }
+  .spec-table td { color: var(--page-ink); }
+  .spec-table tr:last-child th, .spec-table tr:last-child td { border-bottom: none; }
+
+  .qbox {
+    background: var(--page-surface); border: 1px solid var(--page-rule);
+    border-radius: 7px; padding: 18px 20px; margin-block: 14px;
+  }
+  .qbox h3 { margin-bottom: 6px; }
+  .qbox p { color: var(--page-ink-2); font-size: 14.5px; }
+  .qbox .rec { margin-top: 8px; font-size: 14px; color: var(--page-ink); }
+  .qbox .rec b { font-weight: 600; }
+
+  code, .mono { font-family: var(--mono); font-size: 0.9em; }
+  hr.sep { border: none; border-top: 1px solid var(--page-rule); margin-block: 48px; }
+
+  /* =========================================================
+     DIRECTION A — "Terminal". Dark-first, maximum density.
+     Fixed palette: this is a specimen, it does not follow
+     the reader's theme.
+     ========================================================= */
+  .spec-a {
+    --bg:    #1a1a19;
+    --panel: #212120;
+    --raise: #2a2a28;
+    --ink:   #f2f0ea;
+    --ink2:  #a8a49a;
+    --ink3:  #6f6c65;
+    --rule:  #33322f;
+    --accent:#3987e5;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+    --ok:#3fa96b; --warn:#c98500; --bad:#e66767;
+    background: var(--bg); color: var(--ink);
+    font-family: var(--sans); font-size: 13px;
+    display: grid; grid-template-columns: 178px 1fr;
+    min-height: 430px;
+  }
+  .spec-a .rail {
+    background: var(--panel); border-right: 1px solid var(--rule);
+    padding: 12px 0; display: flex; flex-direction: column; gap: 2px;
+  }
+  .spec-a .brand {
+    font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: .04em;
+    color: var(--ink); padding: 2px 14px 14px;
+  }
+  .spec-a .brand span { color: var(--ink3); font-weight: 400; }
+  .spec-a .rail a {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    padding: 6px 14px; color: var(--ink2); text-decoration: none;
+    border-left: 2px solid transparent; font-size: 12.5px;
+  }
+  .spec-a .rail a.on { background: var(--raise); color: var(--ink); border-left-color: var(--accent); font-weight: 500; }
+  .spec-a .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .spec-a .main { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .spec-a .h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .spec-a .h h4 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .spec-a .h .sub { font-size: 11.5px; color: var(--ink3); font-family: var(--mono); }
+  .spec-a table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .spec-a thead th {
+    text-align: right; font-weight: 500; color: var(--ink3); font-size: 10.5px;
+    letter-spacing: .07em; text-transform: uppercase;
+    padding: 0 8px 5px; border-bottom: 1px solid var(--rule); white-space: nowrap;
+  }
+  .spec-a thead th:first-child, .spec-a tbody td:first-child { text-align: left; }
+  .spec-a tbody td {
+    text-align: right; padding: 4px 8px; border-bottom: 1px solid #262524;
+    font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .spec-a tbody tr td:first-child { font-family: var(--sans); font-weight: 500; }
+  .spec-a tbody tr { border-left: 2px solid transparent; }
+  .spec-a .r-ok    td:first-child { box-shadow: inset 2px 0 0 var(--ok); padding-left: 8px; }
+  .spec-a .r-prov  td:first-child { box-shadow: inset 2px 0 0 var(--warn); padding-left: 8px; }
+  .spec-a .r-insuf td:first-child { box-shadow: inset 2px 0 0 var(--ink3); padding-left: 8px; }
+  .spec-a .na { color: var(--ink3); border-bottom: 1px dotted var(--ink3); cursor: help; }
+  .spec-a .note {
+    font-size: 11.5px; color: var(--ink2); background: var(--panel);
+    border-left: 2px solid var(--ink3); padding: 5px 9px;
+  }
+  .spec-a .note.stale { border-left-color: var(--warn); }
+  .spec-a .chartrow { display: flex; gap: 14px; flex-wrap: wrap; }
+  .spec-a .chartbox { background: var(--panel); border: 1px solid var(--rule); padding: 8px 10px; flex: 1 1 300px; min-width: 0; }
+
+  /* =========================================================
+     DIRECTION B — "Research notebook". Light-first, generous.
+     ========================================================= */
+  .spec-b {
+    --bg:    #fcfcfb;
+    --panel: #ffffff;
+    --ink:   #0b0b0b;
+    --ink2:  #52514e;
+    --ink3:  #898781;
+    --rule:  #e1e0d9;
+    --zebra: #f6f5f1;
+    --accent:#2a78d6;
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+    --ok:#008300; --warn:#b07400; --bad:#c23934;
+    background: var(--bg); color: var(--ink);
+    font-family: var(--sans); font-size: 14px;
+    min-height: 430px;
+  }
+  .spec-b .topbar {
+    background: var(--panel); border-bottom: 1px solid var(--rule);
+    display: flex; align-items: center; gap: 22px; padding: 0 18px; flex-wrap: wrap;
+  }
+  .spec-b .brand { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; padding: 13px 0; }
+  .spec-b .tabs { display: flex; gap: 2px; overflow-x: auto; }
+  .spec-b .tabs a {
+    padding: 13px 13px 11px; color: var(--ink2); text-decoration: none;
+    border-bottom: 2px solid transparent; font-size: 14px; white-space: nowrap;
+  }
+  .spec-b .tabs a.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .spec-b .main { padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; }
+  .spec-b .h h4 { margin: 0 0 3px; font-size: 21px; font-weight: 600; letter-spacing: -0.015em; }
+  .spec-b .h .sub { font-size: 13.5px; color: var(--ink2); }
+  .spec-b table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .spec-b thead th {
+    text-align: right; font-weight: 600; color: var(--ink2); font-size: 12.5px;
+    padding: 0 14px 8px; border-bottom: 2px solid var(--rule); white-space: nowrap;
+  }
+  .spec-b thead th:first-child, .spec-b tbody td:first-child { text-align: left; }
+  .spec-b tbody td {
+    text-align: right; padding: 11px 14px; border-bottom: 1px solid var(--rule);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .spec-b tbody tr:nth-child(even) { background: var(--zebra); }
+  .spec-b tbody tr td:first-child { font-weight: 600; }
+  .spec-b .notice {
+    display: flex; gap: 10px; align-items: flex-start;
+    border-left: 3px solid var(--ink3); background: var(--panel);
+    padding: 10px 14px; font-size: 13px; color: var(--ink2);
+  }
+  .spec-b .notice.amber { border-left-color: var(--warn); }
+  .spec-b .notice b { color: var(--ink); font-weight: 600; }
+  .spec-b .ico { font-family: var(--mono); font-weight: 600; color: var(--ink3); flex: none; }
+  .spec-b .notice.amber .ico { color: var(--warn); }
+  .spec-b .chartbox { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 12px 14px; }
+
+  /* =========================================================
+     DIRECTION C — "Confidence-first". An overlay of semantics.
+     Shown on B's light base to make the delta legible.
+     ========================================================= */
+  .spec-c {
+    --bg:    #fcfcfb;
+    --panel: #ffffff;
+    --ink:   #0b0b0b;
+    --ink2:  #52514e;
+    --ink3:  #898781;
+    --rule:  #e1e0d9;
+    --zebra: #f6f5f1;
+    --accent:#2a78d6;
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+    --mature:#008300; --prov:#b07400; --insuf:#898781;
+    background: var(--bg); color: var(--ink);
+    font-family: var(--sans); font-size: 14px; min-height: 430px;
+  }
+  .spec-c .topbar {
+    background: var(--panel); border-bottom: 1px solid var(--rule);
+    display: flex; align-items: center; gap: 22px; padding: 0 18px; flex-wrap: wrap;
+  }
+  .spec-c .brand { font-weight: 600; font-size: 15px; padding: 13px 0; letter-spacing: -0.01em; }
+  .spec-c .tabs { display: flex; gap: 2px; overflow-x: auto; }
+  .spec-c .tabs a {
+    padding: 13px 13px 11px; color: var(--ink2); text-decoration: none;
+    border-bottom: 2px solid transparent; font-size: 14px; white-space: nowrap;
+  }
+  .spec-c .tabs a.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .spec-c .strip {
+    display: flex; gap: 0; background: var(--panel);
+    border-bottom: 1px solid var(--rule); overflow-x: auto;
+  }
+  .spec-c .cell {
+    flex: 1 1 0; min-width: 118px; padding: 8px 12px 9px;
+    border-right: 1px solid var(--rule); border-top: 3px solid var(--insuf);
+  }
+  .spec-c .cell:last-child { border-right: none; }
+  .spec-c .cell.mature { border-top-color: var(--mature); }
+  .spec-c .cell.prov   { border-top-color: var(--prov); }
+  .spec-c .cell .n { font-size: 12px; color: var(--ink2); }
+  .spec-c .cell .v { font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 5px; margin-top: 1px; }
+  .spec-c .cell.mature .v { color: var(--mature); }
+  .spec-c .cell.prov   .v { color: var(--prov); }
+  .spec-c .cell.insuf  .v { color: var(--ink3); }
+  .spec-c .main { padding: 18px 22px; display: flex; flex-direction: column; gap: 15px; }
+  .spec-c .h h4 { margin: 0 0 3px; font-size: 20px; font-weight: 600; letter-spacing: -0.015em; }
+  .spec-c .h .sub { font-size: 13px; color: var(--ink2); }
+  .spec-c table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .spec-c thead th {
+    text-align: right; font-weight: 600; color: var(--ink2); font-size: 12.5px;
+    padding: 0 12px 8px; border-bottom: 2px solid var(--rule); white-space: nowrap;
+  }
+  .spec-c thead th.gut { width: 4px; padding: 0; }
+  .spec-c thead th.lbl, .spec-c tbody td.lbl { text-align: left; }
+  .spec-c tbody td {
+    text-align: right; padding: 9px 12px; border-bottom: 1px solid var(--rule);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .spec-c tbody td.gut { padding: 0; width: 4px; }
+  .spec-c tbody td.lbl { font-weight: 600; }
+  .spec-c tr.mature td.gut { background: var(--mature); }
+  .spec-c tr.prov   td.gut { background: var(--prov); }
+  .spec-c tr.insuf  td.gut { background: var(--insuf); }
+  .spec-c .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; border-radius: 3px;
+    padding: 1px 6px; border: 1px solid currentColor; white-space: nowrap;
+  }
+  .spec-c .chip.mature { color: var(--mature); }
+  .spec-c .chip.prov   { color: var(--prov); }
+  .spec-c .chip.insuf  { color: var(--ink3); }
+  .spec-c .chartbox { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 12px 14px; }
+  .spec-c .excluded {
+    font-size: 12.5px; color: var(--ink2); border-left: 3px solid var(--insuf);
+    padding: 7px 12px; background: var(--panel); margin-top: 8px;
+  }
+  .glyph { font-family: var(--mono); font-weight: 600; }
+
+  /* palette swatches */
+  .swatches { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .sw { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+  .sw i { width: 46px; height: 26px; border-radius: 3px; display: block; border: 1px solid rgba(128,128,128,.28); }
+  .sw span { font-family: var(--mono); font-size: 10px; color: var(--page-ink-3); }
+
+  @media (max-width: 720px) {
+    .spec-a { grid-template-columns: 1fr; }
+    .spec-a .rail { flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--rule); padding: 0; }
+    .spec-a .brand { display: none; }
+    .spec-a .rail a { border-left: none; border-bottom: 2px solid transparent; white-space: nowrap; }
+    .spec-a .rail a.on { border-left: none; border-bottom-color: var(--accent); }
+  }
+</style>
+
+<div class="wrap">
+
+  <div class="stack">
+    <p class="eyebrow">my_site · P3 — UI · branch claude/ui-shell</p>
+    <h1>Three directions for the interface</h1>
+    <p class="lede">
+      The app has five dashboards, no navigation, and no stylesheet of any kind. These are three
+      genuinely different answers to what it should become — rendered, not described, so they can
+      be compared rather than imagined.
+    </p>
+  </div>
+
+  <div class="banner">
+    <span class="banner-mark">PROPOSAL</span>
+    <span>
+      <strong>Nothing here is merged, and no application code has been changed.</strong>
+      This page is a standalone mock-up committed alongside the audit. The real
+      <code>web/</code> routes are untouched and still render exactly as they did before —
+      193 unit tests, 55 end-to-end tests and <code>tsc</code> all pass on this branch, unchanged.
+    </span>
+  </div>
+
+  <!-- ============================ A ============================ -->
+  <section class="specimen">
+    <div class="specimen-head">
+      <div class="specimen-title">
+        <span class="specimen-tag">A</span>
+        <h2>Terminal</h2>
+      </div>
+      <p class="lede">
+        Dark by default, monospaced numerals, as much on screen at once as will fit. Built for one
+        person watching five dashboards on a large monitor all day. Uncertainty is compressed to a
+        mark you learn to read at a glance.
+      </p>
+    </div>
+
+    <div class="device">
+      <p class="device-label">Specimen — fixed dark palette, does not follow your theme</p>
+      <div class="spec-a">
+        <nav class="rail">
+          <p class="brand">my_site <span>/ research</span></p>
+          <a href="#a" class="on">Pairs <i class="dot" style="background:#3fa96b"></i></a>
+          <a href="#a">Screener <i class="dot" style="background:#3fa96b"></i></a>
+          <a href="#a">Regime <i class="dot" style="background:#3fa96b"></i></a>
+          <a href="#a">Narrative <i class="dot" style="background:#c98500"></i></a>
+          <a href="#a">On-chain <i class="dot" style="background:#6f6c65"></i></a>
+        </nav>
+        <div class="main">
+          <div class="h">
+            <h4>Pair screener</h4>
+            <span class="sub">153 pairs · 18 coins · 0 significant after BH</span>
+          </div>
+
+          <div class="scroller">
+            <table>
+              <thead>
+                <tr>
+                  <th>Pair</th><th>Overlap</th><th>Raw p</th><th>BH p</th>
+                  <th>Johansen</th><th>Half-life</th><th>z</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="r-ok">
+                  <td>DOGE / BCH</td><td>1 866</td><td>0.00057</td><td>0.087</td>
+                  <td>r ≤ 0</td><td>34.2 d</td><td>−1.84</td>
+                </tr>
+                <tr class="r-ok">
+                  <td>LINK / DOT</td><td>1 866</td><td>0.00291</td><td>0.223</td>
+                  <td>r ≤ 0</td><td>51.7 d</td><td>+0.42</td>
+                </tr>
+                <tr class="r-prov">
+                  <td>SUI / APT</td><td>612</td><td>0.01140</td><td>0.436</td>
+                  <td>none</td><td>18.9 d</td><td>+2.06</td>
+                </tr>
+                <tr class="r-insuf">
+                  <td>HYPE / XRP</td><td>287</td>
+                  <td colspan="5" style="text-align:left;font-family:var(--sans)">
+                    <span class="na" title="Not enough history for this window">— not enough history for this window</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="note stale">Stale — showing the last archived data (28 Sep, 18:47 UTC)</p>
+
+          <div class="chartrow">
+            <div class="chartbox">
+              <svg viewBox="0 0 360 96" width="100%" height="96" role="img"
+                   aria-label="Narrative attention, three series: AI rising to 88, RWA to 55, L2s falling to 22">
+                <text x="32" y="75" fill="#6f6c65" font-size="9" text-anchor="end" font-family="IBM Plex Mono, monospace">0</text>
+                <text x="32" y="45" fill="#6f6c65" font-size="9" text-anchor="end" font-family="IBM Plex Mono, monospace">50</text>
+                <text x="32" y="16" fill="#6f6c65" font-size="9" text-anchor="end" font-family="IBM Plex Mono, monospace">100</text>
+                <path d="M40,34.8 L83.3,31.2 L126.7,29.4 L170,32.4 L213.3,27.6 L256.7,23.4 L300,19.2"
+                      fill="none" stroke="#3987e5" stroke-width="2" stroke-linejoin="round"/>
+                <path d="M40,48 L83.3,45.6 L126.7,47.4 L170,43.8 L213.3,40.8 L256.7,42.6 L300,39"
+                      fill="none" stroke="#d95926" stroke-width="2" stroke-linejoin="round"/>
+                <path d="M40,54 L83.3,55.2 L126.7,52.2 L170,53.4 L213.3,55.8 L256.7,57 L300,58.8"
+                      fill="none" stroke="#199e70" stroke-width="2" stroke-linejoin="round"/>
+                <circle cx="300" cy="19.2" r="2.6" fill="#3987e5"/>
+                <circle cx="300" cy="39" r="2.6" fill="#d95926"/>
+                <circle cx="300" cy="58.8" r="2.6" fill="#199e70"/>
+                <text x="307" y="22.4" fill="#a8a49a" font-size="9.5" font-family="IBM Plex Sans, sans-serif">AI</text>
+                <text x="307" y="42.2" fill="#a8a49a" font-size="9.5" font-family="IBM Plex Sans, sans-serif">RWA</text>
+                <text x="307" y="62" fill="#a8a49a" font-size="9.5" font-family="IBM Plex Sans, sans-serif">L2s</text>
+                <text x="40" y="90" fill="#6f6c65" font-size="9" font-family="IBM Plex Mono, monospace">22 Sep</text>
+                <text x="300" y="90" fill="#6f6c65" font-size="9" text-anchor="end" font-family="IBM Plex Mono, monospace">28 Sep</text>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="scroller">
+      <table class="spec-table">
+        <tr><th>Navigation</th><td>Fixed left rail, 178px, always visible. Each route carries a health dot so you can see which data is trustworthy before opening it. Collapses to a horizontal scrolling strip below 720px.</td></tr>
+        <tr><th>Type</th><td>IBM Plex Sans for prose; <b>IBM Plex Mono with <code>tabular-nums</code> for every numeral</b>. Scale 10.5 / 11.5 / 12 / 13 / 15 — six tight steps.</td></tr>
+        <tr><th>Light / dark</th><td><b>Dark-first.</b> Light exists as a toggle and honours <code>prefers-color-scheme</code>, but dark is the designed state.</td></tr>
+        <tr><th>Dense table</th><td>~22px rows, hairline rules, no zebra, sticky header, numerals right-aligned and monospaced so digits line up down the column.</td></tr>
+        <tr><th>Insufficient data</th><td>Compressed to an em-dash with a dotted underline plus a short inline reason; severity carried by a 2px left rule on the row — <span class="glyph" style="color:#3fa96b">grey / amber / green</span> for insufficient, provisional, mature.</td></tr>
+        <tr><th>Charts</th><td>Transparent surface (already true today), gridlines off, axis borders off, series from the validated <b>dark</b> 8-slot palette. Matches five of the seven charts as they are now.</td></tr>
+        <tr><th>Trade-off</th><td>Most information per screen. The compressed uncertainty mark has to be <em>learned</em> — and a hover-only reason is unavailable on touch, which sits awkwardly against the project's "never silently wrong" rule. The inline reason text shown above is the mitigation.</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <!-- ============================ B ============================ -->
+  <section class="specimen">
+    <div class="specimen-head">
+      <div class="specimen-title">
+        <span class="specimen-tag">B</span>
+        <h2>Research notebook</h2>
+      </div>
+      <p class="lede">
+        Light by default, generous spacing, every caveat spelled out in full. Built to be read and
+        thought about, on a laptop or a phone. This is the closest to what the on-chain dashboard
+        already looks like, so it is the least disruptive of the three.
+      </p>
+    </div>
+
+    <div class="device">
+      <p class="device-label">Specimen — fixed light palette, does not follow your theme</p>
+      <div class="spec-b">
+        <nav class="topbar">
+          <span class="brand">my_site</span>
+          <span class="tabs">
+            <a href="#b">Screener</a>
+            <a href="#b">Regime</a>
+            <a href="#b">Narrative</a>
+            <a href="#b" class="on">Pairs</a>
+            <a href="#b">On-chain</a>
+          </span>
+        </nav>
+        <div class="main">
+          <div class="h">
+            <h4>Pair screener</h4>
+            <p class="sub">Every pair from an 18-coin universe, tested both directions. Whole-history diagnostic, never a live signal.</p>
+          </div>
+
+          <div class="notice amber">
+            <span class="ico">!</span>
+            <span><b>No pair is significant after Benjamini–Hochberg correction.</b>
+            The closest is DOGE/BCH at raw p = 0.00057, which corrects to 0.087. Twenty-one pairs
+            clear raw p &lt; 0.05; none survive the correction.</span>
+          </div>
+
+          <div class="scroller">
+            <table>
+              <thead>
+                <tr>
+                  <th style="text-align:left">Pair</th><th>Overlap days</th><th>Raw p</th>
+                  <th>BH-corrected p</th><th>Johansen</th><th>Half-life</th><th>z-score</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>DOGE / BCH</td><td>1 866</td><td>0.00057</td><td>0.087</td><td>r ≤ 0</td><td>34.2 days</td><td>−1.84</td></tr>
+                <tr><td>LINK / DOT</td><td>1 866</td><td>0.00291</td><td>0.223</td><td>r ≤ 0</td><td>51.7 days</td><td>+0.42</td></tr>
+                <tr><td>SUI / APT</td><td>612</td><td>0.01140</td><td>0.436</td><td>none</td><td>18.9 days</td><td>+2.06</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="notice">
+            <span class="ico">i</span>
+            <span><b>HYPE / XRP is not shown.</b> Not enough overlapping history for this window —
+            287 days against the 500 needed. It will appear on its own once the shorter series
+            catches up; nothing is being estimated from the partial data.</span>
+          </div>
+
+          <div class="chartbox">
+            <svg viewBox="0 0 360 96" width="100%" height="96" role="img"
+                 aria-label="Narrative attention, three series: AI rising to 88, RWA to 55, L2s falling to 22">
+              <line x1="40" y1="72" x2="300" y2="72" stroke="#e1e0d9" stroke-width="1"/>
+              <line x1="40" y1="42" x2="300" y2="42" stroke="#e1e0d9" stroke-width="1"/>
+              <line x1="40" y1="12" x2="300" y2="12" stroke="#e1e0d9" stroke-width="1"/>
+              <line x1="40" y1="12" x2="40" y2="72" stroke="#c3c2b7" stroke-width="1"/>
+              <text x="32" y="75" fill="#898781" font-size="9" text-anchor="end" font-family="IBM Plex Sans, sans-serif">0</text>
+              <text x="32" y="45" fill="#898781" font-size="9" text-anchor="end" font-family="IBM Plex Sans, sans-serif">50</text>
+              <text x="32" y="16" fill="#898781" font-size="9" text-anchor="end" font-family="IBM Plex Sans, sans-serif">100</text>
+              <path d="M40,34.8 L83.3,31.2 L126.7,29.4 L170,32.4 L213.3,27.6 L256.7,23.4 L300,19.2"
+                    fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M40,48 L83.3,45.6 L126.7,47.4 L170,43.8 L213.3,40.8 L256.7,42.6 L300,39"
+                    fill="none" stroke="#eb6834" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M40,54 L83.3,55.2 L126.7,52.2 L170,53.4 L213.3,55.8 L256.7,57 L300,58.8"
+                    fill="none" stroke="#1baf7a" stroke-width="2" stroke-linejoin="round"/>
+              <circle cx="300" cy="19.2" r="2.8" fill="#2a78d6"/>
+              <circle cx="300" cy="39" r="2.8" fill="#eb6834"/>
+              <circle cx="300" cy="58.8" r="2.8" fill="#1baf7a"/>
+              <text x="307" y="22.4" fill="#52514e" font-size="9.5" font-family="IBM Plex Sans, sans-serif">AI</text>
+              <text x="307" y="42.2" fill="#52514e" font-size="9.5" font-family="IBM Plex Sans, sans-serif">RWA</text>
+              <text x="307" y="62" fill="#52514e" font-size="9.5" font-family="IBM Plex Sans, sans-serif">L2s</text>
+              <text x="40" y="90" fill="#898781" font-size="9" font-family="IBM Plex Sans, sans-serif">22 Sep</text>
+              <text x="300" y="90" fill="#898781" font-size="9" text-anchor="end" font-family="IBM Plex Sans, sans-serif">28 Sep</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="scroller">
+      <table class="spec-table">
+        <tr><th>Navigation</th><td>Sticky top bar, 46px, horizontal tabs. Scrolls sideways rather than collapsing, so every route stays one tap away on a phone.</td></tr>
+        <tr><th>Type</th><td>IBM Plex Sans throughout, <code>tabular-nums</code> on numerals only. Larger scale: 12 / 13.5 / 14 / 16 / 21 / 27, body line-height 1.5.</td></tr>
+        <tr><th>Light / dark</th><td><b>Light-first</b>, with a designed dark counterpart from the same validated ramps — a selected second theme, not an inverted first one.</td></tr>
+        <tr><th>Dense table</th><td>~38px rows, zebra striping, 14px cell padding, a 2px rule under the header. Fewer rows visible; each far easier to read across.</td></tr>
+        <tr><th>Insufficient data</th><td><b>Never abbreviated.</b> The full sentence from <code>format-unavailable-reason.ts</code> renders as an inline block with a left rule and a glyph. Grey for structural, amber for stale or degraded.</td></tr>
+        <tr><th>Charts</th><td>Light surface, horizontal gridlines visible, axis border — exactly today's <code>onchain</code> chart style, promoted to all seven charts. Light 8-slot palette.</td></tr>
+        <tr><th>Trade-off</th><td>Roughly half the rows per screen compared with A. In exchange the honesty rule is carried literally: a caveat is never compressed into a mark you must already understand, and it works identically on touch.</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <!-- ============================ C ============================ -->
+  <section class="specimen">
+    <div class="specimen-head">
+      <div class="specimen-title">
+        <span class="specimen-tag">C</span>
+        <h2>Confidence-first</h2>
+      </div>
+      <p class="lede">
+        Not a third skin — a layer of meaning that sits on top of either A or B. Certainty stops
+        being a footnote and becomes a column, a gutter, and a permanent strip across the top. This
+        is the project's own stated purpose made visible: show how strong a read is, and where the
+        signals disagree.
+      </p>
+    </div>
+
+    <div class="device">
+      <p class="device-label">Specimen — shown on B's light base so the added layer is legible</p>
+      <div class="spec-c">
+        <nav class="topbar">
+          <span class="brand">my_site</span>
+          <span class="tabs">
+            <a href="#c">Screener</a>
+            <a href="#c">Regime</a>
+            <a href="#c">Narrative</a>
+            <a href="#c" class="on">Pairs</a>
+            <a href="#c">On-chain</a>
+          </span>
+        </nav>
+
+        <div class="strip">
+          <div class="cell mature"><p class="n">Screener</p><p class="v">Mature · 18 coins</p></div>
+          <div class="cell mature"><p class="n">Regime</p><p class="v">Mature · 6 of 6</p></div>
+          <div class="cell prov"><p class="n">Narrative</p><p class="v">Provisional · 2 of 3</p></div>
+          <div class="cell mature"><p class="n">Pairs</p><p class="v">Mature · fresh</p></div>
+          <div class="cell insuf"><p class="n">On-chain</p><p class="v">Insufficient · 1 chain</p></div>
+        </div>
+
+        <div class="main">
+          <div class="h">
+            <h4>Pair screener</h4>
+            <p class="sub">Sorted by corrected significance, then by certainty — mature rows rise.</p>
+          </div>
+
+          <div class="scroller">
+            <table>
+              <thead>
+                <tr>
+                  <th class="gut"></th><th class="lbl">Pair</th><th>Overlap</th><th>Raw p</th>
+                  <th>BH p</th><th>Half-life</th><th class="lbl">Certainty</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="mature">
+                  <td class="gut"></td><td class="lbl">DOGE / BCH</td><td>1 866</td><td>0.00057</td>
+                  <td>0.087</td><td>34.2 d</td>
+                  <td class="lbl"><span class="chip mature">● Mature</span></td>
+                </tr>
+                <tr class="mature">
+                  <td class="gut"></td><td class="lbl">LINK / DOT</td><td>1 866</td><td>0.00291</td>
+                  <td>0.223</td><td>51.7 d</td>
+                  <td class="lbl"><span class="chip mature">● Mature</span></td>
+                </tr>
+                <tr class="prov">
+                  <td class="gut"></td><td class="lbl">SUI / APT</td><td>612</td><td>0.01140</td>
+                  <td>0.436</td><td>18.9 d</td>
+                  <td class="lbl"><span class="chip prov">◐ Provisional</span></td>
+                </tr>
+                <tr class="insuf">
+                  <td class="gut"></td><td class="lbl">HYPE / XRP</td><td>287</td><td>—</td>
+                  <td>—</td><td>—</td>
+                  <td class="lbl"><span class="chip insuf">○ Insufficient</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="chartbox">
+            <svg viewBox="0 0 360 96" width="100%" height="96" role="img"
+                 aria-label="Narrative attention: AI mature rising to 88, RWA mature to 55, L2s provisional shown dashed falling to 22">
+              <line x1="40" y1="72" x2="300" y2="72" stroke="#e1e0d9" stroke-width="1"/>
+              <line x1="40" y1="42" x2="300" y2="42" stroke="#e1e0d9" stroke-width="1"/>
+              <line x1="40" y1="12" x2="300" y2="12" stroke="#e1e0d9" stroke-width="1"/>
+              <line x1="40" y1="12" x2="40" y2="72" stroke="#c3c2b7" stroke-width="1"/>
+              <text x="32" y="75" fill="#898781" font-size="9" text-anchor="end" font-family="IBM Plex Sans, sans-serif">0</text>
+              <text x="32" y="45" fill="#898781" font-size="9" text-anchor="end" font-family="IBM Plex Sans, sans-serif">50</text>
+              <text x="32" y="16" fill="#898781" font-size="9" text-anchor="end" font-family="IBM Plex Sans, sans-serif">100</text>
+              <path d="M40,34.8 L83.3,31.2 L126.7,29.4 L170,32.4 L213.3,27.6 L256.7,23.4 L300,19.2"
+                    fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M40,48 L83.3,45.6 L126.7,47.4 L170,43.8 L213.3,40.8 L256.7,42.6 L300,39"
+                    fill="none" stroke="#eb6834" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M40,54 L83.3,55.2 L126.7,52.2 L170,53.4 L213.3,55.8 L256.7,57 L300,58.8"
+                    fill="none" stroke="#1baf7a" stroke-width="2" stroke-dasharray="4 3" stroke-linejoin="round"/>
+              <circle cx="300" cy="19.2" r="2.8" fill="#2a78d6"/>
+              <circle cx="300" cy="39" r="2.8" fill="#eb6834"/>
+              <circle cx="300" cy="58.8" r="2.8" fill="#ffffff" stroke="#1baf7a" stroke-width="1.6"/>
+              <text x="307" y="22.4" fill="#52514e" font-size="9.5" font-family="IBM Plex Sans, sans-serif">AI</text>
+              <text x="307" y="42.2" fill="#52514e" font-size="9.5" font-family="IBM Plex Sans, sans-serif">RWA</text>
+              <text x="307" y="62" fill="#898781" font-size="9.5" font-family="IBM Plex Sans, sans-serif">L2s ◐</text>
+              <text x="40" y="90" fill="#898781" font-size="9" font-family="IBM Plex Sans, sans-serif">22 Sep</text>
+              <text x="300" y="90" fill="#898781" font-size="9" text-anchor="end" font-family="IBM Plex Sans, sans-serif">28 Sep</text>
+            </svg>
+            <p class="excluded">
+              <b>Reddit is not plotted.</b> Credentials are not configured for the nightly job, so the
+              source is skipped and has never archived a point. It is listed here rather than quietly
+              dropped from the chart.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="scroller">
+      <table class="spec-table">
+        <tr><th>Navigation</th><td>B's top bar, plus a permanent five-cell confidence strip — one per dashboard, coloured by that area's current data health. You can see which dashboards are worth opening before you open them.</td></tr>
+        <tr><th>The new idea</th><td>A single three-level grammar — <b>mature / provisional / insufficient</b> — reused everywhere: the strip, a row gutter, a chip, a dashed chart line, an open endpoint marker. Learn it once, read it anywhere.</td></tr>
+        <tr><th>Dense table</th><td>A 4px certainty gutter on the left edge and a certainty chip on the right. Secondary sort by certainty. An optional "hide provisional" filter.</td></tr>
+        <tr><th>Insufficient data</th><td>Gets first-class space rather than a footnote. Series that cannot be computed are <em>named and explained below the chart</em>, never silently absent — which is what the codebase already does in copy and does not yet do in layout.</td></tr>
+        <tr><th>Charts</th><td>Provisional series render dashed with a hollow endpoint; insufficient series are not drawn at all and are listed underneath with their reason. Same validated palette either way.</td></tr>
+        <tr><th>Depends on</th><td>The backend already emits <code>insufficient</code> / <code>provisional</code> / <code>mature</code>, plus <code>stale</code> and <code>unavailable</code>. No new API field is needed for the per-panel gutters and chips.</td></tr>
+        <tr><th>Trade-off</th><td>The most opinionated option and the largest change. The top strip is the one part that may need data the API does not yet aggregate — and it overlaps <b>T10</b> in the master plan, which is scheduled as its own task with its own SPEC. Worth deciding deliberately rather than absorbing here.</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <!-- ==================== shared foundation ==================== -->
+  <section class="specimen">
+    <div class="specimen-head">
+      <div class="specimen-title"><span class="specimen-tag">ALL</span><h2>What all three share</h2></div>
+      <p class="lede">
+        These parts do not depend on which direction wins, and are the safest things to build first.
+      </p>
+    </div>
+
+    <div class="qbox">
+      <h3>One validated colour palette, already in the repo</h3>
+      <p>
+        The on-chain dashboard's six chart colours are byte-identical to a reference palette that
+        passes colour-blindness and legibility gates in both light and dark. The other two palettes
+        in the app — in <code>MindshareView</code> and <code>RelativePerformanceChart</code> — fail
+        those gates when measured. Extending the on-chain six to eight slots passes everything.
+      </p>
+      <div class="swatches">
+        <span class="sw"><i style="background:#2a78d6"></i><span>#2a78d6</span></span>
+        <span class="sw"><i style="background:#eb6834"></i><span>#eb6834</span></span>
+        <span class="sw"><i style="background:#1baf7a"></i><span>#1baf7a</span></span>
+        <span class="sw"><i style="background:#eda100"></i><span>#eda100</span></span>
+        <span class="sw"><i style="background:#e87ba4"></i><span>#e87ba4</span></span>
+        <span class="sw"><i style="background:#008300"></i><span>#008300</span></span>
+        <span class="sw"><i style="background:#4a3aa7"></i><span>#4a3aa7</span></span>
+        <span class="sw"><i style="background:#e34948"></i><span>#e34948</span></span>
+      </div>
+      <p class="rec"><b>Recommendation:</b> promote it to a shared token file; retire the two that fail.</p>
+    </div>
+
+    <div class="qbox">
+      <h3>A stylesheet is the prerequisite, not a preference</h3>
+      <p>
+        Dark mode, responsive layout and a type scale are not merely missing today — they are
+        impossible. Inline <code>style={{}}</code> objects cannot express a media query or a
+        <code>prefers-color-scheme</code> rule, and 113 of them carry the current design. Nothing
+        else on this page can be built until styling moves into a stylesheet with tokens.
+      </p>
+      <p class="rec"><b>Recommendation:</b> plain CSS with custom properties in
+      <code>app/globals.css</code>. No new dependency, and it immediately styles the screener,
+      whose BEM class names already exist and currently point at nothing.</p>
+    </div>
+
+    <div class="qbox">
+      <h3>Build in the order that protects the tests</h3>
+      <p>
+        185 source lines carry a <code>data-testid</code>, and 165 assertions across 55 end-to-end
+        tests select on them. Styling work touches none of those; restructuring work touches all of
+        them. Those are two different risk profiles and should not be done in one step.
+      </p>
+      <p class="rec"><b>Recommendation:</b> tokens and stylesheet first (no test risk) → one pilot
+      route converted end to end → the nav shell → the remaining four routes.</p>
+    </div>
+  </section>
+
+</div>
