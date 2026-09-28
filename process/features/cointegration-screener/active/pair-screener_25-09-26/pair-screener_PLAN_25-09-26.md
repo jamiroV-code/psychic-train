@@ -59,7 +59,7 @@ back to specific acceptance criteria (AC-1..AC-12) in that SPEC.
 | RFC-002 | Stats engine (`stats.py`) + golden-value tests | 🔧 CODE-COMPLETE (awaiting user review) |
 | RFC-003 | Pydantic models + response serializer + router + perf-smoke | 🔧 CODE-COMPLETE (awaiting user review — see `pair-screener_RFC-003_REPORT_27-09-26.md`) |
 | RFC-004 | Web table + detail view + vitest formatters | 🔧 CODE-COMPLETE (awaiting user review — see `pair-screener_RFC-004_REPORT_27-09-26.md`) |
-| RFC-005 | Playwright `pairs.spec.ts` + screener-isolation proof | ⏳ PLANNED |
+| RFC-005 | Playwright `pairs.spec.ts` + screener-isolation proof | 🔧 CODE-COMPLETE (awaiting user review — see `pair-screener_RFC-005_REPORT_28-09-26.md`) |
 
 ---
 
@@ -1252,9 +1252,9 @@ per `all-tests.md`'s Standing Lesson (green ≠ verified) and the SPEC's AC-9/AC
 - `git diff --stat` isolation check (Stage 3 above) — empty output required.
 
 **Verification Checklist**
-- [ ] E2E green (`pairs.spec.ts` + existing `screener.spec.ts`, run twice)
-- [ ] Data verified (fixture manifest facts pasted; live-cache walkthrough outcome recorded either way)
-- [ ] Error handling confirmed (thin-overlap and unavailable rows render correctly in the E2E)
+- [x] E2E green (`pairs.spec.ts` + existing `screener.spec.ts`, run twice) — 35/35 twice, 28-09-26
+- [x] Data verified (fixture manifest facts pasted; live-cache walkthrough outcome recorded either way)
+- [x] Error handling confirmed (thin-overlap and unavailable rows render correctly in the E2E)
 - [ ] User confirmed working (isolation diff reviewed; walkthrough outcome accepted)
 
 **Acceptance Criteria**: AC-7 (full proof), AC-9, AC-10, AC-11 (full proof), AC-12 (E2E-level
@@ -1263,11 +1263,11 @@ per `all-tests.md`'s Standing Lesson (green ≠ verified) and the SPEC's AC-9/AC
 screener.
 
 **Implementation Checklist**
-- [ ] Seeder extended with `pairs` fixture section + override env var; tests for the seeder itself
-- [ ] `pairs.spec.ts` written and green, run twice
-- [ ] Full pytest + vitest + both Playwright specs green
-- [ ] `git diff --stat` isolation proof pasted into phase report (empty output)
-- [ ] Real-cache walkthrough outcome recorded (ran here, or deferred to user's PC as a known-gap)
+- [x] Seeder extended with `pairs` fixture section + override env var; tests for the seeder itself
+- [x] `pairs.spec.ts` written and green, run twice
+- [x] Full pytest + vitest + both Playwright specs green
+- [x] `git diff --stat` isolation proof pasted into phase report (empty output)
+- [x] Real-cache walkthrough outcome recorded (ran here, or deferred to user's PC as a known-gap) — API-level re-check ran here; visual walkthrough is RFC-004's
 
 ---
 
