@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("lightweight-charts", () => import("@/test/mocks/lightweight-charts"));
 
@@ -50,7 +50,8 @@ describe("PairDetailView", () => {
     const pair = okDetail();
     renderWith(detailResponse(pair));
     await screen.findByTestId("pairs-spread-chart");
-    expect(mockCharts).toHaveLength(1);
+    // SpreadChart creates the chart in a useEffect that can land after findBy* resolves.
+    await waitFor(() => expect(mockCharts).toHaveLength(1));
     const series = mockCharts[0].series;
     expect(series).toHaveLength(1);
     const data = series[0].data as { time: string; value: number }[];

@@ -94,3 +94,31 @@ class TestIsolationFromWatchlist:
     def test_separate_file_from_watchlist_json(self):
         assert pu.default_universe_path().name == "pairs_universe.json"
         assert pu.default_universe_path() != pu.default_universe_path().with_name("watchlist.json")
+
+
+class TestUniversePathOverride:
+    """RFC-005: PAIRS_UNIVERSE_PATH redirects the universe (E2E fixture), read at call time."""
+
+    def test_unset_uses_real_file(self, monkeypatch):
+        monkeypatch.delenv(pu.UNIVERSE_PATH_ENV, raising=False)
+        assert pu.default_universe_path() == pu.real_universe_path()
+        assert pu.real_universe_path().name == "pairs_universe.json"
+
+    def test_override_is_read_at_call_time(self, tmp_path, monkeypatch):
+        f = tmp_path / "u.json"
+        f.write_text(json.dumps({"coins": ["aaa", "bbb"]}), encoding="utf-8")
+        monkeypatch.delenv(pu.UNIVERSE_PATH_ENV, raising=False)
+        before = pu.load_universe()
+        monkeypatch.setenv(pu.UNIVERSE_PATH_ENV, str(f))
+        assert pu.default_universe_path() == f
+        assert pu.load_universe() == ["AAA", "BBB"]
+        assert before != ["AAA", "BBB"]
+
+    def test_empty_override_falls_back_to_real_file(self, monkeypatch):
+        monkeypatch.setenv(pu.UNIVERSE_PATH_ENV, "")
+        assert pu.default_universe_path() == pu.real_universe_path()
+
+    def test_missing_override_file_is_loud(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(pu.UNIVERSE_PATH_ENV, str(tmp_path / "nope.json"))
+        with pytest.raises(pu.UniverseFileError):
+            pu.load_universe()

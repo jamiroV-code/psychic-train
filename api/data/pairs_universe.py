@@ -11,11 +11,15 @@ watchlist incident was a default argument binding the real path at import).
 from __future__ import annotations
 
 import json
+import os
 import warnings
 from itertools import combinations
 from pathlib import Path
 
 UNIVERSE_FILENAME = "pairs_universe.json"
+# Override for tests/E2E (RFC-005), mirroring SCREENER_WATCHLIST_PATH. Read on
+# every call so an env change is honoured without re-importing this module.
+UNIVERSE_PATH_ENV = "PAIRS_UNIVERSE_PATH"
 
 # Pegged stablecoins. A pair containing one is meaningless for cointegration
 # (near-constant log price), so the loader warns if one appears.
@@ -26,8 +30,16 @@ class UniverseFileError(ValueError):
     """The universe file is missing or not shaped `{"coins": [str, ...]}`."""
 
 
-def default_universe_path() -> Path:
+def real_universe_path() -> Path:
+    """The repo's own universe file, ignoring any override."""
     return Path(__file__).resolve().parent / UNIVERSE_FILENAME
+
+
+def default_universe_path() -> Path:
+    override = os.environ.get(UNIVERSE_PATH_ENV)
+    if override:
+        return Path(override)
+    return real_universe_path()
 
 
 def load_universe(path: Path | str | None = None) -> list[str]:

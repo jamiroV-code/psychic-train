@@ -10,6 +10,9 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 // market data (three live-data incidents in two days made that explicit).
 const E2E_CACHE_ROOT = path.join(os.tmpdir(), "screener-e2e-cache");
 const E2E_WATCHLIST = path.join(E2E_CACHE_ROOT, "watchlist.json");
+// Pair-screener fixture universe (RFC-005). The seeder writes it and refuses
+// to run if this resolves to the real api/data/pairs_universe.json.
+const E2E_PAIRS_UNIVERSE = path.join(E2E_CACHE_ROOT, "pairs_universe.json");
 
 const CHROMIUM_PATH = process.env["PLAYWRIGHT_CHROMIUM_PATH"] || undefined;
 
@@ -20,6 +23,7 @@ const API_BASE_URL = `http://127.0.0.1:${API_PORT}`;
 const apiEnv = {
   SCREENER_CACHE_ROOT: E2E_CACHE_ROOT,
   SCREENER_WATCHLIST_PATH: E2E_WATCHLIST,
+  PAIRS_UNIVERSE_PATH: E2E_PAIRS_UNIVERSE,
   // CORS in api/main.py is origin-exact and hardcoded to localhost:3000. The
   // E2E runs the web server on another port, so the allowed origin has to be
   // widened for this process only — never in main.py itself.
@@ -33,6 +37,10 @@ export default defineConfig({
   retries: 0,
   fullyParallel: false,
   workers: 1,
+  // 15 s, not the 5 s default: the screener board takes 2-5 s on a cold local
+  // backend and flaked at 5 s both here and at the pre-feature commit 35e646f
+  // (pair-screener RFC-005 report). Assertion logic is unchanged.
+  expect: { timeout: 15_000 },
   reporter: [["list"], ["html", { open: "never" }]],
 
   use: {

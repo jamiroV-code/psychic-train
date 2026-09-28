@@ -378,6 +378,193 @@ def seed_narrative(today: pd.Timestamp | None = None) -> dict:
     return fixture["facts"]
 
 
+# --- /pairs fixture (pair screener RFC-005) --------------------------------
+# Six fake coins, daily closes only, written through `cache.write_ohlcv` and
+# then run through the PRODUCTION compute path (`compute_and_persist`), so the
+# results/provenance/spreads the API serves are exactly what production would
+# write for these inputs, and `computation_status` is "fresh" by construction.
+# The universe is a fixture file at PAIRS_UNIVERSE_PATH; the real
+# api/data/pairs_universe.json is never read or written.
+#
+# Designed states (asserted after compute; any miss exits non-zero, which
+# fails the Playwright webServer start instead of producing a quiet green):
+#   CINTA/CINTB  strongly cointegrated -> significant after BH, half-life computed
+#   CINTA/WEAKB  weakly cointegrated   -> raw p < 0.05 but BH p >= 0.05 (raw-only tag)
+#   CINTA/DRIFT  explosive spread      -> half-life not_mean_reverting; EG not
+#                significant while Johansen says rank >= 1 (AC-6 disagreement)
+#   SHORT/*      200 bars < MIN_OVERLAP_DAYS -> insufficient_overlap
+#   GHOST/*      in the universe, no cache file -> coin_unavailable (AC-12)
+# Values come from seeded RNGs and do not depend on today's date; only the
+# date index is anchored to today (like the other fixtures).
+PAIRS_COINS = ["CINTA", "CINTB", "WEAKB", "DRIFT", "SHORT", "GHOST"]
+PAIRS_BARS = 900
+PAIRS_SHORT_BARS = 200
+PAIRS_MISSING = "GHOST"
+PAIRS_SHORT = "SHORT"
+PAIRS_SEEDS = {"base": 7, "cintb": 101, "weakb": 10, "drift": 1, "short": 3}
+PAIRS_WEAK_PHI = 0.975
+PAIRS_DRIFT_RATE = 1.006
+PAIRS_SIGNIFICANT = ("CINTA", "CINTB")
+PAIRS_RAW_ONLY = ("CINTA", "WEAKB")
+PAIRS_NOT_MEAN_REVERTING = ("CINTA", "DRIFT")
+PAIRS_SIGNIFICANCE_LEVEL = 0.05
+
+
+def _pairs_universe_path() -> Path:
+    """Resolve PAIRS_UNIVERSE_PATH, refusing unset or the real universe file."""
+    from api.data import pairs_universe
+
+    raw = os.environ.get(pairs_universe.UNIVERSE_PATH_ENV)
+    if not raw:
+        sys.exit(
+            f"REFUSING: {pairs_universe.UNIVERSE_PATH_ENV} is not set.\n"
+            "Without it the API would serve the real pairs universe against fixture results."
+        )
+    path = Path(raw).resolve()
+    if path == pairs_universe.real_universe_path().resolve():
+        sys.exit(
+            f"REFUSING: {pairs_universe.UNIVERSE_PATH_ENV} points at the real universe file ({path}).\n"
+            "Point it somewhere disposable."
+        )
+    return path
+
+
+def build_pairs_fixture(today: pd.Timestamp) -> dict[str, pd.DataFrame]:
+    """Pure: daily OHLCV frames per fixture coin (GHOST deliberately absent)."""
+    import numpy as np
+
+    n = PAIRS_BARS
+    idx = pd.date_range(end=today, periods=n, freq="D", tz="UTC")
+
+    def rng(key: str):
+        return np.random.default_rng(PAIRS_SEEDS[key])
+
+    def ar(key: str, phi: float, sd: float):
+        e = rng(key).normal(0, sd, n)
+        x = np.zeros(n)
+        for t in range(1, n):
+            x[t] = phi * x[t - 1] + e[t]
+        return x
+
+    base = np.cumsum(rng("base").normal(0, 0.03, n))
+    drift = np.zeros(n)
+    drift[0] = 0.01
+    shocks = rng("drift").normal(0, 0.002, n)
+    for t in range(1, n):
+        drift[t] = PAIRS_DRIFT_RATE * drift[t - 1] + shocks[t]
+    logs = {
+        "CINTA": base,
+        "CINTB": 0.5 + 0.8 * base + ar("cintb", 0.80, 0.02),
+        "WEAKB": 0.2 + base + ar("weakb", PAIRS_WEAK_PHI, 0.02),
+        "DRIFT": base + drift,
+    }
+
+    def frame(log_close, index) -> pd.DataFrame:
+        close = np.exp(log_close) * 100.0
+        return pd.DataFrame({
+            "timestamp": index, "open": close, "high": close * 1.01, "low": close * 0.99,
+            "close": close, "volume": 1000.0, "source": "e2e-fixture",
+        })
+
+    frames = {sym: frame(lg, idx) for sym, lg in logs.items()}
+    short = np.cumsum(rng("short").normal(0, 0.03, PAIRS_SHORT_BARS))
+    frames[PAIRS_SHORT] = frame(short, idx[-PAIRS_SHORT_BARS:])
+    return frames
+
+
+def check_pairs_results(table: pd.DataFrame) -> list[str]:
+    """Every designed state, checked against what compute actually wrote.
+    Returns a list of problems; empty means the fixture is as designed."""
+    problems: list[str] = []
+    alpha = PAIRS_SIGNIFICANCE_LEVEL
+    expected_n = len(PAIRS_COINS) * (len(PAIRS_COINS) - 1) // 2
+    if len(table) != expected_n:
+        problems.append(f"row count {len(table)} != {expected_n}")
+
+    by_pair = {(r["coin_a"], r["coin_b"]): r for r in table.to_dict("records")}
+    for (a, b), r in by_pair.items():
+        want = ("coin_unavailable" if PAIRS_MISSING in (a, b)
+                else "insufficient_overlap" if PAIRS_SHORT in (a, b) else "ok")
+        if r["status"] != want:
+            problems.append(f"{a}/{b}: status {r['status']}, designed {want}")
+
+    def get(pair):
+        r = by_pair.get(pair)
+        if r is None:
+            problems.append(f"{pair[0]}/{pair[1]}: missing row")
+        return r
+
+    r = get(PAIRS_SIGNIFICANT)
+    if r is not None and not (r["status"] == "ok" and r["eg_p_bh"] < alpha and r["half_life_state"] == "computed"):
+        problems.append(f"{PAIRS_SIGNIFICANT}: not significant with a computed half-life "
+                        f"(bh={r['eg_p_bh']}, hl={r['half_life_state']})")
+    r = get(PAIRS_RAW_ONLY)
+    if r is not None and not (r["status"] == "ok" and r["eg_p_raw"] < alpha <= r["eg_p_bh"]):
+        problems.append(f"{PAIRS_RAW_ONLY}: not raw-only (raw={r['eg_p_raw']}, bh={r['eg_p_bh']})")
+    r = get(PAIRS_NOT_MEAN_REVERTING)
+    if r is not None and r["status"] == "ok":
+        if r["half_life_state"] != "not_mean_reverting":
+            problems.append(f"{PAIRS_NOT_MEAN_REVERTING}: half-life {r['half_life_state']}, designed not_mean_reverting")
+        if not (r["eg_p_bh"] >= alpha and bool(r["johansen_rank_at_least_1"])):
+            problems.append(f"{PAIRS_NOT_MEAN_REVERTING}: EG and Johansen do not disagree "
+                            f"(bh={r['eg_p_bh']}, johansen rank>=1={r['johansen_rank_at_least_1']})")
+    return problems
+
+
+def seed_pairs(today: pd.Timestamp | None = None) -> dict:
+    """Write the pairs fixture, run the production compute, verify it, and
+    return the manifest facts. Caller must already have passed `_guard()`."""
+    from api.analytics.cointegration import pairs_response
+    from api.data import cache
+
+    universe_path = _pairs_universe_path()
+    today = today if today is not None else pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
+    universe_path.parent.mkdir(parents=True, exist_ok=True)
+    universe_path.write_text(json.dumps({"coins": PAIRS_COINS}), encoding="utf-8")
+    for sym, df in build_pairs_fixture(today).items():
+        cache.write_ohlcv(sym, "1d", df)
+
+    summary = pairs_response.compute_and_persist()
+    table = pd.read_parquet(cache.pairs_results_path())
+    problems = check_pairs_results(table)
+    if problems:
+        sys.exit("PAIRS FIXTURE DID NOT COME OUT AS DESIGNED:\n  " + "\n  ".join(problems))
+
+    # Display order of ranked rows (plan AC-4, web sortPairs): corrected p, ties
+    # on raw p, then coin names. The three DRIFT pairs tie on corrected p (BH
+    # step-up), so the raw-p tie-break is exercised end to end.
+    ok = table[table["status"] == "ok"].sort_values(["eg_p_bh", "eg_p_raw", "coin_a", "coin_b"])
+    # Display order of the non-ok group (plan AC-4): insufficient_overlap, then
+    # coin_unavailable, each alphabetical.
+    rest = table[table["status"] != "ok"].assign(
+        _group=lambda t: t["status"].map({"insufficient_overlap": 0, "coin_unavailable": 1})
+    ).sort_values(["_group", "coin_a", "coin_b"])
+    sig = table[(table["coin_a"] == PAIRS_SIGNIFICANT[0]) & (table["coin_b"] == PAIRS_SIGNIFICANT[1])].iloc[0]
+    alpha = PAIRS_SIGNIFICANCE_LEVEL
+    return {
+        "universe": PAIRS_COINS,
+        "pair_count": int(summary.pair_count),
+        "status_counts": {k: int(v) for k, v in summary.status_counts.items()},
+        "status_by_pair": {f"{a}-{b}": s for a, b, s in zip(table["coin_a"], table["coin_b"], table["status"])},
+        "ok_order": [f"{a}-{b}" for a, b in zip(ok["coin_a"], ok["coin_b"])],
+        "non_ok_order": [f"{a}-{b}" for a, b in zip(rest["coin_a"], rest["coin_b"])],
+        "tested_count": int(len(ok)),
+        "significant_count": int((ok["eg_p_bh"] < alpha).sum()),
+        "raw_only_pairs": [f"{a}-{b}" for a, b, raw, bh in zip(ok["coin_a"], ok["coin_b"], ok["eg_p_raw"], ok["eg_p_bh"])
+                           if raw < alpha <= bh],
+        "significant_pair": list(PAIRS_SIGNIFICANT),
+        "raw_only_pair": list(PAIRS_RAW_ONLY),
+        "not_mean_reverting_pair": list(PAIRS_NOT_MEAN_REVERTING),
+        "missing_coin": PAIRS_MISSING,
+        "short_coin": PAIRS_SHORT,
+        "significant_sample": {
+            "start": str(sig["sample_start"])[:10],
+            "end": str(sig["sample_end"])[:10],
+            "overlap_days": int(sig["overlap_days"]),
+        },
+    }
+
+
 def main() -> int:
     root = _guard()
     from api.data import cache, watchlist as watchlist_store
@@ -414,10 +601,12 @@ def main() -> int:
 
     regime = seed_regime()
     narrative = seed_narrative()
+    pairs = seed_pairs()
 
     manifest = {
         "regime": regime,
         "narrative": narrative,
+        "pairs": pairs,
         "cache_root": str(root),
         "watchlist": WATCHLIST,
         "benchmarks": BENCHMARKS,
@@ -432,6 +621,7 @@ def main() -> int:
     print(f"seeded {len(written)} symbols into {root}")
     print(f"regime     inputs seeded; gap at {regime['gap']['expected_gap_date']}")
     print(f"narrative  {len(narrative['category_ids'])} categories seeded; gap at {narrative['gap']['gap_date']}")
+    print(f"pairs      {pairs['pair_count']} pairs, {pairs['status_counts']}")
     print(f"watchlist  {WATCHLIST} -> {watchlist_path or '(not set)'}")
     print(f"manifest   {MANIFEST_PATH}")
     print(f"store path {watchlist_store.DEFAULT_WATCHLIST_PATH}")

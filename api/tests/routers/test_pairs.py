@@ -96,6 +96,32 @@ def test_sorted_bh_ascending_non_ok_last(seeded):
     assert ps[0]["coin_a"] == "AAA" and ps[0]["coin_b"] == "BBB"  # the planted cointegrated pair
 
 
+def _tie_row(a, b, bh, raw, status="ok"):
+    return {"coin_a": a, "coin_b": b, "status": status, "eg_p_bh": bh, "eg_p_raw": raw}
+
+
+def test_sort_tie_on_bh_breaks_by_raw_p():
+    table = pd.DataFrame([
+        _tie_row("AAA", "BBB", 0.05, 0.03),
+        _tie_row("CCC", "DDD", 0.05, 0.01),
+        _tie_row("EEE", "FFF", None, None, status="insufficient_overlap"),
+    ])
+    rows = pairs_response._sorted_rows(table)
+    assert [(r["coin_a"], r["coin_b"]) for r in rows] == [("CCC", "DDD"), ("AAA", "BBB"), ("EEE", "FFF")]
+
+
+def test_sort_tie_on_bh_and_raw_falls_back_to_names():
+    table = pd.DataFrame([
+        _tie_row("ZZZ", "BBB", 0.05, 0.01),
+        _tie_row("AAA", "YYY", 0.05, 0.01),
+        _tie_row("AAA", "CCC", 0.05, 0.01),
+        _tie_row("BCH", "NEW", None, None, status="coin_unavailable"),
+    ])
+    rows = pairs_response._sorted_rows(table)
+    assert [(r["coin_a"], r["coin_b"]) for r in rows] == [
+        ("AAA", "CCC"), ("AAA", "YYY"), ("ZZZ", "BBB"), ("BCH", "NEW")]
+
+
 # ---------------------------------------------------------------- staleness (a)-(e) + D-2..D-4
 
 def test_a_results_unavailable(isolated_cache, tmp_path, monkeypatch):

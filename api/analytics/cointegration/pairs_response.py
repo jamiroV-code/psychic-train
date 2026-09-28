@@ -306,7 +306,7 @@ def _summary_fields(row: dict) -> dict:
 
 def _sorted_rows(table: pd.DataFrame) -> list[dict]:
     rows = table.to_dict("records")
-    ok = sorted((r for r in rows if r["status"] == "ok"), key=lambda r: (r["eg_p_bh"], r["coin_a"], r["coin_b"]))
+    ok = sorted((r for r in rows if r["status"] == "ok"), key=lambda r: (r["eg_p_bh"], r["eg_p_raw"], r["coin_a"], r["coin_b"]))
     rest = sorted((r for r in rows if r["status"] != "ok"), key=lambda r: (r["coin_a"], r["coin_b"]))
     return ok + rest
 
