@@ -43,7 +43,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from api.analytics.narrative import exchange_attention, mapping, trigger
+from api.analytics.narrative import exchange_attention, narrative_config
 from api.data import cache, coingecko_adapter, pytrends_adapter, reddit_adapter
 
 SOURCES = ("pytrends", "reddit", "coingecko-narrative", "exchange")
@@ -153,9 +153,9 @@ def snapshot_coingecko_narrative(categories: list[dict], today: str) -> SourceSu
         return s
     counts: dict[str, int] = {cat["id"]: 0 for cat in categories}
     for symbol in trending.symbols:
-        cat_id, _ = mapping.map_coin_to_narrative_category(symbol)
-        if cat_id in counts:
-            counts[cat_id] += 1
+        for cat_id in narrative_config.narratives_for_coin(symbol):
+            if cat_id in counts:
+                counts[cat_id] += 1
     for cat_id, count in counts.items():
         try:
             if has_row(COINGECKO_NARRATIVE_SOURCE, cat_id, today):
@@ -208,7 +208,7 @@ RUNNERS = {
 def run_snapshot(today: str | None = None) -> list[SourceSummary]:
     today = today or utc_today()
     cache.bootstrap_cache_dirs()
-    categories = trigger.load_seed_categories()
+    categories = narrative_config.load_narratives()
     summaries: list[SourceSummary] = []
     for name in SOURCES:
         try:

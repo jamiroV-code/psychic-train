@@ -3,8 +3,9 @@ change-in-attention behind `GET /api/narrative/history` (ADR-4, ADR-5).
 
 A pure read of the narrative archive. Nothing here calls a provider adapter
 or `trigger.compute_narrative_categories` (those fetch live data and write
-the cache). The only thing shared with the `/categories` path is
-`trigger.load_seed_categories` (ADR-4); trigger constants are read, not changed.
+the cache). Narratives (ids, labels, keywords, coins) come from
+`api/data/narratives.json` via `narrative_config` (narrative-v2 RFC-2); only
+trigger constants are shared with `/categories`, read not changed.
 
 Series keying (RFC-2 report item 6): pytrends and reddit are stored under the
 seed's primary keyword (`keywords[0]`, what trigger.py passes to the
@@ -27,7 +28,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 
-from api.analytics.narrative import mapping, scoring, trigger
+from api.analytics.narrative import narrative_config, scoring, trigger
 from api.data import cache
 from api.data.hyperliquid_narrative_adapter import HYPERLIQUID_REDISTRIBUTABLE
 from api.data.pytrends_adapter import PYTRENDS_DEAD_THRESHOLD_DAYS
@@ -359,12 +360,7 @@ def _sort_entries(entries: list[RankEntry]) -> list[RankEntry]:
 
 
 def _coins_for(category_id: str) -> list[tuple[str, bool]]:
-    curated = mapping.load_category_map()
-    out = []
-    for symbol in sorted(s for s, cid in curated.items() if cid == category_id):
-        _, narrative_only = mapping.map_coin_to_narrative_category(symbol)
-        out.append((symbol, narrative_only))
-    return out
+    return narrative_config.coins_for(category_id)
 
 
 # --- orchestrator ----------------------------------------------------------
@@ -376,9 +372,10 @@ def build_narrative_history(
     end: date | None = None,
     today: date | None = None,
 ) -> NarrativeHistoryResult:
-    """Read-only. `category_ids` must be seed ids (allow-listed before any
-    cache path is built from them); unknown ids raise UnknownCategoryError."""
-    seeds = trigger.load_seed_categories()
+    """Read-only. `category_ids` must be enabled narrative ids from
+    `api/data/narratives.json` (allow-listed before any cache path is built
+    from them); unknown ids raise UnknownCategoryError."""
+    seeds = narrative_config.load_narratives()
     seed_by_id = {c["id"]: c for c in seeds}
     if category_ids is None:
         wanted = [c["id"] for c in seeds]
@@ -395,7 +392,7 @@ def build_narrative_history(
     grid: set[str] = set()
     for cid in wanted:
         seed = seed_by_id[cid]
-        keyword = seed["keywords"][0] if seed.get("keywords") else cid
+        keyword = narrative_config.primary_keyword(seed)
         series = load_category_series(cid, keyword, today)
         composite = build_composite(series)
         # Rankings see composites up to `end` only (the viewing window's as-of).

@@ -1,0 +1,81 @@
+{
+  "_comment": "How to edit narratives: this file is the ONLY place to add, rename, remove or re-coin a narrative for /api/narrative/history, the /narrative page, the nightly snapshot and the pytrends backfill. Each entry: id (lowercase slug, the permanent key archived history is stored under), label (display name, safe to rename), keywords (non-empty; the FIRST keyword is the pytrends/reddit archive key), coins (UPPERCASE tickers), enabled (true/false). No restart needed: the API re-reads this file when it changes on disk. Invalid entries (empty label, duplicate id, bad id) are skipped with a logged warning; a broken file keeps the last-known-good version. Renaming a label never affects history. Removing an entry or setting enabled=false hides it but keeps its archived history under the old id; re-adding the same id brings it back. This file does NOT affect /api/narrative/categories or /screener (frozen legacy map in api/analytics/narrative/mapping.py).",
+  "version": 2,
+  "narratives": [
+    {
+      "id": "ai",
+      "label": "AI",
+      "keywords": [
+        "AI crypto",
+        "artificial intelligence crypto"
+      ],
+      "coins": [
+        "FET",
+        "TAO",
+        "RENDER",
+        "WLD",
+        "VIRTUAL",
+        "AI16Z",
+        "AR"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "rwa",
+      "label": "Real World Assets",
+      "keywords": [
+        "RWA crypto",
+        "tokenized real world assets"
+      ],
+      "coins": [
+        "ONDO",
+        "ENA",
+        "PENDLE",
+        "MKR",
+        "POLYX",
+        "OM",
+        "LINK"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "l2s",
+      "label": "L2s",
+      "keywords": [
+        "layer 2 crypto",
+        "L2 rollup"
+      ],
+      "coins": [
+        "ETH",
+        "HYPE",
+        "ARB",
+        "OP",
+        "STRK",
+        "ZK",
+        "MNT",
+        "POL",
+        "IMX"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "memecoins",
+      "label": "Memecoins",
+      "keywords": [
+        "memecoin",
+        "meme coin crypto"
+      ],
+      "coins": [
+        "DOGE",
+        "PEPE",
+        "WIF",
+        "BONK",
+        "SHIB",
+        "POPCAT",
+        "FARTCOIN",
+        "TRUMP"
+      ],
+      "enabled": true
+    }
+  ]
+}

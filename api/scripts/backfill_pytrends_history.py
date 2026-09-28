@@ -53,7 +53,7 @@ SOURCE = "pytrends"
 BACKFILLED = "backfilled"
 WINDOW_DAYS = 269
 TIMEOUT_SECONDS = 10.0
-SEEDS_PATH = Path(__file__).resolve().parents[1] / "data" / "narrative_categories.json"
+SEEDS_PATH = Path(__file__).resolve().parents[1] / "data" / "narratives.json"
 
 
 @dataclass
@@ -70,8 +70,9 @@ class CategoryOutcome:
 
 
 def load_seed_keywords(path: Path = SEEDS_PATH) -> list[tuple[str, str | None]]:
-    seeds = json.loads(path.read_text(encoding="utf-8"))["seed_categories"]
-    return [(s["id"], (s.get("keywords") or [None])[0]) for s in seeds]
+    """Enabled narratives from api/data/narratives.json (RFC-2 loader)."""
+    from api.analytics.narrative import narrative_config
+    return [(n["id"], narrative_config.primary_keyword(n)) for n in narrative_config.load_narratives(path)]
 
 
 def window_timeframe(today: date) -> str:

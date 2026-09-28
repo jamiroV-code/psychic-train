@@ -10,7 +10,7 @@ feature: narrative-mindshare
 # Narrative Dashboard v2 — Real-Data Fixes, File-Editable Narratives, Momentum & Mindshare
 
 **Date**: 25-09-26
-**Status**: DRAFT — awaiting VALIDATE
+**Status**: EXECUTE in progress
 **Complexity**: COMPLEX (single plan, 7-RFC internal breakdown)
 
 ## Overview
@@ -46,7 +46,7 @@ narratives as the design floor/ceiling everywhere cross-narrative comparison hap
 | RFC | Scope | Status |
 |---|---|---|
 | RFC-1 | Data-sufficiency gating (history.py + new scoring helper) + chart regression coverage | ✅ CODE DONE |
-| RFC-2 | Unified narrative config file (`api/data/narratives.json`) + loader + migration off the 2-file seed/map split | ⏳ NOT STARTED (depends on RFC-1) |
+| RFC-2 | Unified narrative config file (`api/data/narratives.json`) + loader + migration off the 2-file seed/map split | ✅ CODE DONE |
 | RFC-3 | Multi-keyword blending + anchor-chained pytrends batching (nightly job + backfill script) | ⏳ NOT STARTED (depends on RFC-2) |
 | RFC-4 | Momentum view (cross-sectional, vs-the-field ranking) | ⏳ NOT STARTED (depends on RFC-3) |
 | RFC-5 | Daily social-mindshare view (blend + show each source) | ⏳ NOT STARTED (depends on RFC-3, parallel to RFC-4) |
@@ -957,3 +957,7 @@ Trends/Reddit/CoinGecko/Hyperliquid — same constraint as v1's AC-12):
 ## Post-EXECUTE Amendments
 
 (none yet — appended during UPDATE PROCESS if EXECUTE deviates from this plan)
+
+## Deviations
+
+- **RFC-2 (28-09-26):** the migration dropped the grandfathered legacy `BTC -> store-of-value` map entry: it isn't a seed category, and `/history` never listed it. `mapping.LEGACY_COIN_CATEGORY_MAP` still has BTC for `/categories`/`/screener`. Impact: none on `/history` output. `narrative_categories.json` gained a new `_comment` key. `narrative_category_map.json` got a DEPRECATED prefix added to its existing `_comment`. `trigger.py` reads only `seed_categories`, and the AC-13 contract test still passes.
