@@ -16,7 +16,7 @@ import pandas as pd
 import pytest
 
 from api.analytics.narrative import trigger
-from api.data import pytrends_adapter
+from api.data import cache, coingecko_adapter, pytrends_adapter, reddit_adapter
 
 
 def _flat_series(n: int = 30, value: float = 0.5) -> pd.Series:
@@ -197,3 +197,93 @@ class TestPytrendsStaleness:
         assert result.status == "ok"
         assert result.value == 77.0
         assert written["value"] == 77.0
+
+
+class TestHistoryKeying:
+    """pytrends/reddit history is archived under the search keyword
+    (`keywords[0]`), not the category id — `compute_narrative_categories`
+    must read it back under that same key. Real cache writers/readers under
+    `isolated_cache`; `cache.read_narrative_series` is deliberately NOT
+    stubbed (stubbing the read is what originally hid this bug).
+    """
+
+    AS_OF = "2024-06-30"
+    DECOY_DATE = "2024-05-01"
+
+    def _stub_fetchers(self, monkeypatch):
+        monkeypatch.setattr(
+            coingecko_adapter, "fetch_trending",
+            lambda *a, **k: coingecko_adapter.TrendingResult(symbols=[], as_of=None, status="unavailable"),
+        )
+        monkeypatch.setattr(
+            pytrends_adapter, "fetch_trend",
+            lambda kw: pytrends_adapter.TrendResult(keyword=kw, value=None, as_of=None, status="ok"),
+        )
+        monkeypatch.setattr(
+            reddit_adapter, "fetch_mentions",
+            lambda q, *a, **k: reddit_adapter.MentionResult(query=q, mention_count=None, as_of=None, status="ok"),
+        )
+
+    def _spy_series(self, monkeypatch) -> dict[str, dict]:
+        seen: dict[str, dict] = {}
+        real = trigger.compute_trigger
+
+        def spy(category_id, series_by_source, source_status):
+            seen[category_id] = dict(series_by_source)
+            return real(category_id, series_by_source, source_status)
+
+        monkeypatch.setattr(trigger, "compute_trigger", spy)
+        return seen
+
+    def _ai_keyword(self) -> str:
+        return next(c for c in trigger.load_seed_categories() if c["id"] == "ai")["keywords"][0]
+
+    def test_keyword_keyed_rows_seen_and_category_id_decoy_ignored(self, isolated_cache, monkeypatch):
+        keyword = self._ai_keyword()
+        start = datetime.fromisoformat(self.AS_OF) - timedelta(days=20)
+        for i in range(20):
+            d = (start + timedelta(days=i)).strftime("%Y-%m-%d")
+            spike = 18.0 if i >= 16 else 0.0
+            cache.write_narrative_point("pytrends", keyword, d, 10.0 + (i % 3) + spike)
+            cache.write_narrative_point("reddit", keyword, d, 5.0 + (i % 2) + spike / 3)
+        cache.write_narrative_point("pytrends", "ai", self.DECOY_DATE, 999.0)  # wrong key: must be ignored
+        cache.write_narrative_point("reddit", "ai", self.DECOY_DATE, 999.0)
+
+        self._stub_fetchers(monkeypatch)
+        seen = self._spy_series(monkeypatch)
+        result = next(r for r in trigger.compute_narrative_categories(as_of=self.AS_OF) if r.category_id == "ai")
+
+        ai = seen["ai"]
+        assert ai["coingecko"] is None
+        for source in ("pytrends", "reddit"):
+            series = ai[source]
+            assert series is not None and len(series) == 20
+            assert pd.Timestamp(self.DECOY_DATE) not in series.index
+        assert sum(s is not None for s in ai.values()) == 2  # n_available
+        assert result.triggered is True
+        assert result.trust_weight == trigger.BASE_TRUST_WEIGHT
+
+    def test_only_category_id_keyed_rows_are_not_read(self, isolated_cache, monkeypatch):
+        for i in range(20):
+            d = (datetime.fromisoformat(self.AS_OF) - timedelta(days=20 - i)).strftime("%Y-%m-%d")
+            cache.write_narrative_point("pytrends", "ai", d, 10.0 + i * i)
+            cache.write_narrative_point("reddit", "ai", d, 5.0 + i * i)
+
+        self._stub_fetchers(monkeypatch)
+        seen = self._spy_series(monkeypatch)
+        result = next(r for r in trigger.compute_narrative_categories(as_of=self.AS_OF) if r.category_id == "ai")
+
+        assert all(s is None for s in seen["ai"].values())
+        assert result.triggered is False
+        assert result.trust_weight == 0.0
+
+    def test_coingecko_still_read_by_category_id(self, isolated_cache, monkeypatch):
+        cache.write_narrative_point("coingecko", "ai", self.DECOY_DATE, 3.0)
+        cache.write_narrative_point("coingecko", self._ai_keyword(), self.DECOY_DATE, 7.0)  # wrong key for coingecko
+
+        self._stub_fetchers(monkeypatch)
+        seen = self._spy_series(monkeypatch)
+        trigger.compute_narrative_categories(as_of=self.AS_OF)
+
+        cg = seen["ai"]["coingecko"]
+        assert cg is not None and len(cg) == 1

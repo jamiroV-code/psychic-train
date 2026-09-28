@@ -1,14 +1,13 @@
 # my_site - All Context
 
-Last updated: 2026-09-28 (pair screener v1 — `/pairs`, `cointegration-screener`'s first shipped
-feature, all 5 RFCs ✅ VERIFIED and archived; see Changes Since Last Update below. The 2026-09-24
-version predates this build.
-
-**Branch note:** this copy of the file lives on `main` (this worktree,
-`my_project-main`). A separate worktree/branch (`claude/kind-tesla-tat3vo`) has newer,
-still-unmerged narrative-v2 and on-chain work with its own further-ahead `all-context.md`. The two
-will need reconciling by hand when that branch merges into `main` — do not assume this file already
-reflects that work.)
+Last updated: 2026-09-28 (merge of two independent branches — pair screener v1 (`/pairs`,
+`cointegration-screener`'s first shipped feature, all 5 RFCs VERIFIED and archived) from `main`,
+and the 2026-09-27 snapshot cron timing fix (all three nightly workflows moved earlier to absorb
+GitHub's ~2h scheduler delay) from `claude/kind-tesla-tat3vo`. See Changes Since Last Update below
+for both, newest first, plus everything each branch already had (narrative v2 SPEC, on-chain
+chain-growth plan, the 2026-09-25 keyword-keying fix, and earlier). This merge reconciles the two
+branches' `all-context.md` — the previous "Branch note" about needing to reconcile by hand is now
+resolved.)
 
 This file is the root context entrypoint for the repo.
 
@@ -91,6 +90,56 @@ code, cache, or runtime state with the momentum screener, regime dashboard, or n
   throttling) — both remain mocked-test-only known-gaps from the original feasibility VERDICT. The
   Johansen-refused row and the "no pair significant" banner are unit-tested only, not reachable in
   the current E2E fixture set.
+## Changes Since Last Update (2026-09-25 → 2026-09-27, snapshot cron timing)
+
+Plan: `process/general-plans/active/snapshot-cron-timing_27-09-26/`.
+
+- `[Correction]` **GitHub starts our scheduled workflows ~2h late** (observed up to ~2h20m via
+  `gh run list`). The old slots — chain-growth 22:00, narrative 23:00, liqtide 23:30 UTC — actually
+  started 23:56Z, 01:03–01:07Z and 01:30–01:52Z. Narrative points are dated by the UTC day the run
+  executes, so the post-midnight runs skipped a day: **2026-09-25 has no narrative point and is
+  unrecoverable** (Google Trends' short window, Reddit search and CoinGecko trending keep no history).
+- `[Product]` New schedules, off the top of the hour, same order, 30-min stagger:
+  `chain-growth-snapshot.yml` `47 17 * * *`, `narrative-snapshot.yml` `17 18 * * *`,
+  `liqtide-snapshot.yml` `47 18 * * *`. Even a ~2h20m delay now lands every run before ~21:10 UTC.
+- `[Product]` `liqtide-snapshot.yml` gained the same `concurrency` group and "nothing new to commit" +
+  3-attempt `git pull --rebase`/push retry block the other two workflows already had.
+- `[Correction]` **LiqTide publishes ~00:25–01:12 UTC** (observed `generated_utc`), not "~22:45 UTC"
+  as previously documented. The archive is keyed by `generated_utc[:10]`, so LiqTide had no gap — the
+  earlier schedule just ran only ~40 min after publish; it now runs ~18h after.
+- Testing: new guard `api/tests/scripts/test_snapshot_workflow_schedules.py` (13 tests) pins each
+  cron ≥3h before UTC midnight, ≥20-min stagger, no `pull_request` trigger, `permissions:
+  contents: write` only, a concurrency group, the retry-push block, and per-workflow `git add` scope.
+- `[Finding]` pytrends nightly points can be 0 because `df.iloc[-1]` of the hourly "now 7-d" frame is
+  Google's incomplete `isPartial` hour (e.g. memecoins 34→0, RWA all 0). Not fixed — see Open
+  Questions and `process/general-plans/backlog/pytrends-partial-hour-zeros_NOTE_27-09-26.md`.
+
+## Changes Since Last Update (2026-09-24 → 2026-09-25)
+
+Small, self-contained bug fix on branch `claude/narrative-keyword-keying` (task folder now at
+`process/features/narrative-mindshare/completed/narrative-keyword-keying_25-09-26/`) — not part of
+the still-unmerged narrative dashboard work described below, but touches the same reader function.
+
+- `[Correction]` **`api/analytics/narrative/trigger.py`'s `compute_narrative_categories` was
+  reading pytrends/reddit history under the wrong key.** The adapters
+  (`pytrends_adapter.py`/`reddit_adapter.py`) write cached rows keyed by `keywords[0]`, but the
+  reader looked them up by `category_id`, so pytrends/reddit contributed nothing real to
+  `/api/narrative/categories` under real (non-stubbed) conditions — `history.py`'s sibling read
+  path already got this right. Fixed with a small `_source_history_key` helper; coingecko is
+  unaffected (correctly keyed by `category_id`). Production effect confirmed via a before/after
+  diff report: `trust_weight` 0.4→0.6 and `n_available` 1→3 for all 4 seed categories; no
+  screener badge/`narrative_state` changes in the fixture scenarios. Golden contract fixture
+  regenerated and confirmed byte-identical after user sign-off.
+  See `narrative-keyword-keying_25-09-26/narrative-keyword-keying_REPORT_25-09-26.md` in the
+  completed task folder for the full closeout.
+- Testing: counts moved to **381 passed / 3 deselected** pytest, 75 vitest (12 files) — see
+  `tests/all-tests.md` for the fresh-worktree `pnpm install --frozen-lockfile` (run inside `web/`,
+  not the repo root) note discovered during this fix.
+- **Reminder, still open:** the narrative dashboard feature (RFC-1..5 stage-0/plan work under
+  `process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/`) lives on the
+  separate, still-unmerged branch `claude/kind-tesla-tat3vo` (this worktree's branch,
+  `claude/narrative-keyword-keying`, is based on it but is a distinct branch/worktree) — this
+  keyword-keying fix's amendment note was added to that plan's AC-1 section directly.
 
 ## Changes Since Last Update (2026-09-24, narrative-mindshare `/narrative` dashboard)
 
@@ -124,7 +173,8 @@ ownership/documentation change, not a code relocation.
   user terms check, handles `k`-prefixed meme-perp symbols (`kPEPE`→`KPEPE`). See
   `data-sources/all-data-sources.md`.
 - `[Product]` **Second scheduled workflow**: `.github/workflows/narrative-snapshot.yml` (cron
-  `0 23 * * *`, 30 min before `liqtide-snapshot.yml`'s `30 23 * * *`; its own
+  originally `0 23 * * *`, 30 min before `liqtide-snapshot.yml`'s `30 23 * * *` — both moved earlier
+  on 2026-09-27, see that entry; its own
   `concurrency: narrative-snapshot` group) runs `api/scripts/snapshot_narrative.py` nightly,
   forward-archiving one point per (source, category) to `api/data/cache/narrative/` (new
   `.gitignore` carve-out, same per-entry mechanic as `liqtide/`). AC-3 (the cron actually firing) is
@@ -148,7 +198,8 @@ ownership/documentation change, not a code relocation.
   `None`→`NaN` coercion in `history.py::_exchange_frames` 500'd `/history` from the second nightly
   archive day onward (fixed with `dtype=object`, regression test added). See
   `tests/all-tests.md` for the generalized lesson.
-- `[Correction]` **Known pre-existing bug, found but explicitly not fixed here:**
+- `[Correction]` **Known pre-existing bug, found but not fixed in this program — since FIXED
+  2026-09-25 (see the 2026-09-25 entry above, PR #2):**
   `trigger.py::compute_narrative_categories` reads pytrends/Reddit history by category id, but
   those adapters write under the keyword key (see above) — so `/categories`' own trigger never
   actually sees archived pytrends/Reddit history; it runs on CoinGecko alone. Predates this
@@ -200,7 +251,7 @@ second real feature after the momentum screener, and the first to live in
   manual — see the `.github/workflows/` correction below.
 - `[Correction]` **`.github/workflows/` is no longer empty.** Earlier versions of this file said
   "no CI/deploy config exists" — that was true through 2026-09-20 but is stale now.
-  `.github/workflows/liqtide-snapshot.yml` runs nightly at 23:30 UTC, executes
+  `.github/workflows/liqtide-snapshot.yml` runs nightly (18:47 UTC since 2026-09-27), executes
   `snapshot_liqtide.py`, and commits `api/data/cache/liqtide/` to `main` — discovered mid-session
   on 2026-09-24 (it had already captured 09-21 through 09-24 by the time this was found). This is
   the **only** scheduled fetch of LiqTide; the Windows Task Scheduler step in the regime plan's Ops
@@ -545,10 +596,15 @@ my_site/
                                 (`pair-screener_25-09-26/`, archived to `completed/`, see Changes
                                 Since Last Update); still-empty `_GUIDE.md` placeholder:
                                 charting-indicators
+                                `narrative-mindshare/completed/` also holds
+                                `narrative-keyword-keying_25-09-26/`; still-empty
+                                `_GUIDE.md` placeholders: charting-indicators,
+                                cointegration-screener
     development-protocols/  -- RIPER-5 methodology docs
-  .github/workflows/        -- liqtide-snapshot.yml (nightly 23:30 UTC), narrative-snapshot.yml
-                                (nightly 23:00 UTC, new 24-09-26) -- both snapshot + commit to
-                                main, see Changes Since Last Update
+  .github/workflows/        -- chain-growth-snapshot.yml (nightly 17:47 UTC), narrative-snapshot.yml
+                                (nightly 18:17 UTC), liqtide-snapshot.yml (nightly 18:47 UTC) --
+                                all snapshot + commit to main; GitHub starts them ~2h late, see
+                                the 2026-09-27 Changes Since Last Update entry
   .claude/ .codex/ .agents/ -- agent + skill surfaces
   .env.example               -- REDDIT_CLIENT_ID/SECRET, LIQTIDE_ATTRIBUTION_URL,
                                  API_BASE_URL, API_PORT (see Environment and Configuration)
@@ -681,6 +737,11 @@ may be redistributed. See Licensing in `data-sources/all-data-sources.md`.
   cap-hit pagination test matches Hyperliquid's actual capped-response behaviour, and whether bulk
   rate-limit/backoff kicks in past the 18 sequential deep-fetch calls this feature made (0 failures
   observed so far). See `process/context/data-sources/all-data-sources.md`.
+- **New, 27-09-26: pytrends nightly points can read 0 from Google's partial hour.**
+  `pytrends_adapter` takes `df.iloc[-1]` of the hourly "now 7-d" frame, which is Google's incomplete
+  `isPartial` hour (observed memecoins 34→0, RWA all 0). Candidate fix: drop `isPartial` rows or use a
+  daily aggregate — changes stored values, so it needs its own plan. See
+  `process/general-plans/backlog/pytrends-partial-hour-zeros_NOTE_27-09-26.md`. Don't fix ad hoc.
 - **Momentum screener lives under `process/general-plans/`, not `process/features/`.** It's
   the first shipped feature, and it draws on macro-liquidity and narrative work that overlaps
   `cycle-regime` and `narrative-mindshare`. **Partially resolved, 24-09-26, for narrative only:**
@@ -881,3 +942,6 @@ iteration reports (incl. EVL cycle 6's tie-break fix), `results.tsv`, and `git l
   `process/general-plans/active/momentum-screener_17-09-26/`,
   `process/features/cycle-regime/completed/regime-dashboard_24-09-26/`, `process/features/*/` (the
   other three still placeholder-only), `.env.example`, `.github/workflows/liqtide-snapshot.yml`
+- 2026-09-25 amendment: `vc-update-process-agent` closeout of the narrative-keyword-keying
+  fix (targeted edits; `api/analytics/narrative/trigger.py` + its tests), then merged into
+  `claude/kind-tesla-tat3vo`

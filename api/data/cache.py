@@ -511,3 +511,124 @@ def write_exchange_point(category_id: str, row: dict) -> bool:
     combined = combined.sort_values("date", kind="stable")
     combined[EXCHANGE_SERIES_COLUMNS].to_parquet(path, index=False)
     return True
+
+
+# --------------------------------------------------------------------------
+# On-chain growth archive (chain-growth RFC-3). One Parquet file per
+# (source, chain_id, metric). Providers return full history each night, so a
+# write is a merge with a revision window, not a single-point append:
+#   - new dates are inserted;
+#   - dates inside the window whose value changed are replaced, marked
+#     revised=True, and the old value kept in previous_value;
+#   - older dates are never overwritten (a change there is counted as drift);
+#   - nothing is ever deleted;
+#   - the file is rewritten only when something was inserted or revised, so
+#     no-change nights produce no git diff.
+# --------------------------------------------------------------------------
+ONCHAIN_COLUMNS = ["date", "value", "first_seen_utc", "as_of_utc", "revised", "previous_value"]
+ONCHAIN_REVISION_WINDOW_DAYS = 14
+_ONCHAIN_DTYPES = {
+    "date": "string", "value": "float64", "first_seen_utc": "string",
+    "as_of_utc": "string", "revised": "bool", "previous_value": "float64",
+}
+
+
+class OnchainMergeResult:
+    __slots__ = ("inserted", "revised", "unchanged", "out_of_window_drift", "dropped_future", "wrote_file", "rows")
+
+    def __init__(self) -> None:
+        self.inserted = 0
+        self.revised = 0
+        self.unchanged = 0
+        self.out_of_window_drift = 0
+        self.dropped_future = 0
+        self.wrote_file = False
+        self.rows = 0
+
+    def __repr__(self) -> str:  # pragma: no cover - debug aid
+        return (f"OnchainMergeResult(inserted={self.inserted}, revised={self.revised}, "
+                f"unchanged={self.unchanged}, drift={self.out_of_window_drift}, "
+                f"dropped_future={self.dropped_future}, wrote_file={self.wrote_file}, rows={self.rows})")
+
+
+def onchain_series_path(source: str, chain_id: str, metric: str) -> Path:
+    return CACHE_ROOT / "onchain" / source / chain_id / f"{metric}.parquet"
+
+
+def _empty_onchain_frame() -> pd.DataFrame:
+    return pd.DataFrame({c: pd.Series(dtype=t) for c, t in _ONCHAIN_DTYPES.items()})[ONCHAIN_COLUMNS]
+
+
+def read_onchain_series(source: str, chain_id: str, metric: str) -> pd.DataFrame:
+    """Stored series sorted by date; an empty frame with ONCHAIN_COLUMNS if absent."""
+    path = onchain_series_path(source, chain_id, metric)
+    if not path.exists():
+        return _empty_onchain_frame()
+    df = _connect().sql(f"SELECT * FROM read_parquet('{path.as_posix()}') ORDER BY date").df()
+    return df[ONCHAIN_COLUMNS].astype(_ONCHAIN_DTYPES).reset_index(drop=True)
+
+
+def _values_differ(old: float, new: float) -> bool:
+    return abs(old - new) > 1e-9 * max(1.0, abs(old))
+
+
+def merge_onchain_series(
+    source: str,
+    chain_id: str,
+    metric: str,
+    points: list[tuple[str, float]],
+    *,
+    today: str,
+    now_utc: str,
+    window_days: int = ONCHAIN_REVISION_WINDOW_DAYS,
+) -> OnchainMergeResult:
+    """Merge a provider's full series into the stored archive (rules above).
+
+    `today` is the UTC date (YYYY-MM-DD); dates after it are dropped. The
+    window covers `today - window_days` .. `today` inclusive.
+    """
+    from datetime import date as _date, timedelta as _timedelta
+
+    result = OnchainMergeResult()
+    today_d = _date.fromisoformat(today)
+    window_start = (today_d - _timedelta(days=max(0, int(window_days)))).isoformat()
+
+    incoming: dict[str, float] = {}
+    for d, v in points:
+        d = str(d)
+        if _date.fromisoformat(d) > today_d:
+            result.dropped_future += 1
+            continue
+        incoming[d] = float(v)  # duplicate dates: last one wins
+
+    existing = read_onchain_series(source, chain_id, metric)
+    stored = {row.date: row for row in existing.itertuples(index=False)}
+    rows = [dict(zip(ONCHAIN_COLUMNS, r)) for r in existing.itertuples(index=False)]
+    index = {r["date"]: i for i, r in enumerate(rows)}
+
+    for d in sorted(incoming):
+        v = incoming[d]
+        if d not in stored:
+            rows.append({"date": d, "value": v, "first_seen_utc": now_utc, "as_of_utc": now_utc,
+                         "revised": False, "previous_value": float("nan")})
+            result.inserted += 1
+            continue
+        old = float(stored[d].value)
+        if not _values_differ(old, v):
+            result.unchanged += 1
+        elif d >= window_start:
+            r = rows[index[d]]
+            r.update(value=v, previous_value=old, revised=True, as_of_utc=now_utc)
+            result.revised += 1
+        else:
+            result.out_of_window_drift += 1
+
+    result.rows = len(rows)
+    if result.inserted or result.revised:
+        path = onchain_series_path(source, chain_id, metric)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        df = pd.DataFrame(rows, columns=ONCHAIN_COLUMNS).astype(_ONCHAIN_DTYPES)
+        df = df.sort_values("date", kind="stable").reset_index(drop=True)
+        df.to_parquet(path, index=False)
+        result.wrote_file = True
+    return result

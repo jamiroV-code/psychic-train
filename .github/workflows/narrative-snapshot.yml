@@ -3,14 +3,19 @@ name: Narrative daily snapshot
 # Forward-archives one point per (source, category) for the /narrative
 # dashboard (narrative dashboard RFC-4). Google Trends' short window, Reddit
 # search and CoinGecko "trending" keep no history we can fetch later, so a
-# day this workflow doesn't capture is gone. Runs at 23:00 UTC, 30 minutes
-# before liqtide-snapshot.yml, so the two pushes to main don't overlap.
+# day this workflow doesn't capture is gone. Points are dated by the UTC day
+# the run actually executes. Scheduled for 18:17 UTC: GitHub starts scheduled
+# runs ~2h late (observed up to ~2h20m), which pushed the old 23:00 UTC slot
+# past midnight (01:03-01:07 UTC) and left 2026-09-25 with no point at all.
+# Runs 30 minutes after chain-growth-snapshot.yml and 30 before
+# liqtide-snapshot.yml, so the pushes to main don't overlap. Pinned by
+# api/tests/scripts/test_snapshot_workflow_schedules.py.
 #
 # No secrets: without REDDIT_CLIENT_ID/REDDIT_CLIENT_SECRET the Reddit
 # source is skipped and logged as "credentials-not-configured" (ADR-8).
 on:
   schedule:
-    - cron: "0 23 * * *"
+    - cron: "17 18 * * *"
   workflow_dispatch: {}
 
 permissions:

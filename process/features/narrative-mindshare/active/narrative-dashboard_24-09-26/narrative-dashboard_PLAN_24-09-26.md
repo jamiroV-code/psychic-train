@@ -43,6 +43,21 @@ The single hardest constraint in this plan is **AC-1**: nothing built here may c
 `GET /api/narrative/categories`'s response shape or `/screener`'s narrative strip/confidence-badge
 behavior by even one byte. Every RFC below is designed around that constraint first.
 
+> **AC-1 amendment (25-09-26, narrative-keyword-keying fix — additive note only).** The AC-1
+> byte-identical contract test (`api/tests/routers/test_narrative_categories_contract.py`) was
+> validated against a seed that wrote pytrends/reddit history under the category id. The real
+> adapters archive those two sources under the search keyword (`keywords[0]`), and
+> `trigger.py::compute_narrative_categories` read them back by category id — so in production it
+> always saw empty pytrends/reddit history. The test's seed matched the buggy read key, which masked
+> the bug. The keyword-keying plan
+> (`process/features/narrative-mindshare/active/narrative-keyword-keying_25-09-26/narrative-keyword-keying_PLAN_25-09-26.md`)
+> fixed the reader (pytrends/reddit by keyword, coingecko by category id), moved the seed to
+> keyword-keyed rows, and re-ran the golden fixture regeneration: the fixture came out
+> **byte-identical**, because the old stubbed seed already produced the corrected 3-source values.
+> Before/after evidence: `narrative-keyword-keying_DIFF_25-09-26.md` in that task folder. No
+> `LEGACY_COIN_CATEGORY_MAP` / `mapping.py` change and no change to any AC-1 conclusion about
+> mapping.
+
 ## Quick Links
 
 - [1. Context and Goals](#1-context-and-goals)

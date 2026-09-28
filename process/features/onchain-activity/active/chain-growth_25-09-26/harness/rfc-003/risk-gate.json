@@ -1,0 +1,14 @@
+{
+  "riskClass": "deploy/runtime/container/proxy/gateway behavior",
+  "workDescription": "New scheduled GitHub Actions workflow chain-growth-snapshot.yml (cron 0 22 * * *, workflow_dispatch, permissions contents: write) that runs api/scripts/snapshot_chain_growth.py and commits api/data/cache/onchain/ to main. Additive cache.py merge helpers + .gitignore negation. No secrets.",
+  "approver": "pending user review (manual-first)",
+  "mustStopBeforeFinalize": true,
+  "task": "RFC-3: chain-growth nightly archive (storage + workflow)",
+  "planPath": "process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md",
+  "riskLevel": "high",
+  "riskClasses": [
+    "deploy-runtime"
+  ],
+  "humanApprovalRequired": true,
+  "why": "A new write-capable scheduled job pushing to main."
+}

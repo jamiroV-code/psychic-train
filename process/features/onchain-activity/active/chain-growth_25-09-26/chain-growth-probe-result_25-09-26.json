@@ -1,0 +1,228 @@
+{
+  "dune_key_present": true,
+  "generated_at": "2026-09-25T19:49:03+00:00",
+  "items": [
+    {
+      "data": {
+        "chain_keys": [
+          "all_l2s",
+          "arbitrum",
+          "arbitrum_nova",
+          "base",
+          "celo",
+          "ethereum",
+          "fraxtal",
+          "gravity",
+          "ink",
+          "linea",
+          "lisk",
+          "manta",
+          "mantle",
+          "megaeth",
+          "metis",
+          "mode",
+          "multiple",
+          "optimism",
+          "plume",
+          "polygon_pos",
+          "robinhood",
+          "ronin",
+          "scroll",
+          "soneium",
+          "starknet",
+          "taiko",
+          "unichain",
+          "worldchain",
+          "zircuit",
+          "zksync_era"
+        ],
+        "host": "https://api.growthepie.xyz",
+        "launch_dates": {
+          "arbitrum": "2021-08-31",
+          "base": "2023-08-09",
+          "ethereum": "2015-07-30",
+          "optimism": "2021-12-16",
+          "robinhood": "2026-07-01"
+        },
+        "metric_keys": [
+          "app_revenue",
+          "blob_size",
+          "costs",
+          "costs_blobs",
+          "costs_l1",
+          "daa",
+          "fdv",
+          "fees",
+          "market_cap",
+          "profit",
+          "rent_paid",
+          "stables_mcap",
+          "throughput",
+          "tvl",
+          "txcosts",
+          "txcount"
+        ],
+        "metrics_present": {
+          "daa": true,
+          "txcount": true
+        },
+        "robinhood_keys": [
+          "robinhood"
+        ],
+        "targets_present": {
+          "arbitrum": true,
+          "base": true,
+          "ethereum": true,
+          "optimism": true
+        }
+      },
+      "detail": "all 4 target chains + daa/txcount present; robinhood key(s): ['robinhood']",
+      "id": "growthepie_master",
+      "status": "PASS"
+    },
+    {
+      "data": {},
+      "detail": "HTTPStatusError: Client error '403 Forbidden' for url 'https://api.growthepie.xyz/v1/fundamentals_full.json'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403",
+      "id": "growthepie_history_depth",
+      "status": "UNKNOWN"
+    },
+    {
+      "data": {
+        "url": "https://l2beat.com/api/scaling/activity"
+      },
+      "detail": "keyless activity endpoint: https://l2beat.com/api/scaling/activity",
+      "id": "l2beat_endpoint",
+      "status": "PASS"
+    },
+    {
+      "data": {
+        "first": "2026-08-26",
+        "has_tx": true,
+        "has_uops": true,
+        "last": "2026-09-24",
+        "points": 30,
+        "types": [
+          "timestamp",
+          "count",
+          "uopsCount"
+        ],
+        "url": "https://l2beat.com/api/scaling/activity/base"
+      },
+      "detail": "30 points 2026-08-26..2026-09-24",
+      "id": "l2beat_activity_base",
+      "status": "PASS"
+    },
+    {
+      "data": {
+        "first": "2026-08-26",
+        "has_tx": true,
+        "has_uops": true,
+        "last": "2026-09-24",
+        "points": 30,
+        "types": [
+          "timestamp",
+          "count",
+          "uopsCount"
+        ],
+        "url": "https://l2beat.com/api/scaling/activity/arbitrum"
+      },
+      "detail": "30 points 2026-08-26..2026-09-24",
+      "id": "l2beat_activity_arbitrum",
+      "status": "PASS"
+    },
+    {
+      "data": {
+        "url": "https://l2beat.com/api/scaling/activity/optimism"
+      },
+      "detail": "ValueError: no chart.types / chart.data in L2BEAT response",
+      "id": "l2beat_activity_optimism",
+      "status": "FAIL"
+    },
+    {
+      "data": {
+        "first": "2026-08-26",
+        "has_tx": true,
+        "has_uops": true,
+        "last": "2026-09-24",
+        "points": 30,
+        "types": [
+          "timestamp",
+          "count",
+          "uopsCount"
+        ],
+        "url": "https://l2beat.com/api/scaling/activity/robinhood"
+      },
+      "detail": "30 points 2026-08-26..2026-09-24",
+      "id": "l2beat_activity_robinhood",
+      "status": "PASS"
+    },
+    {
+      "data": {},
+      "detail": "usage endpoint HTTP 405; check credits in the Dune UI",
+      "id": "dune_usage",
+      "status": "UNKNOWN"
+    },
+    {
+      "data": {},
+      "detail": "execute HTTP 402: {\"error\":\"This api request would exceed your configured datapoint limit per billing cycle. Please visit your subscription settings on dune.com and adjust your limits to perform this request.\"}",
+      "id": "dune_execute",
+      "status": "FAIL"
+    },
+    {
+      "data": {
+        "detail": "credit cost per query not reported",
+        "status": "UNKNOWN"
+      },
+      "detail": "credit cost per query not reported",
+      "id": "dune_budget_math",
+      "status": "UNKNOWN"
+    },
+    {
+      "data": {},
+      "detail": "execute HTTP 402: {\"error\":\"This api request would exceed your configured datapoint limit per billing cycle. Please visit your subscription settings on dune.com and adjust your limits to perform this request.\"}",
+      "id": "dune_solana_scale_35d",
+      "status": "FAIL"
+    },
+    {
+      "data": {},
+      "detail": "execute HTTP 402: {\"error\":\"This api request would exceed your configured datapoint limit per billing cycle. Please visit your subscription settings on dune.com and adjust your limits to perform this request.\"}",
+      "id": "dune_coverage_solana",
+      "status": "FAIL"
+    },
+    {
+      "data": {},
+      "detail": "execute HTTP 402: {\"error\":\"This api request would exceed your configured datapoint limit per billing cycle. Please visit your subscription settings on dune.com and adjust your limits to perform this request.\"}",
+      "id": "dune_coverage_bnb",
+      "status": "FAIL"
+    },
+    {
+      "data": {},
+      "detail": "execute HTTP 402: {\"error\":\"This api request would exceed your configured datapoint limit per billing cycle. Please visit your subscription settings on dune.com and adjust your limits to perform this request.\"}",
+      "id": "dune_coverage_tron",
+      "status": "FAIL"
+    },
+    {
+      "data": {},
+      "detail": "execute HTTP 402: {\"error\":\"This api request would exceed your configured datapoint limit per billing cycle. Please visit your subscription settings on dune.com and adjust your limits to perform this request.\"}",
+      "id": "dune_coverage_polygon",
+      "status": "FAIL"
+    },
+    {
+      "data": {},
+      "detail": "execute HTTP 402: {\"error\":\"This api request would exceed your configured datapoint limit per billing cycle. Please visit your subscription settings on dune.com and adjust your limits to perform this request.\"}",
+      "id": "dune_coverage_robinhood",
+      "status": "FAIL"
+    },
+    {
+      "data": {
+        "executions": 0,
+        "spent": 0.0
+      },
+      "detail": "0.0 credits reported over 0 executions",
+      "id": "dune_credits_spent",
+      "status": "PASS"
+    }
+  ],
+  "overall": "FAIL",
+  "probe": "chain-growth RFC-1"
+}

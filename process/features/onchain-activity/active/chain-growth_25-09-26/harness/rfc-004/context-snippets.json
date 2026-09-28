@@ -1,0 +1,35 @@
+{
+  "snippets": [
+    {
+      "file": "api/main.py",
+      "lines": "22,56",
+      "description": "additive import + include_router(onchain_activity.router)",
+      "content": "app.include_router(onchain_activity.router)"
+    },
+    {
+      "file": "api/routers/onchain_activity.py",
+      "lines": "20-32",
+      "description": "GET handlers; metric Literal -> 422; future start -> 422; no provider calls",
+      "content": "metric: Literal[\"active_addresses\", \"transactions\"]"
+    },
+    {
+      "file": "api/analytics/onchain/response.py",
+      "lines": "whole file",
+      "description": "reads cache.read_onchain_series + load_chains only; L2BEAT exposed only as a display-only summary with redistributable=False",
+      "content": "CrossCheck(source=\"l2beat\", redistributable=l2beat_adapter.REDISTRIBUTABLE)"
+    },
+    {
+      "file": "api/analytics/onchain/growth.py",
+      "lines": "21-31",
+      "description": "D1/D3 constants with sweep-evidence docstring",
+      "content": "WINDOW_DAYS = 180; RECOVERY_PCT = 0.25; SUSTAIN_DAYS = 14; SPACING_DAYS = 180; FLOOR_STATE_PCT = 0.10"
+    },
+    {
+      "file": "api/models/onchain_activity.py",
+      "lines": "ComparisonSeriesModel",
+      "description": "AC-13: comparison series has no raw-value field",
+      "content": "index_values, pct_above_low_values"
+    }
+  ],
+  "task": "RFC-4: chain-growth floor/ramp analytics + GET /api/onchain/growth, /chains"
+}

@@ -1,0 +1,73 @@
+{
+  "steps": [
+    {
+      "step": "New RFC-3 tests (merge rules, round-trip, dry-run, isolation, none-source skip, spacing, UTC)",
+      "command": "uv run --project api pytest api/tests/data/test_cache_chain_growth.py api/tests/scripts/test_snapshot_chain_growth.py -q",
+      "result": "PASS",
+      "notes": "22 passed"
+    },
+    {
+      "step": "Full api suite",
+      "command": "uv run --project api pytest api/ -q",
+      "result": "PASS",
+      "notes": "467 passed, 5 deselected (baseline 445/5, +22)"
+    },
+    {
+      "step": "Workflow YAML parses",
+      "command": "python3 -c \"import yaml; yaml.safe_load(open('.github/workflows/chain-growth-snapshot.yml'))\"",
+      "result": "PASS",
+      "notes": "on={schedule cron 0 22 * * *, workflow_dispatch}; permissions={contents: write}; concurrency group chain-growth-snapshot"
+    },
+    {
+      "step": "E1 diff vs narrative-snapshot.yml (non-comment lines)",
+      "command": "diff .github/workflows/narrative-snapshot.yml .github/workflows/chain-growth-snapshot.yml",
+      "result": "PASS",
+      "notes": "Only: name, cron, concurrency group, run command (no --with pytrends), warn step name/text, commit step name, git add path, commit message. No pull_request, no env/secrets."
+    },
+    {
+      "step": "git check-ignore 6 cases",
+      "command": "git check-ignore -v --no-index <path>",
+      "result": "PASS",
+      "notes": "onchain/growthepie/base/active_addresses.parquet not ignored; onchain/l2beat/base/transactions.parquet not ignored; narrative/pytrends/x.parquet not ignored; liqtide/2026-09-20.parquet not ignored; narrative/coingecko_trending.parquet ignored (.gitignore:25); ohlcv/x.parquet ignored (.gitignore:18)"
+    },
+    {
+      "step": "Additive-only cache.py/.gitignore",
+      "command": "git diff api/data/cache.py .gitignore | grep -c '^-[^-]'",
+      "result": "PASS",
+      "notes": "0 removed lines"
+    },
+    {
+      "step": "Whitespace/conflict markers",
+      "command": "git diff --check",
+      "result": "PASS",
+      "notes": "clean"
+    },
+    {
+      "step": "Failure case: all series unavailable",
+      "command": "test_all_unavailable_exit_2",
+      "result": "PASS",
+      "notes": "exit 2, no files written"
+    },
+    {
+      "step": "Live provider run / real cron firing",
+      "command": "gh workflow run chain-growth-snapshot.yml (after merge)",
+      "result": "SKIP",
+      "notes": "Container egress blocks growthepie/L2BEAT; user step after merge."
+    }
+  ],
+  "task": "RFC-3: chain-growth nightly archive (storage + workflow)",
+  "commands": [
+    "uv run --project api pytest api/tests/data/test_cache_chain_growth.py api/tests/scripts/test_snapshot_chain_growth.py -q",
+    "uv run --project api pytest api/ -q",
+    "python3 -c \"import yaml; yaml.safe_load(open('.github/workflows/chain-growth-snapshot.yml'))\"",
+    "diff .github/workflows/narrative-snapshot.yml .github/workflows/chain-growth-snapshot.yml",
+    "git check-ignore -v --no-index <path>",
+    "git diff api/data/cache.py .gitignore | grep -c '^-[^-]'",
+    "git diff --check",
+    "test_all_unavailable_exit_2"
+  ],
+  "manualChecks": [
+    "User: trigger the workflow once after merge (gh workflow run chain-growth-snapshot.yml) and review the summary lines and the committed api/data/cache/onchain/ files."
+  ],
+  "result": "pass (automated); live run pending on user side"
+}

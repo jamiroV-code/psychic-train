@@ -1,0 +1,13 @@
+{
+  "reviewer": "pending \u2014 user (manual-first)",
+  "decision": "PENDING",
+  "rationale": "Not yet reviewed. RFC-4 is not finalize-ready until the user reviews the new API contract and the real-data markers, then records APPROVE or REJECT.",
+  "timestamp": null,
+  "task": "RFC-4: chain-growth floor/ramp analytics + GET /api/onchain/growth, /chains",
+  "blockingFindings": [],
+  "nonBlockingFindings": [
+    "L2BEAT values are never served; only a divergence % summary (display_only=true, redistributable=false). Confirm this derived number is acceptable under L2BEAT terms.",
+    "Response is ~1.36 MB uncompressed per metric; gzip applies."
+  ],
+  "notes": "Decision deliberately PENDING."
+}

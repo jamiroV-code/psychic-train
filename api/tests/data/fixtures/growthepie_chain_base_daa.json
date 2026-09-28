@@ -1,0 +1,29 @@
+{
+ "last_updated_utc": "2026-09-25 06:12:03",
+ "details": {
+  "metric_id": "daa",
+  "metric_name": "Active Addresses",
+  "timeseries": {
+   "daily": {
+    "types": [
+     "unix",
+     "value"
+    ],
+    "data": [
+     [
+      1727049600000,
+      812345
+     ],
+     [
+      1727136000000,
+      null
+     ],
+     [
+      1727222400000,
+      834567
+     ]
+    ]
+   }
+  }
+ }
+}

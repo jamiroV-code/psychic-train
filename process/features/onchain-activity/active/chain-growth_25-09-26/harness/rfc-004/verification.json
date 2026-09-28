@@ -1,0 +1,76 @@
+{
+  "steps": [
+    {
+      "step": "new analytics tests (synthetic + frozen real-data regression)",
+      "command": "uv run --project api pytest api/tests/analytics/onchain -q",
+      "result": "PASS",
+      "notes": "30 passed"
+    },
+    {
+      "step": "router tests: shape, grid sync, 422s, gzip, read-only (no network, no writes), unavailable chains, stale, route snapshot",
+      "command": "uv run --project api pytest api/tests/routers/test_onchain_activity_router.py -q",
+      "result": "PASS",
+      "notes": "14 passed"
+    },
+    {
+      "step": "boundary: bad metric / bad start / future start rejected",
+      "command": "test_422 (3 params)",
+      "result": "PASS",
+      "notes": "422"
+    },
+    {
+      "step": "full api suite",
+      "command": "uv run --project api pytest api/ -q",
+      "result": "PASS",
+      "notes": "511 passed, 5 deselected (baseline 467/5)"
+    },
+    {
+      "step": "web suite unchanged",
+      "command": "pnpm --filter web test",
+      "result": "PASS",
+      "notes": "110 passed (16 files)"
+    },
+    {
+      "step": "real-cache smoke: dates reproduce Stage 0",
+      "command": "build_growth_response on api/data/cache/onchain",
+      "result": "PASS",
+      "notes": "ETH daa 2022-06-30->2022-08-08 etc.; floor state 2/10 series"
+    }
+  ],
+  "task": "RFC-4: chain-growth floor/ramp analytics + GET /api/onchain/growth, /chains",
+  "commands": [
+    "uv run --project api pytest api/tests/analytics/onchain -q",
+    "uv run --project api pytest api/tests/routers/test_onchain_activity_router.py -q",
+    "test_422 (3 params)",
+    "uv run --project api pytest api/ -q",
+    "pnpm --filter web test",
+    "build_growth_response on api/data/cache/onchain"
+  ],
+  "manualChecks": [
+    "User: review /api/onchain/growth on the real cache (AC-14, RFC-6) and eyeball markers against known history."
+  ],
+  "result": "PASS (automated); manual review pending",
+  "evlConfirmation": {
+    "date": "2026-09-26",
+    "runBy": "vc-tester (EVL confirmation sweep, uncommitted tree)",
+    "gates": [
+      {"command": "uv run --project api pytest api/tests/analytics/onchain -q", "result": "PASS", "notes": "30 passed"},
+      {"command": "uv run --project api pytest api/tests/routers/test_onchain_activity_router.py -q", "result": "PASS", "notes": "14 passed"},
+      {"command": "uv run --project api pytest api/ -q", "result": "PASS", "notes": "511 passed, 5 deselected"},
+      {"command": "pnpm --filter web test", "result": "PASS", "notes": "110 passed, 16 files"},
+      {"command": "git diff --check", "result": "PASS", "notes": "no conflict markers, no whitespace errors"}
+    ],
+    "adversarialChecks": {
+      "diffScope": "PASS - git diff --name-status shows only api/main.py (+2 lines registering router) and api/data/chains.json (polygon launch_date only); everything else untracked new files; no narrative/regime/screener/cache.py changes",
+      "constantsSingleSource": "PASS - EMA_SPAN=28, WINDOW_DAYS(N)=180, RECOVERY_PCT(R)=0.25, SUSTAIN_DAYS(M)=14, SPACING_DAYS(S)=180, FLOOR_STATE_PCT=0.10 all defined once in api/analytics/onchain/growth.py, documented in module docstring",
+      "mutationTest": "PASS - set RECOVERY_PCT=0.40, re-ran test_growth.py: 4 tests failed (TestConstants::test_d1_d3_values, TestRealDataRegression::test_ethereum_daa/test_arbitrum_tx/test_base_daa) confirming real dependency on the constant; reverted growth.py, cmp confirms byte-identical to original",
+      "preLaunchExclusion": "PASS - test_pre_launch_ramp_from_zero_excluded and test_gate_counts_only_post_launch in test_growth.py; router test_pre_launch_flagged_and_gate confirms pre_launch points flagged, ema28=None, and excluded from history_days gate",
+      "neverSilentlyWrong": "PASS - solana/bnb/tron have source:none + unavailable_reason (no zero rows, verified in chains.json + test_unavailable_chain_never_zero_filled/test_chains_endpoint); gap_before flags breaks (MAX_GAP_DAYS=1); is_stale() flags >3 days (STALE_AFTER_DAYS=3, test_stale); cross_check_summary returns only pct divergence, no raw values (test_cross_check_display_only_transactions_only)",
+      "readOnlyEndpoints": "PASS - archive fixture monkeypatches httpx.HTTPTransport.handle_request to raise on any network call; _snapshot() proves cache mtimes unchanged after GET; test_422 covers bad metric (new_addresses), malformed start (not-a-date), future start",
+      "realDataFixtures": "PASS - fixtures are 1191-2461 rows / 23-49KB each, frozen from commit 7143733; asserted dates match Stage 0 report exactly: ETH daa 2022-06-30/2022-08-08, ARB tx 2023-09-17/2023-11-27, Base daa 2025-04-23/2025-05-24 (test_ethereum_daa/test_arbitrum_tx/test_base_daa all pass)",
+      "evidencePack": "PASS - harness/rfc-004/ has exactly 5 files (adversarial-validation.json, context-snippets.json, review-decision.json, risk-gate.json, verification.json); review-decision.json decision is PENDING with rationale 'Not yet reviewed'",
+      "gitDiffCheck": "PASS - exit code 0, no conflict markers or trailing-whitespace errors"
+    },
+    "treeState": "Tree left exactly as found - no source files modified (mutation test reverted and byte-verified via cmp)"
+  }
+}
