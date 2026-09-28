@@ -92,6 +92,69 @@ Correct this line as part of T8.
 
 ---
 
+---
+
+## 🎯 New Direction (2026-09-28, user): deployed always-on app + smooth UI
+
+The goal moved from "keep the research tooling correct" to **"a workable app for everyday use."**
+User decisions this session:
+
+| Decision | Answer |
+|---|---|
+| How to run it | **Deployed, always-on** (reachable from any device, not just the PC) |
+| UI | Own worktree — `claude/ui-shell` at `/home/user/psychic-train-ui`; user will give detailed direction there |
+| Daily-driver page | No preference — treat all five as equal |
+| Reddit (T4) | **Leave for now.** Mindshare keeps showing a permanently empty third source. |
+
+### ⚠️ The constraint deployment runs into
+
+Three shipped adapters are tagged **non-redistributable**: `etf_flows_adapter` (Farside),
+`l2beat_adapter`, and `hyperliquid_narrative_adapter` (unverified terms). T12's LSE verdict says
+the same for equities. `all-context.md` also records that auth and multi-tenancy are *deliberately
+out of scope* "until the research tooling works."
+
+An always-on deployment therefore **must be private to you**. That does not mean building real
+auth — a single-user gate (Cloudflare Access, Tailscale, or HTTP basic at the proxy) satisfies it
+cheaply. What it rules out is a publicly reachable URL. Flagging, not blocking: the decision is
+yours and the work proceeds either way.
+
+### What "deployed + full pipeline" actually requires
+
+**P1 — Pipeline completeness** (needed regardless of where it deploys)
+Today 3 GitHub crons cover liqtide / narrative / onchain. Nothing schedules the rest:
+- `refresh_cache.py` — OHLCV tails, feeds `/screener` **and** `/pairs`
+- `backfill_primaries.py` — FRED series, feeds `/regime`
+- `compute_pairs.py` — pair stats, must re-run after each OHLCV refresh (T5)
+
+Plus the split-brain: liqtide/narrative/onchain archives are committed to the repo, while
+ohlcv/liquidity/legs/pairs are gitignored and local-only. A deployed instance needs one coherent
+story for both.
+
+**P2 — Deployability**
+- `api/main.py` binds `127.0.0.1` by design and CORS is `localhost:3000` only — both need to change
+- Parquet + DuckDB means **files on disk**, so a persistent volume is required; a stateless PaaS
+  will not work without one
+- Single-user access gate (see constraint above)
+- Config/secrets: `API_BASE_URL`, CORS origins
+- **Open decision: the deploy target itself.** Materially changes the work — see Open Decisions.
+
+**P3 — UI** (parallel, own worktree, user-directed)
+Currently: 5 routes, no nav, no global CSS, `layout.tsx` is 14 lines, `page.tsx` is a bare list of
+links, 24 files use inline `style={{}}` against 9 using `className`. T14 and T24 fold into this.
+
+### Phase order
+
+```
+P0 (today)  merge PR #6's fix before ~20:20 UTC · clear the 4 leftover branches
+P1          pipeline automation — the 3 missing scheduled jobs + one cache story
+P2          deployability — needs a SPEC (deploy target + access gate are real decisions)
+P3          UI — runs in PARALLEL with P1/P2, touches web/ only
+```
+
+P1 and P3 are disjoint (`api/` + workflows vs `web/`), so they fit the 3-worktree model with a slot
+left for housekeeping.
+
+
 ## Verified Ground Truth
 
 Measured at 13:40 UTC on main `e3a94bf` merged into this branch.
@@ -123,11 +186,17 @@ are user-PC steps.
 PR #8 landed the `isPartial` filter in `_fetch_live` plus tests and a SPEC/PLAN/REPORT closeout.
 The single-keyword path is fixed on main. **T1b is the remaining half.**
 
-### T1b — port the `isPartial` guard into `fetch_trends_batched` · 🚨 **NOW LIVE ON MAIN**
+### T1b — port the `isPartial` guard into `fetch_trends_batched` · ✅ **FIXED, awaiting merge**
 
-**PR #7 merged at 14:44:57Z (main `e9c33fe`) with this gap unfixed.** Its merge commit `ca8e68b`
-pulled in PR #8's fix, so the file now *contains* an `isPartial` guard — but only at lines 66–67,
-inside `_fetch_live` (lines 50–80). Verified on main:
+**Fixed on `claude/pensive-dijkstra-ko69oi` (commit `a0a7b09`), open in PR #6 — not yet on main.**
+`_fetch_batch_live` now drops `isPartial=True` rows and returns `None` when nothing complete
+survives, so `fetch_trends_batched` inherits the guard and reports `unavailable` /
+`batch-fetch-failed` rather than a fabricated value. 3 regression tests added; full suite 714
+passed / 5 deselected. **Must merge before the ~20:20 UTC cron.**
+
+The state it fixes — PR #7 merged at 14:44:57Z (main `e9c33fe`) with the gap open. Its merge commit
+`ca8e68b` pulled in PR #8's fix, so the file *contained* an `isPartial` guard at lines 66–67 inside
+`_fetch_live` only. Verified on main at the time:
 
 | Function (main `e9c33fe`) | Lines | `isPartial` guard |
 |---|---|---|
