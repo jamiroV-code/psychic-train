@@ -86,11 +86,10 @@ function series(body: HistoryResponse, cid: string, source: string, variant: str
   return s!;
 }
 
-test("page loads from a real request with the data-quality caveat on every view", async ({ page }) => {
+test("page loads from a real request with the data-quality caveat shown exactly once", async ({ page }) => {
   await openNarrative(page);
-  for (const view of ["page", "history", "comparison", "change"]) {
-    await expect(page.getByTestId(`narrative-caveat-${view}`)).toBeVisible();
-  }
+  await expect(page.getByTestId("narrative-caveat")).toHaveCount(1);
+  await expect(page.getByTestId("narrative-caveat")).toBeVisible();
   await expect(page.getByTestId("narrative-error")).toHaveCount(0);
   await expect(page.getByTestId("narrative-empty")).toHaveCount(0);
 });

@@ -50,7 +50,7 @@ narratives as the design floor/ceiling everywhere cross-narrative comparison hap
 | RFC-3 | Multi-keyword blending + anchor-chained pytrends batching (nightly job + backfill script) | ✅ CODE DONE |
 | RFC-4 | Momentum view (cross-sectional, vs-the-field ranking) | ✅ CODE DONE |
 | RFC-5 | Daily social-mindshare view (blend + show each source) | ✅ CODE DONE |
-| RFC-6 | Caveat de-duplication (sticky, once per page) | ⏳ NOT STARTED (no hard dependency — may run anytime after RFC-1) |
+| RFC-6 | Caveat de-duplication (sticky, once per page) | ✅ CODE DONE |
 | RFC-7 | Tripwire snapshot + AC-13 re-confirm + seeded Playwright + AC-14 handoff | ⏳ NOT STARTED (depends on all above) |
 
 Code-only completion is `CODE DONE`, not `VERIFIED`. A phase reaches `✅ VERIFIED` only after its
@@ -1001,3 +1001,36 @@ Trends/Reddit/CoinGecko/Hyperliquid — same constraint as v1's AC-12):
   `MindshareView` (with an `onDateChange` callback) and `fetchNarrativeMindshare` are ready to be
   wired in during RFC-6/RFC-7. The inline proxy label is local to the view, and `DataQualityCaveat`
   is untouched (RFC-6 owns de-duplication).
+
+### RFC-6 (caveat de-duplication) — 2026-09-28 — orchestrator-approved scope expansion
+
+This scope was approved by the orchestrator (option "a") after Stage 0 found that ADR-6's premise did not
+match the code. It is not silent creep. Everything stays frontend-only: no API, schema or
+`api/` change, and AC-13 still passes.
+
+- **ADR-6 premise was wrong.** `CategoryHistoryPanel.tsx` never rendered a caveat, so it was not edited.
+  The page actually had 4 caveats, rendered from three files: `NarrativeDashboard.tsx` (`page` +
+  `history`), `ComparisonView.tsx` (`comparison`) and `ChangeInAttentionView.tsx` (`change`).
+- **Files touched (7 rather than the planned 3):**
+  - `NarrativeDashboard.tsx`: one pinned caveat; the `history` instance was removed.
+  - `ComparisonView.tsx` and `ChangeInAttentionView.tsx`: caveat call removed.
+  - `DataQualityCaveat.tsx`: metadata only, no rendering change. The `view` prop was narrowed to
+    `"page"` and the stale "on each view" header comment was updated.
+  - `__tests__/NarrativeDashboard.test.tsx` and `__tests__/RankViews.test.tsx`: rewritten to assert
+    the new behaviour.
+  - `e2e/narrative.spec.ts`: see the note below.
+- **Test-id decision.** `DataQualityCaveat`'s inner id is still `narrative-caveat-page`. `NarrativeDashboard`
+  wraps it in a `<div data-testid="narrative-caveat" style="position: sticky; top: 0">` (`PinnedCaveat`).
+  AC-12 is asserted on `narrative-caveat` having exactly one element, with the 6- and 15-narrative
+  fixtures. The test also checks that no `narrative-caveat-{history,comparison,change}` element exists.
+  The "sticky" pinning lives on this wrapper.
+- **E2E touched narrowly (RFC-7 note).** In `web/e2e/narrative.spec.ts`, only the existing
+  "caveat on every view" test was changed, to "exactly once" (`narrative-caveat` count 1 + visible).
+  RFC-7 should leave that assertion block alone and add its own scenarios. This session did not
+  run Playwright; RFC-7's seeded E2E run is the proof.
+- **Momentum and mindshare mounted (approved addition).** `NarrativeDashboard.tsx` now renders
+  `MomentumView` (`fetchNarrativeMomentum`) and `MindshareView` (`fetchNarrativeMindshare(date)`, re-fetched
+  via `onDateChange`) below the change view. Each view fetches independently and has its own
+  loading and error notice (`narrative-momentum-error` / `narrative-mindshare-error`), so a failure in
+  either one never hides the history views. The new optional props `fetchMomentum` / `fetchMindshare`
+  let tests inject stubs. This closes the gap that the RFC-4/RFC-5 notes flagged above.
