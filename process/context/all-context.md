@@ -1,17 +1,19 @@
 # my_site - All Context
 
-Last updated: 2026-09-28 (pytrends partial-hour-zeros fix, `narrative-mindshare`, on branch
-`claude/vigilant-hamilton-grr18c` — isolated single-file bug fix, full RESEARCH → SPEC → INNOVATE →
-PLAN → VALIDATE → EXECUTE → EVL, closed via UPDATE PROCESS; see the top Changes Since Last Update
-entry below. Prior merge note, still accurate for everything below it: 2026-09-28 (merge of two
-independent branches — pair screener v1 (`/pairs`,
-`cointegration-screener`'s first shipped feature, all 5 RFCs VERIFIED and archived) from `main`,
-and the 2026-09-27 snapshot cron timing fix (all three nightly workflows moved earlier to absorb
-GitHub's ~2h scheduler delay) from `claude/kind-tesla-tat3vo`. See Changes Since Last Update below
-for both, newest first, plus everything each branch already had (narrative v2 SPEC, on-chain
-chain-growth plan, the 2026-09-25 keyword-keying fix, and earlier). This merge reconciles the two
-branches' `all-context.md` — the previous "Branch note" about needing to reconcile by hand is now
-resolved.)
+Last updated: 2026-09-28, 2nd session (narrative-v2 EVL confirmation + RFC-3 scale-drift fix on
+branch `fix/narrative-sufficiency-gating-rfc1`, PR #7 — RFC-1..6 now `✅ VERIFIED`, RFC-7 stays
+`✅ CODE DONE` pending the user's AC-14 walkthrough; plan not archived). Also 2026-09-28, on a
+separate branch (`claude/vigilant-hamilton-grr18c`, merged into `main` via PR #8 ahead of this PR):
+the pytrends partial-hour-zeros fix (`narrative-mindshare`) — isolated single-file bug fix, full
+RESEARCH → SPEC → INNOVATE → PLAN → VALIDATE → EXECUTE → EVL, closed via UPDATE PROCESS. This
+version merges that PR #8 history into PR #7's branch to resolve a conflict between the two
+branches' independent edits to this same section — the previous "Branch note" about needing to
+reconcile by hand is now resolved. Prior update same day: merge of two independent branches — pair
+screener v1 (`/pairs`, `cointegration-screener`'s first shipped feature, all 5 RFCs VERIFIED and
+archived) from `main`, and the 2026-09-27 snapshot cron timing fix (all three nightly workflows
+moved earlier to absorb GitHub's ~2h scheduler delay) from `claude/kind-tesla-tat3vo`. See Changes
+Since Last Update below, newest first, for all of the above plus everything each branch already had
+(narrative v2 SPEC, on-chain chain-growth plan, the 2026-09-25 keyword-keying fix, and earlier).
 
 This file is the root context entrypoint for the repo.
 
@@ -23,6 +25,58 @@ Use it for two things:
 Start here before loading deeper context files.
 
 ---
+
+## Changes Since Last Update (2026-09-28, narrative-v2 EVL confirmation — narrative-mindshare)
+
+Plan: `process/features/narrative-mindshare/active/narrative-v2_25-09-26/narrative-v2_PLAN_25-09-26.md`
+(branch `fix/narrative-sufficiency-gating-rfc1`, PR #7). This is a documentation/process-only UPDATE
+PROCESS closeout session — no `api/` or `web/` source files were edited by this session beyond the
+already-committed scale-drift fix below.
+
+- `[Correction]` **RFC-3's primary-keyword pytrends scale drift, flagged 28-09-26 in an earlier
+  session, is now fixed (commit `1bec5db`).** Batching (RFC-3) folded the primary keyword into the
+  same anchor-chained request as every other keyword for a narrative, which meant the archived
+  `pytrends/{keywords[0]}` row — the exact key `trigger.py::compute_narrative_categories` reads for
+  `/categories` — silently switched from an independent single-keyword value to an anchor-rescaled
+  one. Fix: `snapshot_narrative.py` now writes that row from a separate unbatched `_fetch_live`
+  top-up call (first-write-wins on its own `as_of`; a failed top-up skips the row, no batched
+  fallback substituted); batched + blended writes are unchanged. Two new regression tests
+  (`test_primary_keyword_uses_unbatched_value_blend_uses_batched`,
+  `test_primary_topup_failure_skips_row_no_batched_fallback`,
+  `api/tests/scripts/test_snapshot_narrative.py`) confirm it, folded into the 708-passed count below.
+  This adds up to 15 extra pytrends requests/night at the plan's 15-narrative ceiling (23 total vs.
+  the pre-fix 8) — checked against `process/context/data-sources/all-data-sources.md`'s pytrends
+  guidance (no numeric hard ceiling documented) and accepted as within "cache aggressively"
+  tolerance. Full arithmetic recorded in the plan's new `## Agent-Probe Evidence` section — this also
+  satisfies RFC-3's previously-unrun named agent-probe (the 15-narrative worst-case request-count
+  check), so RFC-3 reaches `✅ VERIFIED`.
+- `[Product]` **RFC-1 through RFC-6 of narrative-v2 promoted to `✅ VERIFIED`** (real-data
+  sufficiency gating, the unified `narratives.json` config, RFC-3's fix above, the momentum view,
+  the daily mindshare view, and caveat de-duplication) — an independent `vc-tester` EVL confirmation
+  run reproduced all fully-automated gates green: `uv run --project api pytest api/ -q` → 708
+  passed/5 deselected (up from VALIDATE's 395/3 baseline); the AC-13 contract-snapshot test → 3
+  passed unmodified; `pnpm --filter web test` → 193 passed/24 files; `tsc --noEmit` → exit 0; full
+  Playwright suite run 3 times → 55/55, 54/55, 55/55 (see the flake finding below). A
+  frozen-file check (`git diff` against the pre-plan base commit for `trigger.py`/`mapping.py`) is
+  independently reproduced empty, confirming the hard-stop constraint held across all 7 RFCs.
+  **RFC-7 stays `✅ CODE DONE`, not VERIFIED** — its named agent-probe, the AC-14 real-machine
+  walkthrough (plan Section 14), needs live Google Trends/Reddit/CoinGecko/Hyperliquid access this
+  sandbox's egress proxy blocks, the same structural constraint that held up v1's AC-11/AC-12 until
+  the user ran them on their own PC. The plan stays in `active/`, not archived, pending that
+  walkthrough — same precedent as regime-dashboard and narrative-dashboard v1 above.
+- `[Finding]` **One Playwright flake observed, judged pre-existing/unrelated but not yet proven so.**
+  `web/e2e/screener.spec.ts:103` ("weekly bars are Monday 00:00 UTC") failed on 1 of 3 full-suite
+  runs but passed 15/15 in an isolated `--repeat-each=15` re-run — narrative-v2 touches zero screener
+  files, and the identical failure was already present in PR #7's own pre-this-session description.
+  Not proven pre-existing by reproducing against the base commit in a clean worktree (unlike the
+  `pair-screener_25-09-26` precedent, which did do that proof) — backlog note:
+  `process/general-plans/backlog/screener-weekly-bars-flake_NOTE_28-09-26.md`.
+- `[Finding]` **`mapping.py`'s tripwire coverage is weaker than `trigger.py`'s.**
+  `api/tests/analytics/narrative/test_trigger_tripwire.py` SHA-256-hashes the whole of `trigger.py`
+  but only spot-checks `mapping.py` (no file hash, and no coverage at all of
+  `map_coin_to_narrative_category`, which this plan's Non-Goals list as frozen). Today's empty git
+  diff against the base commit closes the gap for this session only, not for future edits. Backlog
+  note: `process/general-plans/backlog/mapping-tripwire-gap_NOTE_28-09-26.md`.
 
 ## Changes Since Last Update (2026-09-28, pytrends partial-hour-zeros fix — narrative-mindshare)
 
@@ -777,6 +831,18 @@ may be redistributed. See Licensing in `data-sources/all-data-sources.md`.
 
 ## Open Questions
 
+- **Resolved, 2026-09-28 (2nd session): RFC-3's primary-keyword pytrends scale drift is fixed.**
+  Was: batching (RFC-3) rescaled the `pytrends/{keywords[0]}` archive key `trigger.py`'s
+  `/categories` path reads, via the anchor-chaining formula, from 28-09-26 forward. Now: fixed by
+  commit `1bec5db` (unbatched top-up write for the primary keyword). See the 2026-09-28
+  narrative-v2 EVL confirmation entry above for the full fix + worst-case-request-count arithmetic.
+- **New, 28-09-26 (2nd session): `web/e2e/screener.spec.ts:103` flakes inside full-suite Playwright
+  runs, judged pre-existing/unrelated to narrative-v2 but not proven so against the base commit.**
+  See `process/general-plans/backlog/screener-weekly-bars-flake_NOTE_28-09-26.md`. Don't fix ad hoc
+  — needs a clean-worktree reproduction against base first.
+- **New, 28-09-26 (2nd session): `mapping.py`'s RFC-7 tripwire test is weaker than `trigger.py`'s** —
+  no file hash, and no coverage of `map_coin_to_narrative_category` at all. See
+  `process/general-plans/backlog/mapping-tripwire-gap_NOTE_28-09-26.md`. Small, scoped follow-up.
 - **New, 2026-09-28: Hyperliquid's apparent daily-history floor (~2020-08-19) is unconfirmed.**
   BTC/ETH/DOGE/LTC/ATOM's deep-fetched OHLCV all start on exactly the same date
   (`api/scripts/backfill_pairs_universe.py`'s real run) — consistent with a server-side history
@@ -982,7 +1048,17 @@ originating backlog note
   `vc-generate-context` re-run; amended a fifth time same day (28-09-26) on branch
   `claude/vigilant-hamilton-grr18c` closing out the pytrends partial-hour-zeros fix
   (narrative-mindshare) — targeted UPDATE PROCESS edit (new Changes Since Last Update entry,
-  resolved the 27-09-26 Open Question), no `vc-generate-context` re-run
+  resolved the 27-09-26 Open Question), no `vc-generate-context` re-run (this branch later merged
+  into `main` via PR #8); amended a sixth time same day (28-09-26, 2nd session) on branch
+  `fix/narrative-sufficiency-gating-rfc1` closing out the narrative-v2 EVL confirmation + RFC-3
+  scale-drift fix — targeted UPDATE PROCESS edit, no `vc-generate-context` re-run. Source read for
+  this amendment: `process/features/narrative-mindshare/active/narrative-v2_25-09-26/narrative-v2_PLAN_25-09-26.md`
+  (full read), `git show 6de2559 c806b9c 1bec5db --stat`, `process/context/data-sources/all-data-sources.md`'s
+  pytrends section, `api/data/pytrends_adapter.py` (`plan_batches`/`BATCH_SIZE`), a grep for numeric
+  pytrends rate-limit constants (none found), and the independent `vc-tester` EVL run results supplied
+  in the orchestrator handoff prompt (not independently re-run by this UPDATE PROCESS session).
+  Merged with PR #8's `main` history (this same `all-context.md` amendment) via a merge commit to
+  resolve PR #7's conflict against `main`; no source files touched beyond the conflict itself.
 - HEAD (pre-merge): `7ef8eb3` (branch `claude/kind-tesla-tat3vo`, narrative-dashboard closeout) and
   `ecb5e39` (branch `claude/compassionate-goldberg-o2iq49`, regime-dashboard AC-11-confirmed
   closeout) — two independent branches/sessions, reconciled here via a `git merge` commit rather

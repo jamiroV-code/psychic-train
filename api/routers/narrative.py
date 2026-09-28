@@ -81,7 +81,7 @@ def _history_response(result: history.NarrativeHistoryResult) -> NarrativeHistor
                     NarrativeHistoryPoint(
                         date=r.date, raw_value=None if pd_isna(r.raw) else float(r.raw),
                         normalized_value=r.normalized, point_status=r.point_status,
-                        reason=r.reason, gap_before=bool(r.gap_before),
+                        reason=r.reason, gap_before=bool(r.gap_before), sufficiency=r.sufficiency,
                     )
                     for r in s.frame.itertuples(index=False)
                 ],
@@ -129,3 +129,47 @@ def _history_response(result: history.NarrativeHistoryResult) -> NarrativeHistor
 
 def pd_isna(v) -> bool:
     return v is None or (isinstance(v, float) and v != v)
+
+
+# --- Narrative-v2 RFC-4 (ADR-4): GET /api/narrative/momentum. Additive only;
+# shares nothing with `get_categories`/`get_history` above.
+from api.analytics.narrative import momentum  # noqa: E402
+from api.models.narrative import NarrativeMomentumEntry, NarrativeMomentumResponse  # noqa: E402
+
+
+@router.get("/momentum", response_model=NarrativeMomentumResponse)
+def get_momentum() -> NarrativeMomentumResponse:
+    """Cross-sectional momentum ranking of every enabled narrative. Read-only."""
+    result = momentum.build_momentum()
+    return NarrativeMomentumResponse(
+        generated_utc=result.generated_utc,
+        window_days=result.window_days,
+        acceleration_window_days=result.acceleration_window_days,
+        tolerance_days=result.tolerance_days,
+        entries=[NarrativeMomentumEntry(**vars(e)) for e in result.entries],
+    )
+
+
+# --- Narrative-v2 RFC-5 (ADR-5): GET /api/narrative/mindshare. Additive only;
+# shares nothing with the endpoints above.
+from api.analytics.narrative import mindshare  # noqa: E402
+from api.models.narrative import (  # noqa: E402
+    NarrativeMindshareEntry,
+    NarrativeMindshareResponse,
+    NarrativeMindshareSources,
+)
+
+
+@router.get("/mindshare", response_model=NarrativeMindshareResponse)
+def get_mindshare(day: date | None = Query(default=None, alias="date")) -> NarrativeMindshareResponse:
+    """Daily cross-narrative mindshare for `date` (default: latest archived day). Read-only."""
+    r = mindshare.build_mindshare(day)
+    return NarrativeMindshareResponse(
+        generated_utc=r.generated_utc, date=r.date, available_dates=r.available_dates,
+        sources_present=r.sources_present, n_sources=r.n_sources,
+        only_one_source=r.only_one_source, no_sources_available=r.no_sources_available,
+        entries=[NarrativeMindshareEntry(category_id=e.category_id, label=e.label, mindshare=e.mindshare,
+                                         sources=NarrativeMindshareSources(**e.sources),
+                                         status=e.status, reason=e.reason)  # type: ignore[arg-type]
+                 for e in r.entries],
+    )

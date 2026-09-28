@@ -82,7 +82,7 @@ describe("CategoryHistoryPanel", () => {
           in_composite: false,
           status: "unavailable",
           reason: "no-baseline-yet",
-          points: [{ date: "2026-09-22", raw_value: null, normalized_value: null, point_status: "unavailable", reason: "no-baseline-yet", gap_before: false }],
+          points: [{ date: "2026-09-22", raw_value: null, normalized_value: null, point_status: "unavailable", reason: "no-baseline-yet", gap_before: false, sufficiency: "provisional" }],
         }),
       ],
     });
@@ -90,6 +90,45 @@ describe("CategoryHistoryPanel", () => {
     const el = screen.getByTestId("narrative-new-listings-ai");
     expect(el).toHaveTextContent("Not enough history yet to detect new listings");
     expect(el.textContent).not.toMatch(/\b0\b/);
+  });
+
+  it("renders provisional marker below mature threshold", () => {
+    const c = category("ai", 0.5, { series: [series({ source: "reddit", label: "Reddit" })] });
+    render(<CategoryHistoryPanel category={c} />);
+    const el = screen.getByTestId("narrative-provisional-ai-reddit");
+    expect(el).toHaveAttribute("data-sufficiency", "provisional");
+    expect(el).toHaveTextContent("provisional — thin history (2 points)");
+    expect(screen.getByTestId("narrative-legend-ai-reddit")).toHaveTextContent("(provisional)");
+  });
+
+  it("renders no provisional marker for a mature series", () => {
+    const pts = ["2026-09-18", "2026-09-19", "2026-09-20", "2026-09-21", "2026-09-22"].map((date, i) => ({
+      date, raw_value: i, normalized_value: i / 4, point_status: "ok", reason: null, gap_before: false, sufficiency: "mature" as const,
+    }));
+    const c = category("ai", 0.5, { series: [series({ source: "reddit", label: "Reddit", points: pts })] });
+    render(<CategoryHistoryPanel category={c} />);
+    expect(screen.queryByTestId("narrative-provisional-ai-reddit")).toBeNull();
+    expect(screen.getByTestId("narrative-legend-ai-reddit")).not.toHaveTextContent("provisional");
+  });
+
+  it("renders insufficient-history marker not a line", () => {
+    const c = category("ai", 0.5, {
+      series: [
+        series({ source: "pytrends", variant: "nightly-7d", label: "Google Trends" }),
+        series({
+          source: "reddit",
+          label: "Reddit",
+          points: [{ date: "2026-09-22", raw_value: 7, normalized_value: null, point_status: "ok", reason: null, gap_before: false, sufficiency: "insufficient" }],
+        }),
+      ],
+    });
+    render(<CategoryHistoryPanel category={c} />);
+    const el = screen.getByTestId("narrative-insufficient-ai-reddit");
+    expect(el).toHaveAttribute("data-sufficiency", "insufficient");
+    expect(el).toHaveTextContent("not enough history yet (1 point)");
+    expect(screen.queryByTestId("narrative-legend-ai-reddit")).toBeNull();
+    // only the sufficient pytrends line + composite are drawn
+    expect(mockCharts[0].series.filter((s) => s.options.lineVisible !== false)).toHaveLength(2);
   });
 
   it("passes gap_before through so the line is not bridged", () => {

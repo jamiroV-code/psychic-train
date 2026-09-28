@@ -114,3 +114,139 @@ def fetch_trend(keyword: str) -> TrendResult:
         return TrendResult(keyword=keyword, value=None, as_of=str(last_row["date"]), status="presumed-dead")
 
     return TrendResult(keyword=keyword, value=None, as_of=str(last_row["date"]), status="unavailable")
+
+
+# --- narrative-v2 RFC-3 (ADR-3): batched multi-keyword fetch ---------------
+#
+# Additive: `fetch_trend` / `_fetch_live` above are unchanged. Google Trends
+# accepts at most 5 terms per request and rescales each request 0-100 on its
+# own. To put more than 5 keywords on one scale we use anchor-keyword
+# chaining: every request carries the same `anchor` term plus up to 4 others,
+# and batch b is rescaled onto batch 0 by `anchor_b0 / anchor_b`.
+#
+# Guard: if the anchor's value in a batch (or in the reference batch 0) is
+# missing or below ANCHOR_EPSILON, the ratio is undefined/unstable, so every
+# keyword in that batch is `insufficient` — a ratio is never fabricated.
+# These helpers never write to the cache; callers decide what to archive.
+
+BATCH_SIZE = 5  # pytrends' per-request term cap
+ANCHOR_EPSILON = 1.0
+
+BatchStatus = Literal["ok", "insufficient", "unavailable"]
+
+
+@dataclass
+class ChainedValue:
+    value: float | None
+    status: BatchStatus
+    reason: str | None = None
+
+
+def plan_batches(keywords: list[str], anchor: str | None = None) -> list[list[str]]:
+    """Split keywords into requests of <= BATCH_SIZE terms, each starting
+    with the shared anchor. Duplicates are dropped (first occurrence wins)."""
+    uniq = list(dict.fromkeys(k for k in keywords if k))
+    if not uniq:
+        return []
+    anchor = anchor or uniq[0]
+    others = [k for k in uniq if k != anchor]
+    per = BATCH_SIZE - 1
+    if not others:
+        return [[anchor]]
+    return [[anchor, *others[i:i + per]] for i in range(0, len(others), per)]
+
+
+def chain_batches(batch_values: list[dict[str, float | None] | None], batches: list[list[str]],
+                  anchor: str) -> dict[str, ChainedValue]:
+    """Rescale one observation (one date) of every batch onto batch 0's scale.
+
+    `batch_values[i]` is keyword -> raw 0-100 value for `batches[i]`, or None
+    when that request failed. Returns keyword -> ChainedValue.
+    """
+    out: dict[str, ChainedValue] = {}
+    ref_vals = batch_values[0] if batch_values else None
+    ref = None if ref_vals is None else ref_vals.get(anchor)
+    for i, (terms, vals) in enumerate(zip(batches, batch_values)):
+        members = terms if i == 0 else [t for t in terms if t != anchor]
+        if vals is None:
+            for t in members:
+                out[t] = ChainedValue(None, "unavailable", "batch-fetch-failed")
+            continue
+        a = vals.get(anchor)
+        if ref is None or ref < ANCHOR_EPSILON or a is None or a < ANCHOR_EPSILON:
+            for t in members:
+                out[t] = ChainedValue(None, "insufficient", "anchor-below-epsilon")
+            continue
+        scale = 1.0 if i == 0 else ref / a
+        for t in members:
+            v = vals.get(t)
+            if v is None:
+                out[t] = ChainedValue(None, "unavailable", "keyword-missing")
+            else:
+                out[t] = ChainedValue(float(v) * scale, "ok")
+    return out
+
+
+def _fetch_batch_live(keywords: list[str], timeframe: str = "now 7-d"):
+    """One live request for up to BATCH_SIZE terms. Returns the raw
+    interest_over_time frame, or None on any failure (incl. no pytrends)."""
+    try:
+        from pytrends.request import TrendReq
+    except Exception:
+        return None
+    for attempt in range(MAX_RETRIES):
+        try:
+            client = TrendReq(timeout=(TIMEOUT_SECONDS, TIMEOUT_SECONDS))
+            client.build_payload(list(keywords), timeframe=timeframe)
+            df = client.interest_over_time()
+            if df is None or df.empty:
+                return None
+            return df
+        except Exception:
+            if attempt == MAX_RETRIES - 1:
+                return None
+            time.sleep(BACKOFF_BASE_SECONDS * (2**attempt))
+    return None
+
+
+@dataclass
+class BatchedTrends:
+    as_of: str | None
+    values: dict[str, ChainedValue]
+    requests: int
+
+
+def fetch_trends_batched(keywords: list[str], anchor: str | None = None) -> BatchedTrends:
+    """Latest "now 7-d" point for every keyword, anchor-chained onto one scale.
+
+    A batch whose last timestamp differs from batch 0's is treated as failed
+    (values from different moments are not chained). Never raises."""
+    batches = plan_batches(keywords, anchor)
+    if not batches:
+        return BatchedTrends(None, {}, 0)
+    anchor = batches[0][0]
+    as_of: str | None = None
+    batch_values: list[dict[str, float | None] | None] = []
+    for i, terms in enumerate(batches):
+        try:
+            df = _fetch_batch_live(terms)
+        except Exception:
+            df = None
+        if df is None or df.empty:
+            batch_values.append(None)
+            continue
+        day = df.index[-1].strftime("%Y-%m-%d")
+        if i == 0:
+            as_of = day
+        elif as_of is not None and day != as_of:
+            batch_values.append(None)
+            continue
+        last = df.iloc[-1]
+        batch_values.append({t: (float(last[t]) if t in df.columns and last[t] == last[t] else None)
+                             for t in terms})
+    return BatchedTrends(as_of, chain_batches(batch_values, batches, anchor), len(batches))
+
+
+def blend(values: list[float]) -> float:
+    """Simple mean of per-keyword values already on one normalised scale."""
+    return float(sum(values) / len(values))

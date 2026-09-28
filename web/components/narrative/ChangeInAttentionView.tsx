@@ -1,4 +1,3 @@
-import { DataQualityCaveat } from "@/components/narrative/DataQualityCaveat";
 import { formatNarrativeReason } from "@/lib/format-unavailable-reason";
 import { orderByRank } from "@/lib/narrative-view-model";
 import type { NarrativeChange } from "@/lib/types/narrative";
@@ -18,7 +17,6 @@ export function ChangeInAttentionView({ change, labels }: { change: NarrativeCha
       <div style={{ fontSize: 12, color: "#8a8f98" }}>
         as of {change.as_of ?? "no data"}; baseline {lo}–{hi} days earlier
       </div>
-      <DataQualityCaveat view="change" />
       {rows.length === 0 ? (
         <div data-testid="narrative-change-empty">No categories to compare yet</div>
       ) : (

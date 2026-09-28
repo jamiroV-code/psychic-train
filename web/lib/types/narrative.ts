@@ -15,6 +15,8 @@ export type NarrativeHistorySource =
 export type NarrativeSeriesStatus = "ok" | "stale" | "unavailable" | "presumed-dead";
 export type NarrativeEntryStatus = "ok" | "unavailable";
 export type PytrendsVariant = "nightly-7d" | "backfill-269d";
+/** Narrative-v2 ADR-1: data sufficiency of the point's owning series. */
+export type NarrativeSufficiency = "insufficient" | "provisional" | "mature";
 
 export interface NarrativeHistoryPoint {
   date: string;
@@ -23,6 +25,7 @@ export interface NarrativeHistoryPoint {
   point_status: string | null;
   reason: string | null;
   gap_before: boolean;
+  sufficiency: NarrativeSufficiency;
 }
 
 export interface NarrativeHistorySeries {
@@ -111,4 +114,59 @@ export interface NarrativeHistoryResponse {
   categories: NarrativeHistoryCategory[];
   comparison: NarrativeComparison;
   change_in_attention: NarrativeChange;
+}
+
+// --- Narrative-v2 RFC-4 (ADR-4): GET /api/narrative/momentum. Additive only.
+
+export type NarrativeMomentumBasis = "pytrends-blended" | "composite" | "insufficient";
+
+export interface NarrativeMomentumEntry {
+  category_id: string;
+  label: string;
+  momentum_basis: NarrativeMomentumBasis;
+  rank: number | null;
+  as_of: string | null;
+  change: number | null;
+  prev_change: number | null;
+  acceleration: number | null;
+  direction: "up" | "down" | "flat" | null;
+  trend: "accelerating" | "decelerating" | "steady" | null;
+  baseline_date: string | null;
+  prior_baseline_date: string | null;
+  status: "ok" | "insufficient";
+  reason: string | null;
+}
+
+export interface NarrativeMomentumResponse {
+  generated_utc: string;
+  window_days: number;
+  acceleration_window_days: number;
+  tolerance_days: number;
+  entries: NarrativeMomentumEntry[];
+}
+
+// --- Narrative-v2 RFC-5 (ADR-5): GET /api/narrative/mindshare. Additive only.
+
+export type NarrativeMindshareSource = "pytrends" | "coingecko" | "reddit";
+
+export interface NarrativeMindshareEntry {
+  category_id: string;
+  label: string;
+  /** Headline share of the day (0..1); null when excluded for lack of data. */
+  mindshare: number | null;
+  /** Each source's own same-day share, shown alongside the headline. */
+  sources: Record<NarrativeMindshareSource, number | null>;
+  status: "ok" | "excluded";
+  reason: string | null;
+}
+
+export interface NarrativeMindshareResponse {
+  generated_utc: string;
+  date: string | null;
+  available_dates: string[];
+  sources_present: NarrativeMindshareSource[];
+  n_sources: number;
+  only_one_source: boolean;
+  no_sources_available: boolean;
+  entries: NarrativeMindshareEntry[];
 }

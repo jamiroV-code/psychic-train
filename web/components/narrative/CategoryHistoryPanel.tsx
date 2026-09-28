@@ -7,7 +7,7 @@ import { RedistributionBadge } from "@/components/narrative/RedistributionBadge"
 import { formatNarrativeReason } from "@/lib/format-unavailable-reason";
 import { buildPanelAxis, isPlottedSeries, seriesKey } from "@/lib/narrative-view-model";
 import { toSegmentedSeriesData, type SeriesPoint } from "@/lib/regime-line-segments";
-import type { NarrativeHistoryCategory, NarrativeHistorySeries } from "@/lib/types/narrative";
+import type { NarrativeHistoryCategory, NarrativeHistorySeries, NarrativeSufficiency } from "@/lib/types/narrative";
 
 const COMPOSITE_COLOR = "#2962ff";
 const MIXED_SCALE_COLOR = "#ff9800";
@@ -26,6 +26,18 @@ function seriesStatusText(s: NarrativeHistorySeries): string | null {
   return `${s.label}${s.variant ? ` (${s.variant})` : ""} [${s.status}]: ${reason}`;
 }
 
+/**
+ * Narrative-v2 ADR-1: a series' sufficiency comes from the API on every point.
+ * A series with no points at all is insufficient by definition.
+ */
+function seriesSufficiency(s: NarrativeHistorySeries): NarrativeSufficiency {
+  return s.points.length > 0 ? s.points[0].sufficiency : "insufficient";
+}
+
+function realPointCount(s: NarrativeHistorySeries): number {
+  return s.points.filter((p) => p.raw_value !== null).length;
+}
+
 function latestPoint(s: NarrativeHistorySeries) {
   return s.points.length > 0 ? s.points[s.points.length - 1] : null;
 }
@@ -42,7 +54,12 @@ function CategoryHistoryPanelImpl({ category, height = 160 }: { category: Narrat
   const id = category.category_id;
   const containerRef = useRef<HTMLDivElement>(null);
   const axis = useMemo(() => buildPanelAxis(category), [category]);
-  const plotted = category.series.filter(isPlottedSeries);
+  const composable = category.series.filter(isPlottedSeries);
+  // Insufficient series are never drawn as a line (ADR-1): they get an explicit marker instead.
+  const plotted = composable.filter((s) => seriesSufficiency(s) !== "insufficient");
+  const insufficient = composable.filter((s) => s.points.length > 0 && seriesSufficiency(s) === "insufficient");
+  const provisional = plotted.filter((s) => seriesSufficiency(s) === "provisional");
+  const hiddenKey = insufficient.map(seriesKey).sort().join("|");
   const legacy = category.series.find((s) => s.source === "coingecko");
   const listings = category.series.find((s) => s.source === "exchange_new_listings");
 
@@ -84,7 +101,9 @@ function CategoryHistoryPanelImpl({ category, height = 160 }: { category: Narrat
       }
     };
 
+    const hiddenKeys = new Set(hiddenKey ? hiddenKey.split("|") : []);
     axis.series.forEach((line) => {
+      if (hiddenKeys.has(line.key)) return;
       addLine(line.values, line.gapBefore, SOURCE_COLORS[line.key] ?? FALLBACK_COLOR, 1, line.key === "pytrends-backfill-269d");
     });
     addLine(axis.composite.values, axis.composite.gapBefore, COMPOSITE_COLOR, 3, false);
@@ -111,7 +130,7 @@ function CategoryHistoryPanelImpl({ category, height = 160 }: { category: Narrat
       window.removeEventListener("resize", onResize);
       chart.remove();
     };
-  }, [axis, height]);
+  }, [axis, height, hiddenKey]);
 
   const compositeReason =
     category.composite.status === "unavailable"
@@ -156,10 +175,43 @@ function CategoryHistoryPanelImpl({ category, height = 160 }: { category: Narrat
             <span key={key} data-testid={`narrative-legend-${id}-${key}`} style={{ color: SOURCE_COLORS[key] ?? FALLBACK_COLOR, marginRight: 12 }}>
               {key === "pytrends-backfill-269d" ? "┄" : "―"} {s.label}
               {s.variant ? ` (${s.variant})` : ""}
+              {seriesSufficiency(s) === "provisional" && <em style={{ color: "#8a8f98" }}> (provisional)</em>}
             </span>
           );
         })}
       </div>
+
+      {insufficient.map((s) => {
+        const key = seriesKey(s);
+        const n = realPointCount(s);
+        return (
+          <div
+            key={`insufficient-${key}`}
+            data-testid={`narrative-insufficient-${id}-${key}`}
+            data-sufficiency="insufficient"
+            style={{ fontSize: 12, color: "#8a8f98" }}
+          >
+            ⊘ {s.label}
+            {s.variant ? ` (${s.variant})` : ""}: not enough history yet ({n} point{n === 1 ? "" : "s"}) — not plotted,
+            excluded from the composite
+          </div>
+        );
+      })}
+      {provisional.map((s) => {
+        const key = seriesKey(s);
+        const n = realPointCount(s);
+        return (
+          <div
+            key={`provisional-${key}`}
+            data-testid={`narrative-provisional-${id}-${key}`}
+            data-sufficiency="provisional"
+            style={{ fontSize: 12, color: "#b0b4bc", fontStyle: "italic" }}
+          >
+            ◌ {s.label}
+            {s.variant ? ` (${s.variant})` : ""}: provisional — thin history ({n} point{n === 1 ? "" : "s"}), read with caution
+          </div>
+        );
+      })}
 
       {compositeReason && (
         <DeadDataNotice testId={`narrative-composite-notice-${id}`} message={`Composite unavailable — ${compositeReason}`} className="narrative-notice" />

@@ -30,7 +30,7 @@ describe("ComparisonView", () => {
     expect(rows[2]).toHaveTextContent("—");
     expect(c.getByText(/no composite value on the as-of date/)).toBeInTheDocument();
     expect(screen.getByTestId("narrative-comparison-mixed-b")).toBeInTheDocument();
-    expect(screen.getByTestId("narrative-caveat-comparison")).toBeInTheDocument();
+    expect(screen.queryByTestId(/^narrative-caveat/)).toBeNull(); // caveat lives once on the page (ADR-6)
   });
 });
 
@@ -58,7 +58,7 @@ describe("ChangeInAttentionView", () => {
     expect(c).toHaveTextContent(/7–9 days earlier/);
     expect(c).toHaveAttribute("data-rank", "");
     expect(screen.getByText(/baseline 7–9 days earlier/)).toBeInTheDocument();
-    expect(screen.getByTestId("narrative-caveat-change")).toBeInTheDocument();
+    expect(screen.queryByTestId(/^narrative-caveat/)).toBeNull(); // caveat lives once on the page (ADR-6)
   });
 
   it("renders a null delta as '—' with its reason, never 0, and a non-null delta as its formatted value", () => {
