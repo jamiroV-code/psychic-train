@@ -15,7 +15,6 @@ import type { RegimeComponentsResponse } from "@/lib/types/regime";
 const COMPONENT_COLOR = "#2962ff";
 const REPRODUCED_COLOR = "#2962ff";
 const PUBLISHED_COLOR = "#ff9800";
-const RESERVED_COLUMN_PX = 280;
 
 export interface RegimeDashboardProps {
   fetchData?: () => Promise<RegimeComponentsResponse>;
@@ -144,10 +143,11 @@ export function RegimeDashboard({ fetchData = () => fetchRegimeComponents() }: R
   }
 
   return (
-    <div
-      data-testid="regime-dashboard"
-      style={{ display: "grid", gridTemplateColumns: `minmax(0, 1fr) ${RESERVED_COLUMN_PX}px`, gap: 16 }}
-    >
+    // Layout moved to CSS (`.regime-layout`) so the reserved column can collapse
+    // on narrower viewports. An inline style cannot express a media query, and
+    // holding 280px for an empty box squeezes the plot area enough to shorten
+    // the default three-year window — see globals.css §8.
+    <div data-testid="regime-dashboard" className="regime-layout">
       <div>
         <Readout model={model} composite={data.composite} hoverIndex={hoverIndex} />
         {panels.map((p) => (

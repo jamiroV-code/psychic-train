@@ -3,6 +3,8 @@ import { RelativePerformanceChart } from "@/components/screener/RelativePerforma
 import { LegTimelineBanner } from "@/components/screener/LegTimelineBanner";
 import { NarrativeStrip } from "@/components/screener/NarrativeStrip";
 
+export const metadata = { title: "Screener" };
+
 export default function ScreenerPage() {
   return (
     <main>
