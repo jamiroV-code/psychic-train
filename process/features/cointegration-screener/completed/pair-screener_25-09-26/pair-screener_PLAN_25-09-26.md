@@ -9,7 +9,8 @@ feature: cointegration-screener
 
 **Date**: 25-09-26
 **Complexity**: Complex (standard complex — one authoritative plan, sequential RFCs)
-**Status**: ⏳ PLANNED — nothing in `process/features/cointegration-screener/active/pair-screener_25-09-26/` has started
+**Status**: ✅ VERIFIED — all 5 RFCs code-complete, EVL-confirmed, and user-approved; archived at
+UPDATE PROCESS (28-09-26)
 **Feature folder**: `process/features/cointegration-screener/`
 **Owner**: Jamiro (user) · executor: vc harness agents
 
@@ -55,11 +56,19 @@ back to specific acceptance criteria (AC-1..AC-12) in that SPEC.
 
 | RFC | Title | Status |
 |---|---|---|
-| RFC-001 | Universe file + loader + deep-fetch script (+ statsmodels dependency, Stage-0 smoke check) | ⏳ PLANNED |
-| RFC-002 | Stats engine (`stats.py`) + golden-value tests | 🔧 CODE-COMPLETE (awaiting user review) |
-| RFC-003 | Pydantic models + response serializer + router + perf-smoke | 🔧 CODE-COMPLETE (awaiting user review — see `pair-screener_RFC-003_REPORT_27-09-26.md`) |
-| RFC-004 | Web table + detail view + vitest formatters | 🔧 CODE-COMPLETE (awaiting user review — see `pair-screener_RFC-004_REPORT_27-09-26.md`) |
-| RFC-005 | Playwright `pairs.spec.ts` + screener-isolation proof | 🔧 CODE-COMPLETE (awaiting user review — see `pair-screener_RFC-005_REPORT_28-09-26.md`) |
+| RFC-001 | Universe file + loader + deep-fetch script (+ statsmodels dependency, Stage-0 smoke check) | ✅ VERIFIED |
+| RFC-002 | Stats engine (`stats.py`) + golden-value tests | ✅ VERIFIED |
+| RFC-003 | Pydantic models + response serializer + router + perf-smoke | ✅ VERIFIED — see `pair-screener_RFC-003_REPORT_27-09-26.md` |
+| RFC-004 | Web table + detail view + vitest formatters | ✅ VERIFIED — see `pair-screener_RFC-004_REPORT_27-09-26.md` |
+| RFC-005 | Playwright `pairs.spec.ts` + screener-isolation proof | ✅ VERIFIED — see `pair-screener_RFC-005_REPORT_28-09-26.md` + EVL cycle 6 (tie-break fix) |
+
+**All 5 RFCs user-approved 28-09-26.** Real-data result (18-coin universe, 153 pairs, all `ok`):
+21 pairs have raw EG p < 0.05; 0 are significant after BH correction at the 5% level (closest is
+DOGE/BCH, raw 0.00057 → BH-corrected 0.087). `compute_pairs.py` runs in ~56 s; the read-path
+(`GET /api/pairs`) p95 is 135-232 ms. Final gates: pytest 486 passed / 3 deselected; vitest 153
+passed across 19 files (3 consecutive green runs); `tsc --noEmit` exit 0; Playwright 35/35, run
+twice (26 existing + 9 new `pairs.spec.ts`), plus a `pairs.spec.ts`-only repeat-each run at 90/90;
+isolation diff vs pre-feature commit `35e646f` empty for `screener`/`regime`/`narrative` surfaces.
 
 ---
 
@@ -743,6 +752,16 @@ results_unavailable`** (ADR-8 Amendment) is a separate, response-level freshness
 from per-pair `status` — describing whether the persisted results cache matches the current
 universe/price cache; see the ADR-8 Amendment (§3 Architecture Decisions) for the full table.
 
+**Tie-break rule (added post-EXECUTE, RFC-005 EVL cycle 6, 28-09-26, user decision — closes SPEC
+AC-4's amendment):** `GET /api/pairs` sorts `ok` rows by `(eg_p_bh, eg_p_raw, coin_a, coin_b)` —
+ties on the BH-corrected p-value break on the lower raw p-value, and ties on both break on coin
+names alphabetically. `api/analytics/cointegration/pairs_response.py::_sorted_rows` previously
+tie-broke on names only, so the API's order did not match the web page's own sort (which already
+used raw-p as its first tie-break); the two are now identical. Rows with `status != "ok"` are
+sorted separately by coin name and always appended after all `ok` rows, so their `None` statistics
+are never part of a tie-break comparison. Covered by two new pytest cases in
+`api/tests/routers/test_pairs.py` (ties on corrected p; ties on both p-values).
+
 **Path-param edge cases (added PVL cycle 1, resolves CONCERN-2):**
 - **Self-pair (`a == b`)**: `GET /api/pairs/{a}/{a}` returns **422** (`{"detail": "a and b must be different coins"}`) — a coin is never cointegration-tested against itself; this is never silently treated as a degenerate/self-cointegrated `ok` pair.
 - **Ticker case-sensitivity**: matching is **case-insensitive** — both `{a}` and `{b}` are normalized to uppercase (`.upper()`) before universe lookup, so `GET /api/pairs/btc/eth` and `GET /api/pairs/BTC/ETH` resolve identically. The universe file itself stores uppercase tickers only; normalization happens once, in the router, before any lookup.
@@ -778,8 +797,8 @@ cache is fully regenerable from `compute_pairs.py` and should never be git-track
 
 ### Current Status
 
-All RFCs ⏳ PLANNED. Nothing in `process/features/cointegration-screener/active/pair-screener_25-09-26/`
-has started beyond this plan and the locked SPEC.
+All RFCs ✅ VERIFIED (28-09-26) — see the Status Strip above. This plan is archived to
+`process/features/cointegration-screener/completed/pair-screener_25-09-26/`.
 
 Each RFC below carries: Summary, Dependencies, Stage 0 (where applicable), Stages, Post-Phase
 Testing, Verification Checklist, Acceptance Criteria, What's Functional Now, Ready For,
@@ -1318,11 +1337,11 @@ Strip, then continue. Most likely triggers: the confirmed coin universe changes 
 0 market-resolution; perf-smoke forces the ADR-8 fallback; the real-cache walkthrough surfaces a
 data-quality issue in a specific pair.
 
-**UPDATE PROCESS item (carried from SPEC Background, not actioned in this plan):**
-`process/features/cointegration-screener/_GUIDE.md` (its "Key Source Files" section) still names
+**UPDATE PROCESS item (carried from SPEC Background) — DONE 28-09-26:**
+`process/features/cointegration-screener/_GUIDE.md` (its "Key Source Files" section) named
 `api/routers/screener.py` and `web/app/screener/` as this feature's target locations — a naming
-collision predating this plan (those are the momentum screener's files). UPDATE PROCESS after RFC-005
-must correct `_GUIDE.md` to point at this feature's actual new files
+collision predating this plan (those are the momentum screener's files). Corrected at UPDATE
+PROCESS to point at this feature's actual new files
 (`api/routers/pairs.py`, `web/app/pairs/`, `api/analytics/cointegration/`, etc.).
 
 ### Post-Stage-0 Amendment (RFC-002), 25-09-26
@@ -1484,7 +1503,40 @@ Commands and runners per `process/context/tests/all-tests.md`:
 
 (none identified yet)
 
+## Post-EXECUTE Amendments (UPDATE PROCESS, 28-09-26)
+
+All 5 RFCs are ✅ VERIFIED (user-approved in chat). This closeout pass reconciled the following
+stale-text items flagged by the RFC reports for UPDATE PROCESS action:
+
+1. **Tie-break rule (RFC-005 EVL cycle 6) — done.** `_sorted_rows` now sorts `ok` rows by
+   `(eg_p_bh, eg_p_raw, coin_a, coin_b)`, matching the web page's order. Written into SPEC AC-4
+   (Post-EXECUTE amendment) and this plan's §11 API Surface, above.
+2. **RFC-001 `since=` wording (RFC-001 report + Stage-0 report Plan Deviations) — already
+   reconciled in-plan.** §15 RFC-001 "Stages" item 3 and the Stage 0 research bullets above both
+   carry the corrected explicit-`since` mechanism (`since=<explicit early UTC date>`, never
+   `since=None`) with a "(Corrected post-RFC-001 ...)" note; no further edit needed this cycle —
+   confirmed by re-reading the live text.
+3. **`_GUIDE.md` naming collision (SPEC Background + this plan's §18) — done.** Corrected below /
+   in the feature's `_GUIDE.md` to point at `api/routers/pairs.py`, `web/app/pairs/`,
+   `api/analytics/cointegration/` instead of the momentum screener's files.
+4. **Status Strip / Current Status / Resume and Execution Handoff — done.** All updated from
+   "⏳ PLANNED" / "no RFC started" to ✅ VERIFIED with the final gate counts (see Status Strip).
+5. **Other reported items, accepted as known-gaps, not plan edits:** the screener cold-start
+   Playwright flake (pre-existing, `all-tests.md` backlog item, mitigated by a 15s expect timeout
+   — not a pair-screener defect); the single unidentified intermittent vitest failure (not
+   reproduced in 3 consecutive full runs); the Hyperliquid ~2020-08-19 apparent history floor and
+   live cap-hit/rate-limit behavior (both carried in `all-data-sources.md`, see below); the
+   Johansen-refused-row and no-significant-pairs banner paths being unit-tested only, not E2E
+   (documented in RFC-005's spec header, accepted as sufficient coverage).
+
 ## Resume and Execution Handoff
+
+**Superseded 28-09-26 (UPDATE PROCESS closeout) — kept for history, not deleted.** All 5 RFCs are
+now ✅ VERIFIED and this plan is archived to
+`process/features/cointegration-screener/completed/pair-screener_25-09-26/`. There is no next step
+for this plan; see the plan's own Status Strip and the `pair-screener_25-09-26-RFC-005-phase-report`
+/ EVL cycle 6 notes for the final state. The steps below describe the plan's state before EXECUTE
+started and are retained as a record only.
 
 1. **Selected plan file**: `process/features/cointegration-screener/active/pair-screener_25-09-26/pair-screener_PLAN_25-09-26.md`
 2. **Last completed phase or step**: PLAN written 25-09-26; SPEC locked; INNOVATE decisions recorded

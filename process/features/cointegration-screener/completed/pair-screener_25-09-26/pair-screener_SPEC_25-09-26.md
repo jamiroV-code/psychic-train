@@ -139,6 +139,16 @@ Table-level sort:
    hardcoded to input order).
    - proven by: unit test asserting sort order across a shuffled synthetic pair-result set
    - strategy: Fully-Automated
+   - **Post-EXECUTE amendment (RFC-005 EVL cycle 6, 28-09-26, user decision):** the tie-break
+     for rows sharing the same BH-corrected p-value is `(eg_p_bh, eg_p_raw, coin_a, coin_b)` —
+     ties on corrected p resolve to the lower raw p first, and ties on both p-values fall back
+     to coin names alphabetically. This applies identically in both the API's sort
+     (`api/analytics/cointegration/pairs_response.py::_sorted_rows`) and the web page's own sort,
+     so the two now agree (previously the API tie-broke on names only, while the page already
+     used raw-p; that mismatch never affected correctness since the page always re-sorts, but is
+     now closed at the source). Rows that are not `ok` (`insufficient_overlap`,
+     `coin_unavailable`) are unaffected — they sort separately by name and are always appended
+     last, so a `None` statistic is never part of any tie-break comparison.
 
 5. **The multiple-testing correction (Benjamini-Hochberg) is applied across all pairs that had
    enough data to be tested in a given run — insufficient-history pairs are excluded from the
