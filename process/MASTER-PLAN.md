@@ -67,6 +67,15 @@ inherits main's fix. **The blended namespace does not.** After PR #7 merges as i
 `pytrends/{keywords[0]}` would be clean while `pytrends-blended/*` — the basis for both new views —
 stays contaminated. → **T1b.**
 
+**The repo's own docs corroborate this, and get one fact wrong.** `all-context.md` on main
+(lines 47–48) states the fix left `_fetch_live`'s signature and call sites alone "deliberately, so
+the **not-yet-started** `narrative-v2` RFC-3 (a separate, still-active plan that **will later add an
+additive batched-fetch function to this same file**) is unaffected." The design intent is exactly as
+described — but RFC-3 is not "not-yet-started": PR #7 has it implemented, marked ✅ VERIFIED and
+open for review, and the batched function already exists on that branch. A session reading
+`all-context.md` alone would conclude there is no batched path yet and therefore nothing to guard.
+Correct this line as part of T8.
+
 ### Merge order
 
 1. **PR #5** — smallest, has the path fixes `split-all-context` lacks.
