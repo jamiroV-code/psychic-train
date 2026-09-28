@@ -63,6 +63,10 @@ def _fetch_live(keyword: str) -> tuple[float | None, str | None]:
             df = pytrends.interest_over_time()
             if df is None or df.empty or keyword not in df.columns:
                 return None, None
+            if "isPartial" in df.columns:
+                df = df[~df["isPartial"].astype(bool)]
+                if df.empty:
+                    return None, None
             last = df.iloc[-1]
             value = float(last[keyword])
             as_of = df.index[-1].strftime("%Y-%m-%d")

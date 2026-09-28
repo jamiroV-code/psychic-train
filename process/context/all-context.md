@@ -2,13 +2,18 @@
 
 Last updated: 2026-09-28, 2nd session (narrative-v2 EVL confirmation + RFC-3 scale-drift fix on
 branch `fix/narrative-sufficiency-gating-rfc1`, PR #7 — RFC-1..6 now `✅ VERIFIED`, RFC-7 stays
-`✅ CODE DONE` pending the user's AC-14 walkthrough; plan not archived). Prior update same day: merge
-of two independent branches — pair screener v1 (`/pairs`, `cointegration-screener`'s first shipped
-feature, all 5 RFCs VERIFIED and archived) from `main`, and the 2026-09-27 snapshot cron timing fix
-(all three nightly workflows moved earlier to absorb GitHub's ~2h scheduler delay) from
-`claude/kind-tesla-tat3vo`. See Changes Since Last Update below, newest first, for both plus
-everything each branch already had (narrative v2 SPEC, on-chain chain-growth plan, the 2026-09-25
-keyword-keying fix, and earlier).
+`✅ CODE DONE` pending the user's AC-14 walkthrough; plan not archived). Also 2026-09-28, on a
+separate branch (`claude/vigilant-hamilton-grr18c`, merged into `main` via PR #8 ahead of this PR):
+the pytrends partial-hour-zeros fix (`narrative-mindshare`) — isolated single-file bug fix, full
+RESEARCH → SPEC → INNOVATE → PLAN → VALIDATE → EXECUTE → EVL, closed via UPDATE PROCESS. This
+version merges that PR #8 history into PR #7's branch to resolve a conflict between the two
+branches' independent edits to this same section — the previous "Branch note" about needing to
+reconcile by hand is now resolved. Prior update same day: merge of two independent branches — pair
+screener v1 (`/pairs`, `cointegration-screener`'s first shipped feature, all 5 RFCs VERIFIED and
+archived) from `main`, and the 2026-09-27 snapshot cron timing fix (all three nightly workflows
+moved earlier to absorb GitHub's ~2h scheduler delay) from `claude/kind-tesla-tat3vo`. See Changes
+Since Last Update below, newest first, for all of the above plus everything each branch already had
+(narrative v2 SPEC, on-chain chain-growth plan, the 2026-09-25 keyword-keying fix, and earlier).
 
 This file is the root context entrypoint for the repo.
 
@@ -72,6 +77,50 @@ already-committed scale-drift fix below.
   `map_coin_to_narrative_category`, which this plan's Non-Goals list as frozen). Today's empty git
   diff against the base commit closes the gap for this session only, not for future edits. Backlog
   note: `process/general-plans/backlog/mapping-tripwire-gap_NOTE_28-09-26.md`.
+
+## Changes Since Last Update (2026-09-28, pytrends partial-hour-zeros fix — narrative-mindshare)
+
+Plan: `process/features/narrative-mindshare/completed/pytrends-partial-hour-fix_28-09-26/`. Small,
+isolated bug fix — went through the full RESEARCH → SPEC → INNOVATE → PLAN → VALIDATE → EXECUTE →
+EVL cycle (SIMPLE plan, `Gate: PASS`, 0 FAILs/0 CONCERNs first pass) rather than being patched ad
+hoc, resolving the Open Question flagged 27-09-26 (see below).
+
+- `[Correction]` **`api/data/pytrends_adapter.py::_fetch_live` was archiving Google Trends'
+  still-filling-in current hour as if it were a finished reading.** It took `df.iloc[-1]` of the
+  hourly `"now 7-d"` `interest_over_time()` frame with no `isPartial` filtering; that last row is
+  frequently Google's incomplete current hour, which is often 0 or heavily under-counted — and
+  because Google Trends keeps no history, each affected night's real value was permanently lost.
+  Confirmed real damage: `memecoins` and `RWA` were writing 0.0 on every nightly snapshot since
+  09-24/09-26; only `ai` got real nonzero values.
+- `[Product]` **Fix**: `_fetch_live` now drops `isPartial=True` rows before selecting the last
+  point — reusing the exact pattern already proven in
+  `api/scripts/backfill_pytrends_history.py::daily_points`. Returns `(None, None)` when no complete
+  row survives the filter, so `fetch_trend`'s existing `unavailable`/`presumed-dead` handling takes
+  over instead of writing a fabricated 0. Behavior is byte-identical to pre-fix when no `isPartial`
+  column is present at all. `_fetch_live`'s signature and both call sites (`fetch_trend`,
+  `snapshot_narrative.py::snapshot_pytrends`) are unchanged — deliberately, so the not-yet-started
+  `narrative-v2` RFC-3 (a separate, still-active plan that will later add an additive batched-fetch
+  function to this same file) is unaffected.
+- `[Product]` New test file `api/tests/data/test_pytrends_adapter.py` (3 tests) — the first-ever
+  direct unit coverage of `_fetch_live`'s row-selection logic. Uses synthetic `pandas.DataFrame`
+  fixtures via `sys.modules` injection of a fake `pytrends.request` module (`pytrends` is confirmed
+  not installed in the `api` env and not a declared dependency, so this injection is the required
+  mechanism, not a fallback).
+- `[Correction]` **Deliberately no retroactive correction.** Already-archived zero-valued points
+  (09-24 through 09-28) are left as-is, honestly dated — this is a forward-only fix, mirroring the
+  stance already taken for the separate, permanently-lost 2026-09-25 narrative-point gap (see the
+  2026-09-27 cron-timing entry below).
+- Testing: baseline `uv run --project api pytest api/ -q` was **623 passed / 5 deselected** before
+  this fix (this branch already carries `narrative-v2` RFC-1-in-progress code on top of the merged
+  pair-screener/cron-timing history below, which is why the count differs from the 486/3 recorded
+  in the pair-screener entry) → **626 passed / 5 deselected** after (exactly +3 new tests, zero
+  regressions). `uv run --project api pytest api/tests/data/test_pytrends_adapter.py -v` (3/3
+  passed) run independently as the EVL confirmation gate. `git diff` independently re-confirmed
+  AC-5 (no `cache.write_narrative_point`/`read_narrative_series`/migration touch) and AC-6
+  (signature/call-site stability) both hold.
+- Scoped independently of `narrative-v2` (separate, currently-executing plan) with zero file
+  overlap — confirmed by the plan's own touchpoints (only `pytrends_adapter.py` + one new test
+  file) and by reading `narrative-v2_PLAN_25-09-26.md`'s RFC-3 design before this fix started.
 
 ## Changes Since Last Update (2026-09-28, pair screener v1 — cointegration-screener)
 
@@ -802,11 +851,16 @@ may be redistributed. See Licensing in `data-sources/all-data-sources.md`.
   cap-hit pagination test matches Hyperliquid's actual capped-response behaviour, and whether bulk
   rate-limit/backoff kicks in past the 18 sequential deep-fetch calls this feature made (0 failures
   observed so far). See `process/context/data-sources/all-data-sources.md`.
-- **New, 27-09-26: pytrends nightly points can read 0 from Google's partial hour.**
-  `pytrends_adapter` takes `df.iloc[-1]` of the hourly "now 7-d" frame, which is Google's incomplete
-  `isPartial` hour (observed memecoins 34→0, RWA all 0). Candidate fix: drop `isPartial` rows or use a
-  daily aggregate — changes stored values, so it needs its own plan. See
-  `process/general-plans/backlog/pytrends-partial-hour-zeros_NOTE_27-09-26.md`. Don't fix ad hoc.
+- ~~New, 27-09-26: pytrends nightly points can read 0 from Google's partial hour.~~ **Resolved
+  2026-09-28.** `_fetch_live` now drops `isPartial=True` rows before picking the last point (same
+  pattern already proven in `backfill_pytrends_history.py`), returning `(None, None)` — not a fake
+  0 — when no complete row survives. Went through full RESEARCH → SPEC → INNOVATE → PLAN → VALIDATE
+  → EXECUTE → EVL, not fixed ad hoc. See the 2026-09-28 (pytrends partial-hour fix) entry below and
+  `process/features/narrative-mindshare/completed/pytrends-partial-hour-fix_28-09-26/`. Already-
+  archived zero points (09-24 through 09-28) are left as-is, honestly dated — no retroactive
+  correction (deliberate, see the plan's AC-5). The originating backlog note
+  (`process/general-plans/backlog/pytrends-partial-hour-zeros_NOTE_27-09-26.md`) is marked resolved
+  for Finding 1; Finding 2 (the unrecoverable 09-25 gap) was already closed by the cron-timing fix.
 - **Momentum screener lives under `process/general-plans/`, not `process/features/`.** It's
   the first shipped feature, and it draws on macro-liquidity and narrative work that overlaps
   `cycle-regime` and `narrative-mindshare`. **Partially resolved, 24-09-26, for narrative only:**
@@ -966,6 +1020,15 @@ mechanism runs unattended).
 iteration reports (incl. EVL cycle 6's tie-break fix), `results.tsv`, and `git log --oneline` on
 `main` at `b2d0fd5`.
 
+**Added at the 2026-09-28 UPDATE PROCESS closeout (pytrends partial-hour-zeros fix,
+narrative-mindshare):**
+`process/features/narrative-mindshare/completed/pytrends-partial-hour-fix_28-09-26/pytrends-partial-hour-fix_PLAN_28-09-26.md`
+(incl. `## Validate Contract`, `Gate: PASS`), `pytrends-partial-hour-fix_SPEC_28-09-26.md`,
+`api/data/pytrends_adapter.py` (read directly to confirm the applied diff), `git show d186a08
+--stat` and `git log --oneline` on branch `claude/vigilant-hamilton-grr18c` at `d186a08`, and the
+originating backlog note
+`process/general-plans/backlog/pytrends-partial-hour-zeros_NOTE_27-09-26.md`.
+
 ## Scan Metadata
 
 - Generated: 2026-09-20 by `vc-generate-context` (delta update over the 2026-09-17 setup version);
@@ -982,7 +1045,11 @@ iteration reports (incl. EVL cycle 6's tie-break fix), `results.tsv`, and `git l
   `claude/kind-tesla-tat3vo` worktree referenced in the pre-merge HEAD note below, which has since
   progressed further with unmerged narrative-v2/on-chain work not reflected here) closing out the
   pair screener v1 (`cointegration-screener`) program — targeted UPDATE PROCESS edit, no
-  `vc-generate-context` re-run; amended a fifth time same day (28-09-26, 2nd session) on branch
+  `vc-generate-context` re-run; amended a fifth time same day (28-09-26) on branch
+  `claude/vigilant-hamilton-grr18c` closing out the pytrends partial-hour-zeros fix
+  (narrative-mindshare) — targeted UPDATE PROCESS edit (new Changes Since Last Update entry,
+  resolved the 27-09-26 Open Question), no `vc-generate-context` re-run (this branch later merged
+  into `main` via PR #8); amended a sixth time same day (28-09-26, 2nd session) on branch
   `fix/narrative-sufficiency-gating-rfc1` closing out the narrative-v2 EVL confirmation + RFC-3
   scale-drift fix — targeted UPDATE PROCESS edit, no `vc-generate-context` re-run. Source read for
   this amendment: `process/features/narrative-mindshare/active/narrative-v2_25-09-26/narrative-v2_PLAN_25-09-26.md`
@@ -990,6 +1057,8 @@ iteration reports (incl. EVL cycle 6's tie-break fix), `results.tsv`, and `git l
   pytrends section, `api/data/pytrends_adapter.py` (`plan_batches`/`BATCH_SIZE`), a grep for numeric
   pytrends rate-limit constants (none found), and the independent `vc-tester` EVL run results supplied
   in the orchestrator handoff prompt (not independently re-run by this UPDATE PROCESS session).
+  Merged with PR #8's `main` history (this same `all-context.md` amendment) via a merge commit to
+  resolve PR #7's conflict against `main`; no source files touched beyond the conflict itself.
 - HEAD (pre-merge): `7ef8eb3` (branch `claude/kind-tesla-tat3vo`, narrative-dashboard closeout) and
   `ecb5e39` (branch `claude/compassionate-goldberg-o2iq49`, regime-dashboard AC-11-confirmed
   closeout) — two independent branches/sessions, reconciled here via a `git merge` commit rather
