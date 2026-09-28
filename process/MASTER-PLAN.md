@@ -142,6 +142,30 @@ story for both.
 Currently: 5 routes, no nav, no global CSS, `layout.tsx` is 14 lines, `page.tsx` is a bare list of
 links, 24 files use inline `style={{}}` against 9 using `className`. T14 and T24 fold into this.
 
+### Active parallel lanes (3 — at the cap)
+
+Set up 2026-09-28 15:03 UTC. Blast radii are deliberately disjoint; each lane's prompt names what
+it must not touch, so they can run simultaneously without conflicting.
+
+| Lane | Branch | Where | Owns | Must NOT touch |
+|---|---|---|---|---|
+| **P1 — pipeline** | `claude/p1-pipeline` | cloud session | `api/scripts/`, `.github/workflows/`, `.gitignore` | `web/`, `api/main.py`, `pytrends_adapter.py` |
+| **P2 — deploy** | `claude/p2-deploy` | cloud session | `api/main.py`, deploy config + docs | `web/`, `api/scripts/`, workflows, `.gitignore` |
+| **P3 — UI** | `claude/ui-shell` | local worktree `/home/user/psychic-train-ui`, also pushed | `web/` | everything under `api/` |
+
+All three branch from `main` (`e9c33fe`). The planning branch
+(`claude/pensive-dijkstra-ko69oi`) is not a work lane — it carries this file plus the pending T1b
+fix in PR #6.
+
+**Shared-file watch:** P1 and P2 could both want `.github/workflows/` (P1 for refresh crons, P2 for
+a deploy workflow). P2 is explicitly instructed to write any workflow need up as a requirement for
+P1 rather than implementing it. P2 is SPEC-first and should produce little code, which keeps the
+overlap small — but check this at the next UPDATE.
+
+**P2 has a hard stop built in:** it must surface the deploy-target choice and wait. Creating paid
+infrastructure or a publicly reachable endpoint is irreversible and outward-facing, so it needs the
+user's explicit go-ahead rather than a session's judgement call.
+
 ### Phase order
 
 ```
