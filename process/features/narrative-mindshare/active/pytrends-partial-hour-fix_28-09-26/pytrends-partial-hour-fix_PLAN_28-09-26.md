@@ -123,6 +123,15 @@ modified (SPEC Constraint) — it already mocks `_fetch_live`'s return value dir
    `monkeypatch.setitem(sys.modules, "pytrends.request", fake_module)` or equivalent — pick the
    simplest correct mechanism that does not require the real `pytrends` package to be installed).
 
+   **VALIDATE-confirmed (28-09-26): `pytrends` is genuinely NOT installed in the `api` env**
+   (`uv run python -c "import pytrends"` → `ModuleNotFoundError`) and is NOT listed in
+   `api/pyproject.toml` (confirmed by direct grep — matches the module docstring's own claim that
+   it's deliberately not a hard dependency). This means patching an attribute on the real
+   `pytrends.request` module is not possible — it does not exist to patch. The
+   `monkeypatch.setitem(sys.modules, "pytrends.request", fake_module)` injection path is therefore
+   not a fallback, it is the only viable mechanism, and execute-agent should use it directly rather
+   than trying the "patch the module attribute" branch first.
+
    - `test_fetch_live_drops_partial_hour_row`: build a synthetic `pd.DataFrame` with a
      `DatetimeIndex`, an `isPartial` column, and the target keyword column. Last row
      `isPartial=True` with value `0`; second-to-last row `isPartial=False` with a real nonzero value
@@ -181,9 +190,9 @@ modified (SPEC Constraint) — it already mocks `_fetch_live`'s return value dir
 - Risk: the exact mechanism for mocking `pytrends.request.TrendReq` inside a function-local import
   without installing the real `pytrends` package needs to be confirmed against this repo's existing
   conventions at implementation time (Step 3) — flagged explicitly in the checklist rather than
-  assumed. If `pytrends` genuinely is not installed in the `api` environment (module docstring notes
-  it's not a hard dependency), the test must still pass by injecting a fake module into
-  `sys.modules` before `_fetch_live` executes its local `import`.
+  assumed. **Resolved during VALIDATE (28-09-26):** `pytrends` is confirmed not installed and not a
+  declared dependency, so `sys.modules` injection is the required mechanism, not merely a fallback —
+  see Step 3's VALIDATE-confirmed note above.
 - Risk: none to production behavior — this narrows a failure path (fewer bad writes), it cannot
   newly break a currently-passing case, since `isPartial=False` rows and no-`isPartial`-column cases
   are both explicitly preserved.
@@ -203,11 +212,105 @@ modified (SPEC Constraint) — it already mocks `_fetch_live`'s return value dir
 ## Resume and Execution Handoff
 
 1. Selected plan file path: `process/features/narrative-mindshare/active/pytrends-partial-hour-fix_28-09-26/pytrends-partial-hour-fix_PLAN_28-09-26.md`
-2. Last completed phase or step: PLAN written, not yet validated.
-3. Validate-contract status: pending — VALIDATE has not run yet (see placeholder section below).
-4. Supporting context files loaded: `process/context/all-context.md`, `process/context/tests/all-tests.md`, `process/context/planning/all-planning.md`, the locked SPEC in this task folder, `api/data/pytrends_adapter.py`, `api/scripts/backfill_pytrends_history.py` (lines 85-119).
-5. Next step for a fresh agent: run VALIDATE against this plan (mandatory gate before EXECUTE, per this repo's `VALIDATE Gate` orchestration rule). Do not route directly to EXECUTE.
+2. Last completed phase or step: VALIDATE complete, Gate: PASS — ready for EXECUTE.
+3. Validate-contract status: written 28-09-26 (see `## Validate Contract` below), `generated-by: outer-pvl`.
+4. Supporting context files loaded: `process/context/all-context.md`, `process/context/tests/all-tests.md`, `process/context/planning/all-planning.md`, the locked SPEC in this task folder, `api/data/pytrends_adapter.py`, `api/scripts/backfill_pytrends_history.py` (lines 85-119), `api/tests/scripts/test_snapshot_narrative.py`, `api/analytics/narrative/trigger.py`.
+5. Next step for a fresh agent: `ENTER EXECUTE MODE` for this plan. No PVL supplement cycle needed (first-pass PASS, 0 FAILs, 0 CONCERNs).
 
 ## Validate Contract
 
-(placeholder — vc-validate-agent writes this section before EXECUTE)
+Status: PASS
+Date: 28-09-26
+date: 2026-09-28
+generated-by: outer-pvl
+
+Parallel strategy: sequential
+Rationale: signal score 0/7 (single-file source change + one new test file, no schema/auth/API/billing surface, no phase program) — matches INNOVATE's own recommendation; VALIDATE fan-out itself ran as one pass (Simple Mode) rather than a multi-agent spawn, appropriate for this plan's size.
+
+Test gates (C3 5-column table):
+
+| criterion id | behavior | strategy | proving test | gap-resolution |
+|---|---|---|---|---|
+| AC-1 | `_fetch_live` drops the current, still-accumulating (`isPartial=True`) hour before picking the latest point | Fully-Automated | `uv run --project api pytest api/tests/data/test_pytrends_adapter.py::test_fetch_live_drops_partial_hour_row -v` | B |
+| AC-2 | When every available row is partial, `_fetch_live` returns `(None, None)` so `fetch_trend` falls into existing `unavailable`/`presumed-dead` handling instead of writing a fabricated 0 | Fully-Automated | `uv run --project api pytest api/tests/data/test_pytrends_adapter.py::test_fetch_live_all_rows_partial_returns_none -v` | B |
+| AC-3 | When the frame has no `isPartial` column, behavior is byte-identical to pre-fix (`df.iloc[-1]` used directly) | Fully-Automated | `uv run --project api pytest api/tests/data/test_pytrends_adapter.py::test_fetch_live_no_ispartial_column_unchanged -v` | B |
+| AC-4 | No regression to `test_snapshot_narrative.py`, `trigger.py`, or any other pytrends/narrative consumer | Fully-Automated | `uv run --project api pytest api/ -q` (baseline confirmed green 28-09-26: 623 passed, 5 deselected, exit 0) | A |
+| AC-5 | No retroactive correction of already-archived cache points — diff touches only `_fetch_live`'s row-selection block, no `cache.write_narrative_point`/`read_narrative_series`/migration code | Agent-Probe | `git diff api/data/pytrends_adapter.py` reviewed for cache read/write/migration touches | B |
+| AC-6 | `_fetch_live` signature and all call sites (`fetch_trend`, `snapshot_narrative.py`) unchanged — no interference with not-yet-started `narrative-v2` RFC-3 | Agent-Probe | `git diff api/data/pytrends_adapter.py` reviewed for signature/call-site stability | B |
+
+gap-resolution legend:
+- A — proven now (gate passes in this cycle)
+- B — fixed in this plan (gate added by this plan's checklist)
+- C — deferred to a named later phase/plan
+- D — backlog test-building stub (named residual; keep-active; continue)
+
+Legacy line form (retained so existing validate-contract consumers still parse):
+- `_fetch_live` row-selection: Fully-automated: `uv run --project api pytest api/tests/data/test_pytrends_adapter.py -v` (3 new tests) | Fully-automated: `uv run --project api pytest api/ -q` (full regression, baseline 623 passed/5 deselected confirmed green pre-EXECUTE) | Agent-probe: `git diff api/data/pytrends_adapter.py` reviewed for AC-5 (no cache-write touch) and AC-6 (signature/call-site stability)
+
+Failing stub (AC-1):
+```
+test("should drop the isPartial=True current-hour row before picking the latest point, returning the prior complete row's value instead", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: test_fetch_live_drops_partial_hour_row")
+})
+```
+
+Failing stub (AC-2):
+```
+test("should return (None, None) when every row in the fetched frame is isPartial=True", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: test_fetch_live_all_rows_partial_returns_none")
+})
+```
+
+Failing stub (AC-3):
+```
+test("should behave exactly as pre-fix (use df.iloc[-1] directly) when the frame has no isPartial column at all", () => {
+  throw new Error("NOT IMPLEMENTED — TDD stub: test_fetch_live_no_ispartial_column_unchanged")
+})
+```
+
+(Note: stubs are written in the generic `test(...)` skeleton form per `vc-test-coverage-plan`
+convention; execute-agent implements them as real `pytest` functions per the plan's own Step 3
+test descriptions, which are the authoritative Python-shaped spec for each test body.)
+
+Dimension findings:
+- Infra fit: PASS — no container/infra/runtime surface touched; pure single-module Python fix. File paths confirmed to exist and match plan's line-number claims exactly (`_fetch_live` lines 50-74, early-return at 64-65, `df.iloc[-1]` at line 66 — zero drift from plan text, confirmed by direct read 28-09-26). `api/tests/data/` directory already exists with an `__init__.py` and 8 sibling test files, so plan's "create if it does not already exist" step is a no-op.
+- Test coverage: PASS — all 3 new unit-test commands and the full-suite regression command verified runnable with this repo's exact `uv run --project api pytest ...` convention (confirmed via a live subset run: `api/tests/data` = 162 passed, 4 deselected; full `api/ -q` = 623 passed, 5 deselected, exit 0, confirmed 28-09-26 as pre-EXECUTE baseline). No high-risk class applies, so Agent-Probe-only coverage for AC-5/AC-6 is acceptable under the Test Tier Waterfall (no forced-hybrid minimum).
+- Breaking changes: PASS — `_fetch_live` signature and both call sites (`fetch_trend`, `snapshot_narrative.py::snapshot_pytrends`) confirmed unchanged by plan design; `test_snapshot_narrative.py` confirmed (via direct read) to monkeypatch `pytrends_adapter._fetch_live` at the module-attribute level, never exercising the real row-selection logic, so it needs no edit and will not regress. No schema, cache-format, or public-API surface touched.
+- Security surface: PASS — no auth, billing, secrets, or trust-boundary logic touched. No new external input trust boundary introduced (same pytrends response shape parsed as before, only filtered more defensively before use).
+- Mocking-mechanism risk (plan's Dependencies/Risks section): RESOLVED, not a CONCERN — confirmed 28-09-26 that `pytrends` is genuinely not installed in the `api` env (`ModuleNotFoundError`) and is not declared in `api/pyproject.toml`, so `monkeypatch.setitem(sys.modules, "pytrends.request", fake_module)` is the required (not merely fallback) mechanism for the new test file. Plan text updated above with this confirmation so execute-agent does not need to discover it independently.
+- Cache/AC-5 scope: PASS — plan's touchpoints list only `api/data/pytrends_adapter.py` and the new test file; no reference anywhere in the plan to `cache.py` write paths or `api/data/cache/narrative/`, consistent with AC-5's forward-only-fix requirement.
+- AC mapping 1:1 to SPEC: PASS — plan's Acceptance Criteria table and Verification Evidence table checked directly against the SPEC's 6 acceptance criteria (read in full); every AC's wording, test name, and strategy matches the SPEC exactly, no drift or omission found.
+
+Open gaps: none
+
+What this coverage does NOT prove:
+- The 3 new unit tests prove `_fetch_live`'s row-selection logic in isolation against synthetic DataFrames — they do NOT prove Google Trends' real API actually returns `isPartial` in the shape assumed (this container's egress proxy blocks Google Trends, so no live-network confirmation is possible here; the existing 269-day backfill script's proven use of the identical pattern is the closest available real-world evidence).
+- The full-suite regression run (`pytest api/ -q`) proves no *existing* test breaks — it does NOT prove the nightly `snapshot_narrative.py` cron job itself behaves correctly end-to-end on the user's real schedule (that would require observing an actual nightly run post-deploy, which is out of scope for this fix's verification and consistent with how prior narrative-mindshare fixes in this repo have been closed).
+- The AC-5/AC-6 Agent-Probe diff reviews prove the *committed diff's file scope* is correct — they do NOT prove no other developer/agent modifies `_fetch_live`'s call sites in a future unrelated change; this is an inherent limit of a point-in-time diff review, not a gap specific to this plan.
+- No test confirms whether previously-zero'd categories (`memecoins`, `RWA`) will in fact receive nonzero values once this fix ships — that depends on real Google Trends data at fetch time, which cannot be predicted or tested in advance; the fix's correctness is that it stops writing *known-fake* zeros, not that it guarantees nonzero output.
+
+Gate: PASS (no FAILs, no CONCERNs — plan checked directly against SPEC, source files read to confirm zero drift, test commands verified runnable, mocking-mechanism risk resolved)
+
+## Autonomous Goal Block
+
+```
+SESSION GOAL: Fix pytrends_adapter._fetch_live to drop Google Trends' incomplete isPartial=True
+current-hour row before selecting the latest point, so the nightly narrative snapshot stops
+archiving permanently-lost fake zeros for memecoins/RWA categories.
+Charter + umbrella plan: N/A — single SIMPLE plan, no phase program, no umbrella.
+Autonomy: Standard RIPER-5 autonomy rules apply (process/development-protocols/orchestration.md
+§Autonomy Mode). This plan carries Gate: PASS with 0 FAILs/0 CONCERNs — EXECUTE may proceed on
+explicit "ENTER EXECUTE MODE" without a PVL supplement cycle.
+Hard stop conditions / safety constraints:
+- Do NOT change _fetch_live's function signature or either call site (fetch_trend,
+  snapshot_narrative.py::snapshot_pytrends) — required for narrative-v2 RFC-3 non-interference.
+- Do NOT modify api/tests/scripts/test_snapshot_narrative.py.
+- Do NOT touch cache.write_narrative_point, cache.read_narrative_series/read_narrative_history,
+  or any file under api/data/cache/narrative/ — this is a forward-only fix, no retroactive
+  correction of already-archived zero points.
+- Do NOT require live network access for the new tests — synthetic DataFrame fixtures only
+  (pytrends is confirmed not installed in the api env).
+Next phase: EXECUTE: process/features/narrative-mindshare/active/pytrends-partial-hour-fix_28-09-26/pytrends-partial-hour-fix_PLAN_28-09-26.md
+Validate contract: inline in plan (see ## Validate Contract section above)
+Execute start: fully-automated commands — `uv run --project api pytest api/tests/data/test_pytrends_adapter.py -v` then `uv run --project api pytest api/ -q` | no e2e spec (backend-only fix) | agent-probe: `git diff api/data/pytrends_adapter.py` reviewed for AC-5/AC-6 | high-risk pack: no (no high-risk class present)
+```
