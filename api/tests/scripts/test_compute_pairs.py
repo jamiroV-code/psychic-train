@@ -1,6 +1,11 @@
 """compute_pairs.py + pairs_response compute path (cointegration-screener RFC-003).
 
 All runs use `isolated_cache`; the universe file is a tmp copy. No network.
+
+SAFETY (T22): `_isolate` below is module-level `autouse=True`. It depends on
+`isolated_cache` AND redirects `watchlist_store.DEFAULT_WATCHLIST_PATH`, so
+isolation holds for every test in this file including the pure ones that name
+no fixture.
 """
 from __future__ import annotations
 
@@ -11,7 +16,7 @@ import pandas as pd
 import pytest
 
 from api.analytics.cointegration import pairs_response, stats
-from api.data import cache, ccxt_adapter
+from api.data import cache, ccxt_adapter, watchlist as watchlist_store
 from api.tests.pairs_fixtures import seed_small_universe, write_universe
 
 
@@ -26,6 +31,18 @@ def _hand_bh(ps: list[float]) -> list[float]:
         running = min(running, ps[i] * m / rank)
         adj[i] = running
     return adj
+
+
+@pytest.fixture(autouse=True)
+def _isolate(isolated_cache, tmp_path, monkeypatch):
+    monkeypatch.setattr(watchlist_store, "DEFAULT_WATCHLIST_PATH", tmp_path / "watchlist.json")
+    return isolated_cache
+
+
+def test_isolated_cache_redirects_cache_root(tmp_path):
+    """Canary: the autouse isolation is really in effect inside a test."""
+    assert cache.CACHE_ROOT == tmp_path
+    assert watchlist_store.DEFAULT_WATCHLIST_PATH == tmp_path / "watchlist.json"
 
 
 @pytest.fixture
@@ -125,3 +142,81 @@ def test_script_main_prints_summary(seeded, capsys):
     assert compute_pairs.main() == 0
     out = capsys.readouterr().out
     assert "pairs computed: 10" in out and "coin_unavailable" in out and "BH-adjusted" in out
+
+
+# ------------------------------------------------------- exit-code policy (AC-6)
+
+
+class _Summary:
+    """Minimal stand-in for `pairs_response.ComputeSummary` — `exit_code` only
+    reads `status_counts`."""
+
+    def __init__(self, status_counts, pair_count=None):
+        self.status_counts = status_counts
+        self.pair_count = pair_count if pair_count is not None else sum(status_counts.values())
+        self.not_mean_reverting = 0
+        self.johansen_refused = 0
+        self.bh_significant_05 = 0
+        self.elapsed_s = 0.0
+        self.provenance = {}
+
+
+def test_exit_code_zero_when_any_pair_is_ok():
+    counts = {"ok": 3, "insufficient_overlap": 3, "coin_unavailable": 4}
+    assert compute_pairs_module().exit_code(_Summary(counts)) == 0
+
+
+def test_exit_code_two_when_every_pair_is_coin_unavailable():
+    assert compute_pairs_module().exit_code(_Summary({"coin_unavailable": 153})) == 2
+
+
+def test_exit_code_two_when_every_pair_is_insufficient_overlap():
+    """C2: `insufficient_overlap`-only is a degraded run, not a success."""
+    assert compute_pairs_module().exit_code(_Summary({"insufficient_overlap": 153})) == 2
+
+
+def test_exit_code_two_when_pair_count_is_zero():
+    assert compute_pairs_module().exit_code(_Summary({}, pair_count=0)) == 2
+
+
+def compute_pairs_module():
+    from api.scripts import compute_pairs
+    return compute_pairs
+
+
+def test_main_returns_exit_code_from_stubbed_compute(monkeypatch, capsys):
+    compute_pairs = compute_pairs_module()
+    monkeypatch.setattr(pairs_response, "compute_and_persist",
+                        lambda: _Summary({"coin_unavailable": 153}))
+    assert compute_pairs.main() == 2
+    out = capsys.readouterr().out
+    assert "pairs computed: 153" in out and "coin_unavailable" in out and "BH-adjusted" in out
+
+
+def test_main_with_explicit_empty_argv_matches_bare_main(monkeypatch):
+    """C5: `main()` and `main([])` behave identically under pytest."""
+    compute_pairs = compute_pairs_module()
+    monkeypatch.setattr(pairs_response, "compute_and_persist", lambda: _Summary({"ok": 1}))
+    assert compute_pairs.main() == compute_pairs.main([]) == 0
+
+
+def test_empty_cache_real_compute_returns_two(tmp_path, monkeypatch, capsys):
+    """E2 (NEW): the real compute path on an empty cache with the repo's own
+    read-only universe file yields all `coin_unavailable` and exit 2.
+
+    The universe file is only READ; every write lands under the redirected
+    CACHE_ROOT.
+    """
+    compute_pairs = compute_pairs_module()
+    from api.data import pairs_universe
+
+    coins = pairs_universe.load_universe(pairs_universe.real_universe_path())
+    monkeypatch.setattr(pairs_universe, "default_universe_path",
+                        pairs_universe.real_universe_path)
+
+    assert compute_pairs.main() == 2
+    table = pd.read_parquet(cache.pairs_results_path())
+    expected = len(list(combinations(coins, 2)))
+    assert len(table) == expected
+    assert set(table.status) == {"coin_unavailable"}
+    assert (tmp_path / "pairs" / "results.parquet").exists()

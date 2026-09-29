@@ -1,0 +1,104 @@
+name: Pairs refresh snapshot
+
+# Refreshes the OHLCV cache and then recomputes the pair-screener results, as
+# two sequential steps of ONE job so the compute always sees the same run's
+# bars (pipeline-completeness D2; this supersedes MASTER-PLAN T5's proposed
+# `pairs-recompute.yml` name).
+#
+# HONESTY — what this buys today:
+#   * The commit step is INERT. `api/data/cache/ohlcv/` and
+#     `api/data/cache/pairs/` are gitignored (D1) and the runner is ephemeral,
+#     so nothing persists between runs and the commit step always reports
+#     "nothing new to commit". It becomes real, with zero rewrite, once P2
+#     provides a persistent disk.
+#   * The real value now is a nightly integration canary: a crash (any exit
+#     code other than 0 or 2) fails the job loudly. A total provider outage
+#     (exit 2) is a warning annotation only.
+#   * DEPTH: a GitHub-hosted run is shallow — at most 500 daily bars per coin
+#     (`DEFAULT_LIMIT`), versus the ~2,230 bars of a locally deep-backfilled
+#     cache. A CI pairs result is a canary artifact, not a quality result.
+#
+# Scheduled 19:17 UTC, off the top of the hour. GitHub starts scheduled runs
+# ~2h late in practice (observed up to ~2h20m), so this still lands well
+# before UTC midnight. 30 minutes after liqtide-snapshot.yml (18:47) and 30
+# before liquidity-backfill-snapshot.yml (19:47), so the pushes to main don't
+# overlap. Pinned by api/tests/scripts/test_snapshot_workflow_schedules.py.
+#
+# No secrets: ccxt public OHLCV is keyless.
+on:
+  schedule:
+    - cron: "17 19 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pairs-refresh-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install api/ dependencies
+        run: uv sync --project api
+
+      - name: Refresh OHLCV cache
+        id: refresh
+        run: |
+          set +e
+          uv run --project api python -m api.scripts.refresh_cache
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Recompute pairs
+        id: compute
+        run: |
+          set +e
+          uv run --project api python -m api.scripts.compute_pairs
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Warn when no OHLCV fetch succeeded
+        if: steps.refresh.outputs.exit_code == '2'
+        run: |
+          echo "::warning::refresh_cache.py - no (symbol, timeframe) fetch succeeded, see the job log above"
+
+      - name: Warn when no pair computed ok
+        if: steps.compute.outputs.exit_code == '2'
+        run: |
+          echo "::warning::compute_pairs.py - no pair computed ok, see the job log above"
+
+      - name: Commit refreshed cache
+        if: (steps.refresh.outputs.exit_code == '0' || steps.refresh.outputs.exit_code == '2') && (steps.compute.outputs.exit_code == '0' || steps.compute.outputs.exit_code == '2')
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Tolerant staging: under D1 these directories are gitignored and on
+          # a fresh runner they may not exist at all. A bare `git add` exits
+          # 128 (missing) or 1 (present but ignored) and would fail the job
+          # every night. Never use -f/--force: that would bypass D1.
+          git add -A -- api/data/cache/ohlcv/ 2>/dev/null || true
+          git add -A -- api/data/cache/pairs/ 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "nothing new to commit"
+            exit 0
+          fi
+          git commit -m "chore: pairs refresh snapshot $(date -u +%Y-%m-%d)"
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
+            echo "push attempt $attempt failed; retrying"
+            sleep $((attempt * 10))
+          done
+          exit 1
+
+      - name: Fail the job when a step crashed
+        if: (steps.refresh.outputs.exit_code != '0' && steps.refresh.outputs.exit_code != '2') || (steps.compute.outputs.exit_code != '0' && steps.compute.outputs.exit_code != '2')
+        run: |
+          echo "::error::refresh=${{ steps.refresh.outputs.exit_code }} compute=${{ steps.compute.outputs.exit_code }} - a step exited outside the 0/2 contract (crash); commit skipped"
+          exit 1
