@@ -137,7 +137,7 @@ function CategoryHistoryPanelImpl({ category, height = 160 }: { category: Narrat
         </div>
       )}
 
-      <div className="narrative-panel__row narrative-panel__legend">
+      <div className="plot-legend">
         <span data-testid={`narrative-legend-${id}-composite`}>
           <span className="legend-glyph" style={{ color: COMPOSITE_COLOR }}>
             ▬

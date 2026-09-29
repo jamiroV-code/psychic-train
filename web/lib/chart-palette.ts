@@ -49,3 +49,18 @@ export const NARRATIVE_COMPOSITE_COLOR = SERIES.primary;
 /** Backfilled points sit on a different Google Trends scale — a warning, hence the warning hue. */
 export const NARRATIVE_MIXED_SCALE_COLOR = SERIES.secondary;
 export const NARRATIVE_FALLBACK_COLOR = "#8a8f98";
+
+/**
+ * Floor/ramp markers on /onchain.
+ *
+ * Deliberately NEUTRAL: every one of the six chain slots is a series hue, so a
+ * coloured marker would read as "some other chain". They sit on the light plot
+ * and in the light legend strip, which is why they are the plot's ink tokens
+ * rather than shell ink.
+ */
+export const MARKER = {
+  /** --an-ink-1 */
+  floor: "#0b0b0b",
+  /** --an-ink-3 */
+  ramp: "#898781",
+} as const;

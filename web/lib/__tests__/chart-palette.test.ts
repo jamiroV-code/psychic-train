@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { NARRATIVE_SERIES, SERIES } from "@/lib/chart-palette";
+import { MARKER, NARRATIVE_SERIES, SERIES } from "@/lib/chart-palette";
 
 /**
  * The canvas charts need literal colours, so the validated palette exists in
@@ -38,5 +38,13 @@ describe("chart palette", () => {
 
   it("separates the two pytrends windows by dash, not by a near-identical hue", () => {
     expect(NARRATIVE_SERIES["pytrends-backfill-269d"]).toBe(NARRATIVE_SERIES["pytrends-nightly-7d"]);
+  });
+
+  it("keeps floor/ramp markers neutral so they never read as a chain", () => {
+    expect(MARKER.floor).toBe(token("an-ink-1"));
+    expect(MARKER.ramp).toBe(token("an-ink-3"));
+    const chainHues = new Set<string>(Object.values(SERIES));
+    expect(chainHues.has(MARKER.floor)).toBe(false);
+    expect(chainHues.has(MARKER.ramp)).toBe(false);
   });
 });

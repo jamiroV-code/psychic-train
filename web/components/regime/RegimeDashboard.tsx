@@ -8,7 +8,7 @@ import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
 import { fetchRegimeComponents } from "@/lib/api/regime";
 import { SERIES } from "@/lib/chart-palette";
 import { defaultVisibleRange } from "@/lib/regime-chart-sync";
- import { loadIslands, type IslandApi, type RegimeStore } from "@/lib/island-loader";
+ import { loadIslands, type IslandApi, type PanelSyncStore } from "@/lib/island-loader";
 import { formatRegimeStatus } from "@/lib/format-regime-value";
 import { buildRegimeGridModel } from "@/lib/regime-view-model";
 import type { RegimeComponentsResponse } from "@/lib/types/regime";
@@ -77,10 +77,10 @@ export function RegimeDashboard({ fetchData = () => fetchRegimeComponents() }: R
     };
   }, []);
 
-  const sync: RegimeStore | null = useMemo(
+  const sync: PanelSyncStore | null = useMemo(
     () =>
       island && model
-        ? island.createRegimeChartSync({
+        ? island.createPanelSync({
             gridDates: model.gridDates,
             gridTimes: model.gridTimes,
             initialRange: defaultVisibleRange(model.gridDates),

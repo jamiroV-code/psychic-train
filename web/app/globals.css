@@ -879,7 +879,7 @@
    reverse — 8.86:1 dark, 2.17:1 light. No single hue serves both surfaces, so
    the legend moves to the light one rather than the palette being bent to fit
    a surface it was not validated for. */
-.narrative-panel__legend {
+.plot-legend {
   display: inline-block;
   background: var(--an-bg);
   color: var(--an-ink-2);
@@ -887,12 +887,24 @@
   border-radius: var(--radius-sm);
   margin: var(--sp-1) 0;
 }
-.narrative-panel__legend > span {
+.plot-legend > span {
   margin-right: var(--sp-3);
+}
+/* The comparison legend is a <ul> of chains rather than a row of spans. */
+.plot-legend--list {
+  list-style: none;
+  padding: var(--sp-1) var(--sp-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-3);
+}
+.plot-legend__label {
+  color: var(--an-ink-1);
+  font-weight: 600;
 }
 /* Colour rides the glyph; the label stays in readable ink. A thin series colour
    is a graphic (3:1), but a word is text (4.5:1), and several of these slots
    clear the first and not the second. */
-.narrative-panel__legend .legend-glyph {
+.plot-legend .legend-glyph {
   font-weight: 700;
 }

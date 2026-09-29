@@ -22,7 +22,7 @@ import { visibleRangeAttribute } from "../lib/regime-chart-sync";
  * `visibleRangeAttribute` the lightweight-charts path uses, so the attribute
  * an end-to-end test reads is byte-identical between the two implementations.
  */
-export function createRegimeChartSync({ gridDates, gridTimes, initialRange, onHover }) {
+export function createPanelSync({ gridDates, gridTimes, initialRange, onHover }) {
   const lastIndex = Math.max(0, gridDates.length - 1);
 
   const state = $state({

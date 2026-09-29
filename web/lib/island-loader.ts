@@ -12,7 +12,7 @@ import type { SpreadPoint } from "@/lib/types/pairs";
 const ISLAND_URL = "/islands/spread-chart.js";
 const ISLAND_CSS = "/islands/spread-chart.css";
 
-export interface RegimeStore {
+export interface PanelSyncStore {
   state: { from: number; to: number; hoverIndex: number | null };
   registerElement(id: string, el: HTMLElement): () => void;
   zoomAt(fraction: number, deltaY: number): void;
@@ -34,17 +34,29 @@ export interface NarrativePanelLine {
   dashed?: boolean;
 }
 
+export interface OnchainMarker {
+  date: string;
+  kind: string;
+}
+
+export interface OnchainOverlayLine {
+  key: string;
+  color: string;
+  values: (number | null)[];
+  gapBefore?: boolean[];
+}
+
 export interface IslandApi {
   mountSpreadChart(
     target: HTMLElement,
     props: { points: SpreadPoint[]; height: number },
   ): () => void;
-  createRegimeChartSync(options: {
+  createPanelSync(options: {
     gridDates: string[];
     gridTimes: number[];
     initialRange: { from: number; to: number } | null;
     onHover?: (index: number | null) => void;
-  }): RegimeStore;
+  }): PanelSyncStore;
   mountNarrativePanel(
     target: HTMLElement,
     props: {
@@ -55,10 +67,40 @@ export interface IslandApi {
       height: number;
     },
   ): () => void;
+  mountOnchainPanel(
+    target: HTMLElement,
+    props: {
+      store: PanelSyncStore;
+      gridDates: string[];
+      value: (number | null)[];
+      preLaunchValue: (number | null)[];
+      ema28: (number | null)[];
+      gapBefore: boolean[];
+      markers: OnchainMarker[];
+      color: string;
+      rawColor: string;
+      preLaunchColor: string;
+      preLaunchFill: string;
+      floorColor: string;
+      rampColor: string;
+      height: number;
+    },
+  ): () => void;
+  mountOnchainOverlay(
+    target: HTMLElement,
+    props: {
+      store: PanelSyncStore;
+      gridDates: string[];
+      lines: OnchainOverlayLine[];
+      logScale: boolean;
+      format: (v: number) => string;
+      height: number;
+    },
+  ): () => void;
   mountRegimePanel(
     target: HTMLElement,
     props: {
-      store: RegimeStore;
+      store: PanelSyncStore;
       gridDates: string[];
       lines: RegimePanelLine[];
       unit: string;

@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
-import { loadIslands, type RegimeStore } from "@/lib/island-loader";
+import { loadIslands, type PanelSyncStore } from "@/lib/island-loader";
 import { lineBreakIndices } from "@/lib/regime-line-segments";
 
 export interface PanelLine {
@@ -35,7 +35,7 @@ export interface ComponentPanelProps {
   gridDates: string[];
   lines: PanelLine[];
   /** Shared range/hover store for the panel group; null until the island loads. */
-  sync: RegimeStore | null;
+  sync: PanelSyncStore | null;
   /** Inline drill-down; receives a close callback. */
   renderDrillDown: (close: () => void) => ReactNode;
   height?: number;

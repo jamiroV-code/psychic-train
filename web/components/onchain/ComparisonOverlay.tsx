@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createChart, LineSeries, PriceScaleMode, type MouseEventParams, type Time } from "lightweight-charts";
-import { toSegmentedSeriesData } from "@/lib/regime-line-segments";
+import { loadIslands, type IslandApi, type PanelSyncStore } from "@/lib/island-loader";
+import { ComparisonReadout } from "@/components/onchain/ComparisonReadout";
+import { overlayLines } from "@/lib/onchain-overlay-lines";
 import {
   INK,
   chainColor,
@@ -71,51 +72,55 @@ export function ComparisonOverlay({
   const effectiveLog = mode === "index" && logScale;
   const range = useMemo(() => visibleRangeFrom(gridDates, startDate), [gridDates, startDate]);
 
+  // Its own store, deliberately not the chain panels' — the overlay has its
+  // own range and its own readout, exactly as before.
+  const [island, setIsland] = useState<IslandApi | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    loadIslands()
+      .then((api) => {
+        if (!cancelled) setIsland(api);
+      })
+      .catch(() => {
+        // The legend, readout and table view still carry every number.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const store: PanelSyncStore | null = useMemo(
+    () =>
+      island
+        ? island.createPanelSync({
+            gridDates,
+            gridTimes,
+            initialRange: range,
+            onHover: setHoverIndex,
+          })
+        : null,
+    [island, gridDates, gridTimes, range]
+  );
+
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
-    const chart = createChart(container, {
+    if (!container || !island || !store) return;
+
+    const unregister = store.registerElement("comparison", container);
+    const dispose = island.mountOnchainOverlay(container, {
+      store,
+      gridDates,
+      lines: overlayLines(series, mode, gapBefore),
+      logScale: effectiveLog,
+      format: (v: number) => formatComparison(v, mode),
       height,
-      width: container.clientWidth,
-      layout: { background: { color: "transparent" }, textColor: INK.muted },
-      grid: { vertLines: { visible: false }, horzLines: { color: INK.gridline } },
-      timeScale: { borderColor: INK.baseline },
-      rightPriceScale: {
-        borderVisible: false,
-        mode: effectiveLog ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
-      },
-      crosshair: { horzLine: { visible: false, labelVisible: false } },
-      localization: { priceFormatter: (p: number) => formatComparison(p, mode) },
     });
-    for (const s of series) {
-      const line = chart.addSeries(LineSeries, {
-        color: chainColor(s.chain_id),
-        lineWidth: 2,
-        priceLineVisible: false,
-        lastValueVisible: false,
-      });
-      line.setData(toSegmentedSeriesData(gridTimes, comparisonValues(s, mode), gapBefore[s.chain_id]).line);
-    }
-    if (range) {
-      chart.timeScale().setVisibleLogicalRange(range);
-      container.setAttribute("data-visible-range", visibleRangeAttribute(gridTimes, range));
-    }
-    const indexByTime = new Map(gridTimes.map((t, i) => [t, i]));
-    const onMove = (param: MouseEventParams<Time>) => {
-      const i = typeof param.time === "number" ? indexByTime.get(param.time) : undefined;
-      setHoverIndex(i ?? null);
-    };
-    chart.subscribeCrosshairMove(onMove);
-    const handleResize = () => {
-      if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth });
-    };
-    window.addEventListener("resize", handleResize);
+
     return () => {
-      window.removeEventListener("resize", handleResize);
-      chart.unsubscribeCrosshairMove(onMove);
-      chart.remove();
+      dispose();
+      unregister();
     };
-  }, [series, gapBefore, gridTimes, mode, effectiveLog, range, height]);
+  }, [island, store, series, gapBefore, gridDates, mode, effectiveLog, height]);
 
   const method = mode === "index" ? normalizationMethod : alternativeMethod;
 
@@ -160,15 +165,15 @@ export function ComparisonOverlay({
         {METHOD_COPY[method] ?? method}. Range start: {startDate}. Raw counts are never plotted on this chart.
       </p>
 
-      <ul data-testid="onchain-comparison-legend" style={{ listStyle: "none", padding: 0, margin: "4px 0", display: "flex", flexWrap: "wrap", gap: 14, fontSize: 12 }}>
+      <ul data-testid="onchain-comparison-legend" className="plot-legend plot-legend--list">
         {series.map((s) => {
           const latest = latestValue(comparisonValues(s, mode));
           return (
-            <li key={s.chain_id} data-testid={`onchain-legend-${s.chain_id}`} style={{ color: INK.secondary }}>
-              <span aria-hidden="true" style={{ color: chainColor(s.chain_id), fontWeight: 700 }}>
+            <li key={s.chain_id} data-testid={`onchain-legend-${s.chain_id}`}>
+              <span aria-hidden="true" className="legend-glyph" style={{ color: chainColor(s.chain_id) }}>
                 ―
               </span>{" "}
-              <span style={{ color: INK.primary }}>{labels[s.chain_id] ?? s.chain_id}</span>{" "}
+              <span className="plot-legend__label">{labels[s.chain_id] ?? s.chain_id}</span>{" "}
               {latest ? formatComparison(latest.value, mode) : "no data in range"}
               {s.rebased_late && (
                 <span
@@ -183,26 +188,22 @@ export function ComparisonOverlay({
         })}
       </ul>
 
-      <div ref={containerRef} data-testid="onchain-comparison-chart" />
+      {/* Written here rather than only by the store, so the range is on the
+          DOM from first paint instead of appearing once the island loads. The
+          store rewrites it on zoom. */}
+      <div
+        ref={containerRef}
+        data-testid="onchain-comparison-chart"
+        data-visible-range={range ? visibleRangeAttribute(gridTimes, range) : undefined}
+      />
 
-      <div data-testid="onchain-comparison-readout" style={{ fontSize: 12, color: INK.secondary, minHeight: 18 }}>
-        {hoverIndex === null ? (
-          "Hover the chart for every chain's value on a date."
-        ) : (
-          <>
-            <span style={{ color: INK.primary }}>{gridDates[hoverIndex]}</span>
-            {series.map((s) => (
-              <span key={s.chain_id} style={{ marginLeft: 12 }}>
-                <span aria-hidden="true" style={{ color: chainColor(s.chain_id) }}>
-                  ―
-                </span>{" "}
-                <strong style={{ color: INK.primary }}>{formatComparison(comparisonValues(s, mode)[hoverIndex] ?? null, mode)}</strong>{" "}
-                {labels[s.chain_id] ?? s.chain_id}
-              </span>
-            ))}
-          </>
-        )}
-      </div>
+      <ComparisonReadout
+        series={series}
+        labels={labels}
+        gridDates={gridDates}
+        mode={mode}
+        hoverIndex={hoverIndex}
+      />
 
       <details>
         <summary style={{ fontSize: 12, color: INK.secondary }}>Table view</summary>

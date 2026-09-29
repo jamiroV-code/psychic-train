@@ -1,13 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
-vi.mock("lightweight-charts", () => import("@/test/mocks/onchain-lightweight-charts"));
-
-import { markerCalls, mockCharts, resetMarkerCalls, resetMockCharts } from "@/test/mocks/onchain-lightweight-charts";
+import { ChainPanel } from "@/components/onchain/ChainPanel";
 import { OnchainDashboard } from "@/components/onchain/OnchainDashboard";
+import { buildPanelModel } from "@/lib/onchain-view-model";
 import { isoDateToUtcSeconds } from "@/lib/regime-chart-sync";
 import type { OnchainGrowthResponse, OnchainMetric } from "@/lib/types/onchain";
 import { ATTRIBUTION, GRID, allUnavailableResponse, makeResponse } from "./fixtures";
+
+/**
+ * The plots are Svelte/LayerChart islands (ADR-1) that jsdom does not mount,
+ * so what was asserted against a mocked lightweight-charts instance is now
+ * asserted on the model that feeds them and on the DOM the panel still owns.
+ */
 
 const LIVE = ["ethereum", "base", "arbitrum", "optimism", "polygon", "robinhood"];
 
@@ -20,11 +25,6 @@ async function renderLoaded(fetchData = fetcher()) {
   await screen.findByTestId("onchain-dashboard");
   return fetchData;
 }
-
-beforeEach(() => {
-  resetMockCharts();
-  resetMarkerCalls();
-});
 
 describe("OnchainDashboard", () => {
   it("shows loading, then 6 live panels and 3 unavailable cards with no zero", async () => {
@@ -141,24 +141,45 @@ describe("OnchainDashboard", () => {
     await renderLoaded();
     expect(screen.getByTestId("onchain-panel-polygon-prelaunch")).toHaveTextContent("before launch (2025-09-22)");
     expect(screen.queryByTestId("onchain-panel-ethereum-prelaunch")).toBeNull();
-    const ethMarkers = markerCalls.find((c) => (c.markers as { text: string }[]).length === 2);
-    expect(ethMarkers?.markers).toEqual([
-      expect.objectContaining({ time: isoDateToUtcSeconds(GRID[1]), text: "floor" }),
-      expect.objectContaining({ time: isoDateToUtcSeconds(GRID[4]), text: "ramp" }),
+    // Markers come from the API verbatim, in order, and are counted on the DOM.
+    const eth = makeResponse("active_addresses").chains.find((c) => c.id === "ethereum")!;
+    expect(buildPanelModel(eth, GRID).markers).toEqual([
+      expect.objectContaining({ date: GRID[1], kind: "floor" }),
+      expect.objectContaining({ date: GRID[4], kind: "ramp" }),
     ]);
+    expect(screen.getByTestId("onchain-chart-ethereum")).toHaveAttribute("data-marker-count", "2");
     expect(screen.getByTestId("onchain-chart-ethereum")).toHaveAttribute("data-gap-dates", "2025-09-25");
   });
 
-  it("syncs crosshair across panels and updates every readout", async () => {
+  it("gives every live chain exactly one plot host, and no more", async () => {
     await renderLoaded();
-    const panelCharts = mockCharts.filter((c) => (c.container as HTMLElement).dataset.testid?.startsWith("onchain-chart-"));
-    expect(panelCharts).toHaveLength(6);
-    act(() => panelCharts[0].fireCrosshair(isoDateToUtcSeconds(GRID[4])));
+    // One host per live chain. The plots themselves are islands and are not
+    // mounted under jsdom; that they draw and stay in sync is covered by
+    // e2e/onchain.spec.ts in a real browser.
+    expect(screen.getAllByTestId(/^onchain-chart-/)).toHaveLength(6);
+  });
+
+  it("moves a panel readout to the hovered date rather than the latest", () => {
+    // Hover arrives as a prop, so it is asserted directly on the panel instead
+    // of by firing a crosshair at a mocked chart.
+    const chain = makeResponse("active_addresses").chains.find((c) => c.id === "arbitrum")!;
+    const model = buildPanelModel(chain, GRID);
+    const panel = (hoverIndex: number | null) => (
+      <ChainPanel
+        chain={chain}
+        model={model}
+        gridDates={GRID}
+        gridTimes={GRID.map(isoDateToUtcSeconds)}
+        generatedUtc="2026-09-29T00:00:00Z"
+        sync={null}
+        hoverIndex={hoverIndex}
+      />
+    );
+    const { rerender } = render(panel(4));
     expect(screen.getByTestId("onchain-panel-arbitrum-readout")).toHaveTextContent("1,400 on 2026-09-19");
-    expect(panelCharts[2].setCrosshairPosition).toHaveBeenCalled();
-    // the comparison chart is not in the sync group
-    const overlay = mockCharts.find((c) => (c.container as HTMLElement).dataset.testid === "onchain-comparison-chart");
-    expect(overlay?.setCrosshairPosition).not.toHaveBeenCalled();
+    // With nothing hovered it falls back to the latest date that has a value.
+    rerender(panel(null));
+    expect(screen.getByTestId("onchain-panel-arbitrum-readout")).not.toHaveTextContent("on 2026-09-19");
   });
 
   it("shows an error with retry when the first load fails", async () => {

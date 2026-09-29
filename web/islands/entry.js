@@ -2,7 +2,9 @@ import { mount, unmount } from "svelte";
 import SpreadChart from "./spread-chart.svelte";
 import RegimePanel from "./regime-panel.svelte";
 import NarrativePanel from "./narrative-panel.svelte";
-import { createRegimeChartSync } from "./regime-sync.svelte.js";
+import OnchainPanel from "./onchain-panel.svelte";
+import OnchainOverlay from "./onchain-overlay.svelte";
+import { createPanelSync } from "./panel-sync.svelte.js";
 
 /**
  * The island boundary.
@@ -21,11 +23,12 @@ export function mountSpreadChart(target, props) {
 }
 
 /**
- * The seven /regime panels are interleaved with React chrome, so each plot is
- * its own mount. They share one store, created here once by React, which is
- * what keeps the coupled range/hover state undivided across those mounts.
+ * Panels interleaved with React chrome are each their own mount, so the state
+ * they share cannot live in any one of them. One store, created here once by
+ * React and handed to every mount, is what keeps the coupled range/hover state
+ * undivided. Used by the seven /regime panels and the /onchain chain panels.
  */
-export { createRegimeChartSync };
+export { createPanelSync };
 
 export function mountRegimePanel(target, props) {
   const app = mount(RegimePanel, { target, props });
@@ -38,5 +41,20 @@ export function mountRegimePanel(target, props) {
  */
 export function mountNarrativePanel(target, props) {
   const app = mount(NarrativePanel, { target, props });
+  return () => unmount(app);
+}
+
+/** One /onchain chain panel. Shares the chain-panel store, like /regime. */
+export function mountOnchainPanel(target, props) {
+  const app = mount(OnchainPanel, { target, props });
+  return () => unmount(app);
+}
+
+/**
+ * The /onchain normalised comparison overlay. Takes its OWN store instance —
+ * its range and readout are independent of the chain panels below it.
+ */
+export function mountOnchainOverlay(target, props) {
+  const app = mount(OnchainOverlay, { target, props });
   return () => unmount(app);
 }
