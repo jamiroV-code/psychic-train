@@ -507,7 +507,7 @@ What This Coverage Does NOT Prove:
 - Nothing here proves Tailscale reachability, non-reachability from LAN (B10), reboot/sleep/downtime recovery (B12, B13, B15), or that stage B is safe (G-STAGEB, P1's atomic writes are not implemented).
 
 Gate: CONDITIONAL (0 FAILs, 3 CONCERN dimensions; mandatory 717->714 fix and hard checks 1-5 satisfied or corrected in plan; no first-pass PHASE_COMPLETE)
-Accepted by: PENDING — no concern has been accepted by a user or a fix cycle yet. Concerns to be accepted by name: (1) Infra fit: Windows/Tailscale/Task Scheduler behavior unverifiable in-container, agent-probe B5/B6/B8-B12; (2) Test coverage: `.ps1` correctness rests on shape tests plus user-run probes, real-browser CORS gate G6 may not run; (3) Section B: cmdlet/parameter names unconfirmed (B5/B11), BOOTSTRAP.md dangling until P1 merges.
+Accepted by: user, 2026-09-29 (chat: "accept") — concerns: infra-fit, test-coverage (shape-only .ps1), section B cmdlet names / BOOTSTRAP.md dangling until P1 merges
 
 ## Autonomous Goal Block
 
