@@ -123,6 +123,8 @@ Day-2 request flow, once deployed (illustrative, not yet built):
   proven by: repo-state check — no new deploy config committed by this lane beyond docs/config-surface changes named in this SPEC (`git diff --stat` against this lane's allowed touchpoints); no cloud account or DNS record created.
   strategy: Fully-Automated (a diff/scope check, not a runtime test)
 
+*(AC9–AC13, added 29-09-26 for the intermittent-availability assumption, are in `## Phase 1 Operating Assumption — Intermittent Availability` at the end of this document.)*
+
 ---
 
 ## Out Of Scope
@@ -135,6 +137,7 @@ Day-2 request flow, once deployed (illustrative, not yet built):
 - Equity data licensing (London Strategic Edge) — a separate, already-tracked open decision, unaffected by this SPEC.
 - Actually measuring the real on-disk cache size on the author's PC — that number can only be produced by the author running one command locally; this SPEC uses an estimate and says so.
 - Verifying live-provider behavior (Google Trends, Reddit, CoinGecko, Hyperliquid, FRED, DefiLlama) from this environment — this sandbox's network policy blocks all of them.
+- (Added 29-09-26) Implementing the atomic-parquet-write fix in `api/data/cache.py`, or the resume script in `api/scripts/` — both are recorded as requirements with owners to be assigned, not work for this lane.
 
 ---
 
@@ -144,10 +147,11 @@ Day-2 request flow, once deployed (illustrative, not yet built):
 - **Persistent disk is mandatory.** The app's only datastore is Parquet files on disk, read via DuckDB — no database server exists. Any hosting target without a real, redeploy-surviving writable filesystem is disqualified outright (this ruled out Vercel, Netlify, Cloudflare Workers, and plain stateless Lambda).
 - **No app-level auth/login code.** `process/context/all-context.md` records auth and multi-tenancy as deliberately out of scope "until the research tooling works." The privacy requirement must be satisfied without contradicting that — by gating access outside the app, not inside it.
 - **Licensing forbids full public redistribution today.** At least 3 data adapters (Farside/ETF flows, L2Beat, and — pending user confirmation — Hyperliquid) are explicitly marked non-redistributable; a fully public deployment would need per-provider legal review this SPEC does not attempt. A single-user-gated deployment sidesteps this without resolving it.
-- **File ownership boundaries (this session):** this lane may only touch `api/main.py`, new deployment/config files, and deployment docs. Requirements that fall on `web/`, `api/scripts/`, `.github/workflows/`, `.gitignore`, or `api/data/pytrends_adapter.py` must be written as requirements addressed to the owning lane, not implemented here.
+- **File ownership boundaries (this session):** this lane may only touch `api/main.py`, new deployment/config files, and deployment docs. Requirements that fall on `web/`, `api/scripts/`, `.github/workflows/`, `.gitignore`, `api/data/cache.py`, or `api/data/pytrends_adapter.py` must be written as requirements addressed to the owning lane, not implemented here.
 - **Existing env-override levers must be reused, not rebuilt.** `SCREENER_CORS_ORIGINS`, `SCREENER_CACHE_ROOT`, and `SCREENER_WATCHLIST_PATH` already exist and already do most of what a deploy needs — the code change is about wiring/documenting them for a new run context, not inventing new config plumbing.
 - **The bind address is a run-command concern, not a code concern.** `api/main.py` has no `.run()` call; there's nothing to "unbind" in the source — the constraint is on how the container/process is started.
 - **This sandbox cannot verify live-provider behavior or real cache size.** Both are marked accordingly rather than guessed at.
+- **(Added 29-09-26) Phase 1 host is intermittently available.** The box is the author's own PC and will have downtime. No design in Phase 1 may assume it is always on; jobs whose source keeps no history must stay on GitHub Actions (see the Phase 1 Operating Assumption section).
 
 ---
 
@@ -157,11 +161,14 @@ Day-2 request flow, once deployed (illustrative, not yet built):
 
 1. **Which hosting target?** Owner: user. This SPEC recommends Fly.io by default, or a home box + Tailscale if the user already owns a suitable always-on machine (see Background for the full comparison and the decision-pivots that would change this recommendation).
 2. **Which access-privacy gate?** Owner: user. This SPEC recommends Tailscale by default, or Cloudflare Access if the user wants "no app install, just a browser login" instead.
-3. **Does the user already own an always-on machine (a home server / NAS / spare PC) that's on a stable connection?** Owner: user. This single answer is the strongest lever on the hosting recommendation — it can make the cost effectively $0.
+3. ~~**Does the user already own an always-on machine?**~~ **Resolved 29-09-26: yes — but intermittently available.** The box is this same PC (already holds the gitignored caches) and it will have downtime; it will not stay on all the time. See `## Phase 1 Operating Assumption — Intermittent Availability`.
 4. **EU or US?** Owner: user. Materially changes the Hetzner VPS price point specifically (cheap in the EU, notably pricier for a US-region box); doesn't affect Fly/Railway/Tailscale/Cloudflare recommendations.
 5. **Does the user own a domain, and is that domain (or a subdomain) willing to be pointed at Cloudflare?** Owner: user. Required only if Cloudflare Access is chosen; not required for Tailscale.
 6. **Is installing a small always-running app on the phone acceptable, or does "any device" specifically mean "just a browser, nothing installed"?** Owner: user. Tailscale requires an installed app per device; Cloudflare Access does not.
 7. **Has Hyperliquid's redistribution terms-of-use question (already an open item in `all-context.md`) been resolved?** Owner: research (pre-existing open question, not new to this SPEC) — relevant here only insofar as it affects how strictly "private only" must be enforced.
+8. **New (29-09-26): should Phase 1 deliberately keep ALL scheduled jobs on GitHub Actions until a genuinely always-on box exists?** Owner: user. Recommendation: yes for the three no-history jobs (a hard rule in the Phase 1 section below); open only for the backfillable/derived jobs, which could move to the PC's own scheduler but gain little while the PC sleeps.
+9. **New (29-09-26): who owns making `api/data/cache.py` parquet writes atomic?** Owner: user to assign. The file belongs to neither this lane nor P1 (see the risk section below).
+10. **New (29-09-26): when the PC wakes after downtime, should the app pull and recompute automatically, or only on an explicit command?** Owner: next-phase (PLAN). This SPEC only requires that the documented resume path exists and is short.
 
 ---
 
@@ -192,6 +199,8 @@ That means: a fresh checkout of this repo, deployed to any hosting target, would
 The good news is the app already handles this kind of gap honestly rather than crashing — the pairs screen, for example, already reports a named "results unavailable" or "stale" status with a reason instead of showing wrong numbers when its precomputed results are missing or outdated. That same honest-degrade pattern is the right shape to lean on for the other affected screens, rather than inventing a new failure mode.
 
 **This is the exact, bounded interface handed to P1:** P1 owns `.github/workflows/`, `.gitignore`, and `api/scripts/`, and needs to decide how the gitignored-but-screen-critical caches (OHLCV, liquidity/regime inputs, pairs results) get onto a freshly-deployed instance and stay current there — whether that's widening what's git-tracked, adding new scheduled jobs, or a first-boot backfill step. This document does not choose for P1; it names the gap P1 needs to close.
+
+**Update, 29-09-26:** for Phase 1 this gap is closed by the answer to the pivotal question — the box is the same PC that already holds these caches, so nothing needs to be moved. The gap described here applies again in full when Phase 2 (a different, truly always-on machine) begins. See `## Phase 1 Operating Assumption — Intermittent Availability`.
 
 ### 4. Licensing makes "just make it public" the wrong default
 
@@ -266,7 +275,7 @@ The user answered the two open decisions this SPEC stopped at:
 |---|---|
 | Q1 — Which hosting target? | **A home box the user already owns** (~$0, electricity only) |
 | Q2 — Which access gate? | **Tailscale** (free personal tier) |
-| Q3 — Owns an always-on machine? | **Yes** — this is what makes Q1's answer viable |
+| Q3 — Owns an always-on machine? | **Yes, but intermittently available** — the box is this same PC and it will have downtime |
 | Q6 — Phone app install acceptable? | **Yes, implied by choosing Tailscale** |
 
 Q4 (EU/US) and Q5 (domain on Cloudflare) are now **moot** — both were pivots that
@@ -283,15 +292,15 @@ only mattered for a VPS or Cloudflare Access respectively.
 - **Volume sizing becomes a non-issue.** The concern was provisioning a cloud volume
   against an unmeasurable cache size. On a machine the user already owns, the disk is
   already there.
-- **The split-brain cache problem shrinks — possibly to nothing.** If the chosen home
-  box is the same machine that already holds the gitignored `ohlcv/`, `liquidity/`,
-  `pairs/` and `legs/` caches, there is no migration at all and all four screens work
-  on day one. **If it is a different machine, the gap in §3 still applies in full** and
-  those caches must be regenerated there. This is the first thing PLAN must establish.
+- **The split-brain cache problem does not apply to Phase 1.** Resolved 29-09-26: the
+  home box is the **same PC** that already holds the gitignored `ohlcv/`, `liquidity/`,
+  `pairs/` and `legs/` caches. There is no cache to move and all four screens work on
+  day one. (The different-machine case is kept as a Phase 2 note in the section below,
+  because it will apply when a true always-on box replaces this PC.)
 - **The requirement handed to P1 changes shape.** It is no longer "get gitignored
   caches onto a remote instance"; it becomes "keep the existing local caches fresh on
-  an always-on box" — satisfiable with a systemd timer or cron on the same disk, which
-  is materially simpler than any cloud-target option.
+  a box that is **not always on**" — satisfiable with a systemd timer or cron on the same
+  disk, but subject to the intermittent-availability rules in the next section.
 
 ### Consequence for execution
 
@@ -300,3 +309,100 @@ cannot be performed from this container, which has no access to that machine. PL
 therefore produce steps the user runs themselves, in the same shape as the existing
 AC-11/AC-12/AC-14 real-machine walkthrough precedents in this repo, rather than steps an
 agent executes.
+
+---
+
+## Phase 1 Operating Assumption — Intermittent Availability
+
+**TL;DR:** For Phase 1 the "always-on box" is this same PC, and it **will be off some of the time**. That is currently harmless, because every data source that cannot be re-fetched later is archived by GitHub Actions, not by the PC. Everything on the PC can be rebuilt. The one real risk is that cache files are not written safely if power is lost mid-write. This is a first-class operating assumption of Phase 1, not a caveat.
+
+### 1. The assumption
+
+| | Phase 1 (now) | Phase 2 (later) |
+|---|---|---|
+| Machine | This PC — already holds `ohlcv/`, `liquidity/`, `pairs/`, `legs/` | A genuinely always-on machine |
+| Availability | **Intermittent — will have downtime** | Always on |
+| Cache migration | **None** — nothing to move, all four screens work on day one | **Applies in full** — the gitignored caches (Background §3) must be regenerated on the new machine, and the requirement handed to P1 reverts to its original "get gitignored caches onto a different instance" shape |
+| Design goal | Fast recovery after downtime, no harm done | Continuous availability |
+
+Everything in Phase 1 is designed for the left column. Do not design for always-on and treat downtime as an edge case.
+
+### 2. Why downtime currently does no permanent harm (headline finding)
+
+The nightly crons do **not** run on the PC. All three declare `runs-on: ubuntu-latest` (`chain-growth-snapshot.yml:29`, `liqtide-snapshot.yml:27`, `narrative-snapshot.yml:30`): they execute on GitHub's infrastructure and commit to `main`. **The PC being off loses none of the archived data.**
+
+That matters because of a clean split: the data that cannot be recovered is already on always-on infrastructure, and the data on the PC is all reconstructible.
+
+| Domain | Where archived | Recoverable if a day is missed? |
+|---|---|---|
+| narrative (pytrends / Reddit / CoinGecko-trending) | GitHub Actions, git | **No.** Google Trends' short window, Reddit search and CoinGecko trending keep no history. A missed day is permanently lost (precedent: the unrecoverable 2026-09-25 gap and the 09-24 to 09-27 pytrends zeros, both recorded in `all-context.md`). |
+| liqtide | GitHub Actions, git | **No.** LiqTide has no historical endpoint; the archive only grows forward. |
+| onchain (growthepie / L2BEAT) | GitHub Actions, git | Partially, but archived off-box regardless. |
+| ohlcv | PC, gitignored | **Yes.** Exchanges keep history; `refresh_cache.py` tails, `backfill_pairs_universe.py` deep-fetches to about 2020-08-19. |
+| liquidity (FRED) | PC, gitignored | **Yes.** FRED's keyless CSV export serves full history; `backfill_primaries.py` rebuilds. |
+| pairs, legs | PC, gitignored | **Yes.** Purely derived; `compute_pairs.py` recomputes (about 56s for 153 pairs). |
+
+### 3. Hard design rule for P1
+
+> **Any job whose source keeps no history must stay on GitHub Actions (always on). Only backfillable or derived jobs may move to the PC.**
+
+Reason: if P1 moved the narrative or liqtide snapshot onto a PC that sleeps, every night the PC is off becomes a permanent, unrecoverable hole in exactly the data this project has already lost days to twice. This inverts the natural instinct to "consolidate the crons onto the server." Do not consolidate them. The no-history jobs are pinned to GitHub Actions for the whole of Phase 1, and stay there in Phase 2 unless the new box is provably always on and monitored.
+
+Jobs allowed on the PC (if P1 wants them): OHLCV tailing, FRED liquidity refresh, `compute_pairs.py`. All are catch-up-safe, so a missed night costs nothing once the next run happens.
+
+### 4. The one real risk: parquet writes are not atomic
+
+In `api/data/cache.py`, parquet writers call `to_parquet(path, index=False)` directly (lines 106, 210, 283, 312, 340, 388, 407, 512, 632). Only the two JSON writers use a safe temp-then-rename (`tmp.replace(path)` at 254-256 and 454-456). Several parquet writers are read-modify-write (load existing data, combine, rewrite the whole file, e.g. lines 388 and 512), and `all-context.md` records that `write_ohlcv` replaces whole series. A shutdown or power loss **mid-write can truncate a file and destroy existing history, not merely lose the new row.**
+
+| Domain | Blast radius if a write is cut off | Recovery |
+|---|---|---|
+| Git-tracked (narrative, liqtide, onchain) | One file truncated | `git checkout` restores it |
+| Gitignored (ohlcv, liquidity, pairs, legs) | One file truncated, **no git copy** | Rebuildable per §2, OHLCV most expensively (18 sequential deep fetches) |
+
+**Recommended fix (recorded, not implemented here):** adopt the temp-then-rename pattern for parquet writes, reusing the exact pattern already proven twice in that same file. Small, high-value change. **Out of lane and needs an owner:** `api/data/cache.py` belongs to neither this lane nor P1. See Open Question 9.
+
+### 5. Recovery path after downtime
+
+Fast recovery is mostly already true:
+
+1. `git pull` — picks up everything the GitHub crons archived while the PC was off.
+2. Optionally re-tail and recompute local derived data: `refresh_cache.py`, then `compute_pairs.py`.
+
+Until step 2 runs, the app degrades honestly rather than crashing: `/pairs` reports `computation_status: results_unavailable | stale` with a named reason (`api/analytics/cointegration/pairs_response.py:216,273-277`), consistent with "numbers are never silently wrong."
+
+Frame recovery as **"pull, then optionally recompute."** A documented one-command resume script is a natural PLAN deliverable. Its home would be `api/scripts/`, which is **P1's lane**, so it is a requirement for P1, not work for this lane.
+
+### 6. Additional acceptance criteria
+
+- AC9: A night when the PC is off loses no archived narrative, liqtide, or onchain data.
+  proven by: extend the config-shape guard `api/tests/scripts/test_snapshot_workflow_schedules.py` to pin all three no-history workflows to `runs-on: ubuntu-latest` (no self-hosted runner, no move to a box-side scheduler).
+  strategy: Fully-Automated
+
+- AC10: After downtime, getting back to current data is a documented, short command sequence (pull, then optional recompute), ideally one resume command.
+  proven by: pytest of the resume script against a fixture cache (script exits clean, is idempotent); plus an Agent-Probe on the real PC after an actual power-off.
+  strategy: Hybrid
+
+- AC11: While the PC has been off and the caches are behind, every screen shows an honest stale or unavailable state, never wrong numbers.
+  proven by: existing `/pairs` `results_unavailable | stale` tests as the reference pattern, extended to `/screener` and `/regime` against a deliberately aged cache fixture.
+  strategy: Hybrid (automated component behavior + one Agent-Probe on the real PC)
+
+- AC12: An interrupted write (power loss, kill) never corrupts or empties an existing cache file.
+  proven by: new pytest that forces a failure mid-write in each parquet writer (monkeypatched writer raising after partial output) and asserts the prior file is byte-identical afterward and no partial temp file is left behind as the live file.
+  strategy: Fully-Automated. Requires the out-of-lane `cache.py` fix; unmet until an owner is assigned.
+
+- AC13: The intermittent-availability assumption is recorded project-wide, so any future agent reads it before designing scheduled work.
+  proven by: `grep` check that `process/context/all-context.md` contains the entry described in the handoff below, run after T8.
+  strategy: Fully-Automated
+
+### 7. Handoff requirement: `process/context/all-context.md`
+
+This operating assumption must reach `process/context/all-context.md` so it is project-wide knowledge. **This lane must NOT edit that file yet:** the master plan records it as four-way contended (task T8, to be done after branch reconciliation T23).
+
+The entry should say, in substance:
+
+- Phase 1 host is the author's own PC (same machine as the gitignored caches); it has downtime and is not always on.
+- The three nightly snapshot workflows run on GitHub (`ubuntu-latest`), not on the PC, so PC downtime loses no archived data.
+- Design rule: jobs whose source keeps no history (narrative, liqtide) must stay on GitHub Actions; only backfillable or derived jobs may move to the PC.
+- Known risk: parquet writes in `api/data/cache.py` are not atomic (only JSON writes are); fix pending an owner.
+- Recovery after downtime: `git pull`, then optionally `refresh_cache.py` and `compute_pairs.py`.
+- Phase 2 (a true always-on box on a different machine) re-opens the cache-migration problem.
