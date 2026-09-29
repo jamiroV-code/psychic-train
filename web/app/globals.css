@@ -728,3 +728,66 @@
     display: none;
   }
 }
+
+/* ===========================================================================
+   9. Analytical panels (LayerChart)
+   Direction D's signature inversion: the shell is dark, the plot is not. A
+   chart panel is a light surface so the data carries the contrast, and the
+   series use the LIGHT validated slots because that is the surface they sit on.
+   =========================================================================== */
+.analytic-panel {
+  background: var(--an-bg);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3) var(--sp-4) var(--sp-2);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.5),
+    0 8px 26px -12px rgb(0 0 0 / 0.7);
+}
+.analytic-panel__title {
+  color: var(--an-ink-1);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  margin: 0;
+}
+.analytic-panel__sub {
+  color: var(--an-ink-2);
+  font-size: var(--fs-sm);
+  margin: 0 0 var(--sp-2);
+}
+
+/* The island renders plain SVG, so it is themed from here rather than from
+   inside the Svelte component — one place for chart chrome, shared by every
+   chart that follows. */
+.spread-chart {
+  width: 100%;
+}
+.spread-chart svg {
+  overflow: visible;
+}
+.spread-chart .spread-chart__line {
+  stroke: var(--series-1);
+  stroke-width: 2;
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+/* A spread oscillates around zero, so the zero line is the reference the eye
+   needs — emphasised over the ordinary gridlines, but still recessive. */
+.spread-chart .spread-chart__zero {
+  stroke: var(--an-axis);
+  stroke-width: 1;
+}
+.spread-chart .tick line,
+.spread-chart .tick-mark {
+  stroke: var(--an-grid);
+}
+.spread-chart .tick text,
+.spread-chart text {
+  fill: var(--an-ink-3);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.spread-chart .rule,
+.spread-chart .axis .rule {
+  stroke: var(--an-axis);
+}
