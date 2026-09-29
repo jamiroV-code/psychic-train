@@ -327,17 +327,27 @@ routing/SSR rather than just a chart.
 
 ### Consequence
 
-Five chart components remain on `lightweight-charts`, across three routes — more than the two
-routes this section first claimed, corrected here after counting:
+Five chart components were on `lightweight-charts` when this ADR was written — more than the
+two routes this section first claimed. Three are now converted:
 
-| Component | Route | Lines |
+| Component | Route | Status |
 |---|---|---|
-| `components/narrative/CategoryHistoryPanel.tsx` | `/narrative` | 267 |
-| `components/onchain/ComparisonOverlay.tsx` | `/onchain` | 235 |
-| `components/onchain/ChainPanel.tsx` | `/onchain` | 204 |
-| `components/screener/RelativePerformanceChart.tsx` | `/screener` | 149 |
-| `components/chart/MiniChart.tsx` | `/screener` (drill-down) | 75 |
+| `components/narrative/CategoryHistoryPanel.tsx` | `/narrative` | ✅ island (29-09-26) |
+| `components/onchain/ComparisonOverlay.tsx` | `/onchain` | ✅ island (29-09-26) |
+| `components/onchain/ChainPanel.tsx` | `/onchain` | ✅ island (29-09-26) |
+| `components/screener/RelativePerformanceChart.tsx` | `/screener` | ⬜ remaining |
+| `components/chart/MiniChart.tsx` | `/screener` (drill-down) | ⬜ remaining |
 
-Only once all five are converted can `lightweight-charts`, `lib/regime-chart-sync.ts`,
-`lib/regime-line-segments.ts` and the two test mocks be removed. Until then the two chart systems
-coexist, which is expected rather than debt to apologise for.
+`createChartSync` and `toSegmentedSeriesData` are already deleted — the conversions left them
+reachable only from their own tests. `lightweight-charts` itself, plus `lineBreakIndices` and the
+two screener test mocks, come out once `/screener` follows.
+
+**First Load JS, measured after each conversion:** `/narrative` 165 → 107 kB, `/onchain`
+166 → 108 kB, `/regime` 164 → 106 kB, `/pairs/[a]/[b]` 171 → 114 kB. The island entry chunk grew
+744 → 783 kB raw (179 → 184 kB gzipped) across three whole chart types, which is finding 4 made
+concrete: the bulk is LayerChart, and per-chart code is marginal.
+
+**What the conversions cost in fidelity, recorded rather than glossed:** floor/ramp markers on
+`/onchain` are told apart by colour instead of arrow-vs-circle glyphs, because a canvas point mark
+is a circle. The colours are neutral (every chain slot is a series hue, so a coloured marker would
+read as another chain) and the panel key shows the same two dots it draws.
