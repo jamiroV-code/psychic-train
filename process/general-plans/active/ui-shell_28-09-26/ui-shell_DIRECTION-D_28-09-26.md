@@ -327,5 +327,17 @@ routing/SSR rather than just a chart.
 
 ### Consequence
 
-`/narrative` and `/onchain` convert to islands next, after which `lightweight-charts`,
-`lib/regime-chart-sync.ts` and `lib/regime-line-segments.ts` can all be removed.
+Five chart components remain on `lightweight-charts`, across three routes — more than the two
+routes this section first claimed, corrected here after counting:
+
+| Component | Route | Lines |
+|---|---|---|
+| `components/narrative/CategoryHistoryPanel.tsx` | `/narrative` | 267 |
+| `components/onchain/ComparisonOverlay.tsx` | `/onchain` | 235 |
+| `components/onchain/ChainPanel.tsx` | `/onchain` | 204 |
+| `components/screener/RelativePerformanceChart.tsx` | `/screener` | 149 |
+| `components/chart/MiniChart.tsx` | `/screener` (drill-down) | 75 |
+
+Only once all five are converted can `lightweight-charts`, `lib/regime-chart-sync.ts`,
+`lib/regime-line-segments.ts` and the two test mocks be removed. Until then the two chart systems
+coexist, which is expected rather than debt to apologise for.
