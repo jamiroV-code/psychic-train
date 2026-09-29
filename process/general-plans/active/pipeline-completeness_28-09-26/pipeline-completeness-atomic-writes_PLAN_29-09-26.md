@@ -9,7 +9,7 @@ feature: none (general-plans, P1 lane)
 
 TL;DR: add one private helper `_atomic_to_parquet(df, path)` to `cache.py` (unique temp file in the same directory → write → fsync → `os.replace`; temp removed on any exception) and route the 9 existing `.to_parquet(` call sites in `api/data/cache.py` through it (cache.py ONLY — see KG5: `etf_flows_adapter.py` has a separate non-atomic writer that is out of this assignment). Add one `api/tests/data/test_cache_atomic_writes.py` (isolated, offline). Add one `.gitignore` line so a leftover temp from a hard kill can never be committed by the nightly workflows. No refactor, no signature or behaviour change (T21).
 
-**Status**: PLANNED — PVL supplement cycle 1 applied (N1-N4 RESOLVED); PVL supplement cycle 2 APPLIED 29-09-26 (N6 G1 grep literal, N7 liqtide_payload interrupted test, N8 EAFP mode lookup, plus `$SCRATCH` definition). VALIDATE must re-run from V1 before EXECUTE (the `## Validate Contract` below predates cycle 2 and still quotes the pre-fix literals as history).
+**Status**: PLANNED — PVL supplement cycles 1 and 2 applied; independent VALIDATE pass 3 (29-09-26) = Gate: CONDITIONAL, 0 FAIL, N1-N4 and N6-N8 RESOLVED, only structural/recorded gaps KG1-KG5 remain (no human accepted them; autonomous-run policy only). Ready for EXECUTE once the orchestrator routes it.
 **Complexity**: SIMPLE
 
 ## Overview
@@ -134,10 +134,10 @@ None changed. All public `cache.*` function signatures, return values, file path
 ## Resume and Execution Handoff
 
 1. Selected plan: `process/general-plans/active/pipeline-completeness_28-09-26/pipeline-completeness-atomic-writes_PLAN_29-09-26.md`
-2. Last completed step: PLAN + independent VALIDATE pass 1 (CONDITIONAL) + PVL supplement cycle 1 (4 gaps) + independent VALIDATE pass 2 (CONDITIONAL, N6-N8) + PVL supplement cycle 2 APPLIED (N6-N8 + `$SCRATCH`). EXECUTE not started.
-3. Validate-contract: written below (`Gate: CONDITIONAL`, second independent pass; it predates supplement cycle 2 and is kept intact). Cycle 2 applied N6-N8; VALIDATE MUST re-run from V1 and reach `Gate: PASS` before EXECUTE.
+2. Last completed step: PLAN + independent VALIDATE pass 1 (CONDITIONAL) + PVL supplement cycle 1 (4 gaps) + pass 2 (CONDITIONAL, N6-N8) + PVL supplement cycle 2 (N6-N8 + `$SCRATCH`) + independent VALIDATE pass 3 (CONDITIONAL, all gaps RESOLVED, gates proven passable on a scratch copy). EXECUTE not started.
+3. Validate-contract: written below (`Gate: CONDITIONAL`, third independent pass, `generated-by: outer-pvl`). No human accepted KG1-KG5; KG5 needs a user scope decision (P2 AC12 not fully met).
 4. Context loaded: P2 deployability SPEC (OQ9/10, §4, AC12), `api/data/cache.py`, `api/tests/conftest.py`, `process/MASTER-PLAN.md` T21/T22, P1 plan (T22 isolation pattern), `.gitignore`, `.github/workflows/*` `git add` lines, `pairs_response.py` L130-185.
-5. Next step for a fresh agent: orchestrator re-spawns vc-validate-agent from V1 (supplement cycle 2 applied). Only after `Gate: PASS`: checklist step 1 (baseline + size/mtime/hash snapshot), then step 2.
+5. Next step for a fresh agent: EXECUTE with vc-execute-agent (opus) on this plan path, following the "Offline gate commands" list and binding instructions E1-E12 in the Validate Contract; then a vc-tester EVL confirmation run of the same commands.
 
 ## Validate Contract
 
@@ -145,86 +145,94 @@ Status: CONDITIONAL
 Date: 29-09-26
 date: 2026-09-29
 generated-by: outer-pvl
-supersedes: 2026-09-29 (outer-pvl; independent first pass, CONDITIONAL with N1-N4) — this second independent pass, run after PVL supplement cycle 1, has current evidence
+supersedes: 2026-09-29 (outer-pvl; second independent pass, CONDITIONAL with N6-N8) — this third pass, run after PVL supplement cycle 2, has current evidence
 
 Parallel strategy: sequential
-Rationale: score 2/7 (S2 destructive-write data path, S6 high-risk class); 3 files, one dominant surface. The validator ran the Layer 1/Layer 2 checks itself (subagents cannot spawn agents) with scratch-dir experiments; no fan-out needed. `vc-scenario`/`vc-predict` were not invoked: every concern below is mechanical and was reproduced directly.
+Rationale: score 2/7 (S2 destructive-write data path, S6 high-risk class); 3 files, one dominant surface. The validator ran the Layer 1/Layer 2 checks itself with scratch-directory experiments (subagents cannot spawn agents); no fan-out needed. `vc-scenario`/`vc-predict` not invoked: every finding below is mechanical and was reproduced directly.
 
-Validator provenance: written by an independent vc-validate-agent pass (not the plan's author, not the pass-1 validator). All experiments ran in the session scratchpad; the real repo, `api/data/cache` and `.gitignore` were only read. `git status --short` = empty before and after.
+Validator provenance: fresh independent vc-validate-agent pass (not the plan's author, not the pass-1/pass-2 validator). All experiments ran in the session scratchpad; the real repo, `api/data/cache` and `.gitignore` were only read. `git status --short` was empty before the plan edit; no `git add/commit/stash/checkout/restore` was run against the repo. HEAD `2936114`; `git diff --stat df2c3c9..HEAD -- api .gitignore` is empty, so the 789 / 5 baseline recorded at `df2c3c9` still describes `api/`.
 
-### Supplement cycle 1 verification (N1-N4)
+### Supplement cycle 2 verification (N6-N8)
 
 | Item | Verdict | Where it landed / what was checked |
 |---|---|---|
-| N1 etf_flows_adapter bypass recorded, scope NOT widened | RESOLVED | TL;DR ("cache.py ONLY — see KG5"); AC(a) "that file only … Not covered: `etf_flows_adapter.py::merge_into_cache` (KG5)"; Phase Completion Rules "P2's AC12 … NOT fully met until `etf_flows_adapter.merge_into_cache` also goes through an atomic helper"; Blast Radius "HARD OUT OF SCOPE" lists `etf_flows_adapter.py`, `seed_e2e_cache.py` and every other path in the assignment; Touchpoints = exactly `api/data/cache.py`, `api/tests/data/test_cache_atomic_writes.py`, one `.gitignore` line, task folder; Verification Evidence KG5 row; Known Gaps KG5 + Future Work + backlog stub. Citations checked against source: writer at `etf_flows_adapter.py:110`, request path `components.py:484` → `fetch_btc_spot_flows` → `:301`; `seed_e2e_cache.py:232` is a CALLER of `merge_into_cache` (not a second writer; wording is loose but harmless). Repo-wide search for `to_parquet|write_table|COPY|ParquetWriter` outside tests finds only `cache.py` (9), `etf_flows_adapter.py:110` (KG5) and `pairs_response.py:174,183` (D5/KG3) — the gap list is complete. Scoping caveat: the G1 COMMAND is defective (N6) although its scope wording is honest. |
-| N2 file mode | RESOLVED (+N8 clarity) | D1 now states: copy existing target mode (`os.stat(path).st_mode & 0o7777`), else 0o644; chmod between close and `os.replace`; umask caveat and Windows caveat honest; Risks and `test_mode_handling` consistent with it. Scratch-verified with a D1-mirror helper: first write → 0o644; overwrite of a 0o600 file → 0o600; target absent → 0o644; `os.stat` raising `FileNotFoundError` (race) is handled when written EAFP (try/except) and the write still succeeds. The plan does not say EAFP; an `exists()`-then-`stat()` implementation would turn the race into a spurious (safe: temp removed, original intact) exception → N8, one clause. |
-| N3(a) truncating Path-fake | RESOLVED | Step 2 `test_interrupted_write_preserves_original` mandates it. Reproduced (see below): the truncating fake fails 8 of 9 real writers on the current code; a handle-only fake passes 9 of 9 vacuously on the current code. |
-| N3(b) second call must reach the write | PARTIAL | Correct for `write_exchange_point` (same per-category file) and `merge_onchain_series`. NOT sound for `write_liqtide_payload`: a NEW date targets a DIFFERENT file, so "original byte-identical" is vacuous — it PASSES on the current non-atomic code even with the truncating fake (reproduced). → N7. |
-| N3(c) canary | RESOLVED | `test_isolation_canary` (step 2) mirrors `test_bootstrap_watchlist.py:28` / `test_backfill_primaries.py:28`; `DEFAULT_WATCHLIST_PATH` exists (`watchlist.py:41`). |
-| N3(d) global `os.replace` patch + docstring text | PARTIAL | `os.replace` fake is scoped to destinations under `tmp_path` and delegates otherwise: RESOLVED. The "no literal `to_parquet(` in the helper docstring" rule is mis-specified: the helper's own NAME `_atomic_to_parquet(` contains the substring `to_parquet(`, so plan gate G1 (`grep -c "to_parquet(" api/data/cache.py` = 1) returns **11** after the change (measured on a patched scratch copy: 1 raw call + 1 def + 9 calls). `test_no_bypass` (which greps `.to_parquet(` with the leading dot) is correct = 1. → N6. |
-| N4 snapshot strength (size+mtime+sha256+watchlist) | RESOLVED | Steps 1 and 6 use `find … -printf '%p %s %T@\n'` (nanosecond mtime) AND `sha256sum`, plus `watchlist.json`; real cache has 57 files, `api/data/watchlist.json` is absent in this container and the `2>/dev/null` form tolerates that. An identical-content rewrite changes mtime, so it is now detected. Minor: `$SCRATCH` is not defined in the plan (E4). |
-| T22 conftest untouched | RESOLVED | `api/tests/conftest.py` is in the hard-out-of-scope list and absent from Touchpoints; `isolated_cache` is only requested, never edited. |
+| N6 G1 grep literal | RESOLVED | D1 last sentence (docstring/comments must not contain `.to_parquet(` nor `_atomic_to_parquet(`; plain `to_parquet(` explicitly barred as a gate); AC(a) (`grep -c '\.to_parquet(' api/data/cache.py` = 1, `grep -c '_atomic_to_parquet(' api/data/cache.py` = 10); Verification Evidence G1 row; checklist step 2 `test_no_bypass`. The old no-dot literal now survives only inside the barred-pattern warning in D1 and in this contract's history. Empirically proven below. |
+| N7 liqtide_payload interrupted test | RESOLVED | Checklist step 2 per-writer bullet, "Exception — `write_liqtide_payload` (N7)": asserts (i) new-date path does NOT exist, (ii) no `*.tmp`/`.*.tmp`, (iii) date-1 file byte-identical and readable, and states what it does and does not prove. Reproduced red-first below: on unmodified `cache.py` the assertion `assert not cache.liqtide_payload_path("2026-09-02").exists()` FAILS (`assert not True`, junk left by the truncating fake); on the patched copy it passes. |
+| N8 EAFP mode lookup | RESOLVED | D1: `try: mode = os.stat(path).st_mode & 0o7777` / `except FileNotFoundError: mode = 0o644`, "NOT `path.exists()` followed by `stat()`". Implemented exactly so in the scratch helper; first write -> 0o644, overwrite of a 0o600 file -> 0o600 (test passes). |
+| `$SCRATCH` definition (bonus fix) | RESOLVED | Checklist step 1 defines `SCRATCH=<session scratchpad>/atomic-writes; mkdir -p "$SCRATCH"`, outside the repo. Note: shell state does not persist between separate tool calls, so it must be re-exported per call (E9). |
+| N1-N4 (cycle 1) | RESOLVED (unchanged) | Re-spot-checked: scope (Touchpoints exactly the four items), mode policy, snapshot uses size+mtime+sha256+watchlist, KG5 recorded not widened, `conftest.py` untouched. |
 
-### New independent evidence (what was actually run)
+### Empirical gate proof (what was actually run)
 
-- **Byte equivalence through the real writers.** Scratch copy of `cache.py` with the D1 helper and all 9 sites swapped (regex on the 9 real lines). Each of the 9 real writer families (`write_ohlcv`, `write_liqtide_payload`, `write_liqtide_backfill`, `write_liquidity_series`, `write_confirmed_boundaries`, `write_narrative_point`, `write_trending_snapshot`, `write_exchange_point`, `merge_onchain_series`) produces a file **byte-identical** to the current code (9/9). Behaviour unchanged.
-- **Red-first reproduction (per-writer interrupted-write test, scratch pytest, 40 cases).** Against the CURRENT `cache.py` with the truncating fake: 8 FAIL ("original corrupted": ohlcv, liqtide_backfill, liquidity, boundaries, narrative, trending, exchange, onchain) and 1 passes vacuously (`liqtide_payload`). Handle-only fake against current code: 9/9 pass vacuously. Against the patched copy: all 18 (both fakes × 9 writers) pass — original byte-identical, readable, zero `*.tmp`/`.*.tmp` left. Mode test and stat-race test pass on the patched copy. So the corrected design (step 2) is genuinely red-first, except for the `liqtide_payload` per-writer case (N7).
-- **`.gitignore` (D6) reproduced** in a throwaway repo (copy of the real `.gitignore` + `api/data/cache/**/*.tmp` after the three negations): `git add` of `liqtide/`, `narrative/`, `onchain/` (incl. `liqtide/raw`, `narrative/pytrends`, `onchain/growthepie/base`) stages the 6 real parquets and 0 temps; `git check-ignore -v` attributes `.gitignore:48` to the deepest temp. Real `.gitignore` currently has no `tmp` rule (grep empty).
-- **Reader safety re-audited:** repo-wide globs are `*.parquet`, `*/*/*.parquet`, `*.json`, `iterdir()`+`is_dir()`, or exact paths; `.name.parquet.<rand>.tmp` matches none.
-- **Isolation soundness (T22):** `isolated_cache` patches `cache.CACHE_ROOT` (read at call time by every path function); `watchlist_store.DEFAULT_WATCHLIST_PATH` redirect + canary + per-test `SETUP    F isolated_cache` count + size/mtime/sha256 before/after diff together cover cache and watchlist. Residual: the `find` covers files only, not new empty directories, and covers `api/data/cache` only (not a `SCREENER_CACHE_ROOT` override) — advisory.
-- **Forbidden-path check:** plan touches only `api/data/cache.py`, `api/tests/data/test_cache_atomic_writes.py`, one `.gitignore` line, the task folder. `web/`, `api/main.py`, deploy/CORS, `pytrends_adapter.py` + test, `watchlist.py`, `ccxt_adapter.py`, `api/analytics/**`, `process/context/**`, `conftest.py`, `.github/workflows/*`, `etf_flows_adapter.py`, `seed_e2e_cache.py` are all named out of scope. Checklist step 9 (backlog stub) is an UPDATE PROCESS action, not an EXECUTE touchpoint. No forbidden path touched.
-- Plan structure validator: `validate-plan-artifact.mjs` = 0 failures, 0 warnings (275 lines). Carried baseline: 789 passed / 5 deselected (`uv run --project api pytest api/ -q`, recorded at HEAD `df2c3c9`; HEAD `bf4681a` differs only by process files; EXECUTE re-records it).
+1. **Scratch copy of `api/`** in the session scratchpad with the planned helper (D1 exactly: `mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")`, `os.fdopen(fd, "wb")`, `df.to_parquet(fh, index=False)`, flush + `os.fsync`, EAFP mode, `os.chmod(tmp, mode)`, `os.replace`, `BaseException` cleanup, `import tempfile`, docstring and comments written to the D1 rule) inserted after `_as_utc`, and the 9 sites at L106/210/283/312/340/388/407/512/632 swapped 1:1 (regex; all 9 matched the expected `.to_parquet(path, index=False)` form).
+2. **Gate greps on that copy:** `grep -c '\.to_parquet(' api/data/cache.py` = **1**; `grep -c '_atomic_to_parquet(' api/data/cache.py` = **10**; the barred plain `grep -c 'to_parquet(' ...` = **11** (confirms N6's diagnosis and that the ban is right). The helper docstring/comments disturb neither count. `test_no_bypass` (`inspect.getsource(cache).count(".to_parquet(") == 1`) passes on the patched copy and fails (`assert 9 ...`) on the unmodified copy.
+3. **`--setup-show` grep against real pytest output:** the line is `        SETUP    F isolated_cache (fixtures used: monkeypatch, tmp_path)`; `grep -c "SETUP    F isolated_cache"` = 6 for a 6-test scratch file whose autouse `_isolate` depends on `isolated_cache` and which also names it in signatures (one SETUP line per test, no double count); `--collect-only -q | grep -c '::'` = 6. The pattern and the equality hold. The plan does not state the collected-count command; it is fixed in E10.
+4. **Red-first on unmodified `cache.py`** (scratch tests with the truncating Path/handle fake): helper-level tests fail (helper absent), `test_no_bypass` fails, the liqtide new-date test fails on its own assertion (N7), the isolation canary passes (expected; not a red gate). Prior pass measured 8/9 real per-writer tests red with the truncating fake and 9/9 vacuous with a handle-only fake — carried, unchanged.
+5. **Isolation of the existing suite (G6 precondition):** in an unmodified scratch copy, snapshot `find api/data/cache -type f -printf '%p %s %T@\n'` + `sha256sum`, full `pytest api/`, re-snapshot: `diff` of both is EMPTY (57 files, no `watchlist.json`). So a non-empty diff at EXECUTE can only come from the new work. Full suite in the scratch copy: 789 collected, 5 deselected; the 39 + 1 failures seen were artifacts of the copy (no `.github/workflows`, no `web/`), not of the change; the recorded real-repo baseline stays 789 passed / 5 deselected.
+6. **G7 reproduced** in a throwaway repo (copy of real `.gitignore` + `api/data/cache/**/*.tmp` after the negations): `git add` of `liqtide/`, `narrative/pytrends/`, `onchain/growthepie/base/` stages the 3 real parquets and 0 temps; `git check-ignore -v` attributes `.gitignore:48` to temps in `liqtide/` and `onchain/`; a temp under git-ignored `ohlcv/` is skipped by `git add -A`.
+7. **Plan validator:** `validate-plan-artifact.mjs` = 0 failures, 0 warnings.
+8. **Scope:** Touchpoints = `api/data/cache.py`, `api/tests/data/test_cache_atomic_writes.py`, one `.gitignore` line, the task folder. `etf_flows_adapter.py`, `seed_e2e_cache.py`, `conftest.py`, `web/`, `api/main.py`, deploy/CORS, `pytrends_adapter.py` + test, `watchlist.py`, `ccxt_adapter.py`, `api/analytics/**`, `process/context/**`, `.github/workflows/*` are all named out of scope (Blast Radius). Unwidened.
+
+### Hunt for unpassable gates (every count, grep, threshold)
+
+| Gate | Passable on the intended end state? |
+|---|---|
+| G1 `\.to_parquet(` = 1, `_atomic_to_parquet(` = 10, `test_no_bypass` | YES (proven: 1 / 10 / passes) |
+| G2-G4 new test file | YES (scratch equivalents green on patched, red on unmodified) |
+| G5 `pytest api/ -q` = baseline + new, 0 failed | YES; baseline is "re-record in step 1" (789 / 5 recorded, api/ unchanged since) — the number is a reference, the pass condition is baseline + new tests |
+| G6 `--setup-show` count == collected | YES (6 == 6 proven; collected command fixed in E10) |
+| G6 before/after size+mtime and sha256 diff empty | YES (existing suite proven not to touch the cache) |
+| G7 throwaway repo | YES, with one wording caveat — see advisory A1 |
+| Step 10 scope guard `git status --porcelain` | YES at the end of EXECUTE (task-folder files count as allowed; UPDATE PROCESS backlog stub is a later phase) |
+
+No gate that cannot pass was found. Advisories (wording precision, resolved as binding instructions, NOT counted as concerns because the intent is unambiguous and passable):
+- A1: step 7 says `git status --porcelain` "shows only the parquet"; in a throwaway repo the copied `.gitignore` itself appears as `?? .gitignore`. Scope it: `git status --porcelain -- api/data/cache` (E11).
+- A2: the collected-count command is unspecified (E10).
+- A3: no gate asserts that `os.fsync` is actually called before `os.replace`; ordering is proven only by the interrupted-write tests. A tiny `os.fsync` spy test in the same test file would close it cheaply; optional, not required. Recorded under KG1.
 
 ### Net gate derivation
 
 | Layer 1 dimensions | Status |
 |---|---|
-| Infra fit | PASS — KG5 bypass recorded, scope honest, repo-wide writer search complete |
-| Test coverage | CONCERN — N6 (G1 grep cannot pass as written), N7 (liqtide_payload per-writer case vacuous); structural KG1/KG2 |
-| Breaking changes | PASS — 9/9 writers byte-identical; signatures/paths/formats unchanged; mode policy explicit |
-| Security surface | PASS — `.gitignore` rule reproduced; mode copy avoids loosening a 0600 file |
+| Infra fit | PASS — writer search complete, KG5 recorded, scope honest |
+| Test coverage | PASS with residual — all gates passable and red-first; KG1 (power loss, fsync call not spied) and KG2 (Windows) are structural |
+| Breaking changes | PASS — 9/9 writers byte-identical (prior pass), signatures/paths/formats unchanged |
+| Security surface | PASS — `.gitignore` rule reproduced; existing target mode copied, no loosening |
 
 | Layer 2 sections | Status |
 |---|---|
-| Helper (D1/D2/D7) | PASS mechanics; CONCERN (low) N8 — say EAFP stat |
-| 9 call-site swap (D3) | PASS — sites at L106/210/283/312/340/388/407/512/632, guards and mkdirs preserved |
+| Helper (D1/D2/D7) | PASS — EAFP mode proven |
+| 9 call-site swap (D3) | PASS — all 9 lines match the swap form; guards and mkdirs untouched |
 | Reader safety | PASS |
 | `.gitignore` (D6) | PASS — reproduced |
-| Test plan (step 2) | CONCERN — N7 |
-| Gate commands (Verification Evidence / G1) | CONCERN — N6 |
-| T22 isolation (steps 1/6) | PASS |
+| Test plan (step 2) | PASS — N7 fixed and red-first verified |
+| Gate commands (G1-G7) | PASS — proven empirically; advisories A1-A3 only |
+| T22 isolation (steps 1/6) | PASS — existing suite proven cache-neutral |
 | Scope / KG5 honesty | PASS |
 | Known-gap honesty (KG1-KG5) | PASS |
 
-Totals: **0 FAILs / 3 new fixable CONCERNs (N6, N7, N8) / 4 items RESOLVED (N1-N4 from cycle 1) / rest PASS** → Net Gate: **CONDITIONAL, NOT terminal**. Every cycle-1 fix landed except two partials (N3b, N3d) which are exactly N7 and N6. Because N6 makes a mandatory gate impossible to pass as written, `PHASE_COMPLETE: VALIDATE` is withheld; a second, small PVL supplement cycle is required. Structural gaps (KG1, KG2) and recorded-not-fixed gaps (KG3, KG4, KG5) would be acceptable CONDITIONAL residuals on their own and are not what blocks the signal.
+Totals: **0 FAILs / 0 unresolved CONCERNs / N6, N7, N8 RESOLVED (and N1-N4) / 3 advisories** -> Net Gate: **CONDITIONAL**, driven only by structural and recorded gaps (KG1-KG5). Net-gate vacuous-green check: KG1 (real power-loss durability) is developed behavior with no automated gate, so the gate cannot be a plain PASS; it is a named residual with written justification (untestable without a crash harness), not a silent pass. P2 AC12 is NOT fully met (KG5).
 
-### Concerns (numbered, with resolution route)
-
-- **N6 (fixable, one line, HIGH within this plan)** — G1 as written cannot pass. `grep -c "to_parquet(" api/data/cache.py` counts every line containing the substring, including `def _atomic_to_parquet(` and its 9 call sites → **11**, not 1 (measured). Fix: use `grep -c '\.to_parquet(' api/data/cache.py` = 1 (matches only the raw call inside the helper; `_atomic_to_parquet(` has an underscore, not a dot, before `to_parquet`), and `grep -c '_atomic_to_parquet(' api/data/cache.py` = 10 (1 def + 9 calls; only if the helper's docstring/comments do not repeat the name followed by `(`). Reword D1's "must NOT contain the literal text `to_parquet(`" to "must NOT contain the literal text `.to_parquet(`" and keep `test_no_bypass` as is. Places: D1 (last sentence), Verification Evidence G1 row.
-- **N7 (fixable)** — `write_liqtide_payload` per-writer interrupted test is vacuous: the interrupted second call uses a NEW date → a different file → the date-1 original is never targeted (reproduced: passes on current code with the truncating fake). Fix in step 2: for this writer assert that after the interrupted new-date call the NEW date's path does NOT exist (that fails on the current code, which leaves junk there), no `.tmp`, and the date-1 file is byte-identical; keep the existing-target-overwrite assertions for the other 8 writers.
-- **N8 (fixable, low)** — D1 should say the mode lookup is written EAFP: `try: mode = os.stat(path).st_mode & 0o7777 / except FileNotFoundError: mode = 0o644`, not `if path.exists()` then `stat` (a vanishing target would otherwise raise spuriously; failure would be safe but avoidable). Reproduced working in scratch.
-- **Structural / recorded, not fixable by planning:** KG1 power loss/SIGKILL durability (fsync untested, no dir fsync); KG2 Windows `os.replace` vs an open reader (the always-on box is the user's own PC); KG3 `pairs_response` not fsynced; KG4 JSON writers' fixed temp name; KG5 `etf_flows_adapter.merge_into_cache` bypass — P2 AC12 NOT fully met.
+Cycle count: `results.tsv` holds 2 `[atomic-writes]` cycle rows (cycles 1 and 2) and 6 lines total, so condition (b) for `PHASE_COMPLETE: VALIDATE` (CONDITIONAL with N>=1 fix cycles, `wc -l` >= 3) holds. No human has accepted anything; see "Accepted by".
 
 ### SUPPLEMENT REQUEST
 
-- Gap 1: Section [decisions, verification-evidence] | Concern: N6 — G1 `grep -c "to_parquet(" api/data/cache.py` = 1 cannot pass (returns 11 because `_atomic_to_parquet(` contains the substring); D1's docstring rule quotes the wrong literal | Severity: CONCERN | Suggested addition: change G1 (and D1's docstring rule) to `grep -c '\.to_parquet(' api/data/cache.py` = 1 plus `grep -c '_atomic_to_parquet(' api/data/cache.py` = 10.
-- Gap 2: Section [implementation-checklist] | Concern: N7 — per-writer interrupted test for `write_liqtide_payload` targets a different file (new date) and passes on the unmodified code | Severity: CONCERN | Suggested addition: in step 2, for `write_liqtide_payload` assert the interrupted new-date path does not exist (+ no temp, date-1 file byte-identical).
-- Gap 3: Section [decisions] | Concern: N8 — D1 does not say how a missing/vanishing target is handled when copying mode | Severity: CONCERN (low) | Suggested addition: add one clause to D1: mode is read with try/except FileNotFoundError → 0o644 (EAFP), not exists()+stat.
+None. N6, N7, N8 are RESOLVED; no new FAIL or CONCERN.
 
 ### Test gates (5-column table)
 
 | criterion id | behavior | strategy | proving test | gap-resolution |
 |---|---|---|---|---|
-| (a) / G1 | every raw parquet write in `cache.py` goes through `_atomic_to_parquet` (cache.py only; KG5 excluded) | Fully-Automated | `grep -c '\.to_parquet(' api/data/cache.py` = 1; `grep -c '_atomic_to_parquet(' api/data/cache.py` = 10; `test_no_bypass` (N6: plan text still has the broken pattern) | B |
-| (b) / G2 | interrupted write, `os.replace` failure and first-write interruption leave original byte-identical, readable, no `*.tmp` | Fully-Automated | `uv run --project api pytest api/tests/data/test_cache_atomic_writes.py -q` (helper-level + 9 per-writer tests; fake truncates on Path; liqtide_payload asserts new-date path absent — N7) | B |
+| (a) / G1 | every raw parquet write in `cache.py` goes through `_atomic_to_parquet` (cache.py only; KG5 excluded) | Fully-Automated | `grep -c '\.to_parquet(' api/data/cache.py` = 1; `grep -c '_atomic_to_parquet(' api/data/cache.py` = 10; `test_no_bypass` (proven 1 / 10 / pass on a scratch copy) | B |
+| (b) / G2 | interrupted write, `os.replace` failure and first-write interruption leave original byte-identical, readable, no `*.tmp` | Fully-Automated | `uv run --project api pytest api/tests/data/test_cache_atomic_writes.py -q` (helper-level + 9 per-writer tests; truncating Path-fake; liqtide_payload asserts new-date path absent, N7) | B |
 | (c) / G3 | normal round-trip unchanged per writer; liqtide no-overwrite; onchain write-only-when-changed; mode 0644 / existing mode kept | Fully-Automated | same file, per-family round-trip + `test_mode_handling` | B |
 | (e) / G4 | narrative/exchange RMW keep prior rows after interrupted second write | Fully-Automated | same file, AC(e) tests (interrupted call uses a new date) | B |
 | (d) / G5 | no regression | Fully-Automated | `uv run --project api pytest api/ -q` = baseline (789 passed / 5 deselected, re-record in step 1) + new tests, 0 failed | A |
-| (f) / G6 | tests never touch real cache or `watchlist.json` | Fully-Automated | `--setup-show \| grep -c "SETUP    F isolated_cache"` == collected count; `test_isolation_canary`; before/after `find … -printf '%p %s %T@\n'` and `sha256sum` diffs both empty | B |
-| D6 / G7 | stray temp never staged by nightly `git add` | Fully-Automated | throwaway-repo `git add` + `git check-ignore -v` (reproduced by this validator: 6 parquets staged, 0 temps) | A |
+| (f) / G6 | tests never touch real cache or `watchlist.json` | Fully-Automated | `--setup-show \| grep -c "SETUP    F isolated_cache"` == `--collect-only -q \| grep -c '::'`; `test_isolation_canary`; before/after `find … -printf '%p %s %T@\n'` and `sha256sum` diffs both empty | B |
+| D6 / G7 | stray temp never staged by nightly `git add` | Fully-Automated | throwaway-repo `git add` + `git check-ignore -v`, status scoped to `api/data/cache` (reproduced: 3 parquets staged, 0 temps) | A |
 
 Named residuals (NOT strategies; gap-resolution D unless stated):
-- KG1 power-loss/SIGKILL durability, no dir fsync — D.
+- KG1 power-loss/SIGKILL durability, no dir fsync, fsync call not spied — D.
 - KG2 Windows `os.replace` vs open reader — D (user-PC check optional).
 - KG3 `pairs_response` writes not fsynced (out of lane) — D.
 - KG4 JSON writers' fixed temp name (T21) — D.
@@ -239,57 +247,64 @@ test("should keep prior rows after an interrupted second write to narrative and 
 test("should not touch the real cache or watchlist", () => { throw new Error("NOT IMPLEMENTED — TDD stub: isolation") })
 ```
 
-Offline gate commands EXECUTE / EVL must run (all offline, run from repo root; `SCRATCH` = a directory in the session scratchpad OUTSIDE the repo):
-1. `uv run --project api pytest api/ -q 2>&1 | tail -3` (baseline; record passed/deselected; expected 789 passed / 5 deselected)
+Offline gate commands EXECUTE / EVL must run (all offline, from repo root; `SCRATCH` = a directory in the session scratchpad OUTSIDE the repo, re-exported in every call that uses it):
+1. `SCRATCH=<session scratchpad>/atomic-writes; mkdir -p "$SCRATCH"; uv run --project api pytest api/ -q 2>&1 | tail -3` (baseline; record passed/deselected; expected 789 passed / 5 deselected)
 2. before snapshots: `{ find api/data/cache -type f -printf '%p %s %T@\n' | sort; find api/data/watchlist.json -printf '%p %s %T@\n' 2>/dev/null; } > $SCRATCH/before.txt` and `{ find api/data/cache -type f -exec sha256sum {} + | sort; sha256sum api/data/watchlist.json 2>/dev/null; } > $SCRATCH/before.sha`
-3. red run of the new test file on unmodified `cache.py` (helper-level tests fail: helper absent; per-writer truncating-fake tests must fail for all 9 writers, including liqtide_payload once N7 is applied)
-4. `grep -c '\.to_parquet(' api/data/cache.py` → `1`; `grep -c '_atomic_to_parquet(' api/data/cache.py` → `10`
-5. `uv run --project api pytest api/tests/data/test_cache_atomic_writes.py -q` → all pass
-6. `uv run --project api pytest api/tests/data/test_cache_atomic_writes.py -q --setup-show | grep -c "SETUP    F isolated_cache"` → equals the collected test count
-7. `uv run --project api pytest api/ -q` → baseline + new tests, 0 failed
-8. after snapshots (same two commands → `$SCRATCH/after.txt`, `$SCRATCH/after.sha`); `diff $SCRATCH/before.txt $SCRATCH/after.txt` and `diff $SCRATCH/before.sha $SCRATCH/after.sha` both empty
-9. throwaway-repo gitignore proof in `$SCRATCH` (never the real repo): copy `.gitignore`, create `api/data/cache/{liqtide,narrative,onchain}/…/.x.parquet.abc.tmp` + real parquets, `git add` the three dirs, `git status --porcelain` shows only parquets; `git check-ignore -v` on temps in `liqtide/` and `onchain/`
+3. red run of the new test file on unmodified `cache.py`: helper-level tests fail (helper absent), `test_no_bypass` fails, per-writer truncating-fake tests fail for all 9 writers (liqtide_payload via `assert not path.exists()`); the isolation canary passing is expected
+4. `grep -c '\.to_parquet(' api/data/cache.py` -> `1`; `grep -c '_atomic_to_parquet(' api/data/cache.py` -> `10` (never gate on plain `to_parquet(`: 11)
+5. `uv run --project api pytest api/tests/data/test_cache_atomic_writes.py -q` -> all pass
+6. `uv run --project api pytest api/tests/data/test_cache_atomic_writes.py -q --setup-show | grep -c "SETUP    F isolated_cache"` equals `uv run --project api pytest api/tests/data/test_cache_atomic_writes.py --collect-only -q | grep -c '::'`
+7. `uv run --project api pytest api/ -q` -> baseline + new tests, 0 failed
+8. after snapshots (same two commands -> `$SCRATCH/after.txt`, `$SCRATCH/after.sha`); `diff $SCRATCH/before.txt $SCRATCH/after.txt` and `diff $SCRATCH/before.sha $SCRATCH/after.sha` both empty
+9. throwaway-repo gitignore proof in `$SCRATCH` (never the real repo): `git init`, copy `.gitignore`, create `api/data/cache/{liqtide,narrative,onchain}/…/.x.parquet.abc.tmp` + real parquets, `git add api/data/cache/liqtide/ api/data/cache/narrative/ api/data/cache/onchain/`, `git status --porcelain -- api/data/cache` shows only the parquets; `git check-ignore -v` on temps in `liqtide/` and `onchain/`
 10. scope guard: `git status --porcelain` lists only `api/data/cache.py`, `api/tests/data/test_cache_atomic_writes.py`, `.gitignore`, and files inside the task folder; `api/tests/conftest.py` and `api/data/etf_flows_adapter.py` unmodified
 
 Binding execute-agent instructions:
-- E1: use the corrected G1 patterns from N6 (`\.to_parquet(`), not the broken text still present in the plan body until the supplement lands.
-- E2: read the target mode EAFP (try/except FileNotFoundError → 0o644), chmod before `os.replace`, all inside the try that cleans the temp on `BaseException`.
-- E3: for `write_liqtide_payload` assert the new-date target does not exist after the interrupted call (N7).
+- E1: use the corrected G1 patterns (`\.to_parquet(` = 1, `_atomic_to_parquet(` = 10); the plan body now carries them.
+- E2: read the target mode EAFP (try/except FileNotFoundError -> 0o644), chmod before `os.replace`, all inside the try that cleans the temp on `BaseException`.
+- E3: for `write_liqtide_payload` assert the new-date target does not exist after the interrupted call (N7); do not rely on the date-1 byte-identical assertion.
 - E4: define `SCRATCH` as a scratchpad path outside the repo before step 1; never write snapshots into the repo.
 - E5: never `git add/commit/stash/checkout/restore` the real repo for experiments.
 - E6: KG5 stays recorded, not fixed; do not touch `etf_flows_adapter.py` or `seed_e2e_cache.py`; do not import the private helper from another module.
 - E7: the handle-only fake alone is vacuous; keep the truncating Path-fake.
 - E8: EXECUTE report notes the mode behaviour (D1) and the KG5 scope statement.
+- E9: re-export `SCRATCH` in every tool call that uses it (shell state does not persist between calls).
+- E10: the collected-count command for gate 6 is `... --collect-only -q | grep -c '::'`.
+- E11: in the throwaway repo scope status to `-- api/data/cache` (the copied `.gitignore` shows as untracked otherwise).
+- E12: helper docstring/comments must not contain `.to_parquet(` or `_atomic_to_parquet(`; re-run gate 4 after writing the docstring.
 
 Legacy line form:
-- cache.py writers: [Fully-automated: `uv run --project api pytest api/tests/data/test_cache_atomic_writes.py -q`] | [Fully-automated: `uv run --project api pytest api/ -q`] | [Fully-automated: throwaway-repo gitignore check] | [Fully-automated: `grep -c '\.to_parquet(' api/data/cache.py` = 1] | [known-gap: power loss, Windows open-reader, etf_flows_adapter bypass — documented]
+- cache.py writers: [Fully-automated: `uv run --project api pytest api/tests/data/test_cache_atomic_writes.py -q`] | [Fully-automated: `uv run --project api pytest api/ -q`] | [Fully-automated: throwaway-repo gitignore check] | [Fully-automated: `grep -c '\.to_parquet(' api/data/cache.py` = 1 and `grep -c '_atomic_to_parquet(' api/data/cache.py` = 10] | [known-gap: power loss, Windows open-reader, etf_flows_adapter bypass — documented]
 
 Dimension findings:
 - Infra fit: PASS — KG5 recorded honestly, scope not widened, repo-wide writer search complete.
-- Test coverage: CONCERN — N6 (G1 grep returns 11, cannot pass), N7 (liqtide_payload per-writer test vacuous); power loss untestable here.
-- Breaking changes: PASS — 9/9 real writers byte-identical after the swap; mode policy explicit and tested.
+- Test coverage: PASS (residual) — every gate proven passable and red-first on scratch copies; KG1 power loss and fsync-call spy absent are recorded residuals.
+- Breaking changes: PASS — 9/9 real writers byte-identical after the swap (prior pass, carried); mode policy explicit and tested.
 - Security surface: PASS — `.gitignore` reproduced; no permission loosening.
-- Helper section: PASS mechanics; CONCERN (low) N8.
-- Call-site swap section: PASS — 9 sites, guards and mkdirs preserved.
+- Helper section: PASS — EAFP mode proven.
+- Call-site swap section: PASS — 9 sites match, guards and mkdirs preserved.
 - Reader-safety section: PASS.
 - `.gitignore` section: PASS — reproduced.
-- Scope: PASS — forbidden paths untouched.
+- Scope: PASS — forbidden paths untouched, touchpoints unwidened.
 
 Open gaps:
-- N6, N7, N8 (fixable plan text; SUPPLEMENT REQUEST above).
-- KG1-KG5 residuals above (KG5: P2 AC12 NOT fully met; needs a user scope decision).
+- KG1-KG5 residuals only (KG5: P2 AC12 NOT fully met; needs a user scope decision).
+- Advisories A1-A3 (wording precision, folded into E9-E11; A3 optional).
+
+### What This Coverage Does NOT Prove
 
 What this coverage does NOT prove:
 - G1/`test_no_bypass`: does not prove no OTHER module writes cache files atomically-or-not (`etf_flows_adapter` does not; `pairs_response` is atomic but unsynced).
-- G2/G4: prove that a SIMULATED exception (fake `to_parquet`, failing `os.replace`) leaves the original intact; they do NOT prove behaviour under real power loss, SIGKILL mid-write, a full disk, or an fsync the OS ignores.
+- G2/G4: prove that a SIMULATED exception (fake `to_parquet`, failing `os.replace`) leaves the original intact; they do NOT prove behaviour under real power loss, SIGKILL mid-write, a full disk, an fsync the OS ignores, or that `os.fsync` is called at all (no spy).
+- G2 for `write_liqtide_payload`: proves an interrupted first write of a new date leaves no partial file and does not disturb earlier dates; it does NOT prove overwrite-atomicity for that writer (no-overwrite guard) — only the helper-level test covers overwrite.
 - G3: proves round-trip on synthetic frames, not on the real 57-file cache.
 - G5: proves no regression in the existing suite, not real-network refresh behaviour.
-- G6: proves these tests did not modify the real cache/watchlist (files only, `api/data/cache` only); it does not prove other suites are isolated.
+- G6: proves these tests did not modify the real cache/watchlist (files only, `api/data/cache` only); it does not prove other suites are isolated (the existing suite was shown cache-neutral only in a scratch copy).
 - G7: proves git ignores a `.tmp` in the tracked dirs; not that no other stray file type can be committed.
 - Windows: nothing here proves `os.replace` succeeds while DuckDB/the API holds a read handle.
 
-Gate: CONDITIONAL (second independent pass; cycle-1 items N1-N4 RESOLVED; 3 new small fixable concerns N6-N8 outstanding → NOT terminal, PVL supplement cycle 2 required before EXECUTE; structural gaps KG1/KG2 and recorded gaps KG3/KG4/KG5 remain)
-Accepted by: NO HUMAN has accepted any concern or known-gap. KG1, KG2, KG3, KG4, KG5 are carried provisionally under the autonomous-run policy only. N6-N8 are NOT accepted — they are open supplement items.
+Gate: CONDITIONAL (third independent pass; N6-N8 and N1-N4 RESOLVED, 0 FAIL, 0 unresolved CONCERN; remaining gaps are structural or recorded: KG1, KG2, KG3, KG4, KG5; P2 AC12 NOT fully met until KG5 is fixed)
+Accepted by: NO HUMAN has accepted any known-gap. KG1, KG2, KG3, KG4 and KG5 are accepted under the autonomous-run policy only (session, autonomous /goal execution) so that EXECUTE may proceed; KG5 additionally needs a user scope decision before P2 AC12 can be claimed met.
 
 ## Autonomous Goal Block
 
@@ -301,7 +316,7 @@ Hard stops / safety constraints:
 - Files allowed: api/data/cache.py, api/tests/data/test_cache_atomic_writes.py, one .gitignore line, this task folder. web/, api/main.py, workflows, pytrends, watchlist.py, ccxt_adapter.py, api/analytics/**, process/context/**, etf_flows_adapter.py, seed_e2e_cache.py are out of scope.
 - Never git add/commit/stash/checkout the real repo for experiments; use a scratch repo.
 - Do not widen scope to etf_flows_adapter.py without an explicit user decision (KG5).
-- Do not run EXECUTE until PVL supplement cycle 2 (N6-N8) is applied and VALIDATE re-runs from V1.
-Next phase: PVL supplement (vc-plan-agent) for N6-N8, then re-validate from V1; then EXECUTE: process/general-plans/active/pipeline-completeness_28-09-26/pipeline-completeness-atomic-writes_PLAN_29-09-26.md
-Validate contract: inline in this plan (## Validate Contract), Gate CONDITIONAL, second independent pass.
-Execute start: `uv run --project api pytest api/ -q` baseline (789 passed/5 deselected) | `uv run --project api pytest api/tests/data/test_cache_atomic_writes.py -q` | `grep -c '\.to_parquet(' api/data/cache.py` = 1 | gitignore throwaway-repo check | high-risk pack: no (destructive-write class, covered by fully-automated round-trip + interrupted-write tests)
+- Follow the Validate Contract gate commands and binding instructions E1-E12 exactly; gate greps are `\.to_parquet(` = 1 and `_atomic_to_parquet(` = 10, never plain `to_parquet(`.
+Next phase: EXECUTE: process/general-plans/active/pipeline-completeness_28-09-26/pipeline-completeness-atomic-writes_PLAN_29-09-26.md (vc-execute-agent, opus), then vc-tester EVL confirmation.
+Validate contract: inline in this plan (## Validate Contract), Gate CONDITIONAL, third independent pass (KG1-KG5 only; no human accepted them).
+Execute start: `uv run --project api pytest api/ -q` baseline (789 passed/5 deselected) | `uv run --project api pytest api/tests/data/test_cache_atomic_writes.py -q` | `grep -c '\.to_parquet(' api/data/cache.py` = 1 and `grep -c '_atomic_to_parquet(' api/data/cache.py` = 10 | gitignore throwaway-repo check | high-risk pack: no (destructive-write class, covered by fully-automated round-trip + interrupted-write tests)
