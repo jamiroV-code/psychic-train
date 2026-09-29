@@ -26,6 +26,14 @@ export interface RegimePanelLine {
   gapBefore?: boolean[];
 }
 
+export interface NarrativePanelLine {
+  key: string;
+  color: string;
+  values: (number | null)[];
+  gapBefore?: boolean[];
+  dashed?: boolean;
+}
+
 export interface IslandApi {
   mountSpreadChart(
     target: HTMLElement,
@@ -37,6 +45,16 @@ export interface IslandApi {
     initialRange: { from: number; to: number } | null;
     onHover?: (index: number | null) => void;
   }): RegimeStore;
+  mountNarrativePanel(
+    target: HTMLElement,
+    props: {
+      dates: string[];
+      lines: NarrativePanelLine[];
+      composite: { color: string; values: (number | null)[]; gapBefore?: boolean[] };
+      mixedScale: { color: string; values: (number | null)[] } | null;
+      height: number;
+    },
+  ): () => void;
   mountRegimePanel(
     target: HTMLElement,
     props: {

@@ -1,6 +1,7 @@
 import { mount, unmount } from "svelte";
 import SpreadChart from "./spread-chart.svelte";
 import RegimePanel from "./regime-panel.svelte";
+import NarrativePanel from "./narrative-panel.svelte";
 import { createRegimeChartSync } from "./regime-sync.svelte.js";
 
 /**
@@ -28,5 +29,14 @@ export { createRegimeChartSync };
 
 export function mountRegimePanel(target, props) {
   const app = mount(RegimePanel, { target, props });
+  return () => unmount(app);
+}
+
+/**
+ * One /narrative category panel. Independent by design (no shared range or
+ * crosshair), so unlike the regime panels it takes no store.
+ */
+export function mountNarrativePanel(target, props) {
+  const app = mount(NarrativePanel, { target, props });
   return () => unmount(app);
 }

@@ -842,7 +842,10 @@
   font-size: var(--fs-xs);
   color: var(--ink-3);
 }
-.regime-plot {
+/* The light analytical surface every canvas chart sits on. Canvas marks cannot
+   be reached by CSS, but LayerChart resolves them against `currentColor`, so
+   `color` here is what makes the axes and gridlines read on the light ground. */
+.analytic-plot {
   width: 100%;
   background: var(--an-panel);
   color: var(--an-ink-3);
@@ -850,4 +853,46 @@
   box-shadow:
     0 1px 2px rgb(0 0 0 / 0.45),
     0 6px 20px -12px rgb(0 0 0 / 0.6);
+}
+
+/* Narrative panels share the regime panel's chrome; only the plot differs. */
+.narrative-panel {
+  border-top: 1px solid var(--sh-3);
+  padding: var(--sp-2) 0 var(--sp-3);
+}
+.narrative-panel__title {
+  color: var(--ink-1);
+  font-weight: 600;
+}
+.narrative-panel__meta {
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  margin-left: var(--sp-2);
+}
+.narrative-panel__row {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+/* The legend carries the plot's colours, so it lives on the plot's surface.
+   Measured: --series-4 indigo is 2.24:1 on the dark shell (a graphic needs 3:1)
+   but 8.56:1 on the light panel, while the only free alternative, amber, is the
+   reverse — 8.86:1 dark, 2.17:1 light. No single hue serves both surfaces, so
+   the legend moves to the light one rather than the palette being bent to fit
+   a surface it was not validated for. */
+.narrative-panel__legend {
+  display: inline-block;
+  background: var(--an-bg);
+  color: var(--an-ink-2);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-sm);
+  margin: var(--sp-1) 0;
+}
+.narrative-panel__legend > span {
+  margin-right: var(--sp-3);
+}
+/* Colour rides the glyph; the label stays in readable ink. A thin series colour
+   is a graphic (3:1), but a word is text (4.5:1), and several of these slots
+   clear the first and not the second. */
+.narrative-panel__legend .legend-glyph {
+  font-weight: 700;
 }

@@ -1,14 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-vi.mock("lightweight-charts", () => import("@/test/mocks/lightweight-charts"));
-
-import { mockCharts, resetMockCharts } from "@/test/mocks/lightweight-charts";
 import { CategoryHistoryPanel } from "@/components/narrative/CategoryHistoryPanel";
-import { HIDDEN_SEGMENT_COLOR } from "@/lib/regime-line-segments";
+import { buildPanelAxis, seriesKey } from "@/lib/narrative-view-model";
+import { buildNarrativeLines } from "@/lib/narrative-panel-lines";
+import { toLineSegments } from "@/lib/chart-segments";
 import { category, series } from "./fixtures";
 
-beforeEach(() => resetMockCharts());
+/**
+ * The plot is a Svelte/LayerChart island (ADR-1) and jsdom does not mount it,
+ * so what used to be asserted against a mocked lightweight-charts instance is
+ * asserted here against the real mapping that feeds the island. That is a
+ * stronger check, not a weaker one: a mock-shaped assertion only ever proved
+ * the mock. That the island then draws is covered by e2e/narrative.spec.ts.
+ */
 
 describe("CategoryHistoryPanel", () => {
   it("labels the legacy CoinGecko count as legacy-map and excluded from the composite", () => {
@@ -36,9 +41,11 @@ describe("CategoryHistoryPanel", () => {
     c.composite.points[1].mixed_scale = true;
     render(<CategoryHistoryPanel category={c} />);
     expect(screen.getByTestId("narrative-mixed-scale-ai")).toHaveAttribute("data-count", "1");
-    const markers = mockCharts[0].series.find((s) => s.options.lineVisible === false && s.options.pointMarkersRadius === 3);
-    expect(markers).toBeDefined();
-    expect((markers!.data as { value?: number }[]).filter((p) => p.value !== undefined)).toHaveLength(1);
+    // Exactly one composite point is on the backfill scale, so exactly one
+    // marker is handed to the plot.
+    const axis = buildPanelAxis(c);
+    expect(axis.mixedScaleCount).toBe(1);
+    expect(axis.mixedScale.filter((v) => v !== null)).toHaveLength(1);
   });
 
   it("keeps pytrends nightly-7d and backfill-269d as separate lines", () => {
@@ -51,8 +58,12 @@ describe("CategoryHistoryPanel", () => {
     render(<CategoryHistoryPanel category={c} />);
     expect(screen.getByTestId("narrative-legend-ai-pytrends-nightly-7d")).toBeInTheDocument();
     expect(screen.getByTestId("narrative-legend-ai-pytrends-backfill-269d")).toBeInTheDocument();
-    // two source lines + composite
-    expect(mockCharts[0].series.filter((s) => s.options.lineVisible !== false)).toHaveLength(3);
+    // Both windows are drawn as their own line, separated by the dash rather
+    // than by a near-identical hue (see lib/chart-palette.ts).
+    const lines = buildNarrativeLines(buildPanelAxis(c).series, new Set());
+    expect(lines.map((l) => l.key)).toEqual(["pytrends-nightly-7d", "pytrends-backfill-269d"]);
+    expect(lines.map((l) => l.dashed)).toEqual([false, true]);
+    expect(new Set(lines.map((l) => l.color)).size).toBe(1);
   });
 
   it("renders unavailable / stale / presumed-dead series explicitly with their reasons", () => {
@@ -127,16 +138,22 @@ describe("CategoryHistoryPanel", () => {
     expect(el).toHaveAttribute("data-sufficiency", "insufficient");
     expect(el).toHaveTextContent("not enough history yet (1 point)");
     expect(screen.queryByTestId("narrative-legend-ai-reddit")).toBeNull();
-    // only the sufficient pytrends line + composite are drawn
-    expect(mockCharts[0].series.filter((s) => s.options.lineVisible !== false)).toHaveLength(2);
+    // The insufficient series is reported as a marker and never reaches the
+    // plot: hiding it leaves only the sufficient pytrends line.
+    const reddit = c.series.find((x) => x.source === "reddit")!;
+    const lines = buildNarrativeLines(buildPanelAxis(c).series, new Set([seriesKey(reddit)]));
+    expect(lines.map((l) => l.key)).toEqual(["pytrends-nightly-7d"]);
   });
 
   it("passes gap_before through so the line is not bridged", () => {
     const c = category("ai", 0.5);
     c.composite.points[1].gap_before = true;
     render(<CategoryHistoryPanel category={c} />);
-    const composite = mockCharts[0].series.find((s) => s.options.lineWidth === 3)!;
-    expect((composite.data[0] as { color?: string }).color).toBe(HIDDEN_SEGMENT_COLOR);
+    const axis = buildPanelAxis(c);
+    // The flagged point starts a new segment, so no line is drawn across it.
+    const segments = toLineSegments(axis.dates, axis.composite.values, axis.composite.gapBefore);
+    expect(segments.length).toBeGreaterThan(1);
+    expect(segments[1][0].i).toBe(1);
   });
 
   it("shows a personal-use badge when any series is not redistributable", () => {

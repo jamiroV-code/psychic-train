@@ -110,7 +110,7 @@
 </script>
 
 <div
-  class="regime-plot"
+  class="analytic-plot"
   style="height: {height}px"
   bind:this={plot}
   {onwheel}
