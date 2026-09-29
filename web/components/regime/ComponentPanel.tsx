@@ -133,10 +133,15 @@ function ComponentPanelImpl({
           </span>
         ))}
         {lines.length > 1 && (
-          <span className="regime-panel__legend">
+          <span className="plot-legend">
             {lines.map((l) => (
-              <span key={l.key} data-testid={`regime-legend-${l.key}`} style={{ color: l.color }}>
-                ― {l.label}
+              <span key={l.key} data-testid={`regime-legend-${l.key}`}>
+                {/* Colour rides the glyph; the label stays in readable ink. The
+                    series blue as TEXT on the dark card measured 3.7:1. */}
+                <span className="legend-glyph" style={{ color: l.color }} aria-hidden="true">
+                  ―
+                </span>{" "}
+                {l.label}
               </span>
             ))}
           </span>

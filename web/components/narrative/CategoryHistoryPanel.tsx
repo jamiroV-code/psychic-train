@@ -153,7 +153,7 @@ function CategoryHistoryPanelImpl({ category, height = 160 }: { category: Narrat
               </span>{" "}
               {s.label}
               {s.variant ? ` (${s.variant})` : ""}
-              {seriesSufficiency(s) === "provisional" && <em style={{ color: "#8a8f98" }}> (provisional)</em>}
+              {seriesSufficiency(s) === "provisional" && <em className="plot-legend__note"> (provisional)</em>}
             </span>
           );
         })}

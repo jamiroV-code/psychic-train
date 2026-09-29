@@ -361,6 +361,41 @@ with no legend. All were found by looking at pixels, not by assertions — so `e
 now counts pixels in the series colour, and was mutation-checked (pointed at a colour no chart uses,
 it fails with the intended message).
 
+**Contrast audit (29-09-26).** A one-off browser probe over every route, later made permanent as
+`e2e/contrast.spec.ts`, measured every visible text node against the background it is actually
+painted on. It found what no unit test could:
+
+- `--ink-3` (`#6c7585`) was 3.1–4.1:1 on the shell's surfaces against the 4.5:1 small text needs.
+  Lifted to `#8590a3`, which clears 4.5:1 on all four shell surfaces. `--sev-insuf` shares the grey
+  and is used as text, so it moved with it. The unit test that guarded `INK.muted` had held it to
+  3:1 as "supporting text" — wrong for 12px text — and now checks every surface at 4.5:1.
+- Axis labels on the light plot used `--an-ink-3` at 3.5:1 (10px text). Now `--an-ink-2`, 7.7:1,
+  for both the SVG chart's `fill` and every canvas chart's `currentColor`. A canvas has no text
+  nodes, so the browser audit cannot see those labels; `lib/__tests__/plot-ink.test.ts` pins the
+  rule that colours them instead.
+- The `/regime` composite legend coloured label text in series blue on the dark card (3.7:1); it now
+  uses the shared light legend strip, colour on the glyph and the label in readable ink.
+- `/narrative`'s pinned caveat sat on `background: Canvas`, a CSS system colour that resolves to
+  white unless the page declares a colour scheme — a stray white bar on the dark shell with grey
+  text at 3.2:1. Now `var(--sh-0)`.
+- The spec's first draft reported a phantom 1.15:1 on SVG axis ticks: SVG text is painted by
+  `fill`, and it had measured the inherited CSS `color`. The real reading (3.5:1) was a genuine
+  defect hiding behind the false one — worth remembering that a wrong instrument can mask a right
+  finding as easily as it can invent one.
+
+Mutation-checked: with the old grey restored, the spec fails on exactly `/screener`, `/regime` and
+`/narrative` and passes with the fix.
+
+**Accepted, not fixed — legend glyphs.** Green (`--series-3`), pink (`--series-5`) and amber
+(`--series-7`) measure 2.74, 2.62 and 2.11:1 against the light plot. That is not a surprise: the
+palette validator (`validate_palette.js`, light mode) passes all five hard checks — lightness band,
+chroma floor, colour-blind separation (worst adjacent ΔE 9.2), normal-vision floor (worst 20.8) —
+and reports exactly these three as a contrast **WARN**, whose required relief is "visible labels or
+a table view". Every chart using those slots has a visible legend, so the condition is met. The
+audit deliberately does not assert on glyphs (they are graphics, not text) so it does not re-litigate
+a managed property of the palette. The `/onchain` pre-launch swatch (1.75:1) is muted on purpose
+(D2: context, not signal) and is named in its legend.
+
 **What the conversions cost in fidelity, recorded rather than glossed:** floor/ramp markers on
 `/onchain` are told apart by colour instead of arrow-vs-circle glyphs, because a canvas point mark
 is a circle. The colours are neutral (every chain slot is a series hue, so a coloured marker would

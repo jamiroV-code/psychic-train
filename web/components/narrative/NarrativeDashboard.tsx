@@ -26,7 +26,11 @@ export interface NarrativeDashboardProps {
 /** The single, pinned data-quality caveat for the whole page (v2 ADR-6, AC-12). */
 function PinnedCaveat() {
   return (
-    <div data-testid="narrative-caveat" style={{ position: "sticky", top: 0, zIndex: 2, background: "Canvas" }}>
+    // Opaque so scrolled content does not show through the pinned bar. This was
+    // `Canvas`, a CSS system colour that resolves to WHITE unless the page
+    // declares a colour scheme — a stray white bar on the dark shell, with grey
+    // text at 3.2:1 on it.
+    <div data-testid="narrative-caveat" style={{ position: "sticky", top: 0, zIndex: 2, background: "var(--sh-0)" }}>
       <DataQualityCaveat view="page" />
     </div>
   );

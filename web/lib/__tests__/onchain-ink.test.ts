@@ -34,13 +34,26 @@ describe("onchain INK", () => {
     expect(INK.baseline).toBe(token("an-axis"));
   });
 
-  it("keeps page text legible on the dark shell", () => {
+  it("keeps ALL page text legible on EVERY shell surface it can sit on", () => {
     // The regression this pins: these were light-surface values on a dark
     // shell, so every chain label rendered at about 1:1 — invisible.
-    const shell = token("sh-0");
-    expect(contrast(INK.primary, shell)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(INK.secondary, shell)).toBeGreaterThanOrEqual(4.5);
-    // Muted is supporting text, held to the large-text/graphic bar.
-    expect(contrast(INK.muted, shell)).toBeGreaterThanOrEqual(3);
+    //
+    // Muted is held to 4.5:1 like the rest. It used to be held to 3:1 on the
+    // grounds that it was "supporting text", but 12px supporting text is small
+    // text: a browser-side contrast audit measured the old value at 3.1-4.1:1
+    // across the shell's surfaces. And the check is against every surface, not
+    // just the page background — cards and badges sit on the lighter ones, and
+    // that is where it failed.
+    for (const surface of ["sh-0", "sh-1", "sh-2", "sh-3"]) {
+      const bg = token(surface);
+      expect(contrast(INK.primary, bg), `primary on ${surface}`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(INK.secondary, bg), `secondary on ${surface}`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(INK.muted, bg), `muted on ${surface}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("uses the same grey for the insufficient-severity text as for muted ink", () => {
+    // --sev-insuf is used as a text colour, so it is held to the same bar.
+    expect(token("sev-insuf")).toBe(token("ink-3"));
   });
 });

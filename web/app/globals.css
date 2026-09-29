@@ -73,7 +73,7 @@
   /* --- shell ink -------------------------------------------------------- */
   --ink-1: #e9ecf1;
   --ink-2: #a4adbb;
-  --ink-3: #6c7585;
+  --ink-3: #8590a3;
 
   --accent: var(--brand-navy-lift);
 
@@ -91,7 +91,7 @@
      Licensing is NOT amber; it gets a neutral outlined badge.              */
   --sev-mature: #3fa96b;
   --sev-prov: #d9a441;
-  --sev-insuf: #6c7585;
+  --sev-insuf: #8590a3;
   --sev-bad: #e66767;
   /* light-surface counterparts */
   --sev-mature-l: #008300;
@@ -781,9 +781,12 @@
 .spread-chart .tick-mark {
   stroke: var(--an-grid);
 }
+/* Axis labels are 10px TEXT, so they need 4.5:1. --an-ink-3 is 3.5:1 on the plot
+   surface (measured), --an-ink-2 is 7.7:1. Gridlines and rules keep their own
+   lighter tokens; only the words darken. */
 .spread-chart .tick text,
 .spread-chart text {
-  fill: var(--an-ink-3);
+  fill: var(--an-ink-2);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
@@ -844,11 +847,13 @@
 }
 /* The light analytical surface every canvas chart sits on. Canvas marks cannot
    be reached by CSS, but LayerChart resolves them against `currentColor`, so
-   `color` here is what makes the axes and gridlines read on the light ground. */
+   `color` here is what makes the axes and gridlines read on the light ground.
+   It is also the colour of the axis LABELS, which are 10px text and so need
+   4.5:1: --an-ink-3 measured 3.5:1 here, --an-ink-2 is 7.7:1. */
 .analytic-plot {
   width: 100%;
   background: var(--an-panel);
-  color: var(--an-ink-3);
+  color: var(--an-ink-2);
   border-radius: var(--radius-sm);
   box-shadow:
     0 1px 2px rgb(0 0 0 / 0.45),
@@ -897,6 +902,11 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-1) var(--sp-3);
+}
+/* A qualifier inside the light legend strip. The shell's grey (#8a8f98) measured
+   3.2:1 on it; this is the plot surface's own secondary ink. */
+.plot-legend__note {
+  color: var(--an-ink-2);
 }
 .plot-legend__label {
   color: var(--an-ink-1);

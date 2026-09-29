@@ -51,7 +51,7 @@ export const INK = {
   /** --ink-2, on the dark shell */
   secondary: "#a4adbb",
   /** --ink-3, on the dark shell */
-  muted: "#6c7585",
+  muted: "#8590a3",
   /** --an-grid, on the light plot */
   gridline: "#e1e0d9",
   /** --an-axis, on the light plot */

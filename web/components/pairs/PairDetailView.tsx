@@ -33,7 +33,7 @@ function EGBlock({ testId, eg, used }: { testId: string; eg: EGDirection | null;
     <div data-testid={testId} data-used={used ? "true" : "false"} style={{ flex: 1, padding: 8, border: "1px solid #2a2e39" }}>
       <h4 style={{ margin: "0 0 4px" }}>
         {eg.dependent} on {eg.independent}
-        {used && <span style={{ marginLeft: 6, fontSize: "0.8em", color: "#2962ff" }}>(used for ranking)</span>}
+        {used && <span style={{ marginLeft: 6, fontSize: "0.8em", color: "var(--brand-navy-lift)" }}>(used for ranking)</span>}
       </h4>
       <div>p-value: {formatPValue(eg.p_value)}</div>
       <div>Hedge ratio: {formatNumber(eg.hedge_ratio, 3)}</div>
