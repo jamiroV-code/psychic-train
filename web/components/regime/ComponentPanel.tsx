@@ -1,11 +1,9 @@
 "use client";
 
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { createChart, LineSeries, type ISeriesApi } from "lightweight-charts";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
-import type { ChartSync } from "@/lib/regime-chart-sync";
-import { formatRegimeValue } from "@/lib/format-regime-value";
-import { lineBreakIndices, toSegmentedSeriesData } from "@/lib/regime-line-segments";
+import { loadIslands, type RegimeStore } from "@/lib/island-loader";
+import { lineBreakIndices } from "@/lib/regime-line-segments";
 
 export interface PanelLine {
   key: string;
@@ -34,19 +32,21 @@ export interface ComponentPanelProps {
   attribution?: string;
   unit: string;
   gridTimes: number[];
+  gridDates: string[];
   lines: PanelLine[];
-  sync: ChartSync | null;
+  /** Shared range/hover store for the panel group; null until the island loads. */
+  sync: RegimeStore | null;
   /** Inline drill-down; receives a close callback. */
   renderDrillDown: (close: () => void) => ReactNode;
   height?: number;
 }
 
 /**
- * One regime panel: one `createChart` (MiniChart lifecycle), fed the shared
- * grid with whitespace where this panel has no value, registered with the
- * dashboard's sync group. No markers, bands or annotations (plan §2):
- * price lines and last-value labels are off, the horizontal crosshair line is
- * hidden so only the shared date line shows.
+ * One regime panel: React owns the header, notices, attribution and drill-down;
+ * the plot itself is a Svelte/LayerChart island mounted into the chart node.
+ * Every panel shares the one store created by RegimeDashboard, so the visible
+ * range and the hovered date stay identical across all seven without any panel
+ * addressing another. No markers, bands or annotations (plan §2).
  */
 function ComponentPanelImpl({
   panelId,
@@ -57,6 +57,7 @@ function ComponentPanelImpl({
   attribution,
   unit,
   gridTimes,
+  gridDates,
   lines,
   sync,
   renderDrillDown,
@@ -78,93 +79,62 @@ function ComponentPanelImpl({
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || !sync) return;
 
-    const chart = createChart(container, {
-      height,
-      width: container.clientWidth,
-      layout: { background: { color: "transparent" }, textColor: "#8a8f98" },
-      grid: { vertLines: { visible: false }, horzLines: { visible: false } },
-      timeScale: { borderVisible: false },
-      rightPriceScale: { borderVisible: false },
-      crosshair: { horzLine: { visible: false, labelVisible: false } },
-      localization: { priceFormatter: (price: number) => formatRegimeValue(price, unit) },
-    });
+    let disposed = false;
+    let dispose: (() => void) | undefined;
 
-    // One line series per PanelLine (these drive crosshair sync). Real data
-    // holes (API `gap_before`) are not bridged; isolated points get a
-    // dots-only companion series — see lib/regime-line-segments.ts.
-    const seriesList: ISeriesApi<"Line">[] = lines.map((line) => {
-      const { line: lineData, dots } = toSegmentedSeriesData(gridTimes, line.values, line.gapBefore);
-      const series = chart.addSeries(LineSeries, {
-        color: line.color,
-        lineWidth: 2,
-        priceLineVisible: false,
-        lastValueVisible: false,
-      });
-      series.setData(lineData);
-      if (dots) {
-        const dotSeries = chart.addSeries(LineSeries, {
-          color: line.color,
-          lineVisible: false,
-          pointMarkersVisible: true,
-          pointMarkersRadius: 2,
-          crosshairMarkerVisible: false,
-          priceLineVisible: false,
-          lastValueVisible: false,
+    // The plot is a Svelte/LayerChart island. Every panel mounts its own, but
+    // they all share the one store created by RegimeDashboard — that is what
+    // keeps range and hover synced without the panels knowing about each other,
+    // and without the re-entrancy guards the imperative path needed.
+    loadIslands()
+      .then((api) => {
+        if (disposed) return;
+        const unregister = sync.registerElement(panelId, container);
+        const unmountPanel = api.mountRegimePanel(container, {
+          store: sync,
+          gridDates,
+          lines: lines.map((l) => ({ color: l.color, values: l.values, gapBefore: l.gapBefore })),
+          unit,
+          height,
         });
-        dotSeries.setData(dots);
-      }
-      return series;
-    });
-
-    const unregister =
-      sync && seriesList.length > 0
-        ? sync.register(panelId, {
-            chart,
-            series: seriesList[0],
-            element: container,
-            valueAt: (i) => {
-              for (const line of lines) {
-                const v = line.values[i];
-                if (v !== null && v !== undefined) return v;
-              }
-              return null;
-            },
-          })
-        : () => {};
-
-    const handleResize = () => {
-      if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth });
-    };
-    window.addEventListener("resize", handleResize);
+        dispose = () => {
+          unmountPanel();
+          unregister();
+        };
+      })
+      .catch(() => {
+        // The panel's header, notices and drill-down still carry every number
+        // and reason, so a chart that cannot load stays silent rather than
+        // replacing data with an error.
+      });
 
     return () => {
-      window.removeEventListener("resize", handleResize);
-      unregister();
-      chart.remove();
+      disposed = true;
+      dispose?.();
     };
-  }, [panelId, gridTimes, lines, sync, unit, height]);
+  }, [panelId, gridDates, lines, sync, unit, height]);
 
   return (
-    <section data-testid={`regime-panel-${panelId}`} style={{ borderTop: "1px solid #2a2e39", padding: "6px 0" }}>
+    <section data-testid={`regime-panel-${panelId}`} className="regime-panel">
       <button
         type="button"
         data-testid={`regime-panel-header-${panelId}`}
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        style={{ all: "unset", cursor: "pointer", display: "block", width: "100%" }}
+        className="regime-panel__header"
       >
-        <strong>{title}</strong>{" "}
+        <strong className="regime-panel__title">{title}</strong>{" "}
         {meta.map((m) => (
-          <span key={m.label} style={{ color: "#8a8f98", marginLeft: 10, fontSize: 12 }}>
+          <span key={m.label} className="regime-panel__meta">
             {m.label}: {m.value}
           </span>
         ))}
         {lines.length > 1 && (
-          <span style={{ display: "block", fontSize: 12 }}>
+          <span className="regime-panel__legend">
             {lines.map((l) => (
-              <span key={l.key} data-testid={`regime-legend-${l.key}`} style={{ color: l.color, marginRight: 12 }}>
+              <span key={l.key} data-testid={`regime-legend-${l.key}`} style={{ color: l.color }}>
                 ― {l.label}
               </span>
             ))}
@@ -181,14 +151,14 @@ function ComponentPanelImpl({
         />
       ))}
       {notes.length > 0 && (
-        <ul data-testid={`regime-panel-notes-${panelId}`} style={{ margin: "2px 0", paddingLeft: 16, fontSize: 12, color: "#8a8f98" }}>
+        <ul data-testid={`regime-panel-notes-${panelId}`} className="regime-panel__notes">
           {notes.map((note) => (
             <li key={note}>{note}</li>
           ))}
         </ul>
       )}
       {attribution && (
-        <div data-testid={`regime-attribution-${panelId}`} style={{ fontSize: 11, color: "#8a8f98" }}>
+        <div data-testid={`regime-attribution-${panelId}`} className="regime-panel__attribution">
           {attribution}
         </div>
       )}

@@ -791,3 +791,63 @@
 .spread-chart .axis .rule {
   stroke: var(--an-axis);
 }
+
+/* ---------------------------------------------------------------------------
+   Regime panels. Seven stacked panels are too much surface to flip entirely to
+   light, so Direction D's inversion is applied where it earns its keep: the
+   PLOT is the light analytical surface, and the header/meta stay on the dark
+   shell. The canvas cannot be reached by CSS, but LayerChart's marks resolve
+   against `currentColor`, so `color` here is what makes the axes and gridlines
+   read correctly on the light ground.
+   --------------------------------------------------------------------------- */
+.regime-panel {
+  border-top: 1px solid var(--sh-3);
+  padding: var(--sp-2) 0 var(--sp-3);
+}
+.regime-panel__header {
+  all: unset;
+  cursor: pointer;
+  display: block;
+  width: 100%;
+  margin-bottom: var(--sp-1);
+}
+.regime-panel__header:focus-visible {
+  outline: 2px solid var(--brand-navy-lift);
+  outline-offset: 2px;
+}
+.regime-panel__title {
+  color: var(--ink-1);
+  font-weight: 600;
+}
+.regime-panel__meta {
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  margin-left: var(--sp-2);
+}
+.regime-panel__legend {
+  display: block;
+  font-size: var(--fs-xs);
+  margin-top: 2px;
+}
+.regime-panel__legend > span {
+  margin-right: var(--sp-3);
+}
+.regime-panel__notes {
+  margin: 2px 0;
+  padding-left: var(--sp-4);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.regime-panel__attribution {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.regime-plot {
+  width: 100%;
+  background: var(--an-panel);
+  color: var(--an-ink-3);
+  border-radius: var(--radius-sm);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.45),
+    0 6px 20px -12px rgb(0 0 0 / 0.6);
+}

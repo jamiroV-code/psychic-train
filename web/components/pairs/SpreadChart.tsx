@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { SpreadPoint } from "@/lib/types/pairs";
+import { loadIslands } from "@/lib/island-loader";
 
 /**
  * The LayerChart pilot (Direction D).
@@ -11,31 +12,10 @@ import type { SpreadPoint } from "@/lib/types/pairs";
  * node, the props and the lifecycle; the island is mounted into that node and
  * disposed on unmount. Nothing Svelte leaks back across the boundary.
  *
- * The island is built separately by `pnpm build:islands` into
- * public/islands/, so Next's own build never has to learn about Svelte. It is
- * fetched on demand — only a pair detail view pays for it.
- *
  * `points` is passed through verbatim; the mapping to chart-ready data lives in
  * lib/pairs-spread-series.ts, where it is unit-tested independently of whatever
  * chart library sits underneath.
  */
-
-const ISLAND_URL = "/islands/spread-chart.js";
-const ISLAND_CSS = "/islands/spread-chart.css";
-
-type MountFn = (
-  target: HTMLElement,
-  props: { points: SpreadPoint[]; height: number },
-) => () => void;
-
-function ensureIslandStyles() {
-  if (document.querySelector(`link[href="${ISLAND_CSS}"]`)) return;
-  const link = document.createElement("link");
-  link.rel = "stylesheet";
-  link.href = ISLAND_CSS;
-  document.head.appendChild(link);
-}
-
 export function SpreadChart({ points, height = 260 }: { points: SpreadPoint[]; height?: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -46,15 +26,11 @@ export function SpreadChart({ points, height = 260 }: { points: SpreadPoint[]; h
     let disposed = false;
     let unmountIsland: (() => void) | undefined;
 
-    ensureIslandStyles();
-
-    // A runtime import of a file served from public/, so webpack must not try
-    // to resolve or bundle it — the island is built by Vite, not by Next.
-    import(/* webpackIgnore: true */ ISLAND_URL)
-      .then((mod: { mountSpreadChart: MountFn }) => {
+    loadIslands()
+      .then((api) => {
         // The effect can be torn down before the island finishes loading.
         if (disposed) return;
-        unmountIsland = mod.mountSpreadChart(container, { points, height });
+        unmountIsland = api.mountSpreadChart(container, { points, height });
       })
       .catch(() => {
         // The chart is an aid, not the reading. If the island cannot load, the
