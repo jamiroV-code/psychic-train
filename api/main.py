@@ -1,14 +1,22 @@
 """FastAPI application entrypoint.
 
-Security Posture (PLAN.md): binds to 127.0.0.1 only, never 0.0.0.0 — this is
-a personal, single-machine tool. Run with:
+Security posture: this file never binds a socket (there is no `.run()` call
+here) — the bind address is a run command concern, set by whoever starts
+uvicorn.
 
-    uv run uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+* Local development keeps the loopback bind:
 
-CORS is scoped to the web/ dev server's origin only (http://localhost:3000),
-per the VALIDATE infra-dimension finding — without this, the very first
-manual test in RFC-001 (load /screener, confirm panels render) fails on a
-browser CORS error before any real functionality can be checked.
+      uv run uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+
+* Phase 1 deployment (the author's own PC) is reachable only over the
+  Tailscale interface: the `deploy/start-api.ps1` launcher binds uvicorn to the
+  PC's Tailscale IPv4 address, so no listener exists on the LAN or the
+  internet. See `deploy/README.md`.
+
+CORS is scoped to an explicit origin list — default `http://localhost:3000`
+(the web/ dev server), overridable with `SCREENER_CORS_ORIGINS`
+(comma-separated). No credentials, and only the methods and header the API
+actually uses.
 """
 from __future__ import annotations
 
@@ -31,20 +39,33 @@ app = FastAPI(title="Momentum Screener API")
 # a different origin. `SCREENER_CORS_ORIGINS` — comma-separated — lets that
 # process widen the list without this file's default ever changing. Unset, the
 # behaviour is exactly what it was: localhost:3000 alone.
+#
+# The deploy launcher uses the same variable to allow the Tailscale web
+# origin. Unset gives the default; set-but-empty gives an empty list (deny
+# all). Entries are stripped and blanks dropped; trailing slashes are not
+# normalized (a browser `Origin` header never has one).
 _DEFAULT_CORS_ORIGINS = "http://localhost:3000"
-CORS_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get("SCREENER_CORS_ORIGINS", _DEFAULT_CORS_ORIGINS).split(",")
-    if origin.strip()
-]
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+def _parse_cors_origins(raw: str | None) -> list[str]:
+    value = _DEFAULT_CORS_ORIGINS if raw is None else raw
+    return [origin.strip() for origin in value.split(",") if origin.strip()]
+
+
+def _cors_options(origins: list[str]) -> dict:
+    # No credentialed fetch exists in web/, and the API serves only GET plus
+    # the watchlist's POST/DELETE. Starlette answers OPTIONS preflight itself.
+    return {
+        "allow_origins": list(origins),
+        "allow_credentials": False,
+        "allow_methods": ["GET", "POST", "DELETE"],
+        "allow_headers": ["Content-Type"],
+    }
+
+
+CORS_ORIGINS = _parse_cors_origins(os.environ.get("SCREENER_CORS_ORIGINS"))
+
+app.add_middleware(CORSMiddleware, **_cors_options(CORS_ORIGINS))
 
 # RFC-004 decision 5: /api/regime/components returns decades of daily points;
 # gzip is transparent to clients (no shape change).

@@ -1,0 +1,31 @@
+# Start the built my_site web app (next start, never the dev server) on this PC's
+# Tailscale IPv4 only.
+#
+#   powershell -NoProfile -ExecutionPolicy Bypass -File deploy\start-web.ps1 [-DryRun]
+#
+# Needs a prior build from deploy\build-web.ps1 (the API address is baked in at build time).
+#
+# UNVERIFIED IN CI: written without PowerShell available; see deploy\README.md steps B5/B6.
+param([switch]$DryRun)
+
+. "$PSScriptRoot\_common.ps1"
+
+$config = Import-MySiteConfig -LogName 'web'
+$ip = Wait-TailscaleIPv4 -Config $config
+
+$webArgs = @('--filter', 'web', 'exec', 'next', 'start', '-H', $ip, '-p', [string]$config.WebPort)
+
+if ($DryRun) {
+    Write-Host "DRY RUN (nothing started)"
+    Write-Host "host    = $ip"
+    Write-Host "port    = $($config.WebPort)"
+    Write-Host "command = $($config.PnpmPath) $($webArgs -join ' ')  (in $($config.RepoRoot))"
+    exit 0
+}
+
+Write-MySiteLog "Starting web on ${ip}:$($config.WebPort)"
+Set-Location $config.RepoRoot
+& $config.PnpmPath @webArgs
+$code = $LASTEXITCODE
+Write-MySiteLog "Web process exited with code $code"
+exit $code

@@ -509,6 +509,16 @@ What This Coverage Does NOT Prove:
 Gate: CONDITIONAL (0 FAILs, 3 CONCERN dimensions; mandatory 717->714 fix and hard checks 1-5 satisfied or corrected in plan; no first-pass PHASE_COMPLETE)
 Accepted by: user, 2026-09-29 (chat: "accept") — concerns: infra-fit, test-coverage (shape-only .ps1), section B cmdlet names / BOOTSTRAP.md dangling until P1 merges
 
+## Deviations
+
+Recorded at EXECUTE 29-09-26 (all within the allowlist; full detail in `deployability_REPORT_29-09-26.md`):
+
+- Added `api/tests/deploy/conftest.py` (offline stubs, socket guard, real-data snapshot) and `api/tests/deploy/test_zz_real_data_guard.py` (hosts `test_real_data_paths_untouched`). Impact: none outside the lane.
+- The step-5 strict xfail is a parametrize case of `test_aged_cache_regime_and_screener_never_500_and_no_nan`, so only the marker assertion is xfailed. Finding: the screener chart has no staleness marker on an aged cache (AC11 stays CONDITIONAL).
+- Offline stubs also cover FRED, DefiLlama and Farside (reached by `/api/regime/components`), not only ccxt and the narrative adapters.
+
+**Section A status (29-09-26): CODE DONE, not VERIFIED.** Section B not run.
+
 ## Autonomous Goal Block
 
 ```
