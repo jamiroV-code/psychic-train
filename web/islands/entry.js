@@ -4,6 +4,7 @@ import RegimePanel from "./regime-panel.svelte";
 import NarrativePanel from "./narrative-panel.svelte";
 import OnchainPanel from "./onchain-panel.svelte";
 import OnchainOverlay from "./onchain-overlay.svelte";
+import SimpleLines from "./simple-lines.svelte";
 import { createPanelSync } from "./panel-sync.svelte.js";
 
 /**
@@ -56,5 +57,15 @@ export function mountOnchainPanel(target, props) {
  */
 export function mountOnchainOverlay(target, props) {
   const app = mount(OnchainOverlay, { target, props });
+  return () => unmount(app);
+}
+
+/**
+ * A plain multi-line time chart, shared by the screener's relative-performance
+ * view and the drill-down MiniChart. No shared store: neither syncs with
+ * anything.
+ */
+export function mountSimpleLines(target, props) {
+  const app = mount(SimpleLines, { target, props });
   return () => unmount(app);
 }

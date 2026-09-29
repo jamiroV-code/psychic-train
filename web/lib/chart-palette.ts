@@ -20,9 +20,34 @@ export const SERIES = {
   indigo: "#4a3aa7",
   /** --series-5 */
   pink: "#e87ba4",
+  /** --series-6 */
+  darkGreen: "#008300",
+  /** --series-7 */
+  amber: "#eda100",
   /** --series-8 */
   red: "#e34948",
 } as const;
+
+/**
+ * The eight categorical slots, in assignment order.
+ *
+ * For charts that colour by position rather than by a named entity — the
+ * relative-performance lines, the mindshare bars. Both previously carried
+ * their own hand-picked eight, and the UI audit measured one of them
+ * (MindshareView) at a worst adjacent pair of ΔE 5.1: for a protanopic reader
+ * two of its series were the same colour, on the view whose whole job is
+ * comparing by colour.
+ */
+export const CATEGORICAL = [
+  SERIES.primary,
+  SERIES.secondary,
+  SERIES.green,
+  SERIES.indigo,
+  SERIES.pink,
+  SERIES.darkGreen,
+  SERIES.amber,
+  SERIES.red,
+] as const;
 
 /**
  * The /narrative panel's series colours.

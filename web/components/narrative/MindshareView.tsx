@@ -1,4 +1,5 @@
 import type { NarrativeMindshareResponse, NarrativeMindshareSource } from "@/lib/types/narrative";
+import { CATEGORICAL } from "@/lib/chart-palette";
 
 const SOURCE_LABEL: Record<NarrativeMindshareSource, string> = {
   pytrends: "Google Trends",
@@ -6,7 +7,11 @@ const SOURCE_LABEL: Record<NarrativeMindshareSource, string> = {
   reddit: "Reddit",
 };
 const SOURCES: NarrativeMindshareSource[] = ["pytrends", "coingecko", "reddit"];
-const PALETTE = ["#58a6ff", "#3fb950", "#d29922", "#f85149", "#bc8cff", "#39c5cf", "#ff7b72", "#a5d6ff"];
+// The eight validated categorical slots. The UI audit measured the previous
+// hand-picked eight at a worst adjacent pair of ΔE 5.1 — for a protanopic
+// reader two series were the same colour, on the view whose whole job is
+// comparing narratives by colour. See lib/chart-palette.ts.
+const PALETTE = CATEGORICAL;
 
 function pct(v: number | null): string {
   return v === null ? "—" : `${(v * 100).toFixed(1)}%`;

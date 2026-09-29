@@ -268,8 +268,8 @@ all six routes. The prototype uses `my_site` as a placeholder. What should it be
 ## ADR-1 — The migration boundary: islands, not SvelteKit (decided 29-09-26)
 
 **Decision: keep React and mount charts as Svelte/LayerChart islands. Do not migrate to
-SvelteKit.** Two routes (`/pairs`, `/regime`) are already shipped this way; the remaining two
-chart routes follow the same pattern.
+SvelteKit.** Every chart route now ships this way (`/pairs`, `/regime`, `/narrative`, `/onchain`,
+`/screener`) — see Consequence below.
 
 This supersedes the open question left in "What I need decided". It also **corrects an argument
 made in PR #9 after the `/regime` conversion**, where the island bundle's size was offered as a
@@ -327,25 +327,39 @@ routing/SSR rather than just a chart.
 
 ### Consequence
 
-Five chart components were on `lightweight-charts` when this ADR was written — more than the
-two routes this section first claimed. Three are now converted:
+**Complete (29-09-26).** Five chart components were on `lightweight-charts` when this ADR was
+written — more than the two routes this section first claimed. All are converted, and the
+dependency is removed from `package.json`.
 
 | Component | Route | Status |
 |---|---|---|
-| `components/narrative/CategoryHistoryPanel.tsx` | `/narrative` | ✅ island (29-09-26) |
-| `components/onchain/ComparisonOverlay.tsx` | `/onchain` | ✅ island (29-09-26) |
-| `components/onchain/ChainPanel.tsx` | `/onchain` | ✅ island (29-09-26) |
-| `components/screener/RelativePerformanceChart.tsx` | `/screener` | ⬜ remaining |
-| `components/chart/MiniChart.tsx` | `/screener` (drill-down) | ⬜ remaining |
+| `components/narrative/CategoryHistoryPanel.tsx` | `/narrative` | ✅ island |
+| `components/onchain/ComparisonOverlay.tsx` | `/onchain` | ✅ island |
+| `components/onchain/ChainPanel.tsx` | `/onchain` | ✅ island |
+| `components/screener/RelativePerformanceChart.tsx` | `/screener` | ✅ island |
+| `components/chart/MiniChart.tsx` | `/screener` (drill-down) | ✅ island |
 
-`createChartSync` and `toSegmentedSeriesData` are already deleted — the conversions left them
-reachable only from their own tests. `lightweight-charts` itself, plus `lineBreakIndices` and the
-two screener test mocks, come out once `/screener` follows.
+Deleted along the way: `createChartSync`, `toSegmentedSeriesData`, `HIDDEN_SEGMENT_COLOR`, both
+`test/mocks/*lightweight-charts.ts` files and every `vi.mock("lightweight-charts")`. Kept, because
+they are still used and no longer touch the library: `visibleRangeAttribute`,
+`isoDateToUtcSeconds`, `defaultVisibleRange` and `lineBreakIndices`.
 
 **First Load JS, measured after each conversion:** `/narrative` 165 → 107 kB, `/onchain`
-166 → 108 kB, `/regime` 164 → 106 kB, `/pairs/[a]/[b]` 171 → 114 kB. The island entry chunk grew
-744 → 783 kB raw (179 → 184 kB gzipped) across three whole chart types, which is finding 4 made
-concrete: the bulk is LayerChart, and per-chart code is marginal.
+166 → 108 kB, `/regime` 164 → 106 kB, `/screener` 162 → 105 kB, `/pairs/[a]/[b]` 171 → 114 kB. The
+island entry chunk grew 744 → 787 kB raw (179 → 185 kB gzipped) across four whole chart types,
+which is finding 4 made concrete: the bulk is LayerChart, and per-chart code is marginal.
+
+**Palettes.** The audit measured two of the app's three chart palettes as failing colour-blindness
+and legibility gates. Both are gone: `/narrative`'s seven hand-picked hexes and `MindshareView` /
+`RelativePerformanceChart`'s two hand-picked eights now come from the validated `--series-N` set
+(`lib/chart-palette.ts`), pinned to `globals.css` by a test that parses it.
+
+**A class of defect worth naming.** Each conversion shipped, or nearly shipped, a plot that was
+present and wrong while every test was green and the console was clean: a series that drew nothing
+(segments broken on whitespace), text invisible on the dark shell (`INK`), and a multi-line chart
+with no legend. All were found by looking at pixels, not by assertions — so `e2e/screener.spec.ts`
+now counts pixels in the series colour, and was mutation-checked (pointed at a colour no chart uses,
+it fails with the intended message).
 
 **What the conversions cost in fidelity, recorded rather than glossed:** floor/ramp markers on
 `/onchain` are told apart by colour instead of arrow-vs-circle glyphs, because a canvas point mark

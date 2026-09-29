@@ -1,21 +1,17 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { createChart, LineSeries, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
+import { loadIslands } from "@/lib/island-loader";
+import { SERIES } from "@/lib/chart-palette";
 import type { ChartBar } from "@/lib/types/screener";
 
-// lightweight-charts v5: `createChart(container, options)` returns an
-// independent `IChartApi`; series are added via `chart.addSeries(LineSeries,
-// options)` (v4's `addLineSeries` was removed in v5). One `createChart`
-// instance per panel, disposed via `chart.remove()` on unmount — confirmed
-// v5 pattern (Component Details, PLAN.md RFC-001 Stage 0).
-
-function toLineData(bars: ChartBar[]) {
-  return bars.map((bar) => ({
-    time: Math.floor(new Date(bar.timestamp).getTime() / 1000) as UTCTimestamp,
-    value: bar.close,
-  }));
-}
+/**
+ * The drill-down sparkline: close price with its SMA over the top.
+ *
+ * A Svelte/LayerChart island (ADR-1), like every other chart in the app. It
+ * syncs with nothing and has no crosshair, so it takes no store — it is the
+ * simplest use of the shared simple-lines island.
+ */
 
 export interface MiniChartProps {
   price: ChartBar[];
@@ -23,53 +19,42 @@ export interface MiniChartProps {
   height?: number;
 }
 
+function points(bars: ChartBar[]) {
+  return bars.map((bar) => ({ timestamp: bar.timestamp, value: bar.close }));
+}
+
 export function MiniChart({ price, sma, height = 120 }: MiniChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const priceSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const smaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const chart = createChart(container, {
-      height,
-      width: container.clientWidth,
-      layout: { background: { color: "transparent" }, textColor: "#8a8f98" },
-      grid: { vertLines: { visible: false }, horzLines: { visible: false } },
-      timeScale: { borderVisible: false },
-      rightPriceScale: { borderVisible: false },
-      handleScroll: false,
-      handleScale: false,
-    });
-    chartRef.current = chart;
-    priceSeriesRef.current = chart.addSeries(LineSeries, { color: "#2962ff", lineWidth: 2 });
-    smaSeriesRef.current = chart.addSeries(LineSeries, { color: "#ff9800", lineWidth: 1 });
+    let disposed = false;
+    let dispose: (() => void) | undefined;
 
-    const handleResize = () => {
-      if (containerRef.current) {
-        chart.applyOptions({ width: containerRef.current.clientWidth });
-      }
-    };
-    window.addEventListener("resize", handleResize);
+    loadIslands()
+      .then((api) => {
+        if (disposed) return;
+        dispose = api.mountSimpleLines(container, {
+          series: [
+            { key: "price", color: SERIES.primary, width: 2, points: points(price) },
+            { key: "sma", color: SERIES.secondary, width: 1, points: points(sma) },
+          ],
+          height,
+          label: "Close price with its moving average",
+        });
+      })
+      .catch(() => {
+        // The drill-down's numbers are all in the surrounding markup, so a
+        // chart that cannot load stays silent rather than breaking the view.
+      });
 
     return () => {
-      window.removeEventListener("resize", handleResize);
-      chart.remove();
-      chartRef.current = null;
-      priceSeriesRef.current = null;
-      smaSeriesRef.current = null;
+      disposed = true;
+      dispose?.();
     };
-  }, [height]);
-
-  useEffect(() => {
-    priceSeriesRef.current?.setData(toLineData(price));
-  }, [price]);
-
-  useEffect(() => {
-    smaSeriesRef.current?.setData(toLineData(sma));
-  }, [sma]);
+  }, [price, sma, height]);
 
   return <div ref={containerRef} data-testid="mini-chart" />;
 }

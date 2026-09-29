@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { MARKER, NARRATIVE_SERIES, SERIES } from "@/lib/chart-palette";
+import { CATEGORICAL, MARKER, NARRATIVE_SERIES, SERIES } from "@/lib/chart-palette";
 
 /**
  * The canvas charts need literal colours, so the validated palette exists in
@@ -24,6 +24,8 @@ describe("chart palette", () => {
     expect(SERIES.green).toBe(token("series-3"));
     expect(SERIES.indigo).toBe(token("series-4"));
     expect(SERIES.pink).toBe(token("series-5"));
+    expect(SERIES.darkGreen).toBe(token("series-6"));
+    expect(SERIES.amber).toBe(token("series-7"));
     expect(SERIES.red).toBe(token("series-8"));
   });
 
@@ -46,5 +48,13 @@ describe("chart palette", () => {
     const chainHues = new Set<string>(Object.values(SERIES));
     expect(chainHues.has(MARKER.floor)).toBe(false);
     expect(chainHues.has(MARKER.ramp)).toBe(false);
+  });
+
+  it("offers all eight categorical slots, in order and distinct", () => {
+    expect(CATEGORICAL).toHaveLength(8);
+    expect(new Set(CATEGORICAL).size).toBe(8);
+    CATEGORICAL.forEach((color, i) => {
+      expect(color, `slot ${i + 1}`).toBe(token(`series-${i + 1}`));
+    });
   });
 });

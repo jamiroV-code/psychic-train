@@ -46,6 +46,13 @@ export interface OnchainOverlayLine {
   gapBefore?: boolean[];
 }
 
+export interface SimpleLineSeries {
+  key: string;
+  color: string;
+  width?: number;
+  points: { timestamp: string; value: number }[];
+}
+
 export interface IslandApi {
   mountSpreadChart(
     target: HTMLElement,
@@ -96,6 +103,15 @@ export interface IslandApi {
       logScale: boolean;
       format: (v: number) => string;
       height: number;
+      label: string;
+    },
+  ): () => void;
+  mountSimpleLines(
+    target: HTMLElement,
+    props: {
+      series: SimpleLineSeries[];
+      height: number;
+      format?: (v: number) => string;
       label: string;
     },
   ): () => void;
