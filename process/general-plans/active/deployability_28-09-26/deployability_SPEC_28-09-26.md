@@ -255,3 +255,48 @@ Per the requesting session: this document makes one clear hosting recommendation
 ---
 
 **Hard stop, stated plainly:** nothing beyond this document exists yet. Choosing a hosting target, choosing an access gate, and creating any paid infrastructure or public-reachable endpoint all require the user's explicit go-ahead — this SPEC is a decision point, not a green light to build.
+
+---
+
+## Decision Recorded (29-09-26)
+
+The user answered the two open decisions this SPEC stopped at:
+
+| Open question | Decision |
+|---|---|
+| Q1 — Which hosting target? | **A home box the user already owns** (~$0, electricity only) |
+| Q2 — Which access gate? | **Tailscale** (free personal tier) |
+| Q3 — Owns an always-on machine? | **Yes** — this is what makes Q1's answer viable |
+| Q6 — Phone app install acceptable? | **Yes, implied by choosing Tailscale** |
+
+Q4 (EU/US) and Q5 (domain on Cloudflare) are now **moot** — both were pivots that
+only mattered for a VPS or Cloudflare Access respectively.
+
+### What this choice changes
+
+- **Cost is ~$0/month.** No paid infrastructure is created, so the SPEC's hard stop
+  about irreversible spend does not arise on this path.
+- **No publicly reachable endpoint exists at any point.** Tailscale gates at the
+  network layer, so the app is never on the open internet — this is the *strongest*
+  available position against the non-redistributable-adapter licensing constraint,
+  not merely an adequate one.
+- **Volume sizing becomes a non-issue.** The concern was provisioning a cloud volume
+  against an unmeasurable cache size. On a machine the user already owns, the disk is
+  already there.
+- **The split-brain cache problem shrinks — possibly to nothing.** If the chosen home
+  box is the same machine that already holds the gitignored `ohlcv/`, `liquidity/`,
+  `pairs/` and `legs/` caches, there is no migration at all and all four screens work
+  on day one. **If it is a different machine, the gap in §3 still applies in full** and
+  those caches must be regenerated there. This is the first thing PLAN must establish.
+- **The requirement handed to P1 changes shape.** It is no longer "get gitignored
+  caches onto a remote instance"; it becomes "keep the existing local caches fresh on
+  an always-on box" — satisfiable with a systemd timer or cron on the same disk, which
+  is materially simpler than any cloud-target option.
+
+### Consequence for execution
+
+Standing the app up on the user's own hardware is inherently a **user-PC action** — it
+cannot be performed from this container, which has no access to that machine. PLAN must
+therefore produce steps the user runs themselves, in the same shape as the existing
+AC-11/AC-12/AC-14 real-machine walkthrough precedents in this repo, rather than steps an
+agent executes.
