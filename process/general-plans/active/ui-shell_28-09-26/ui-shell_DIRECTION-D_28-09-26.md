@@ -262,3 +262,70 @@ all six routes. The prototype uses `my_site` as a placeholder. What should it be
 5. The sibling lanes `claude/p1-pipeline` and `claude/p2-deploy` still do not exist on the remote,
    so the master plan's blast-radius disjointness remains unconfirmed. This lane has touched only
    `process/`.
+
+---
+
+## ADR-1 — The migration boundary: islands, not SvelteKit (decided 29-09-26)
+
+**Decision: keep React and mount charts as Svelte/LayerChart islands. Do not migrate to
+SvelteKit.** Two routes (`/pairs`, `/regime`) are already shipped this way; the remaining two
+chart routes follow the same pattern.
+
+This supersedes the open question left in "What I need decided". It also **corrects an argument
+made in PR #9 after the `/regime` conversion**, where the island bundle's size was offered as a
+point in favour of SvelteKit. Measured, it is not one — see finding 4.
+
+### What was measured
+
+Production build, `next start`, real Chromium, bytes read off the wire:
+
+| Measurement | Value |
+|---|---|
+| Island files actually fetched by `/regime` | **3** — not the 17 chunks on disk |
+| Transferred | **732 kB raw / 178 kB gzipped**, one entry chunk + 12.5 kB CSS + a 164-byte entry |
+| On disk, whole island tree | 1012 kB raw / 239 kB gzipped (the rest is never fetched) |
+| `/pairs/[a]/[b]` First Load JS | 171 kB → **113 kB** |
+| `/regime` First Load JS | 164 kB → **106 kB** |
+
+### Findings
+
+1. **Only charts have to leave React.** `@skeletonlabs/skeleton-react` 5.0.1 exists at the same
+   version and publish date as the Svelte package, so the shell, theme and tokens stay on React —
+   already proven, since the nav, owl mark, token layer and styled screener all shipped on React.
+   LayerChart is the single package with no React build.
+2. **Code splitting already works.** The browser fetches one chunk, not the seventeen on disk, and
+   it is shared by every chart route and cached after the first.
+3. **Each converted route gets lighter** by ~58 kB of Next JS. Against a one-off shared 178 kB,
+   break-even is about two routes; at four it is a clear win, and `lightweight-charts` leaves the
+   dependency tree entirely.
+4. **The 178 kB is LayerChart's cost, not the island boundary's.** `layerchart@2.5.0` exports only
+   its barrel — `layerchart/components/Chart.svelte` and every deep variant resolve to
+   `ERR_PACKAGE_PATH_NOT_EXPORTED` — so there is no narrower import to tree-shake toward. **A
+   SvelteKit app would pay exactly the same bytes.** Bundle size therefore does not favour
+   SvelteKit; it is neutral between the two.
+5. **SvelteKit would rewrite 125 `@testing-library/react` tests for no user-visible benefit.** The
+   55 E2E tests are framework-agnostic and remain the real safety net either way.
+
+With bundle size neutral (4) and the shell able to stay on React (1), the only genuine difference
+left is developer experience against a large, risky rewrite. That is not a trade worth making.
+
+### What this costs, honestly
+
+- **No HMR for island code.** Editing a `.svelte` file needs `pnpm build:islands` (~5 s) and a
+  reload. Mitigated by `pnpm build:islands:watch`, which rebuilds on save; the browser still needs
+  a manual reload.
+- **Two chart systems coexist** until `/narrative` and `/onchain` are converted.
+  `lib/regime-chart-sync.ts` and `toSegmentedSeriesData` must stay until then.
+- **jsdom does not mount islands**, so chart behaviour is asserted either on the pure mapping
+  functions (`lib/chart-segments.ts`) or in Playwright. This is why `/regime`'s
+  lightweight-charts mock was deleted rather than ported: a mock-shaped test proves the mock.
+
+### Revisit if
+
+LayerChart ships per-component exports (finding 4 disappears), or a future route needs SvelteKit
+routing/SSR rather than just a chart.
+
+### Consequence
+
+`/narrative` and `/onchain` convert to islands next, after which `lightweight-charts`,
+`lib/regime-chart-sync.ts` and `lib/regime-line-segments.ts` can all be removed.
