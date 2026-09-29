@@ -27,6 +27,7 @@
     floorColor,
     rampColor,
     height = 180,
+    label = "chart",
   } = $props();
 
   const bounds = $derived(store.visibleBounds());
@@ -113,6 +114,8 @@
 <div
   class="analytic-plot"
   style="height: {height}px"
+  role="img"
+  aria-label={label}
   bind:this={plot}
   {onwheel}
   {onpointermove}

@@ -80,6 +80,7 @@ function ChainPanelImpl({ chain, model, gridDates, gridTimes, generatedUtc, sync
           floorColor: MARKER.floor,
           rampColor: MARKER.ramp,
           height,
+          label: `${chain.label} — daily value and 28-day EMA`,
         });
         dispose = () => {
           unmountPanel();

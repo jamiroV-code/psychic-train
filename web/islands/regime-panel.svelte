@@ -20,7 +20,7 @@
    * Range and hover come from the shared store, so every panel is looking at
    * the same window without any panel knowing another exists.
    */
-  let { store, gridDates, lines, unit = "", height = 120 } = $props();
+  let { store, gridDates, lines, unit = "", height = 120, label = "chart" } = $props();
 
   const bounds = $derived(store.visibleBounds());
 
@@ -112,6 +112,8 @@
 <div
   class="analytic-plot"
   style="height: {height}px"
+  role="img"
+  aria-label={label}
   bind:this={plot}
   {onwheel}
   {onpointermove}

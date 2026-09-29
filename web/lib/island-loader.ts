@@ -84,6 +84,7 @@ export interface IslandApi {
       floorColor: string;
       rampColor: string;
       height: number;
+      label: string;
     },
   ): () => void;
   mountOnchainOverlay(
@@ -95,6 +96,7 @@ export interface IslandApi {
       logScale: boolean;
       format: (v: number) => string;
       height: number;
+      label: string;
     },
   ): () => void;
   mountRegimePanel(
@@ -105,6 +107,7 @@ export interface IslandApi {
       lines: RegimePanelLine[];
       unit: string;
       height: number;
+      label: string;
     },
   ): () => void;
 }

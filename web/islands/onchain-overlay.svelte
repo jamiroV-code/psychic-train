@@ -11,7 +11,7 @@
    * OWN instance, not the one the chain panels share: the overlay has its own
    * range and its own readout, exactly as it did before.
    */
-  let { store, gridDates, lines = [], logScale = false, format, height = 320 } = $props();
+  let { store, gridDates, lines = [], logScale = false, format, height = 320, label = "chart" } = $props();
 
   const bounds = $derived(store.visibleBounds());
 
@@ -88,6 +88,8 @@
 <div
   class="analytic-plot"
   style="height: {height}px"
+  role="img"
+  aria-label={label}
   bind:this={plot}
   {onwheel}
   {onpointermove}

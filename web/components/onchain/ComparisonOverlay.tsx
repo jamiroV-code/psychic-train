@@ -114,6 +114,7 @@ export function ComparisonOverlay({
       logScale: effectiveLog,
       format: (v: number) => formatComparison(v, mode),
       height,
+      label: `Normalised comparison — ${METHOD_COPY[mode === "index" ? normalizationMethod : alternativeMethod] ?? "every chain on one axis"}`,
     });
 
     return () => {

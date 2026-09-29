@@ -98,6 +98,7 @@ function ComponentPanelImpl({
           lines: lines.map((l) => ({ color: l.color, values: l.values, gapBefore: l.gapBefore })),
           unit,
           height,
+          label: `${title} — line chart`,
         });
         dispose = () => {
           unmountPanel();
