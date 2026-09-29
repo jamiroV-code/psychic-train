@@ -26,6 +26,8 @@ api/data/cache/narrative/coingecko_trending.parquet
 # Chain-growth archive (chain-growth RFC-3): provider revisions and possible
 # loss of deep history make the nightly merged series worth keeping.
 !api/data/cache/onchain/
+# Atomic-write temp files (cache.py `.{name}.<random>.tmp`) left by a hard kill.
+api/data/cache/**/*.tmp
 api/data/watchlist.json
 
 # Node (web/)

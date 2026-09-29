@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import time
 from pathlib import Path
 from typing import Literal
@@ -75,6 +76,38 @@ def _as_utc(df: pd.DataFrame, column: str = "timestamp") -> pd.DataFrame:
     return df
 
 
+def _atomic_to_parquet(df: pd.DataFrame, path: Path) -> None:
+    """Write `df` as parquet to `path` all-or-nothing (index dropped).
+
+    The frame goes to a uniquely named temp file in the same directory
+    (`.{name}.<random>.tmp`, so no `*.parquet` glob ever matches it), is
+    flushed and fsynced, and only then renamed over the target with
+    `os.replace` — an atomic rename on the same filesystem. An interrupted
+    write therefore leaves the previous file intact. On any exception the
+    temp file is removed and the error re-raised.
+
+    The new file copies the existing target's permission bits, or gets 0o644
+    for a first write (mkstemp itself creates 0o600).
+    """
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            df.to_parquet(fh, index=False)
+            fh.flush()
+            os.fsync(fh.fileno())
+        try:
+            mode = os.stat(path).st_mode & 0o7777
+        except FileNotFoundError:
+            mode = 0o644
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
 
 def bootstrap_cache_dirs() -> None:
     """Create the cache/ directory tree if it doesn't exist yet."""
@@ -103,7 +136,7 @@ def write_ohlcv(symbol: str, timeframe: Timeframe, df: pd.DataFrame) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     out = df.sort_values("timestamp").drop_duplicates(subset="timestamp", keep="last")
     out = out[OHLCV_COLUMNS]
-    out.to_parquet(path, index=False)
+    _atomic_to_parquet(out, path)
 
 
 def ohlcv_bar_count(symbol: str, timeframe: Timeframe) -> int:
@@ -207,7 +240,7 @@ def write_liqtide_payload(date: str, row_df: pd.DataFrame) -> None:
     path = liqtide_payload_path(date)
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
-        row_df.to_parquet(path, index=False)
+        _atomic_to_parquet(row_df, path)
 
 
 def read_liqtide_history() -> pd.DataFrame:
@@ -280,7 +313,7 @@ def write_liqtide_backfill(date: str, df: pd.DataFrame) -> None:
     payload. Re-running for the same source date rewrites the same content."""
     path = liqtide_backfill_path(date)
     path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(path, index=False)
+    _atomic_to_parquet(df, path)
 
 
 # --- RFC-002: macro-liquidity input series (FRED, DefiLlama) --------------
@@ -309,7 +342,7 @@ def write_liquidity_series(series_id: str, df: pd.DataFrame) -> None:
     path = liquidity_series_path(series_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     out = df.sort_values("date").drop_duplicates(subset="date", keep="last")
-    out[["date", "value"]].to_parquet(path, index=False)
+    _atomic_to_parquet(out[["date", "value"]], path)
 
 
 def liquidity_series_age_seconds(series_id: str) -> float | None:
@@ -337,7 +370,7 @@ def confirmed_boundaries_path() -> Path:
 def write_confirmed_boundaries(df: pd.DataFrame) -> None:
     path = confirmed_boundaries_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(path, index=False)
+    _atomic_to_parquet(df, path)
 
 
 def read_confirmed_boundaries() -> pd.DataFrame:
@@ -385,7 +418,7 @@ def write_narrative_point(source: str, category_id: str, date: str, raw_value: f
     }])
     combined = pd.concat([existing, new_row], ignore_index=True) if not existing.empty else new_row
     combined = combined.sort_values("date").drop_duplicates(subset="date", keep="last")
-    combined[NARRATIVE_COLUMNS].to_parquet(path, index=False)
+    _atomic_to_parquet(combined[NARRATIVE_COLUMNS], path)
 
 
 # --- RFC-003: CoinGecko trending snapshot (item 49) ------------------------
@@ -404,7 +437,7 @@ def trending_snapshot_path() -> Path:
 def write_trending_snapshot(date: str, symbols: list[str]) -> None:
     path = trending_snapshot_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame([{"date": date, "symbols": ",".join(symbols)}]).to_parquet(path, index=False)
+    _atomic_to_parquet(pd.DataFrame([{"date": date, "symbols": ",".join(symbols)}]), path)
 
 
 def read_trending_snapshot() -> tuple[str, list[str]] | None:
@@ -509,7 +542,7 @@ def write_exchange_point(category_id: str, row: dict) -> bool:
         existing = existing.astype(new_row.dtypes.to_dict())
         combined = pd.concat([existing, new_row], ignore_index=True)
     combined = combined.sort_values("date", kind="stable")
-    combined[EXCHANGE_SERIES_COLUMNS].to_parquet(path, index=False)
+    _atomic_to_parquet(combined[EXCHANGE_SERIES_COLUMNS], path)
     return True
 
 
@@ -629,6 +662,6 @@ def merge_onchain_series(
         path.parent.mkdir(parents=True, exist_ok=True)
         df = pd.DataFrame(rows, columns=ONCHAIN_COLUMNS).astype(_ONCHAIN_DTYPES)
         df = df.sort_values("date", kind="stable").reset_index(drop=True)
-        df.to_parquet(path, index=False)
+        _atomic_to_parquet(df, path)
         result.wrote_file = True
     return result
