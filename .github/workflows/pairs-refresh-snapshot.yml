@@ -18,16 +18,21 @@ name: Pairs refresh snapshot
 #     (`DEFAULT_LIMIT`), versus the ~2,230 bars of a locally deep-backfilled
 #     cache. A CI pairs result is a canary artifact, not a quality result.
 #
-# Scheduled 19:17 UTC, off the top of the hour. GitHub starts scheduled runs
-# ~2h late in practice (observed up to ~2h20m), so this still lands well
-# before UTC midnight. 30 minutes after liqtide-snapshot.yml (18:47) and 30
-# before liquidity-backfill-snapshot.yml (19:47), so the pushes to main don't
-# overlap. Pinned by api/tests/scripts/test_snapshot_workflow_schedules.py.
+# Scheduled 11:17 UTC, off the top of the hour. GitHub started these runs
+# 2h39m-5h01m late on 2026-09-27/28 (measured from the Actions run list,
+# 2026-09-29), and the delay was growing (about +2h in one day); 11:17 survives a
+# 10h delay budget. A late or even wrong-UTC-day run is harmless here: both
+# scripts are idempotent full re-fetch/recompute and the next run repairs
+# anything. The newest daily bar is always the in-progress current-UTC-day bar
+# (partial); the next night's run overwrites it. Runs first of the five
+# nightly workflows: 30 minutes before liquidity-backfill-snapshot.yml and 60
+# before chain-growth-snapshot.yml, so the pushes to main don't overlap.
+# Pinned by api/tests/scripts/test_snapshot_workflow_schedules.py.
 #
 # No secrets: ccxt public OHLCV is keyless.
 on:
   schedule:
-    - cron: "17 19 * * *"
+    - cron: "17 11 * * *"
   workflow_dispatch: {}
 
 permissions:

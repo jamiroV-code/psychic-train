@@ -1,9 +1,15 @@
 """Guard for the five nightly snapshot workflows' schedules and safety properties.
 
-GitHub starts scheduled workflows ~2h late (observed up to ~2h20m). A run that
-slips past UTC midnight dates its data as the next day, which is how the
-narrative archive lost 2026-09-25. Every cron must therefore start at least
-3h before midnight, and the five pushes to main stay staggered.
+GitHub started these scheduled workflows 2h39m-5h01m late on 2026-09-27/28
+(measured from the Actions run list, recorded 2026-09-29), and the delay was
+growing (about +2h in one day). A run that slips past UTC midnight dates its
+data as the next day, which is how the narrative archive lost 2026-09-25.
+Every cron must therefore leave a 10h scheduler-delay budget before midnight,
+and the five pushes to main stay staggered.
+
+These tests pin only the SCHEDULED time, never the observed delay. The real
+crossings are caught at runtime by the first step of each no-history workflow,
+which warns when a scheduled run started after UTC midnight.
 
 Two of the five (`pairs-refresh-snapshot.yml`, `liquidity-backfill-snapshot.yml`)
 own directories that are GITIGNORED under pipeline-completeness D1 and may not
@@ -45,13 +51,18 @@ WORKFLOW_CACHE_DIRS: dict[str, list[str]] = {
 # must not be able to fail the job.
 TOLERANT_STAGING = {"pairs-refresh-snapshot.yml", "liquidity-backfill-snapshot.yml"}
 
+# Workflows whose source keeps no history: a run dated the wrong UTC day loses
+# data, so each carries a runtime midnight-crossing warning as its first step.
+NO_HISTORY = {"chain-growth-snapshot.yml", "narrative-snapshot.yml", "liqtide-snapshot.yml"}
+MIDNIGHT_GUARD_STEP = "Warn when the run crossed UTC midnight"
+
 # workflow file -> the api.scripts module(s) it must invoke, in order
 WORKFLOW_MODULES: dict[str, list[str]] = {
     "pairs-refresh-snapshot.yml": ["api.scripts.refresh_cache", "api.scripts.compute_pairs"],
     "liquidity-backfill-snapshot.yml": ["api.scripts.backfill_primaries"],
 }
 
-SCHEDULER_DELAY_BUFFER_MIN = 180
+SCHEDULER_DELAY_BUFFER_MIN = 600
 MIN_STAGGER_MIN = 20
 MINUTES_PER_DAY = 1440
 
@@ -116,12 +127,34 @@ def _staged_dirs(name: str) -> list[str]:
 
 
 @pytest.mark.parametrize("name", sorted(WORKFLOW_CACHE_DIRS))
-def test_cron_starts_at_least_3h_before_utc_midnight(name: str) -> None:
+def test_cron_leaves_scheduler_delay_budget_before_utc_midnight(name: str) -> None:
     crons = _crons(name)
     assert len(crons) == 1, f"{name}: expected exactly one schedule, got {crons}"
     start = _start_minute(crons[0])
     assert start + SCHEDULER_DELAY_BUFFER_MIN < MINUTES_PER_DAY, (
-        f"{name}: cron {crons[0]!r} leaves < 3h before UTC midnight for GitHub's scheduler delay"
+        f"{name}: cron {crons[0]!r} leaves < {SCHEDULER_DELAY_BUFFER_MIN} min before UTC midnight "
+        "for GitHub's scheduler delay"
+    )
+
+
+@pytest.mark.parametrize("name", sorted(NO_HISTORY))
+def test_no_history_workflows_warn_on_midnight_crossing(name: str) -> None:
+    steps = _steps(name)
+    idx = _step_index(steps, name_contains=MIDNIGHT_GUARD_STEP)
+    assert idx == 0, f"{name}: midnight guard must be steps[0] (before checkout), got index {idx}"
+    step = steps[0]
+    assert step.get("name") == MIDNIGHT_GUARD_STEP
+    assert step.get("if") == "github.event_name == 'schedule'", (
+        f"{name}: midnight guard must be schedule-only, got if={step.get('if')!r}"
+    )
+    run = str(step.get("run", ""))
+    assert "::warning::" in run, f"{name}: midnight guard does not emit a warning annotation"
+    assert "exit 1" not in run, f"{name}: midnight guard must never fail the job"
+    match = re.search(r"cron_hour=(\d+)", run)
+    assert match, f"{name}: midnight guard has no cron_hour"
+    cron_hour = _start_minute(_crons(name)[0]) // 60
+    assert int(match.group(1)) == cron_hour, (
+        f"{name}: guard cron_hour={match.group(1)} but the cron hour is {cron_hour}"
     )
 
 

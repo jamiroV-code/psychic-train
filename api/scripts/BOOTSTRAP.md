@@ -114,8 +114,8 @@ from an empty checkout: see section 5 (estimated 10-15 minutes).
 
 ## 8. What the two new nightly workflows do today
 
-`pairs-refresh-snapshot.yml` (19:17 UTC) and `liquidity-backfill-snapshot.yml`
-(19:47 UTC) run the same scripts on a schedule. **Their commit steps are inert
+`pairs-refresh-snapshot.yml` (11:17 UTC) and `liquidity-backfill-snapshot.yml`
+(11:47 UTC) run the same scripts on a schedule. **Their commit steps are inert
 today**: the runner is ephemeral and the owned directories are gitignored, so
 nothing persists between runs and the commit step always reports "nothing new
 to commit".

@@ -4,9 +4,13 @@ name: Narrative daily snapshot
 # dashboard (narrative dashboard RFC-4). Google Trends' short window, Reddit
 # search and CoinGecko "trending" keep no history we can fetch later, so a
 # day this workflow doesn't capture is gone. Points are dated by the UTC day
-# the run actually executes. Scheduled for 18:17 UTC: GitHub starts scheduled
-# runs ~2h late (observed up to ~2h20m), which pushed the old 23:00 UTC slot
-# past midnight (01:03-01:07 UTC) and left 2026-09-25 with no point at all.
+# the run actually executes, so a run that crosses UTC midnight files the
+# point under the wrong day and loses the intended one (the old 23:00 UTC
+# slot did exactly that and left 2026-09-25 with no point at all).
+# Scheduled for 12:47 UTC: GitHub started these runs
+# 2h39m-5h01m late on 2026-09-27/28 (measured from the Actions run list,
+# 2026-09-29), and the delay was growing (about +2h in one day); 12:47 survives a 10h delay budget. The
+# first step warns if a scheduled run started after UTC midnight.
 # Runs 30 minutes after chain-growth-snapshot.yml and 30 before
 # liqtide-snapshot.yml, so the pushes to main don't overlap. Pinned by
 # api/tests/scripts/test_snapshot_workflow_schedules.py.
@@ -15,7 +19,7 @@ name: Narrative daily snapshot
 # source is skipped and logged as "credentials-not-configured" (ADR-8).
 on:
   schedule:
-    - cron: "17 18 * * *"
+    - cron: "47 12 * * *"
   workflow_dispatch: {}
 
 permissions:
@@ -29,6 +33,15 @@ jobs:
   snapshot:
     runs-on: ubuntu-latest
     steps:
+      - name: Warn when the run crossed UTC midnight
+        if: github.event_name == 'schedule'
+        run: |
+          cron_hour=12   # must equal this workflow's cron hour
+          now_hour=$((10#$(date -u +%H)))
+          if [ "$now_hour" -lt "$cron_hour" ]; then
+            echo "::warning::scheduled for ${cron_hour}:xx UTC but started at $(date -u +%H:%M) UTC - the run crossed UTC midnight; today's no-history point may be dated the wrong day"
+          fi
+
       - uses: actions/checkout@v4
 
       - uses: astral-sh/setup-uv@v3
