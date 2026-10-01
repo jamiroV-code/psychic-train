@@ -1,30 +1,63 @@
 import Link from "next/link";
+import { OwlMark } from "@/components/brand/OwlMark";
+
+// The five surfaces, in the same order as the shell navigation. The
+// `data-testid` values are unchanged — two E2E specs click through them.
+const AREAS = [
+  {
+    href: "/screener",
+    testId: "home-link-screener",
+    label: "Screener",
+    blurb: "Relative-strength momentum across the watchlist, with a confidence read per coin.",
+  },
+  {
+    href: "/regime",
+    testId: "home-link-regime",
+    label: "Regime",
+    blurb: "Six liquidity components and a reproduced composite, shown against LiqTide's own index.",
+  },
+  {
+    href: "/narrative",
+    testId: "home-link-narrative",
+    label: "Narrative",
+    blurb: "Attention by narrative from free proxies — a deliberately weaker signal than price.",
+  },
+  {
+    href: "/pairs",
+    testId: "home-link-pairs",
+    label: "Pair screener",
+    blurb: "Every pair in an 18-coin universe tested for cointegration. Diagnostic, never a live signal.",
+  },
+  {
+    href: "/onchain",
+    testId: "home-link-onchain",
+    label: "On-chain growth",
+    blurb: "Participant growth per chain, with each source and counting method stated on the panel.",
+  },
+] as const;
 
 export default function HomePage() {
   return (
     <main>
-      <h1>Momentum Screener</h1>
-      <p>
-        <Link href="/screener">Open the screener board</Link>
-      </p>
-      <p>
-        <Link href="/regime">Open the regime dashboard</Link>
-      </p>
-      <p>
-        <Link href="/narrative" data-testid="home-link-narrative">
-          Open the narrative dashboard
-        </Link>
-      </p>
-      <p>
-        <Link href="/pairs" data-testid="home-link-pairs">
-          Open the pair screener
-        </Link>
-      </p>
-      <p>
-        <Link href="/onchain" data-testid="home-link-onchain">
-          Open the on-chain growth dashboard
-        </Link>
-      </p>
+      <header className="home-head">
+        <OwlMark size={44} tone="dark" />
+        <div>
+          <h1>my_site</h1>
+          <p className="home-sub">
+            Market research tooling. Every number is computed once in Python and rendered here —
+            never recalculated, never silently filled in.
+          </p>
+        </div>
+      </header>
+
+      <div className="home-grid">
+        {AREAS.map((area) => (
+          <Link key={area.href} href={area.href} data-testid={area.testId} className="home-card">
+            <span className="home-card__label">{area.label}</span>
+            <span className="home-card__blurb">{area.blurb}</span>
+          </Link>
+        ))}
+      </div>
     </main>
   );
 }

@@ -140,7 +140,13 @@ test("cointegrated pair detail: chart range matches the sample window, both EG d
   await expect(page.getByTestId("pairs-chart-range")).toHaveText(
     `Plotted: ${start} → ${end} (${overlap_days.toLocaleString("en-US")} points)`,
   );
-  await expect(page.locator("canvas").first()).toBeVisible();
+  // The spread chart is a Svelte/LayerChart island rendering SVG; it replaced a
+  // canvas-based library, so a `canvas` locator no longer describes it. Asserting
+  // the drawn series path is stricter than the old check anyway — a canvas
+  // element can be present and still be blank, a path cannot.
+  const series = page.locator('[data-testid="pairs-spread-chart"] .spread-chart__line');
+  await expect(series).toBeVisible();
+  await expect(series).toHaveAttribute("d", /^M/);
 
   await expect(page.getByTestId("pairs-eg-a-on-b")).toContainText(`${a} on ${b}`);
   await expect(page.getByTestId("pairs-eg-b-on-a")).toContainText(`${b} on ${a}`);

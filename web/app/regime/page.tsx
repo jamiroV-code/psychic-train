@@ -1,5 +1,7 @@
 import { RegimeDashboard } from "@/components/regime/RegimeDashboard";
 
+export const metadata = { title: "Regime" };
+
 export default function RegimePage() {
   return (
     <main>

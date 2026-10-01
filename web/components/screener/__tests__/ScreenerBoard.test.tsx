@@ -8,20 +8,6 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ScreenerBoard } from "@/components/screener/ScreenerBoard";
 import type { ScreenerBoardResponse, Timeframe } from "@/lib/types/screener";
 
-vi.mock("lightweight-charts", () => {
-  const series = { setData: vi.fn() };
-  const chart = {
-    addSeries: vi.fn(() => series),
-    removeSeries: vi.fn(),
-    applyOptions: vi.fn(),
-    remove: vi.fn(),
-  };
-  return {
-    createChart: vi.fn(() => chart),
-    LineSeries: "LineSeries",
-  };
-});
-
 function makeCoin(symbol: string, overrides: Partial<ScreenerBoardResponse["coins"][number]> = {}) {
   return {
     symbol,

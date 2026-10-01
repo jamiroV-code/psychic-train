@@ -8,7 +8,8 @@ import { RangePicker } from "@/components/onchain/RangePicker";
 import { SourceAttributionFooter } from "@/components/onchain/SourceAttributionFooter";
 import { UnavailableChainCard } from "@/components/onchain/UnavailableChainCard";
 import { fetchOnchainGrowth } from "@/lib/api/onchain";
-import { createChartSync, isoDateToUtcSeconds } from "@/lib/regime-chart-sync";
+import { isoDateToUtcSeconds } from "@/lib/regime-chart-sync";
+import { loadIslands, type IslandApi, type PanelSyncStore } from "@/lib/island-loader";
 import {
   DEFAULT_RANGE,
   INK,
@@ -87,16 +88,34 @@ export function OnchainDashboard({ fetchData = fetchOnchainGrowth }: OnchainDash
     () => new Map(live.map((c) => [c.id, buildPanelModel(c, data?.grid_dates ?? [])])),
     [live, data]
   );
-  const sync = useMemo(
+  // The chart islands are built by Vite and fetched at runtime, so the store
+  // the chain panels share cannot exist until that module has loaded.
+  const [island, setIsland] = useState<IslandApi | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    loadIslands()
+      .then((api) => {
+        if (!cancelled) setIsland(api);
+      })
+      .catch(() => {
+        // Panels still render their badges, readout and notes without a plot.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const sync: PanelSyncStore | null = useMemo(
     () =>
-      data
-        ? createChartSync({
+      island && data
+        ? island.createPanelSync({
+            gridDates: data.grid_dates,
             gridTimes,
             initialRange: visibleRangeFrom(data.grid_dates, data.comparison.start_date),
             onHover: setHoverIndex,
           })
         : null,
-    [data, gridTimes]
+    [island, data, gridTimes]
   );
   const labels = useMemo(() => Object.fromEntries((data?.chains ?? []).map((c) => [c.id, c.label])), [data]);
   const gapBefore = useMemo(

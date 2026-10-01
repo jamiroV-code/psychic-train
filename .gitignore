@@ -45,3 +45,6 @@ web/e2e/.fixture-manifest.json
 
 # OS
 .DS_Store
+
+# Built Svelte/LayerChart islands (pnpm build:islands)
+web/public/islands/

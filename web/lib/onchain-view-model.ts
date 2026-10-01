@@ -32,11 +32,29 @@ export function chainColor(id: string, mode: "light" | "dark" = "light"): string
 }
 
 /** Text and chrome tokens (palette.md §Chart chrome & ink, light). Text never uses a series colour. */
+/**
+ * Two surfaces, two sets.
+ *
+ * `primary/secondary/muted` are PAGE text, which sits on the dark shell; the
+ * rest is CHART ink, which sits on the light plot panel. They were one set of
+ * light-surface values back when the whole page was light — after Direction D
+ * that left every chain label as #0b0b0b on a #0c0f14 shell, a contrast ratio
+ * of about 1:1, i.e. invisible. Splitting them is the fix.
+ *
+ * Mirrors the tokens in app/globals.css; __tests__/onchain-ink.test.ts parses
+ * that file to prove they still match. A canvas mark cannot read a CSS custom
+ * property, which is why these literals exist at all.
+ */
 export const INK = {
-  primary: "#0b0b0b",
-  secondary: "#52514e",
-  muted: "#898781",
+  /** --ink-1, on the dark shell */
+  primary: "#e9ecf1",
+  /** --ink-2, on the dark shell */
+  secondary: "#a4adbb",
+  /** --ink-3, on the dark shell */
+  muted: "#8590a3",
+  /** --an-grid, on the light plot */
   gridline: "#e1e0d9",
+  /** --an-axis, on the light plot */
   baseline: "#c3c2b7",
   /** Pre-launch points: muted, so they read as context, not signal (D2). */
   preLaunch: "#c3c2b7",

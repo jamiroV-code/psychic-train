@@ -1,0 +1,920 @@
+/* ---------------------------------------------------------------------------
+   my_site — Direction D: Dark Research Surface
+
+   The shell is dark and recedes; analytical panels stay light so the plot is
+   never dark-on-dark. Brand colours are sampled from owl.png. See
+   process/general-plans/active/ui-shell_28-09-26/ui-shell_DIRECTION-D_28-09-26.md
+
+   Type is a system stack, deliberately: a remote webfont makes every page load
+   depend on an external host, and `regime.spec.ts` rightly asserts the console
+   stays clean — a blocked font request is a real console error, not noise. The
+   faces below ship with the OS and carry tabular figures. To move to IBM Plex,
+   vendor the woff2 files into public/ and change --font-sans/--font-mono only.
+--------------------------------------------------------------------------- */
+@import "tailwindcss";
+@import "@skeletonlabs/skeleton";
+@import "@skeletonlabs/skeleton/themes/terminus";
+
+/* Let Tailwind see the class names Skeleton's React components emit. */
+@source "../node_modules/@skeletonlabs/skeleton-react/dist";
+
+/* ---------------------------------------------------------------------------
+   Skeleton theme mapping.
+
+   Skeleton's own `@layer base` sets body font-family, colour and letter-spacing
+   from the active theme, and html background from its root-bg tokens. Rather
+   than override those rules (which fights the cascade), point the theme's own
+   variables at our tokens — so any Skeleton component adopted later inherits
+   this product's type and surfaces instead of a stock look.
+
+   `:root[data-theme=...]` (0,2,0) beats the theme file's `[data-theme=...]`
+   (0,1,0), so this wins regardless of import order.
+--------------------------------------------------------------------------- */
+:root[data-theme="terminus"] {
+  --typo-base--font-family: var(--font-sans);
+  --typo-base--font-size: var(--fs-base);
+  --typo-base--line-height: 1.55;
+  /* terminus ships 0.025em, which loosens every figure in a dense table */
+  --typo-base--letter-spacing: normal;
+  --typo-base--color-light: var(--ink-1);
+  --typo-base--color-dark: var(--ink-1);
+
+  --typo-heading--font-family: var(--font-sans);
+  --typo-heading--letter-spacing: -0.015em;
+  --typo-heading--color-light: var(--ink-1);
+  --typo-heading--color-dark: var(--ink-1);
+
+  --typo-anchor--color-light: var(--accent);
+  --typo-anchor--color-dark: var(--accent);
+
+  --color-root-bg-light: var(--sh-0);
+  --color-root-bg-dark: var(--sh-0);
+}
+
+/* ===========================================================================
+   1. Tokens
+   =========================================================================== */
+:root {
+  /* --- brand, sampled from owl.png ------------------------------------- */
+  --brand-navy: #32425a;
+  --brand-sage: #657b5b;
+  /* the same two hues lifted until they clear the dark ground */
+  --brand-navy-lift: #6b9bd4;
+  --brand-sage-lift: #8aa37d;
+
+  /* --- shell surfaces: neutral, carrying a trace of the navy hue -------- */
+  --sh-0: #0c0f14;
+  --sh-1: #141922;
+  --sh-2: #1b2029;
+  --sh-3: #232935;
+  --sh-rule: #2b3340;
+  --sh-rule-soft: #1f2530;
+
+  /* --- shell ink -------------------------------------------------------- */
+  --ink-1: #e9ecf1;
+  --ink-2: #a4adbb;
+  --ink-3: #8590a3;
+
+  --accent: var(--brand-navy-lift);
+
+  /* --- analytical (light) surfaces, for chart panels -------------------- */
+  --an-bg: #fcfcfb;
+  --an-panel: #ffffff;
+  --an-ink-1: #0b0b0b;
+  --an-ink-2: #52514e;
+  --an-ink-3: #898781;
+  --an-grid: #e1e0d9;
+  --an-axis: #c3c2b7;
+
+  /* --- severity grammar --------------------------------------------------
+     One scale, two surfaces. Amber means exactly one thing: degraded.
+     Licensing is NOT amber; it gets a neutral outlined badge.              */
+  --sev-mature: #3fa96b;
+  --sev-prov: #d9a441;
+  --sev-insuf: #8590a3;
+  --sev-bad: #e66767;
+  /* light-surface counterparts */
+  --sev-mature-l: #008300;
+  --sev-prov-l: #b07400;
+  --sev-insuf-l: #898781;
+  --sev-bad-l: #c23934;
+
+  /* --- validated categorical slots, light plot surface -------------------
+     Charts render on a light panel, so they use the LIGHT slots. Slot 4 is
+     violet, not yellow: yellow against orange measures dE 13.7 where the
+     all-pairs floor is 15.                                                 */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #4a3aa7;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #eda100;
+  --series-8: #e34948;
+
+  /* --- type ------------------------------------------------------------- */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+
+  --fs-2xs: 10.5px;
+  --fs-xs: 11.5px;
+  --fs-sm: 12.5px;
+  --fs-md: 13.5px;
+  --fs-base: 15px;
+  --fs-lg: 19px;
+  --fs-xl: 26px;
+
+  /* --- spacing: a real 4px scale --------------------------------------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+
+  /* --- motion: short and calm ------------------------------------------ */
+  --t-fast: 120ms;
+  --t-base: 180ms;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  --rail-w: 172px;
+}
+
+/* ===========================================================================
+   2. Base
+   =========================================================================== */
+@layer base {
+  html {
+    color-scheme: dark;
+    background: var(--sh-0);
+  }
+
+  body {
+    margin: 0;
+    background: var(--sh-0);
+    color: var(--ink-1);
+    font-family: var(--font-sans);
+    font-size: var(--fs-base);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Every figure lines up in its column. The single biggest legibility win
+     in a nine-column statistics table. */
+  td,
+  th,
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1 {
+    font-size: var(--fs-xl);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0 0 var(--sp-1);
+  }
+  h2 {
+    font-size: var(--fs-lg);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin: 0 0 var(--sp-1);
+  }
+  h3 {
+    font-size: var(--fs-base);
+    font-weight: 600;
+    margin: 0 0 var(--sp-1);
+  }
+
+  a {
+    color: var(--accent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+/* Smoothness is the priority; animation is secondary. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
+}
+
+/* ===========================================================================
+   3. App shell
+   =========================================================================== */
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--rail-w) 1fr;
+  min-height: 100dvh;
+}
+
+.app-rail {
+  background: var(--sh-1);
+  border-right: 1px solid var(--sh-rule);
+  padding: var(--sp-4) 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-rail__brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 2px var(--sp-4) var(--sp-4);
+  color: var(--ink-1);
+  text-decoration: none;
+}
+.app-rail__wordmark {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.app-rail__link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  padding: 7px var(--sp-4);
+  color: var(--ink-2);
+  text-decoration: none;
+  font-size: var(--fs-md);
+  border-left: 2px solid transparent;
+  transition:
+    background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+.app-rail__link:hover {
+  background: var(--sh-2);
+  color: var(--ink-1);
+}
+.app-rail__link[aria-current="page"] {
+  background: var(--sh-2);
+  color: var(--ink-1);
+  border-left-color: var(--accent);
+  font-weight: 500;
+}
+
+/* The regime view packs ~1100 daily bars into each panel, and its default
+   three-year window is width-sensitive: the chart silently re-fits the range
+   when the bars cannot fit, showing less history than it promises. Page
+   padding is therefore kept tight so the rail does not eat the plot area. */
+.app-main {
+  padding: var(--sp-4) var(--sp-4) var(--sp-6);
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+  .app-rail {
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--sh-rule);
+    padding: 0;
+  }
+  .app-rail__brand {
+    display: none;
+  }
+  .app-rail__link {
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+  }
+  .app-rail__link[aria-current="page"] {
+    border-left: none;
+    border-bottom-color: var(--accent);
+  }
+  .app-main {
+    padding: var(--sp-4);
+  }
+}
+
+/* ===========================================================================
+   4. Severity grammar
+   Severity is a rail, never a fill: the value itself never changes colour, so
+   a number is never harder to read because it is uncertain.
+   =========================================================================== */
+.sev {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  background: var(--sh-2);
+  border-left: 2px solid var(--sev-insuf);
+  padding: 7px 11px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.sev--provisional,
+.sev--stale {
+  border-left-color: var(--sev-prov);
+}
+.sev--unavailable {
+  border-left-color: var(--sev-bad);
+}
+.sev--mature {
+  border-left-color: var(--sev-mature);
+}
+.sev b,
+.sev strong {
+  color: var(--ink-1);
+  font-weight: 600;
+}
+
+/* A glyph always accompanies the colour, so state survives colour-blindness,
+   greyscale and print. */
+.sev-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  border-radius: 3px;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+  color: var(--sev-insuf);
+}
+.sev-chip--mature {
+  color: var(--sev-mature);
+}
+.sev-chip--provisional {
+  color: var(--sev-prov);
+}
+.sev-chip--unavailable {
+  color: var(--sev-bad);
+}
+
+/* Licensing is a fact about the data, not a warning about its quality, so it
+   is deliberately NOT amber. */
+.license-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+  border: 1px solid var(--sh-rule);
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+/* ===========================================================================
+   5. Screener
+   These BEM class names already existed in the markup and styled nothing.
+   Styling them changes zero TSX and breaks zero tests.
+   =========================================================================== */
+.screener-board__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--sh-rule);
+}
+.screener-board__benchmark {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.screener-board__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--sp-3);
+}
+
+.coin-panel {
+  background: var(--sh-1);
+  border: 1px solid var(--sh-rule);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+  transition: border-color var(--t-fast) var(--ease);
+}
+.coin-panel:hover {
+  border-color: var(--sh-3);
+}
+.coin-panel__header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.coin-panel__symbol {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-right: auto;
+}
+.coin-panel__unavailable {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  background: var(--sh-2);
+  border-left: 2px solid var(--sev-insuf);
+  padding: 7px 11px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.coin-panel__signals {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.coin-panel__signals [data-state="PASS"],
+.coin-panel__signals [data-state="up"] {
+  color: var(--sev-mature);
+}
+.coin-panel__signals [data-state="FAIL"],
+.coin-panel__signals [data-state="down"] {
+  color: var(--sev-bad);
+}
+.coin-panel__signals [data-state="insufficient"] {
+  color: var(--ink-3);
+}
+
+/* The "compact 5-chip row" its own comment describes, finally rendered. */
+.coin-panel__gain-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--sp-1);
+}
+.coin-panel__gain-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  background: var(--sh-2);
+  border-radius: var(--radius-sm);
+  padding: 4px 2px;
+  min-width: 0;
+}
+.coin-panel__gain-chip-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.coin-panel__gain-chip-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-1);
+}
+
+/* Four closed confidence states — never a score or a percent. */
+.confidence-badge {
+  font: inherit;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  border-radius: 3px;
+  padding: 2px 7px;
+  background: transparent;
+  border: 1px solid currentColor;
+  color: var(--ink-3);
+  cursor: default;
+  white-space: nowrap;
+  transition: background var(--t-fast) var(--ease);
+}
+.confidence-badge:not(:disabled) {
+  cursor: pointer;
+}
+.confidence-badge:not(:disabled):hover {
+  background: var(--sh-2);
+}
+.confidence-badge--aligned {
+  color: var(--sev-mature);
+}
+.confidence-badge--mixed {
+  color: var(--sev-prov);
+}
+.confidence-badge--conflicting {
+  color: var(--sev-bad);
+}
+.confidence-badge--insufficient-data {
+  color: var(--sev-insuf);
+}
+
+.signal-detail-panel {
+  background: var(--sh-2);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+.signal-detail-panel__content {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px var(--sp-3);
+  margin: var(--sp-2) 0 0;
+}
+.signal-detail-panel__content dt {
+  color: var(--ink-3);
+}
+.signal-detail-panel__content dd {
+  margin: 0;
+  color: var(--ink-1);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.drilldown-view__header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--sh-rule);
+  font-weight: 600;
+}
+
+.relative-performance-chart__note {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  border-left: 2px solid var(--sev-insuf);
+  padding: 7px 11px;
+  background: var(--sh-2);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* Narrative and regime notices: same grammar, previously three idioms. */
+.narrative-notice,
+.regime-notice {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  background: var(--sh-2);
+  border-left: 2px solid var(--sev-insuf);
+  padding: 7px 11px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin: var(--sp-1) 0;
+}
+.narrative-notice--stale,
+.regime-notice--stale {
+  border-left-color: var(--sev-prov);
+}
+
+/* ===========================================================================
+   6. Home index
+   =========================================================================== */
+.home-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-5);
+}
+.home-sub {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-md);
+  max-width: 62ch;
+}
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--sp-3);
+}
+.home-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  background: var(--sh-1);
+  border: 1px solid var(--sh-rule);
+  border-left: 2px solid var(--sh-rule);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3) var(--sp-4);
+  text-decoration: none;
+  color: inherit;
+  transition:
+    background var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease);
+}
+.home-card:hover {
+  background: var(--sh-2);
+  border-left-color: var(--accent);
+}
+.home-card__label {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-1);
+}
+.home-card__blurb {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+/* ===========================================================================
+   7. Controls
+   The timeframe/range pickers already sit in `role="group"` / `role="radiogroup"`
+   containers and mark the active option with aria-pressed / aria-checked, so
+   they can be styled as segmented controls without touching any markup.
+   =========================================================================== */
+.app-main [role="group"],
+.app-main [role="radiogroup"] {
+  display: inline-flex;
+  border: 1px solid var(--sh-rule);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex: none;
+}
+
+.app-main [role="group"] > button,
+.app-main [role="radiogroup"] > button,
+.app-main [role="group"] > [role="radio"],
+.app-main [role="radiogroup"] > [role="radio"] {
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1;
+  padding: 5px 11px;
+  background: transparent;
+  color: var(--ink-2);
+  border: none;
+  border-right: 1px solid var(--sh-rule);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+.app-main [role="group"] > *:last-child,
+.app-main [role="radiogroup"] > *:last-child {
+  border-right: none;
+}
+.app-main [role="group"] > button:hover,
+.app-main [role="radiogroup"] > button:hover,
+.app-main [role="group"] > [role="radio"]:hover,
+.app-main [role="radiogroup"] > [role="radio"]:hover {
+  background: var(--sh-2);
+  color: var(--ink-1);
+}
+.app-main [aria-pressed="true"],
+.app-main [aria-checked="true"] {
+  background: var(--sh-3);
+  color: var(--ink-1);
+  font-weight: 500;
+}
+
+/* Standalone actions (Drill down, Close) — not part of a group. */
+.app-main button:not([role="group"] *):not([role="radiogroup"] *):not(.confidence-badge) {
+  font: inherit;
+  font-size: var(--fs-sm);
+  padding: 4px 10px;
+  background: var(--sh-2);
+  color: var(--ink-2);
+  border: 1px solid var(--sh-rule);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+.app-main button:not([role="group"] *):not([role="radiogroup"] *):not(.confidence-badge):hover {
+  background: var(--sh-3);
+  color: var(--ink-1);
+}
+
+/* The leg-timeline and narrative strips carry no class hooks of their own.
+   Giving their headings a consistent, smaller weight stops them dominating
+   the page above the board. */
+.app-main section > strong,
+.app-main section > div > strong {
+  display: block;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-top: var(--sp-2);
+}
+
+/* ===========================================================================
+   8. Regime layout
+   The reserved insights column (regime plan §2) is still held open on wide
+   screens, but it is an empty placeholder — holding 280px for it once the
+   shell rail is also taking width shrinks the plot area enough that the
+   charts re-fit their default three-year window and quietly show less
+   history than they promise. Below the breakpoint the column collapses; the
+   element stays in the DOM and stays empty, which is what its test asserts.
+   =========================================================================== */
+.regime-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: var(--sp-4);
+}
+@media (max-width: 1500px) {
+  .regime-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .regime-layout > [data-testid="regime-reserved-column"] {
+    display: none;
+  }
+}
+
+/* ===========================================================================
+   9. Analytical panels (LayerChart)
+   Direction D's signature inversion: the shell is dark, the plot is not. A
+   chart panel is a light surface so the data carries the contrast, and the
+   series use the LIGHT validated slots because that is the surface they sit on.
+   =========================================================================== */
+.analytic-panel {
+  background: var(--an-bg);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3) var(--sp-4) var(--sp-2);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.5),
+    0 8px 26px -12px rgb(0 0 0 / 0.7);
+}
+.analytic-panel__title {
+  color: var(--an-ink-1);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  margin: 0;
+}
+.analytic-panel__sub {
+  color: var(--an-ink-2);
+  font-size: var(--fs-sm);
+  margin: 0 0 var(--sp-2);
+}
+
+/* The island renders plain SVG, so it is themed from here rather than from
+   inside the Svelte component — one place for chart chrome, shared by every
+   chart that follows. */
+.spread-chart {
+  width: 100%;
+}
+.spread-chart svg {
+  overflow: visible;
+}
+.spread-chart .spread-chart__line {
+  stroke: var(--series-1);
+  stroke-width: 2;
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+/* A spread oscillates around zero, so the zero line is the reference the eye
+   needs — emphasised over the ordinary gridlines, but still recessive. */
+.spread-chart .spread-chart__zero {
+  stroke: var(--an-axis);
+  stroke-width: 1;
+}
+.spread-chart .tick line,
+.spread-chart .tick-mark {
+  stroke: var(--an-grid);
+}
+/* Axis labels are 10px TEXT, so they need 4.5:1. --an-ink-3 is 3.5:1 on the plot
+   surface (measured), --an-ink-2 is 7.7:1. Gridlines and rules keep their own
+   lighter tokens; only the words darken. */
+.spread-chart .tick text,
+.spread-chart text {
+  fill: var(--an-ink-2);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.spread-chart .rule,
+.spread-chart .axis .rule {
+  stroke: var(--an-axis);
+}
+
+/* ---------------------------------------------------------------------------
+   Regime panels. Seven stacked panels are too much surface to flip entirely to
+   light, so Direction D's inversion is applied where it earns its keep: the
+   PLOT is the light analytical surface, and the header/meta stay on the dark
+   shell. The canvas cannot be reached by CSS, but LayerChart's marks resolve
+   against `currentColor`, so `color` here is what makes the axes and gridlines
+   read correctly on the light ground.
+   --------------------------------------------------------------------------- */
+.regime-panel {
+  border-top: 1px solid var(--sh-3);
+  padding: var(--sp-2) 0 var(--sp-3);
+}
+.regime-panel__header {
+  all: unset;
+  cursor: pointer;
+  display: block;
+  width: 100%;
+  margin-bottom: var(--sp-1);
+}
+.regime-panel__header:focus-visible {
+  outline: 2px solid var(--brand-navy-lift);
+  outline-offset: 2px;
+}
+.regime-panel__title {
+  color: var(--ink-1);
+  font-weight: 600;
+}
+.regime-panel__meta {
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  margin-left: var(--sp-2);
+}
+.regime-panel__legend {
+  display: block;
+  font-size: var(--fs-xs);
+  margin-top: 2px;
+}
+.regime-panel__legend > span {
+  margin-right: var(--sp-3);
+}
+.regime-panel__notes {
+  margin: 2px 0;
+  padding-left: var(--sp-4);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.regime-panel__attribution {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+/* The light analytical surface every canvas chart sits on. Canvas marks cannot
+   be reached by CSS, but LayerChart resolves them against `currentColor`, so
+   `color` here is what makes the axes and gridlines read on the light ground.
+   It is also the colour of the axis LABELS, which are 10px text and so need
+   4.5:1: --an-ink-3 measured 3.5:1 here, --an-ink-2 is 7.7:1. */
+.analytic-plot {
+  width: 100%;
+  background: var(--an-panel);
+  color: var(--an-ink-2);
+  border-radius: var(--radius-sm);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.45),
+    0 6px 20px -12px rgb(0 0 0 / 0.6);
+}
+
+/* Narrative panels share the regime panel's chrome; only the plot differs. */
+.narrative-panel {
+  border-top: 1px solid var(--sh-3);
+  padding: var(--sp-2) 0 var(--sp-3);
+}
+.narrative-panel__title {
+  color: var(--ink-1);
+  font-weight: 600;
+}
+.narrative-panel__meta {
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  margin-left: var(--sp-2);
+}
+.narrative-panel__row {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+/* The legend carries the plot's colours, so it lives on the plot's surface.
+   Measured: --series-4 indigo is 2.24:1 on the dark shell (a graphic needs 3:1)
+   but 8.56:1 on the light panel, while the only free alternative, amber, is the
+   reverse — 8.86:1 dark, 2.17:1 light. No single hue serves both surfaces, so
+   the legend moves to the light one rather than the palette being bent to fit
+   a surface it was not validated for. */
+.plot-legend {
+  display: inline-block;
+  background: var(--an-bg);
+  color: var(--an-ink-2);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-sm);
+  margin: var(--sp-1) 0;
+}
+.plot-legend > span {
+  margin-right: var(--sp-3);
+}
+/* The comparison legend is a <ul> of chains rather than a row of spans. */
+.plot-legend--list {
+  list-style: none;
+  padding: var(--sp-1) var(--sp-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-3);
+}
+/* A qualifier inside the light legend strip. The shell's grey (#8a8f98) measured
+   3.2:1 on it; this is the plot surface's own secondary ink. */
+.plot-legend__note {
+  color: var(--an-ink-2);
+}
+.plot-legend__label {
+  color: var(--an-ink-1);
+  font-weight: 600;
+}
+/* Colour rides the glyph; the label stays in readable ink. A thin series colour
+   is a graphic (3:1), but a word is text (4.5:1), and several of these slots
+   clear the first and not the second. */
+.plot-legend .legend-glyph {
+  font-weight: 700;
+}

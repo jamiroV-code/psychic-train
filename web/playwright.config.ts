@@ -93,7 +93,10 @@ export default defineConfig({
       stderr: "pipe",
     },
     {
-      command: `pnpm dev --port ${WEB_PORT}`,
+      // The Svelte/LayerChart island is built by Vite, not by Next, and
+      // `next dev` does not build it. Without this the pair detail view
+      // would 404 on /islands/spread-chart.js in a clean checkout.
+      command: `pnpm build:islands && pnpm dev --port ${WEB_PORT}`,
       cwd: __dirname,
       url: `http://localhost:${WEB_PORT}/screener`,
       env: { NEXT_PUBLIC_API_BASE_URL: API_BASE_URL },

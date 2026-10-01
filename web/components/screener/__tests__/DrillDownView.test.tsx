@@ -5,12 +5,6 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { DrillDownView } from "@/components/screener/DrillDownView";
 import type { ScalpView, Timeframe } from "@/lib/types/screener";
 
-vi.mock("lightweight-charts", () => {
-  const series = { setData: vi.fn() };
-  const chart = { addSeries: vi.fn(() => series), removeSeries: vi.fn(), applyOptions: vi.fn(), remove: vi.fn() };
-  return { createChart: vi.fn(() => chart), LineSeries: "LineSeries" };
-});
-
 function makeScalpView(timeframe: Timeframe): ScalpView {
   return {
     symbol: "BTC",

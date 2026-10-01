@@ -1,15 +1,14 @@
 "use client";
 
 import { memo, useEffect, useMemo, useRef } from "react";
-import { AreaSeries, createChart, createSeriesMarkers, LineSeries, type ISeriesApi } from "lightweight-charts";
+import { loadIslands, type PanelSyncStore } from "@/lib/island-loader";
+import { MARKER } from "@/lib/chart-palette";
 import { RedistributionBadge } from "@/components/narrative/RedistributionBadge";
 import { CrossCheckNote } from "@/components/onchain/CrossCheckNote";
 import { FloorRampStateLabel } from "@/components/onchain/FloorRampStateLabel";
 import { LimitedHistoryFlag } from "@/components/onchain/LimitedHistoryFlag";
 import { SourceMethodBadge } from "@/components/onchain/SourceMethodBadge";
-import type { ChartSync } from "@/lib/regime-chart-sync";
-import { isoDateToUtcSeconds } from "@/lib/regime-chart-sync";
-import { lineBreakIndices, toSegmentedSeriesData } from "@/lib/regime-line-segments";
+import { lineBreakIndices } from "@/lib/regime-line-segments";
 import { INK, formatCount, staleDays, type PanelModel } from "@/lib/onchain-view-model";
 import type { ChainGrowth } from "@/lib/types/onchain";
 
@@ -19,7 +18,7 @@ export interface ChainPanelProps {
   gridDates: string[];
   gridTimes: number[];
   generatedUtc: string;
-  sync: ChartSync | null;
+  sync: PanelSyncStore | null;
   /** Shared hover index from the sync group; null = show the latest point. */
   hoverIndex: number | null;
   height?: number;
@@ -53,91 +52,51 @@ function ChainPanelImpl({ chain, model, gridDates, gridTimes, generatedUtc, sync
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
-    const chart = createChart(container, {
-      height,
-      width: container.clientWidth,
-      layout: { background: { color: "transparent" }, textColor: INK.muted },
-      grid: { vertLines: { visible: false }, horzLines: { color: INK.gridline } },
-      timeScale: { borderColor: INK.baseline },
-      rightPriceScale: { borderVisible: false },
-      crosshair: { horzLine: { visible: false, labelVisible: false } },
-      localization: { priceFormatter: (p: number) => formatCount(p) },
-    });
+    if (!container || !sync) return;
 
-    if (model.hasPreLaunch) {
-      const pre = chart.addSeries(AreaSeries, {
-        lineColor: INK.preLaunch,
-        topColor: INK.preLaunchFill,
-        bottomColor: INK.preLaunchFill,
-        lineWidth: 1,
-        priceLineVisible: false,
-        lastValueVisible: false,
-        crosshairMarkerVisible: false,
+    let disposed = false;
+    let dispose: (() => void) | undefined;
+
+    // The plot is a Svelte/LayerChart island (ADR-1). Every chain panel mounts
+    // its own but they all share the one store, which is what keeps the range
+    // and the hovered date identical across panels without any panel knowing
+    // another exists.
+    loadIslands()
+      .then((api) => {
+        if (disposed) return;
+        const unregister = sync.registerElement(chain.id, container);
+        const unmountPanel = api.mountOnchainPanel(container, {
+          store: sync,
+          gridDates,
+          value: model.value,
+          preLaunchValue: model.hasPreLaunch ? model.preLaunchValue : model.preLaunchValue.map(() => null),
+          ema28: model.ema28,
+          gapBefore: model.gapBefore,
+          markers: model.markers.map((m) => ({ date: m.date, kind: m.kind })),
+          color: model.color,
+          rawColor: withAlpha(model.color, 0.45),
+          preLaunchColor: INK.preLaunch,
+          preLaunchFill: INK.preLaunchFill,
+          floorColor: MARKER.floor,
+          rampColor: MARKER.ramp,
+          height,
+          label: `${chain.label} — daily value and 28-day EMA`,
+        });
+        dispose = () => {
+          unmountPanel();
+          unregister();
+        };
+      })
+      .catch(() => {
+        // The readout, badges and cross-check note carry every number, so a
+        // chart that cannot load stays silent rather than blanking the panel.
       });
-      pre.setData(toSegmentedSeriesData(gridTimes, model.preLaunchValue, model.gapBefore).line);
-    }
 
-    const raw: ISeriesApi<"Line"> = chart.addSeries(LineSeries, {
-      color: withAlpha(model.color, 0.45),
-      lineWidth: 1,
-      priceLineVisible: false,
-      lastValueVisible: false,
-    });
-    const rawData = toSegmentedSeriesData(gridTimes, model.value, model.gapBefore);
-    raw.setData(rawData.line);
-    if (rawData.dots) {
-      const dots = chart.addSeries(LineSeries, {
-        color: model.color,
-        lineVisible: false,
-        pointMarkersVisible: true,
-        pointMarkersRadius: 2,
-        crosshairMarkerVisible: false,
-        priceLineVisible: false,
-        lastValueVisible: false,
-      });
-      dots.setData(rawData.dots);
-    }
-
-    const ema = chart.addSeries(LineSeries, {
-      color: model.color,
-      lineWidth: 2,
-      priceLineVisible: false,
-      lastValueVisible: false,
-    });
-    ema.setData(toSegmentedSeriesData(gridTimes, model.ema28, model.gapBefore).line);
-    if (model.markers.length > 0) {
-      createSeriesMarkers(
-        ema,
-        model.markers.map((m) => ({
-          time: isoDateToUtcSeconds(m.date) as never,
-          position: m.kind === "floor" ? ("belowBar" as const) : ("aboveBar" as const),
-          shape: m.kind === "floor" ? ("arrowUp" as const) : ("circle" as const),
-          color: INK.secondary,
-          text: m.kind,
-        }))
-      );
-    }
-
-    const unregister = sync
-      ? sync.register(chain.id, {
-          chart,
-          series: raw,
-          element: container,
-          valueAt: (i) => model.value[i] ?? model.preLaunchValue[i] ?? null,
-        })
-      : () => {};
-
-    const handleResize = () => {
-      if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth });
-    };
-    window.addEventListener("resize", handleResize);
     return () => {
-      window.removeEventListener("resize", handleResize);
-      unregister();
-      chart.remove();
+      disposed = true;
+      dispose?.();
     };
-  }, [chain.id, model, gridTimes, sync, height]);
+  }, [chain.id, model, gridDates, sync, height]);
 
   const readoutIndex = hoverIndex ?? lastIndexWithValue(model);
   const readoutRaw = readoutIndex === null ? null : model.value[readoutIndex] ?? model.preLaunchValue[readoutIndex];
@@ -166,16 +125,30 @@ function ChainPanelImpl({ chain, model, gridDates, gridTimes, generatedUtc, sync
       </div>
       {series && <SourceMethodBadge chainId={chain.id} source={series.source} method={series.method} />}
       <LimitedHistoryFlag chain={chain} />
-      <div style={{ fontSize: 11, color: INK.secondary }}>
-        <span style={{ color: model.color }}>―</span> 28-day EMA{"  "}
-        <span style={{ color: withAlpha(model.color, 0.45) }}>―</span> daily value
+      {/* On the light strip, because every colour in it is a plot colour —
+          the chain hues, the muted pre-launch fill and the neutral markers are
+          all validated against the light panel, not the dark shell. */}
+      <div className="plot-legend">
+        <span>
+          <span className="legend-glyph" style={{ color: model.color }}>―</span> 28-day EMA
+        </span>
+        <span>
+          <span className="legend-glyph" style={{ color: withAlpha(model.color, 0.45) }}>―</span> daily value
+        </span>
         {model.hasPreLaunch && chain.launch_date && (
           <span data-testid={`onchain-panel-${chain.id}-prelaunch`}>
-            {"  "}
-            <span style={{ color: INK.preLaunch }}>▇</span> before launch ({chain.launch_date}), not used in analytics
+            <span className="legend-glyph" style={{ color: INK.preLaunch }}>▇</span> before launch ({chain.launch_date}),
+            not used in analytics
           </span>
         )}
-        {model.markers.length > 0 && <span>{"  "}▲ floor · ● ramp</span>}
+        {model.markers.length > 0 && (
+          <span>
+            {/* Canvas point marks are circles, so floor and ramp are told
+                apart by colour; the key shows exactly what is drawn. */}
+            <span className="legend-glyph" style={{ color: MARKER.floor }}>●</span> floor{" "}
+            <span className="legend-glyph" style={{ color: MARKER.ramp }}>●</span> ramp
+          </span>
+        )}
       </div>
       <div
         ref={containerRef}

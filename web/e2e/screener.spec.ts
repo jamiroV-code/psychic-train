@@ -191,3 +191,68 @@ test("drill-down opens on demand and fetches the scalp view", async ({ page }) =
   await view.getByTestId("drilldown-close").click();
   await expect(page.getByTestId("drilldown-view")).toHaveCount(0);
 });
+
+// ---------------------------------------------------------------------------
+// 7. The screener's charts actually draw.
+//    Catches: a plot that mounts and stays blank. That is the failure a canvas
+//    hides — the element exists, the console is clean, the header says "ok",
+//    and nothing is on it. Every earlier island conversion (/regime, /narrative,
+//    /onchain) shipped or nearly shipped a defect of exactly this shape, found
+//    only by looking at pixels. Both screener charts are islands too, and until
+//    this spec neither had any browser-level assertion at all.
+// ---------------------------------------------------------------------------
+// Counts pixels close to ONE series colour. Axes, gridlines and the zero rule
+// are neutral greys, so a frame with no data on it scores 0 here — which is the
+// point: "any pixel painted" would pass on an empty plot.
+const FIRST_SERIES = "#2a78d6"; // --series-1: BTC's line, and the mini chart's price
+
+async function seriesPixels(canvas: import("@playwright/test").Locator, hex: string): Promise<number> {
+  return canvas.evaluate((el, target) => {
+    const c = el as HTMLCanvasElement;
+    const want = [1, 3, 5].map((i) => parseInt(target.slice(i, i + 2), 16));
+    const data = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+    let hits = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 200) continue;
+      if (
+        Math.abs(data[i] - want[0]) <= 14 &&
+        Math.abs(data[i + 1] - want[1]) <= 14 &&
+        Math.abs(data[i + 2] - want[2]) <= 14
+      ) {
+        hits++;
+      }
+    }
+    return hits;
+  }, hex);
+}
+
+test("the relative-performance chart draws its lines, and the board's mini charts are not blank", async ({ page }) => {
+  await page.goto("/screener");
+  await expect(page.getByTestId("coin-panel-BTC")).toBeVisible();
+
+  const relative = page.getByTestId("rp-chart-container").locator("canvas").first();
+  await expect(relative).toBeVisible();
+  // The first watchlist coin is the first line, so its colour must be on the plot.
+  expect(await seriesPixels(relative, FIRST_SERIES), "relative-performance has no line drawn").toBeGreaterThan(20);
+
+  // Which line is which. A multi-coin chart with no names on it cannot be read.
+  await expect(page.getByTestId("rp-legend-BTC")).toBeVisible();
+  await expect(page.getByTestId("rp-legend-ETH")).toBeVisible();
+
+  // The role/label is what makes the plot reachable by assistive tech.
+  await expect(page.getByTestId("rp-chart-container").getByRole("img")).toHaveAttribute(
+    "aria-label",
+    /Relative performance over/
+  );
+
+  // A mini chart per coin, each drawing something.
+  const minis = page.getByTestId("mini-chart");
+  await expect(minis.first().locator("canvas").first()).toBeVisible();
+  const count = await minis.count();
+  expect(count).toBeGreaterThanOrEqual(manifest.watchlist.length - 1); // the thin symbol has no chart
+  for (let i = 0; i < count; i++) {
+    const canvas = minis.nth(i).locator("canvas").first();
+    if ((await canvas.count()) === 0) continue; // an honest unavailable state has no plot
+    expect(await seriesPixels(canvas, FIRST_SERIES), `mini chart ${i} has no price line`).toBeGreaterThan(10);
+  }
+});

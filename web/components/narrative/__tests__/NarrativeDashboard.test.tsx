@@ -1,14 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
-vi.mock("lightweight-charts", () => import("@/test/mocks/lightweight-charts"));
-
-import { resetMockCharts } from "@/test/mocks/lightweight-charts";
 import { NarrativeDashboard } from "@/components/narrative/NarrativeDashboard";
 import { category, response } from "./fixtures";
 import type { NarrativeMindshareResponse, NarrativeMomentumResponse } from "@/lib/types/narrative";
-
-beforeEach(() => resetMockCharts());
 
 const stubViews = {
   fetchMomentum: (): Promise<NarrativeMomentumResponse> =>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { createChart, LineSeries, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { loadIslands } from "@/lib/island-loader";
+import { buildRelativeLines, formatPercentChange } from "@/lib/relative-performance-lines";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
 import { fetchRelativePerformance } from "@/lib/api/screener";
 import type { RelativePerformanceResponse, RelativePerformanceTimeframe } from "@/lib/types/screener";
@@ -14,10 +15,6 @@ const TIMEFRAME_LABELS: Record<RelativePerformanceTimeframe, string> = {
   ytd: "YTD",
 };
 
-// Watchlist-coins-only palette — cycled by index. The active benchmark is
-// deliberately not plotted on this chart (SPEC Constraints, user-confirmed).
-const PALETTE = ["#2962ff", "#ff9800", "#26a69a", "#ef5350", "#ab47bc", "#8d6e63", "#26c6da", "#9ccc65"];
-
 export interface RelativePerformanceChartProps {
   fetchData?: (timeframe: RelativePerformanceTimeframe) => Promise<RelativePerformanceResponse>;
   initialTimeframe?: RelativePerformanceTimeframe;
@@ -25,12 +22,12 @@ export interface RelativePerformanceChartProps {
 
 /**
  * Amendment 1 (SPEC US-8, AC-14/AC-15). This is the one deliberate exception
- * to the small-multiples pattern: a SINGLE `createChart` instance (not one
- * per coin), with one line series per watchlist coin added via
- * `chart.addSeries(LineSeries, ...)` on that same instance (v5's confirmed
- * multi-series-on-one-instance API — re-confirmed here per the VALIDATE
- * finding on item 29d, distinct from `MiniChart`'s one-instance-per-panel
- * pattern).
+ * to the small-multiples pattern: a SINGLE plot (not one per coin), with one
+ * line per available watchlist coin, all handed to one island mount. Line
+ * building and colour assignment live in lib/relative-performance-lines.ts,
+ * where they are unit-tested (the watchlist coins only, cycling the validated
+ * categorical palette; the active benchmark is deliberately not plotted, per
+ * SPEC Constraints, user-confirmed).
  */
 export function RelativePerformanceChart({
   fetchData = fetchRelativePerformance,
@@ -40,8 +37,6 @@ export function RelativePerformanceChart({
   const [data, setData] = useState<RelativePerformanceResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
 
   useEffect(() => {
     let cancelled = false;
@@ -57,60 +52,40 @@ export function RelativePerformanceChart({
     };
   }, [timeframe, fetchData]);
 
-  // Exactly one createChart call per mount, regardless of watchlist size
-  // (the mechanical guard from item 29d).
+  // One plot for the whole watchlist, not one per coin — the deliberate
+  // exception to the small-multiples pattern (SPEC US-8, AC-14/AC-15). The
+  // island takes every line at once, so that guard is now structural rather
+  // than a rule about how many times createChart may be called.
+  const lines = useMemo(() => buildRelativeLines(data?.series ?? []), [data]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const chart = createChart(container, {
-      height: 320,
-      width: container.clientWidth,
-      layout: { background: { color: "transparent" }, textColor: "#8a8f98" },
-      rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false },
-    });
-    chartRef.current = chart;
 
-    const handleResize = () => {
-      if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth });
-    };
-    window.addEventListener("resize", handleResize);
+    let disposed = false;
+    let dispose: (() => void) | undefined;
+
+    loadIslands()
+      .then((api) => {
+        if (disposed) return;
+        dispose = api.mountSimpleLines(container, {
+          series: lines,
+          height: 320,
+          // `close` is the API's % change from the window start, so the axis
+          // says so rather than showing a bare number.
+          format: formatPercentChange,
+          label: `Relative performance over ${TIMEFRAME_LABELS[timeframe]}`,
+        });
+      })
+      .catch(() => {
+        // The unavailable-coin notes still explain what is missing and why.
+      });
 
     return () => {
-      window.removeEventListener("resize", handleResize);
-      chart.remove();
-      chartRef.current = null;
-      seriesRef.current.clear();
+      disposed = true;
+      dispose?.();
     };
-  }, []);
-
-  // One line series per available coin, added to the single shared instance.
-  useEffect(() => {
-    const chart = chartRef.current;
-    if (!chart || !data) return;
-
-    for (const series of seriesRef.current.values()) {
-      chart.removeSeries(series);
-    }
-    seriesRef.current.clear();
-
-    data.series
-      .filter((s) => s.available)
-      .forEach((s, idx) => {
-        const line = chart.addSeries(LineSeries, {
-          color: PALETTE[idx % PALETTE.length],
-          lineWidth: 2,
-          title: s.symbol,
-        });
-        line.setData(
-          s.points.map((p) => ({
-            time: Math.floor(new Date(p.timestamp).getTime() / 1000) as UTCTimestamp,
-            value: p.close,
-          }))
-        );
-        seriesRef.current.set(s.symbol, line);
-      });
-  }, [data]);
+  }, [lines, timeframe]);
 
   const unavailableCoins = data?.series.filter((s) => !s.available) ?? [];
 
@@ -131,6 +106,22 @@ export function RelativePerformanceChart({
       </div>
 
       {error && <DeadDataNotice testId="rp-error" message={error} />}
+
+      {/* Which line is which. Before the conversion each coin's symbol rode its
+          own price-axis title; without this a multi-coin chart cannot be read.
+          On the light strip, because the glyph colours are plot colours. */}
+      {lines.length > 0 && (
+        <div className="plot-legend" data-testid="rp-legend">
+          {lines.map((l) => (
+            <span key={l.key} data-testid={`rp-legend-${l.key}`}>
+              <span className="legend-glyph" style={{ color: l.color }} aria-hidden="true">
+                ―
+              </span>{" "}
+              <span className="plot-legend__label">{l.key}</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       <div ref={containerRef} data-testid="rp-chart-container" />
 

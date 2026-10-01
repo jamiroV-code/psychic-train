@@ -1,9 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { render, screen } from "@testing-library/react";
 
-vi.mock("lightweight-charts", () => import("@/test/mocks/lightweight-charts"));
-
-import { mockCharts, resetMockCharts } from "@/test/mocks/lightweight-charts";
 import { PairDetailView } from "@/components/pairs/PairDetailView";
 import { OPTIMISM_NOTE } from "@/lib/format-pairs-value";
 import { DISCLOSURE, detailResponse, okDetail } from "@/components/pairs/__tests__/fixtures";
@@ -12,8 +9,6 @@ import type { PairDetailResponse } from "@/lib/types/pairs";
 function renderWith(data: PairDetailResponse) {
   return render(<PairDetailView a="DOGE" b="BCH" fetchData={() => Promise.resolve(data)} />);
 }
-
-beforeEach(() => resetMockCharts());
 
 describe("PairDetailView", () => {
   it("shows both EG directions and the Johansen block at the same time, never merged (AC-6)", async () => {
@@ -46,18 +41,15 @@ describe("PairDetailView", () => {
     expect(screen.getByTestId("pairs-bh-p")).toHaveTextContent("0.087");
   });
 
-  it("plots every spread point unchanged, over the sample window (AC-7 unit level)", async () => {
-    const pair = okDetail();
-    renderWith(detailResponse(pair));
+  it("mounts the spread chart and captions the plotted window (AC-7 unit level)", async () => {
+    renderWith(detailResponse(okDetail()));
     await screen.findByTestId("pairs-spread-chart");
-    // SpreadChart creates the chart in a useEffect that can land after findBy* resolves.
-    await waitFor(() => expect(mockCharts).toHaveLength(1));
-    const series = mockCharts[0].series;
-    expect(series).toHaveLength(1);
-    const data = series[0].data as { time: string; value: number }[];
-    expect(data).toEqual(pair.spread.map((p) => ({ time: p.date, value: p.spread })));
-    expect(data[0].time).toBe(pair.sample_start);
-    expect(data[data.length - 1].time).toBe(pair.sample_end);
+    // The chart is now a Svelte/LayerChart island, mounted in an effect from
+    // public/islands/ and not loaded under jsdom. The guarantee this test used
+    // to carry — every spread point plotted unchanged, first and last on the
+    // sample-window edges — moved to lib/__tests__/pairs-spread-series.test.ts,
+    // where it is asserted against the real mapping instead of a mocked chart
+    // library, and so survives the library underneath it changing.
     expect(screen.getByTestId("pairs-chart-range")).toHaveTextContent("Plotted: 2020-09-24 → 2020-09-27 (4 points)");
   });
 
@@ -93,7 +85,6 @@ describe("PairDetailView", () => {
     );
     expect(screen.queryByTestId("pairs-spread-chart")).toBeNull();
     expect(screen.queryByTestId("pairs-eg-a-on-b")).toBeNull();
-    expect(mockCharts).toHaveLength(0);
   });
 
   it("shows the stale banner on the detail view", async () => {

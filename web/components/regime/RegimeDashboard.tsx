@@ -6,16 +6,20 @@ import { DrillDown } from "@/components/regime/DrillDown";
 import { Readout } from "@/components/regime/Readout";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
 import { fetchRegimeComponents } from "@/lib/api/regime";
-import { createChartSync, defaultVisibleRange } from "@/lib/regime-chart-sync";
+import { SERIES } from "@/lib/chart-palette";
+import { defaultVisibleRange } from "@/lib/regime-chart-sync";
+ import { loadIslands, type IslandApi, type PanelSyncStore } from "@/lib/island-loader";
 import { formatRegimeStatus } from "@/lib/format-regime-value";
 import { buildRegimeGridModel } from "@/lib/regime-view-model";
 import type { RegimeComponentsResponse } from "@/lib/types/regime";
 
-// Screener palette (hard-coded, no theme toggle — decision 8).
-const COMPONENT_COLOR = "#2962ff";
-const REPRODUCED_COLOR = "#2962ff";
-const PUBLISHED_COLOR = "#ff9800";
-const RESERVED_COLUMN_PX = 280;
+// Canvas marks cannot read a CSS custom property, so the series colours come
+// from the shared constants rather than from globals.css directly; a test keeps
+// the two in step (lib/__tests__/chart-palette.test.ts). No theme toggle —
+// decision 8.
+const COMPONENT_COLOR = SERIES.primary;
+const REPRODUCED_COLOR = SERIES.primary;
+const PUBLISHED_COLOR = SERIES.secondary;
 
 export interface RegimeDashboardProps {
   fetchData?: () => Promise<RegimeComponentsResponse>;
@@ -55,16 +59,35 @@ export function RegimeDashboard({ fetchData = () => fetchRegimeComponents() }: R
 
   const model = useMemo(() => (data ? buildRegimeGridModel(data) : null), [data]);
 
-  const sync = useMemo(
+  // The chart islands are built by Vite and fetched at runtime, so the store
+  // they share cannot exist until that module has loaded.
+  const [island, setIsland] = useState<IslandApi | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    loadIslands()
+      .then((api) => {
+        if (!cancelled) setIsland(api);
+      })
+      .catch(() => {
+        // Panels render their header, notices and drill-down regardless; a
+        // chart bundle that cannot load must not blank the page.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const sync: PanelSyncStore | null = useMemo(
     () =>
-      model
-        ? createChartSync({
+      island && model
+        ? island.createPanelSync({
+            gridDates: model.gridDates,
             gridTimes: model.gridTimes,
             initialRange: defaultVisibleRange(model.gridDates),
             onHover: setHoverIndex,
           })
         : null,
-    [model]
+    [island, model]
   );
 
   const panels = useMemo(() => {
@@ -144,14 +167,21 @@ export function RegimeDashboard({ fetchData = () => fetchRegimeComponents() }: R
   }
 
   return (
-    <div
-      data-testid="regime-dashboard"
-      style={{ display: "grid", gridTemplateColumns: `minmax(0, 1fr) ${RESERVED_COLUMN_PX}px`, gap: 16 }}
-    >
+    // Layout moved to CSS (`.regime-layout`) so the reserved column can collapse
+    // on narrower viewports. An inline style cannot express a media query, and
+    // holding 280px for an empty box squeezes the plot area enough to shorten
+    // the default three-year window — see globals.css §8.
+    <div data-testid="regime-dashboard" className="regime-layout">
       <div>
         <Readout model={model} composite={data.composite} hoverIndex={hoverIndex} />
         {panels.map((p) => (
-          <ComponentPanel key={p.panelId} {...p} gridTimes={model.gridTimes} sync={sync} />
+          <ComponentPanel
+            key={p.panelId}
+            {...p}
+            gridTimes={model.gridTimes}
+            gridDates={model.gridDates}
+            sync={sync}
+          />
         ))}
       </div>
       {/* Reserved for the future insights text box (plan §2) — intentionally empty. */}
