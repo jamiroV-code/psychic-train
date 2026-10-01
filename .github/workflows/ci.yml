@@ -1,0 +1,89 @@
+name: CI
+
+# Runs the checks a contributor runs locally, on every pull request and on pushes to main.
+#
+# Why this exists (MASTER-PLAN T13): three lanes totalling ~37 commits were merged on 2026-10-01
+# with zero automated checks on any of the PRs. They were verified by hand. That does not scale.
+#
+# Deliberately NOT here:
+#   * Playwright E2E — needs api/scripts/seed_e2e_cache.py, a browser download, and the
+#     PLAYWRIGHT_CHROMIUM_PATH pin this project keeps hitting; it also carries a known
+#     intermittent flake (process/general-plans/backlog/screener-weekly-bars-flake_NOTE_28-09-26.md).
+#     A gate that fails randomly on day one teaches people to ignore the gate. Run it locally
+#     (`cd web && pnpm test:e2e`) until that flake is root-caused, then add a job here.
+#   * A linter / formatter — this repo has none configured (no eslint, prettier, ruff or black).
+#     Adding one means choosing a rule set and fixing whatever it finds, which is its own change
+#     with its own opinions, not a CI wiring task.
+#   * The `integration`-marked pytest tests — they hit real providers over the network and are
+#     deselected by default via `addopts` in api/pyproject.toml. Leave them opt-in.
+#
+# Unlike the five snapshot workflows, this one needs no write access and SHOULD cancel superseded
+# runs: it produces no archive and a stale result is worthless.
+on:
+  pull_request:
+  push:
+    branches: [main]
+    # The nightly snapshot bots push to main most days touching only cached data. Running the
+    # suites against a parquet-only commit proves nothing, so skip those.
+    paths-ignore:
+      - 'api/data/cache/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: api — pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+
+      # pyproject.toml and .venv live in api/, while module paths (api.main:app) resolve from the
+      # repo root — hence `--project api` with the command run from the root, never a `cd`.
+      - name: Install api/ dependencies
+        run: uv sync --project api
+
+      - name: pytest
+        run: uv run --project api pytest api/ -q
+
+  web:
+    name: web — vitest, tsc, island build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      # `pnpm install` from the repo root does NOT work: there is no root package.json for it to
+      # resolve against. It has to run inside web/. Documented in process/context/tests/all-tests.md.
+      - name: Install web/ dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: vitest
+        run: pnpm --filter web test
+
+      - name: tsc
+        run: pnpm --filter web exec tsc --noEmit
+
+      # Direction D (01-10-26) builds the Svelte/LayerChart chart islands through a separate vite
+      # config, and `pnpm build` runs it ahead of `next build`. A broken island build would
+      # otherwise only show up at deploy time on the user's PC.
+      - name: build islands
+        working-directory: web
+        run: pnpm build:islands

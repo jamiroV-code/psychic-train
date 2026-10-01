@@ -24,7 +24,13 @@ $env:SCREENER_CORS_ORIGINS = ($origins -join ',')
 if ($config.CacheRoot) { $env:SCREENER_CACHE_ROOT = [string]$config.CacheRoot }
 if ($config.WatchlistPath) { $env:SCREENER_WATCHLIST_PATH = [string]$config.WatchlistPath }
 
-$apiArgs = @('run', '--project', 'api', 'uvicorn', 'api.main:app', '--host', $ip, '--port', [string]$config.ApiPort)
+# `python -m uvicorn`, NOT `uvicorn` — verified on the user's Windows PC 01-10-26.
+# `uv run --project api uvicorn ...` fails there with "uv trampoline failed to canonicalize
+# script path": uv installs console scripts as Windows trampoline .exe shims, and launching that
+# shim through `uv run` could not resolve its own path. Going through the module entry point skips
+# the shim entirely and works. Same process, same binding — this is a launcher-only change.
+# Pinned by api/tests/deploy/test_deploy_config_shape.py so it cannot regress.
+$apiArgs = @('run', '--project', 'api', 'python', '-m', 'uvicorn', 'api.main:app', '--host', $ip, '--port', [string]$config.ApiPort)
 
 if ($DryRun) {
     Write-Host "DRY RUN (nothing started)"

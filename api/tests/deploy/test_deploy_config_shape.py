@@ -306,3 +306,24 @@ def test_readme_migration_has_verification_and_rebuild_fallback():
     assert "2020-08-19" in section and "unverified" in section.lower(), (
         "the Hyperliquid history floor is unconfirmed and must be stated as such"
     )
+
+
+def test_start_api_launches_uvicorn_via_python_module_not_the_console_script():
+    """Regression guard for the Windows uv-trampoline failure (found 01-10-26).
+
+    `uv run --project api uvicorn ...` fails on the user's Windows PC with
+    "uv trampoline failed to canonicalize script path" — uv installs console scripts as
+    trampoline .exe shims and launching one through `uv run` could not resolve its own path.
+    `uv run --project api python -m uvicorn ...` works. This pins the module form so an
+    innocent-looking tidy-up cannot reintroduce a launcher that only fails on the real machine,
+    which is the one place CI cannot reach (no PowerShell, no Windows, no Tailscale here).
+    """
+    args = _read("start-api.ps1")
+    assert "'python', '-m', 'uvicorn'" in args, (
+        "start-api.ps1 must invoke uvicorn as `python -m uvicorn` — the bare `uvicorn` console "
+        "script triggers the uv trampoline failure on Windows"
+    )
+    # The bare console-script form must not come back: `'api', 'uvicorn'` is how it looked before.
+    assert "'api', 'uvicorn'" not in args, (
+        "start-api.ps1 is back on the bare `uvicorn` console script; use `python -m uvicorn`"
+    )
