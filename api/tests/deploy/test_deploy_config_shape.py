@@ -206,3 +206,103 @@ def test_readme_pins_required_operator_facts():
     assert "_atomic_to_parquet" in text, "stage B gate (G-STAGEB) must be named"
     assert "pull, then optionally recompute" in lower
     assert "api/scripts/BOOTSTRAP.md" in text and "available once P1 merges" in text
+
+
+# --- Migration to a different PC (README section added 01-10-26) -------------
+
+MIGRATION_MUST_COPY = (
+    r"api\data\cache\ohlcv",
+    r"api\data\cache\liquidity",
+    r"api\data\cache\pairs",
+    r"api\data\watchlist.json",
+    r"api\data\cache\narrative\coingecko_trending.parquet",
+)
+
+
+def _migration_section() -> str:
+    """The README text from the migration heading up to the next top-level heading."""
+    text = _read("README.md")
+    start = text.find("## Moving to a different PC")
+    assert start != -1, "README must document moving to a different PC (cache migration)"
+    nxt = text.find("\n## ", start + 1)
+    return text[start:] if nxt == -1 else text[start:nxt]
+
+
+def test_readme_has_migration_section():
+    section = _migration_section()
+    assert "migration" in section.lower()
+    assert len(section.splitlines()) > 30, "the migration section must be a real runbook, not a stub"
+
+
+def test_readme_migration_names_every_must_copy_path():
+    section = _migration_section()
+    for path in MIGRATION_MUST_COPY:
+        assert path in section, f"migration section must name the gitignored path {path!r}"
+
+
+def test_readme_migration_marks_next_build_as_must_not_copy():
+    section = _migration_section()
+    lower = section.lower()
+    assert r"web\.next" in section, "migration section must name web\\.next"
+    assert "next_public_api_base_url" in lower, "the baked-URL reason must be named"
+    assert "baked" in lower
+    assert "build-web.ps1" in section, "the new PC must re-run build-web.ps1"
+    assert "deploy.psd1" in section, "the operator config must be recreated on the new PC"
+    for rebuild_not_copy in (".venv", "node_modules", "__pycache__", "tsconfig.tsbuildinfo"):
+        assert rebuild_not_copy in section, f"migration section must forbid copying {rebuild_not_copy}"
+
+
+def test_readme_migration_says_legs_cache_is_not_needed():
+    section = _migration_section()
+    assert r"api\data\cache\legs" in section, "migration section must mention the legs cache"
+    assert "write_confirmed_boundaries" in section, "say plainly why legs/ is dead weight"
+    assert "dead weight" in section.lower()
+
+
+def test_readme_migration_states_pairs_staleness_rule():
+    section = _migration_section()
+    assert "statsmodels" in section
+    assert "0.15.0" in section, "uv.lock pins statsmodels 0.15.0 exactly"
+    assert "compute_pairs" in section, "the stale fix is one compute_pairs run"
+    assert "stale" in section.lower()
+    assert "provenance.json" in section, "explain that provenance holds no absolute path"
+
+
+def test_readme_migration_lists_paths_that_arrive_with_git_clone():
+    section = _migration_section()
+    for tracked in (r"api\data\cache\liqtide", r"api\data\cache\onchain"):
+        assert tracked in section, f"migration section must say {tracked} needs no copy"
+    assert "clone" in section.lower()
+
+
+def test_readme_migration_orders_tailscale_before_config_before_build():
+    """The step rows must run: get the new Tailscale address -> write the config -> rebuild."""
+    rows = [line for line in _migration_section().splitlines() if re.match(r"\|\s*M\d+\s*\|", line)]
+    assert len(rows) >= 8, f"expected a numbered migration step table, found {len(rows)} rows"
+    ip_row = next(i for i, r in enumerate(rows) if "tailscale.exe" in r and "ip -4" in r)
+    config_row = next(i for i, r in enumerate(rows) if "deploy.psd1" in r)
+    build_row = next(i for i, r in enumerate(rows) if "build-web.ps1" in r)
+    assert ip_row < config_row < build_row, (
+        "order must be: new Tailscale address -> recreate deploy.psd1 -> rebuild the web app"
+    )
+
+
+def test_readme_migration_requires_services_stopped_and_old_pc_retired():
+    section = _migration_section()
+    lower = section.lower()
+    assert "stop-scheduledtask" in lower, "copy with both services stopped on the old PC"
+    assert "register-tasks.ps1 -Remove" in section, "the old PC must stop serving"
+    assert "sign the old pc out of tailscale" in lower or "sign out of tailscale" in lower
+
+
+def test_readme_migration_has_verification_and_rebuild_fallback():
+    section = _migration_section()
+    assert "computation_status" in section and "fresh" in section
+    assert "grid_dates" in section
+    assert "refresh_cache" in section and "backfill_primaries" in section
+    assert "backfill_pairs_universe" in section
+    assert "watchlist.example.json" in section, "this branch has no bootstrap script"
+    assert "available once P1 merges" in section
+    assert "2020-08-19" in section and "unverified" in section.lower(), (
+        "the Hyperliquid history floor is unconfirmed and must be stated as such"
+    )

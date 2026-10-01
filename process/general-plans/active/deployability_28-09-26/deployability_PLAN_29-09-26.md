@@ -25,11 +25,37 @@ Context router: `process/context/all-context.md`; testing context `process/conte
 
 | Question | Answer |
 |---|---|
-| Hosting | The author's own PC (~$0/month, electricity only) — the same machine that already holds the gitignored `ohlcv/`, `liquidity/`, `pairs/`, `legs/` caches |
+| Hosting | The author's own PC (~$0/month, electricity only). **Premise amended 01-10-26 — see the note below: the box is NOT necessarily the machine that already holds the gitignored caches.** |
 | Access gate | Tailscale, free personal tier |
 | Always on? | **No.** Intermittently available; design for downtime |
 
-Consequences already worked out in the SPEC: no public endpoint ever exists; volume sizing is moot; the cache split-brain does not apply to Phase 1 (nothing to move).
+Consequences already worked out in the SPEC: no public endpoint ever exists; volume sizing is moot.
+
+### PREMISE AMENDED 01-10-26 — the target box is a DIFFERENT Windows PC (cache migration is live)
+
+The user cannot use the original PC and is moving to a **different Windows PC**. The old PC is
+still bootable and files can be copied off it. That voids the earlier "same PC that already
+holds the gitignored caches" premise and **activates the SPEC's Phase 2 cache-migration
+problem**: the gitignored `ohlcv/`, `liquidity/`, `pairs/` caches and `watchlist.json` do not
+arrive with a `git clone` and must be copied by hand. The sentence "the cache split-brain does
+not apply to Phase 1 (nothing to move)" is withdrawn — there is something to move.
+
+Nothing in section A changes: no `deploy/*.ps1` script needs editing, because the copy is a
+manual operator step. What changes is documentation and its shape tests: `deploy/README.md`
+gains a `## Moving to a different PC (cache migration)` runbook, section B gains the
+migration steps **M0-M10** below, and `api/tests/deploy/test_deploy_config_shape.py` gains 9
+tests pinning the new README facts. The most important new fact for the operator is that
+`web/.next` must NOT be copied (F2: the OLD PC's Tailscale address is baked into it), and
+that `%LOCALAPPDATA%\my_site\deploy.psd1` must be recreated with the new machine's paths.
+
+Portability was verified, not assumed: no persisted cache file stores an absolute path
+(`api/data/cache/pairs/provenance.json` stores only `computed_at`, `universe`,
+`per_coin_last_bar_date`, `per_coin_bar_count`, `statsmodels_version`, `eg_autolag` —
+`api/analytics/cointegration/pairs_response.py:186-194`), so a copied cache works at any repo
+location on any machine. The one data-level gotcha is that `/pairs` reports `stale` (flagged,
+never wrong) if the installed `statsmodels` differs from the version the copied results were
+computed with; `api/uv.lock` pins **0.15.0** exactly, so `uv sync --project api` reproduces it,
+and one `compute_pairs` run (~56s) fixes any mismatch.
 
 ### Research findings established this session (ground truth — cited, not re-derived)
 
@@ -301,6 +327,43 @@ Run from a normal (non-elevated) PowerShell in the repo root, on the PC that hol
 | **B16** Rollback (any time) | `powershell -NoProfile -ExecutionPolicy Bypass -File deploy\register-tasks.ps1 -Remove`; stop leftover windows; optionally sign out of Tailscale | Tasks gone; nothing listens on the tailnet IP | A process lingers: `Get-Process uvicorn,node -ErrorAction SilentlyContinue \| Stop-Process` |
 | **B17** Report back | Tell the agent which steps passed; paste any failure output | On confirmation of B8-B14 the plan is marked `VERIFIED` | — |
 
+### Section B-M — MIGRATION to a different Windows PC (USER-PC ONLY, added 01-10-26)
+
+Run these **instead of starting at B1** when the target box is not the machine that already
+holds the caches. The old PC is bootable, so the caches are copied, not rebuilt. Same house
+style: command, expected observable, what to do if it fails. The full operator-facing version
+(with the must-copy table and the warning box) is `deploy/README.md` §"Moving to a different
+PC (cache migration)"; this table is the plan-side mirror.
+
+**Order is load-bearing:** clone -> prereqs -> copy caches -> Tailscale on the new PC (new IP)
+-> recreate `deploy.psd1` -> `build-web.ps1` (bakes the NEW IP) -> start -> verify. Copy with
+BOTH services stopped on the old PC so nothing is mid-write.
+
+| Step | Command | Expected | If it fails |
+|---|---|---|---|
+| **M0** Quiesce the old PC | On the OLD PC: `Stop-ScheduledTask mysite-api; Stop-ScheduledTask mysite-web`; close any foreground windows | Nothing is writing to `api\data` | A process lingers: `Get-Process uvicorn,node -ErrorAction SilentlyContinue \| Stop-Process` |
+| **M1** Record the baseline | On the OLD PC: `foreach($d in 'ohlcv','liquidity','pairs'){ $f=Get-ChildItem "api\data\cache\$d" -Recurse -File; "$d files=$($f.Count) MB=$([math]::Round(($f \| Measure-Object Length -Sum).Sum/1MB,2))" }` | Three lines, non-zero counts. Write them down (M6 compares) | A 0 count means that cache was never built there — use the rebuild fallback for it |
+| **M2** New PC: prereqs + clone | Install git, uv, pnpm + Node, Python 3.12 (`api\.python-version`), Tailscale. `git clone <repo URL>`, `cd` in | Repo present; `git log -1` recent | `where.exe uv` / `where.exe pnpm` prints nothing: install it first |
+| **M3** New PC: dependencies | `uv sync --project api`; `cd web; pnpm install --frozen-lockfile; cd ..` | Both succeed; `statsmodels` resolves to the pinned 0.15.0 | Network error: retry (these need internet) |
+| **M4** Copy the gitignored data | Copy from OLD to NEW: `api\data\cache\ohlcv\`, `api\data\cache\liquidity\`, `api\data\cache\pairs\`, `api\data\watchlist.json`, optionally `api\data\cache\narrative\coingecko_trending.parquet`. Copy NOTHING else from `api\data`. Never copy the Python virtualenv folder, `node_modules\`, `web\.next\`, `__pycache__\`, `web\tsconfig.tsbuildinfo` | The five paths exist on the new PC. `liqtide/`, `narrative/` (bar that one file) and `onchain/` arrived with the clone; `legs/` is dead weight (no non-test caller of `cache.write_confirmed_boundaries` / `read_confirmed_boundaries`, MASTER-PLAN T18) and is skipped | No `watchlist.json` on the old PC: `Copy-Item api\data\watchlist.example.json api\data\watchlist.json` (BTC, HYPE, ETH, SOL) |
+| **M5** New PC: Tailscale | Install, sign in with the SAME account, then `& "C:\Program Files\Tailscale\tailscale.exe" ip -4` | One NEW `100.` address, different from the old PC's. Write it down | Empty/error: sign in from the tray icon |
+| **M6** Prove the copy arrived | Re-run the M1 command on the NEW PC and compare | Same file counts and sizes as M1 | Mismatch: re-copy that folder (a partial copy is worse than none) |
+| **M7** Recreate the config | `New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\my_site"; Copy-Item deploy\config.example.psd1 "$env:LOCALAPPDATA\my_site\deploy.psd1"`, then edit `RepoRoot`, `UvPath`, `PnpmPath`, `TailscaleExe` for THIS machine. Leave `CacheRoot`/`WatchlistPath` empty | All paths absolute and pointing at the new PC | Do not reuse the old file verbatim — its paths and IP are wrong |
+| **M8** Rebuild the web app (F2) | `powershell -NoProfile -ExecutionPolicy Bypass -File deploy\build-web.ps1`, then `Select-String -Path "web\.next\static\*" -Pattern 'http://100\.' -Recurse -List` | At least one file contains the NEW `http://<new ip>:8000`, never the old address | The OLD address appears: `web\.next` was copied — `Remove-Item web\.next -Recurse -Force` and rebuild |
+| **M9** Join the normal checklist | Continue at **B5** (parse check), then B6, B7b, B8-B15 | As documented in section B | As documented there |
+| **M10** Verify the data is READ, not just present | With the API up: (a) `(Invoke-RestMethod "http://<new ip>:8000/api/pairs").computation_status`; (b) `(Invoke-RestMethod "http://<new ip>:8000/api/regime/components").grid_dates.Count`; (c) open `http://<new ip>:3000/screener`; (d) `Invoke-RestMethod "http://<new ip>:8000/api/watchlist"` | (a) `fresh` — not `results_unavailable`, not `stale`; (b) well above 0; (c) coin panels with price history; (d) your own coins, not only the four defaults | (a) `results_unavailable`: re-copy `pairs\`. `stale`: check `statsmodels` is 0.15.0, then run `uv run --project api python -m api.scripts.compute_pairs` (~56s). (b) 0: re-copy `liquidity\`. (c) empty: re-copy `ohlcv\`. (d) defaults only: re-copy `watchlist.json` |
+| **M11** Retire the old PC | On the OLD PC: `powershell -NoProfile -ExecutionPolicy Bypass -File deploy\register-tasks.ps1 -Remove`; then sign the old PC out of Tailscale (or remove that device in the admin console) | The old PC serves nothing and is off the tailnet | A task lingers: delete it in Task Scheduler by hand |
+
+**Rebuild fallback (only if a copy is missed or the old PC dies).** Nothing is permanently
+lost: `refresh_cache.py` (shallow OHLCV), `backfill_pairs_universe.py` (one-time deep OHLCV,
+never automatic), `backfill_primaries.py` (FRED) and `compute_pairs.py` (derived, run last) all
+exist on this branch. The watchlist is seeded by copying `api/data/watchlist.example.json`;
+`api/scripts/bootstrap_watchlist.py` and `api/scripts/BOOTSTRAP.md` live only on the unmerged
+`claude/p1-pipeline` branch ("available once P1 merges", commands deliberately not copied).
+**Unverified, and the concrete reason to prefer copying:** whether a fresh deep fetch on the
+new machine reaches the same ~2020-08-19 Hyperliquid daily-history floor. That floor looks
+server-side but is unconfirmed against Hyperliquid's docs (existing known gap).
+
 ---
 
 ## Verification Evidence
@@ -518,6 +581,28 @@ Recorded at EXECUTE 29-09-26 (all within the allowlist; full detail in `deployab
 - Offline stubs also cover FRED, DefiLlama and Farside (reached by `/api/regime/components`), not only ccxt and the narrative adapters.
 
 **Section A status (29-09-26): CODE DONE, not VERIFIED.** Section B not run.
+
+### Scoped supplement 01-10-26 — different-PC migration (documentation + shape tests only)
+
+The user's target box changed to a **different Windows PC** (old PC still bootable, files
+copyable), which voided the same-PC premise and activated the SPEC's Phase 2 cache-migration
+problem. Applied, all inside the existing allowlist:
+
+- `deploy/README.md` — new `## Moving to a different PC (cache migration)` section: must-copy
+  table (`ohlcv/`, `liquidity/`, `pairs/`, `watchlist.json`, optional
+  `narrative/coingecko_trending.parquet`), what arrives with `git clone`, `legs/` as dead
+  weight, a bordered MUST-NOT-COPY box for `web/.next` (baked-URL trap, F2) plus the
+  virtualenv/`node_modules`/`__pycache__`/`tsconfig.tsbuildinfo` list, portability evidence,
+  the statsmodels/`compute_pairs` staleness rule, prerequisites, ordered steps M0-M10, a
+  data-is-actually-read verification table, and the full-rebuild fallback.
+- Plan `## Overview` — premise note above; the "nothing to move" sentence withdrawn.
+- Plan section B — new `### Section B-M` table (M0-M11), the plan-side mirror of the runbook.
+- `api/tests/deploy/test_deploy_config_shape.py` — 9 new text-shape tests pinning the above
+  (red before green: all 9 fail with the README section removed).
+
+No `.ps1`, `api/main.py`, `web/`, `api/scripts/`, workflow, `.gitignore`, `cache.py` or
+context-doc edit was needed or made — the copy is a manual operator step. Section A remains
+`CODE DONE, not VERIFIED`; the migration steps are Agent-Probe (user-run) and are not claimed.
 
 ## Autonomous Goal Block
 
