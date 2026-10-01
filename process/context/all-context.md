@@ -74,6 +74,54 @@ Final full suite: **820 passed / 5 deselected** (714 at baseline → 789 → 817
   Hyperliquid, FRED) was run from this container; first real nightly run is the first live check.
   Closeout: `pipeline-completeness_CLOSEOUT_01-10-26.md` in the task folder.
 
+## Changes Since Last Update (2026-10-01, three lanes merged: pipeline + deploy + Direction D)
+
+Three parallel lanes merged into `main` the same day — PR #11 (pipeline), #10 (deploy), #9 (UI).
+They were developed on disjoint blast radii and merged with **zero conflicts**; the only shared file
+was `.gitignore`, additively on both sides. Post-merge gates, run together rather than per-branch:
+**866 passed / 1 skipped / 5 deselected / 1 xfailed** pytest (was 714/5), **223 passed / 30 files**
+vitest (was 181/22), `tsc --noEmit` exit 0, and `pnpm build:islands` succeeds.
+
+- `[Product]` **Direction D — the charting stack was replaced (user-directed).** `lightweight-charts`
+  removed; charts are now `layerchart` as **Svelte 5 islands** built by a separate vite step. Adds a
+  real app shell for the first time (`AppNav`, `OwlMark` brand mark, design tokens, Tailwind 4,
+  Skeleton) where before there were five routes with no navigation, no global stylesheet, and inline
+  `style={{}}` in 24 files. Every chart on all five routes was converted. ADR-1 (islands, not
+  SvelteKit) is in `process/general-plans/active/ui-shell_28-09-26/ui-shell_DIRECTION-D_28-09-26.md`,
+  alongside a 520-line UI audit and rendered prototypes. **Measured cost:** 185 kB gzipped of chart
+  runtime vs `lightweight-charts`' 54 kB — ~3.4×. See §Technology Stack.
+- `[Product]` **Deployment resolved: home PC + Tailscale.** See §Technology Stack and `deploy/`.
+  The licensing angle matters here — Farside, L2BEAT and Hyperliquid are all tagged
+  non-redistributable, and a network-layer gate means the app is never on the open internet, which
+  is the *strongest* available position on that constraint rather than merely an adequate one.
+- `[Product]` **The three unscheduled refresh jobs are now scheduled** —
+  `pairs-refresh-snapshot.yml` and `liquidity-backfill-snapshot.yml` join the three existing
+  snapshots. Their commit steps are honestly documented as **inert** while `ohlcv/`, `liquidity/`
+  and `pairs/` stay gitignored on an ephemeral runner; their present value is a nightly integration
+  canary. A hard rule was recorded and honoured: **any job whose source keeps no history stays on
+  GitHub Actions** (narrative, liqtide, chain-growth), because moving them to a PC that sleeps would
+  turn every powered-off night into a permanent hole.
+- `[Correction]` **Every parquet write in `cache.py` is now atomic** (temp-then-rename, the pattern
+  the two JSON writers already used). Before this, a write cut off mid-flight could **truncate a file
+  and destroy existing history**, not merely lose the new row — and the gitignored caches have no git
+  copy to restore from. Latent for months; became a live risk the moment the deploy target became an
+  intermittently-powered home PC.
+- `[Correction]` **All five snapshot crons moved to 11:17–13:17 UTC**, plus a guard that warns when a
+  run crosses UTC midnight. The previous 18:17 narrative slot came within **41 minutes** of losing a
+  day: run #5 on 09-28 started 23:18:44Z after a **5h01m** scheduler delay. Observed delays are
+  2h03m, 3h06m, 5h01m, 4h01m, 4h01m — **variance, not a trend**, and the earlier "~2h20m" figure in
+  this repo's docs was simply too optimistic. The schedule guard test can only pin the *scheduled*
+  time, never the observed delay, which is why the midnight-crossing warning exists.
+- `[Product]` Live confirmation that the pytrends partial-hour fix works on real data, three nights
+  running: `AI crypto` 27/72/50, `memecoin` 51/84/85, `pytrends-blended/ai` 13.5/38.5/25.0.
+- `[Finding]` **`layer 2 crypto` / `l2s` returns 0.0 on every night observed**, across both the
+  unbatched and batched paths. An earlier guess that `RWA crypto` was likewise too low-volume is
+  **refuted** — it returned 74.0 on 09-29. Separately and more interestingly: that same night
+  `pytrends/RWA crypto` was 74.0 while `pytrends-blended/rwa` was **0.0 written as `fresh`**. Anchor
+  chaining can legitimately rescale a term to ~0 against a larger anchor, so the arithmetic may be
+  right — but a `0.0` that means "below the anchor's resolution" has the same *shape* as the bug just
+  fixed. Confirm RFC-1's sufficiency gating surfaces these as `insufficient`. Not fixed.
+
 ## Changes Since Last Update (2026-09-28, narrative-v2 EVL confirmation — narrative-mindshare)
 
 Plan: `process/features/narrative-mindshare/active/narrative-v2_25-09-26/narrative-v2_PLAN_25-09-26.md`
@@ -778,8 +826,20 @@ The web/api split is deliberate: see the first entry under Key Patterns.
 Confirmed installed/configured as of 2026-09-20 (versions from `web/package.json` /
 `api/pyproject.toml`), not just decided.
 
-- **Frontend:** Next.js 15.0.3 (App Router), React 19, TypeScript
-- **Charts:** `lightweight-charts` ^5.0.0 (Apache-2.0, canvas-based)
+- **Frontend:** Next.js 15.0.3 (App Router), React 19, TypeScript, Tailwind 4 +
+  `@skeletonlabs/skeleton` ^5 (added 01-10-26, Direction D — before that there was no CSS framework
+  and no global stylesheet at all)
+- **Charts:** `layerchart` ^2.5 rendered as **Svelte 5 islands**, built by a separate vite step
+  (`pnpm build:islands` → `web/public/islands/`, which `pnpm build` now runs ahead of `next build`).
+  **`lightweight-charts` was removed on 01-10-26** — see the Direction D entry under Changes Since
+  Last Update, and ADR-1 in
+  `process/general-plans/active/ui-shell_28-09-26/ui-shell_DIRECTION-D_28-09-26.md` for the
+  islands-not-SvelteKit boundary. Cost of the swap, measured: the island entry chunk is 787 kB raw /
+  **185 kB gzipped**, against `lightweight-charts`' shipped standalone production bundle at 172 kB
+  raw / **54 kB gzipped** — roughly **3.4× more gzipped chart runtime**. Not apples-to-apples (the
+  island chunk also carries the Svelte runtime, LayerChart and `d3-scale`, while the old 54 kB was
+  charting only and the React wrappers were separate app code), but it is the fairest single number
+  and the direction is real. Accepted deliberately as the price of the design system.
 - **Backend:** Python >=3.12 with FastAPI >=0.115, uvicorn[standard]
 - **Data/analytics libs in use:** `pandas`>=2.2, `numpy`>=1.26, `pandas-ta-classic`>=0.8.32,
   `pydantic`>=2.8, `httpx`>=0.27, `statsmodels`>=0.14 (installed 0.15.0, added 28-09-26 for the
@@ -794,7 +854,13 @@ Confirmed installed/configured as of 2026-09-20 (versions from `web/package.json
   the app ever needs concurrent multi-user writes.
 - **Package managers:** `pnpm` for `web/` (`pnpm-lock.yaml`, `pnpm-workspace.yaml`), `uv` for
   `api/` (`uv.lock`, `.python-version`)
-- **Deployment:** still OPEN DECISION — no `.github/workflows/` or other CI/deploy config exists
+- **Deployment:** **resolved 01-10-26** — the app runs on a home PC the user already owns, reachable
+  only over **Tailscale**, so no publicly reachable endpoint exists at any point. ~$0/month.
+  PowerShell launchers and the user-PC runbook live in `deploy/` (`start-api.ps1`, `start-web.ps1`,
+  `build-web.ps1`, `register-tasks.ps1`, `README.md`). `.github/workflows/` now holds **five**
+  scheduled jobs, not two — see Repository Structure. The box is deliberately **not** always on:
+  recovery after downtime is "pull, then optionally recompute", and screens degrade honestly rather
+  than crashing
 - **Testing:** resolved — `pytest`>=8.3 for `api/` (testpaths=`tests`, `integration` marker for
   real-network tests, deselected by default via `addopts = "-m 'not integration'"`); `vitest`
   ^2.1.4 (unit) + `@playwright/test` ^1.48.0 (e2e) for `web/`. See `tests/all-tests.md` for
@@ -804,8 +870,20 @@ Confirmed installed/configured as of 2026-09-20 (versions from `web/package.json
 
 Cointegration testing (Engle-Granger, Johansen), regime modelling and volatility models have
 no serious JavaScript equivalent — `statsmodels` and `arch` are the reason Python is in the
-stack. Charting is the reverse: `lightweight-charts` is the best free financial charting
-library and it is a browser library. The split follows the maths, not preference.
+stack. Charting is the reverse: the good financial charting libraries are browser libraries.
+The split follows the maths, not preference.
+
+**Amended 01-10-26:** this used to name `lightweight-charts` specifically as the reason for the
+browser half. That library is gone (Direction D, see Technology Stack above) but **the reason
+survives unchanged** — it now points at `layerchart`. The split was never about one library; read
+it as "the charting library of the day is a browser library", because that is the part that is
+load-bearing. Nothing about the Python half changed.
+
+**There are now three runtimes in `web/`, not one:** React (Next.js, the app and all non-chart UI),
+Svelte 5 (chart islands only, built separately by vite), and the Python API behind them. Keep the
+island boundary narrow — islands are for charts. Putting ordinary UI in Svelte would mean two
+component models for the same job, which is the frontend version of the "two implementations of one
+calculation" mistake that One Source of Numerical Truth exists to prevent.
 
 ## Key Patterns and Conventions
 

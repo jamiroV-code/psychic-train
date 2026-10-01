@@ -12,7 +12,8 @@ No source files exist yet — this repo contains no application code as of 2026-
 Target locations once work begins:
 
 - `web/app/charts/` -- chart routes
-- `web/components/chart/` -- lightweight-charts wrappers, overlay and pane components
+- `web/islands/*.svelte` -- LayerChart chart islands (the charting surface since 01-10-26)
+- `web/components/chart/` -- React chart wrappers (the lightweight-charts ones were removed 01-10-26)
 - `api/routers/indicators.py` -- indicator HTTP surface
 - `api/analytics/indicators/` -- indicator implementations
 
@@ -23,7 +24,11 @@ Target locations once work begins:
 
 ## Notes
 
-Uses TradingView `lightweight-charts` v5 (Apache-2.0). The most likely source of quiet bugs here is a mismatch between the timeframe requested and the timeframe the indicator was computed on — make the API response carry the timeframe it actually used rather than assuming it matches the request.
+**Charting stack changed 01-10-26 (Direction D).** `lightweight-charts` was removed; charts are now
+`layerchart` rendered as Svelte 5 islands, built by `pnpm build:islands` into `web/public/islands/`.
+See `process/context/all-context.md` §Technology Stack and ADR-1 in
+`process/general-plans/active/ui-shell_28-09-26/ui-shell_DIRECTION-D_28-09-26.md`. Islands are for
+charts only — do not widen that boundary to ordinary UI. The most likely source of quiet bugs here is a mismatch between the timeframe requested and the timeframe the indicator was computed on — make the API response carry the timeframe it actually used rather than assuming it matches the request.
 
 ## Current Status
 
