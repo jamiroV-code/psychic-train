@@ -136,7 +136,7 @@ liqtide.com) is the only stated condition.
 GET https://liqtide.com/data/latest.json
 ```
 
-Refreshes daily; observed `generated_utc` falls around 00:25–01:12 UTC (corrected 2026-09-27 — earlier docs said ~22:45 UTC). The nightly archive is keyed by `generated_utc[:10]`; `liqtide-snapshot.yml` runs at 18:47 UTC. Top-level keys include `generated_utc`, `data_quality`,
+Refreshes daily; observed `generated_utc` falls around 00:25–01:12 UTC (corrected 2026-09-27 — earlier docs said ~22:45 UTC). The nightly archive is keyed by `generated_utc[:10]`; `liqtide-snapshot.yml` is scheduled for 13:17 UTC (moved 2026-10-01 from 18:47 UTC; takes effect once merged to `main`, real firing unverified). GitHub's measured start delay was 2h39m–5h01m on 2026-09-27/28 (growing ≈ +2h/day), not the "~2h" once recorded; LiqTide only publishes "latest", so a missed run before ~00:25 UTC loses that day's file permanently. Top-level keys include `generated_utc`, `data_quality`,
 `tide_index` (value, label, score, components, weights), `tide_series` (historical date/value
 pairs), `regime`, `regime_plain`, `signals`, `sectors`, `lead_chart`, `fng`, and `metrics` —
 the last carrying time series for net liquidity, WALCL, TGA, RRP, reserves, dollar index,

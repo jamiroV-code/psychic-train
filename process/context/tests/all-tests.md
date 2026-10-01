@@ -33,6 +33,8 @@ landed pytest and vitest, and nothing actioned it. Corrected during RFC-005 UPDA
 
 **Merge note (28-09-26):** the table below combines counts from two independently-developed branches. Neither branch's count includes the other's additions. The merge commit's own post-merge pytest/vitest/tsc run (see the merge report) is the first real combined count; treat the two tables below as "state going into the merge" (main side, then kind-tesla side), and the merge report as authoritative for "state coming out of it."
 
+**Latest count (01-10-26, P1 pipeline completeness EVL, branch `claude/p1-pipeline`):** `uv run --project api pytest api/ -q` → **820 passed, 5 deselected** (714 baseline → 789 after schedules/exit-codes/bootstrap → 817 after atomic parquet writes → 820 after the cron-timing guard; `test_snapshot_workflow_schedules.py` now 41 tests). This branch's baseline (714) differs from the 486/3 and 480/5 rows below because it carries other branches' work; the rows below are historical. Web counts unchanged (this branch touched no `web/`).
+
 | Package | Runner | Command | State (28-09-26, pair screener v1 EVL, final for the day) |
 |---|---|---|---|
 | `api/` | pytest | `uv run --project api pytest api/ -q` | **486 passed, 3 deselected** (final EVL run, pair screener RFC-001..005, incl. EVL cycle 6's tie-break fix — was 392/3 at the narrative-dashboard EVL, 420/3 after RFC-001 alone, 484/3 at RFC-005's first pass; deselected are the opt-in `integration`-marked tests) |
@@ -146,6 +148,24 @@ Practical rules that follow:
    of them executed FastAPI and the real browser client in the same process. The absence of a test
    at a boundary is itself a finding, not a neutral default; RFC-005/ADR-5/ADR-6 all had *some*
    coverage that was merely misplaced, this one had none at all.
+
+### Test-isolation and gate lessons (P1 pipeline completeness, 29-09-26 to 01-10-26)
+
+9. **Never call `monkeypatch.undo()` in a test that uses `isolated_cache`.** It also undoes the
+   `CACHE_ROOT` redirect, so later reads/writes in that test point at the REAL cache (caught during
+   the atomic-writes EXECUTE; only reads were affected, no damage). Scope fakes with
+   `with pytest.MonkeyPatch.context() as mp:` instead.
+10. **Any new test that can reach a cache path needs the module-level autouse fixture** that depends
+    on `isolated_cache` AND redirects `watchlist_store.DEFAULT_WATCHLIST_PATH`. Verify it with the
+    `--setup-show` count check (SETUP count of `isolated_cache` == collected tests) and a before/after
+    size + mtime + sha256 snapshot of the real cache and `watchlist.json`. A grep for the fixture name
+    is NOT sufficient — fixtures arrive transitively (and `grep -L` is blind to them).
+11. **A gate that greps a substring can be unsatisfiable when a helper's name contains it.** The
+    `to_parquet(` count gate also matched `_atomic_to_parquet(` (returned 11, not 1). Prove every grep
+    gate on a scratch copy in both directions (old text matches, new text passes) before relying on it.
+12. **A plan author's inline validate PASS did not survive an independent pass — three times in the
+    `pipeline-completeness_28-09-26` task folder** (7, 4+3, and 8 real concerns respectively, incl.
+    dead/blind gates). Independent validation found real defects every time; do not trust self-validation.
 
 ## Default Verification Order
 

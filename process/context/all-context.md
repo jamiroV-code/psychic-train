@@ -15,6 +15,10 @@ moved earlier to absorb GitHub's ~2h scheduler delay) from `claude/kind-tesla-ta
 Since Last Update below, newest first, for all of the above plus everything each branch already had
 (narrative v2 SPEC, on-chain chain-growth plan, the 2026-09-25 keyword-keying fix, and earlier).
 
+**2026-10-01 note (P1 pipeline completeness, branch `claude/p1-pipeline`, PR #11):** five scheduled
+workflows now exist and all five cron times moved again — every clock time quoted in older entries
+below (17:47/18:17/18:47 UTC, "~2h" delay) is superseded; see the newest entry directly below.
+
 This file is the root context entrypoint for the repo.
 
 Use it for two things:
@@ -25,6 +29,50 @@ Use it for two things:
 Start here before loading deeper context files.
 
 ---
+
+## Changes Since Last Update (2026-10-01, P1 pipeline completeness — general-plans)
+
+Task folder: `process/general-plans/active/pipeline-completeness_28-09-26/` (three plans: schedules +
+cache story, atomic parquet writes, cron timing). Branch `claude/p1-pipeline`, PR #11. All three are
+**CODE DONE, not VERIFIED** — independent `vc-tester` EVL runs were green, but each plan's gate is
+CONDITIONAL on recorded gaps that no human has accepted (carried under the autonomous-run policy).
+Final full suite: **820 passed / 5 deselected** (714 at baseline → 789 → 817 → 820).
+
+- `[Product]` **Two new nightly workflows**: `pairs-refresh-snapshot.yml` (`refresh_cache` then
+  `compute_pairs`, two sequential steps of one job) and `liquidity-backfill-snapshot.yml`
+  (`backfill_primaries`). `.github/workflows/` now has **five** workflows. `refresh_cache.py`,
+  `backfill_primaries.py`, `compute_pairs.py` gained real exit codes (`exit_code`, `main(argv)`);
+  `refresh_cache` also refreshes the 18 pairs-universe coins on `1d` (D7). New
+  `api/scripts/bootstrap_watchlist.py` and runbook **`api/scripts/BOOTSTRAP.md`** (fresh checkout →
+  populated cache; also the manual-refresh runbook).
+- `[Finding]` **Cache decision: nothing new is committed to git.** Committing the OHLCV/liquidity/pairs
+  caches would add an estimated ~1.5–3.3 GB/year (every OHLCV file and the whole `pairs/spreads/` dir
+  are rewritten nightly, so every file diffs every night). The workflows' tolerant `git add` therefore
+  stages nothing.
+- `[Finding]` **The two new workflows' commit steps are INERT on GitHub Actions.** The runner is
+  ephemeral and those dirs stay gitignored, so the commit step always reports "nothing new to
+  commit". Today they are a nightly integration canary (run fails on a real crash/failed-fetch exit
+  code), not a refresher. Real value arrives only when P2 supplies a persistent disk. Also: a
+  GitHub-hosted `compute_pairs` only sees ≤500 daily bars per coin (`DEFAULT_LIMIT`), vs the ~2,230-bar
+  deep-fetched local cache — a canary result, not a quality result.
+- `[Correction]` **Atomic parquet writes**: all 9 parquet writers in `api/data/cache.py` now go
+  through `_atomic_to_parquet` (same-dir temp → fsync → `os.replace`); `.gitignore` gained
+  `api/data/cache/**/*.tmp`. 28 new tests (`test_cache_atomic_writes.py`), 18 red on the old code.
+  **Not covered:** `api/data/etf_flows_adapter.py::merge_into_cache` still writes non-atomically, so
+  P2's atomicity prerequisite is NOT fully met (backlog note). Real power-loss durability and Windows
+  `os.replace` with an open reader are untested.
+- `[Correction]` **Cron move + measured delay.** New schedules (UTC): pairs-refresh `17 11`,
+  liquidity-backfill `47 11`, chain-growth `17 12`, narrative `47 12`, liqtide `17 13`. Measured GitHub
+  start delay was **2h39m–5h01m on 2026-09-27/28 (recorded 2026-09-29), growing ≈ +2h/day** — not
+  the "~2h" the 2026-09-27 entry recorded; the guard test now budgets 10h (`SCHEDULER_DELAY_BUFFER_MIN
+  = 600`). The three no-history workflows gained a schedule-only step that warns (never fails) if a run
+  starts after UTC midnight. **These times take effect only once merged to `main`; real firing is
+  unverified** until `gh run list` is checked over the first 2–3 nights. If merged after a workflow's
+  new cron time it has no scheduled run that UTC day — dispatch it manually (liqtide before ~00:25
+  UTC or that day's file is permanently lost; see the closeout in the task folder).
+- Testing: guard file `test_snapshot_workflow_schedules.py` 13 → 41 tests. No live fetch (ccxt,
+  Hyperliquid, FRED) was run from this container; first real nightly run is the first live check.
+  Closeout: `pipeline-completeness_CLOSEOUT_01-10-26.md` in the task folder.
 
 ## Changes Since Last Update (2026-09-28, narrative-v2 EVL confirmation — narrative-mindshare)
 
@@ -215,6 +263,9 @@ Plan: `process/general-plans/active/snapshot-cron-timing_27-09-26/`.
 - `[Finding]` pytrends nightly points can be 0 because `df.iloc[-1]` of the hourly "now 7-d" frame is
   Google's incomplete `isPartial` hour (e.g. memecoins 34→0, RWA all 0). Not fixed — see Open
   Questions and `process/general-plans/backlog/pytrends-partial-hour-zeros_NOTE_27-09-26.md`.
+- `[Correction]` **Superseded 2026-10-01:** the "~2h" delay and the 17:47/18:17/18:47 UTC times above
+  were too optimistic — measured delay was 2h39m–5h01m and growing ≈ +2h/day. All five workflows now
+  run 11:17–13:17 UTC with a 10h delay budget (pending merge; unverified). See the 2026-10-01 entry.
 
 ## Changes Since Last Update (2026-09-24 → 2026-09-25)
 
@@ -353,7 +404,8 @@ second real feature after the momentum screener, and the first to live in
   manual — see the `.github/workflows/` correction below.
 - `[Correction]` **`.github/workflows/` is no longer empty.** Earlier versions of this file said
   "no CI/deploy config exists" — that was true through 2026-09-20 but is stale now.
-  `.github/workflows/liqtide-snapshot.yml` runs nightly (18:47 UTC since 2026-09-27), executes
+  `.github/workflows/liqtide-snapshot.yml` runs nightly (18:47 UTC from 2026-09-27; moved to 13:17 UTC
+  by the 2026-10-01 P1 branch, pending merge), executes
   `snapshot_liqtide.py`, and commits `api/data/cache/liqtide/` to `main` — discovered mid-session
   on 2026-09-24 (it had already captured 09-21 through 09-24 by the time this was found). This is
   the **only** scheduled fetch of LiqTide; the Windows Task Scheduler step in the regime plan's Ops
@@ -575,6 +627,7 @@ For most substantial tasks:
 | narrative / mindshare work | `all-context.md`, `data-sources/all-data-sources.md` | `process/features/narrative-mindshare/_GUIDE.md` |
 | creating a new plan | `all-context.md`, `planning/all-planning.md` | the example PRD that matches the plan size |
 | testing or verification | `all-context.md`, `tests/all-tests.md` | the specific deeper testing doc once one exists |
+| fresh checkout → populated cache / manual refresh runbook | `all-context.md` | `api/scripts/BOOTSTRAP.md` |
 | context maintenance | `all-context.md` | run `vc-audit-context` after edits |
 
 ## Context Group Lifecycle
@@ -703,10 +756,14 @@ my_site/
                                 `_GUIDE.md` placeholders: charting-indicators,
                                 cointegration-screener
     development-protocols/  -- RIPER-5 methodology docs
-  .github/workflows/        -- chain-growth-snapshot.yml (nightly 17:47 UTC), narrative-snapshot.yml
-                                (nightly 18:17 UTC), liqtide-snapshot.yml (nightly 18:47 UTC) --
-                                all snapshot + commit to main; GitHub starts them ~2h late, see
-                                the 2026-09-27 Changes Since Last Update entry
+  .github/workflows/        -- FIVE workflows (P1, 2026-10-01; on `claude/p1-pipeline`, pending
+                                merge). Cron UTC: pairs-refresh-snapshot.yml 11:17,
+                                liquidity-backfill-snapshot.yml 11:47, chain-growth-snapshot.yml
+                                12:17, narrative-snapshot.yml 12:47, liqtide-snapshot.yml 13:17.
+                                The first two are canaries whose commit steps are inert on Actions;
+                                the other three snapshot + commit to main. GitHub starts them
+                                2h39m-5h01m late (measured), see the 2026-10-01 entry
+                                (supersedes the older 17:47/18:17/18:47 times)
   .claude/ .codex/ .agents/ -- agent + skill surfaces
   .env.example               -- REDDIT_CLIENT_ID/SECRET, LIQTIDE_ATTRIBUTION_URL,
                                  API_BASE_URL, API_PORT (see Environment and Configuration)
