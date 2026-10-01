@@ -9,7 +9,7 @@ feature: pipeline-completeness
 
 Date: 29-09-26
 Complexity: SIMPLE (config + one test file; no application source)
-Status: ⏳ PLANNED — VALIDATE returned CONDITIONAL (0 FAIL / 8 CONCERN); PVL supplement cycle 1 applied 2026-10-01 (8 gaps folded into the plan body); VALIDATE must re-run from V1 before EXECUTE
+Status: ⏳ PLANNED — VALIDATE re-run 2026-10-01 after PVL supplement cycle 1: all 8 concerns RESOLVED, 0 FAIL, verdict CONDITIONAL on recorded structural gaps K1-K4 only (no human accepted them; autonomous-run policy). Ready for EXECUTE (opus vc-execute-agent), then spawned vc-tester EVL.
 **Branch:** `claude/p1-pipeline` (draft PR; workflows only take effect after merge to `main`)
 
 TL;DR: GitHub's scheduler delay grew from ~2h to 5h01m in three days, so every cron moves to 11:17–13:17 UTC (a 10h delay budget), each no-history workflow gets a first step that warns if the run crossed UTC midnight, and the guard test's buffer goes from 180 to 600 min.
@@ -133,7 +133,7 @@ None changed. Script dating/archiving logic untouched. Workflow cron times are t
 | G1 guard test file passes: 41 passed (38 existing + 3 new), **0 skipped** (use `-rs`; a skip means PyYAML is missing and structural tests silently did not run) — AC-1, AC-2 | Fully-Automated | Schedule meets 10h budget, stagger, schedule-only guard shape |
 | G2 full api suite green (baseline count recorded before EXECUTE; must be baseline + 3) — AC-4 | Fully-Automated | No regression |
 | G3 YAML parse of all five workflows — AC-4 | Fully-Automated | Workflows valid |
-| G4a stale-text grep (`~2h`, `2h20m`, `~3h+`, `21:10`, `3h before`, `least 3h`, `lands well`, `well before UTC midnight`) over workflows, guard test, BOOTSTRAP.md -> no output — AC-3 | Fully-Automated | False comments removed (`lands well` catches the phrase wrapped across two lines) |
+| G4a stale-text grep (`~2h`, `2h20m`, `~3h+`, `21:10`, `3h before`, `least 3h`, `least_3h`, `lands well`, `well before UTC midnight`) over workflows, guard test, BOOTSTRAP.md -> no output — AC-3 | Fully-Automated | False comments removed (`lands well` catches the phrase wrapped across two lines; `least_3h` catches an un-renamed `test_cron_starts_at_least_3h_...`, which no other alternative matches and G1's count cannot see) |
 | G4b stale clock-time/cron grep (17:47, 18:17, 18:47, 19:17, 19:47 and old cron strings) -> no output, plus `grep -n "after liqtide-snapshot"` on the pairs workflow -> no output — AC-3 | Fully-Automated | Old times and stale order statements removed |
 | G5 scope guard: `git status --porcelain` (sees untracked files, unlike `git diff --name-only HEAD`) lists only the five workflows, the guard test, BOOTSTRAP.md, or this task folder; plus `git diff --numstat HEAD -- api/scripts/BOOTSTRAP.md` <= `2 2` — AC-5 | Fully-Automated | Nothing outside touchpoints changed |
 | G6 guard step shell logic: the 72-case script in the Validate Contract (3 workflows x 24 hours, PATH-shim `date`, asserts `if` is schedule-only, rc 0, empty stderr, warning iff hour < cron_hour) — AC-2 | Fully-Automated | Warning fires only when now_hour < cron_hour, only on schedule runs |
@@ -150,28 +150,49 @@ None changed. Script dating/archiving logic untouched. Workflow cron times are t
 
 ## Resume and Execution Handoff
 1. Selected plan: `process/general-plans/active/pipeline-completeness_28-09-26/pipeline-completeness-cron-timing_PLAN_29-09-26.md`
-2. Last completed: PLAN, VALIDATE first pass (independent), and PVL supplement cycle 1 (2026-10-01, 8 gaps applied to the plan body).
-3. Validate-contract: written, status CONDITIONAL (first pass, not terminal); it must be re-run from V1 against this supplemented plan. EXECUTE is not legal until VALIDATE records a passing verdict or a supplement cycle completes with accepted gaps.
+2. Last completed: PLAN, VALIDATE first pass (independent), PVL supplement cycle 1 (2026-10-01, 8 gaps applied), and the VALIDATE re-run (2026-10-01: all 8 RESOLVED, empirically re-proven on a scratch end state).
+3. Validate-contract: written 2026-10-01, status CONDITIONAL after 1 PVL fix cycle. It rests on recorded structural gaps K1-K4 only; NO HUMAN accepted them (autonomous-run policy). K2 is an ACTION for the user at merge time.
 4. Context loaded: all five workflows, the guard test, BOOTSTRAP.md §8, `snapshot_narrative.py` (has_row dedupe), `snapshot_chain_growth.py` (utc_now dating), all-context.md (LiqTide publish window)
-5. Next: orchestrator re-spawns vc-validate-agent from V1; after a passing verdict, ENTER EXECUTE MODE → vc-execute-agent (opus) applies checklist 1–5, then a spawned vc-tester runs G1–G6 (record G2 baseline first).
-6. UPDATE PROCESS handoff (NOT for EXECUTE to edit): `process/context/all-context.md` (about lines 14, 199–213, 706–708) and `process/context/data-sources/all-data-sources.md:139` still state the old 17:47/18:17/18:47 cron times and the "~2h" delay; correct them at UPDATE PROCESS.
+5. Next: ENTER EXECUTE MODE → vc-execute-agent (opus) applies checklist 1–5, then a spawned vc-tester runs G1–G6 (G2 baseline recorded in the contract: 817 passed / 5 deselected, so the post-EXECUTE count must be 820).
+6. UPDATE PROCESS handoff (NOT for EXECUTE to edit): `process/context/all-context.md` (about lines 14, 199–213, 356, 706–708) and `process/context/data-sources/all-data-sources.md:139` still state the old 17:47/18:17/18:47 cron times and the "~2h" delay; correct them at UPDATE PROCESS.
 
 ## Validate Contract
 
 Status: CONDITIONAL
-Date: 29-09-26
-date: 2026-09-29
+Date: 01-10-26
+date: 2026-10-01
 generated-by: outer-pvl
-supersedes: 2026-09-29 (outer-pvl, inline single-agent contract, verdict PASS) — independent adversarial pass has current evidence; the inline verdict is void
+supersedes: 2026-09-29 (outer-pvl) — first-pass independent contract (0 FAIL / 8 CONCERN); this re-run, after PVL supplement cycle 1, has current evidence
 
 Parallel strategy: sequential
-Rationale: this VALIDATE was run as one agent doing the four dimensions and the section checks itself, backed by scratch-copy experiments (no Layer 1/2 subagents were spawned). EXECUTE score 2/7 (S6 CI/scheduling-adjacent, S7 7 files in blast radius); 3 workflow edits share one identical step and one test file, so consistency beats speed. Recommended for EXECUTE: 1 vc-execute-agent (opus) then 1 vc-tester (sonnet, EVL). Alternatives: parallel subagents (2, workflows vs test+docs) — saves minutes, adds a shared-constant coordination risk; workflow/agent team — over-scoped.
+Rationale: one validator ran the four dimensions and the section checks itself, backed by scratch-copy experiments (no Layer 1/2 subagents spawned). EXECUTE score 2/7 (S6 CI/scheduling-adjacent, S7 7 files in blast radius); three workflows share one identical step and one test file, so consistency beats speed. Recommended for EXECUTE: 1 vc-execute-agent (opus), then 1 vc-tester (sonnet, EVL). Alternatives: parallel subagents (2) — saves minutes, adds a shared-constant coordination risk; workflow / agent team — over-scoped.
 
-Verdict: **Gate: CONDITIONAL — first pass, NOT terminal.** 0 FAIL / 8 CONCERN. The plan is sound in shape (proven on a scratch copy, see Evidence) but the inline PASS was wrong: the specified guard step false-warns on `workflow_dispatch`, and three gates (G4, G5, G6) are dead, blind, or unspecified. Route to a PVL supplement cycle (SUPPLEMENT REQUEST in the validate report), then re-validate from V1. `PHASE_COMPLETE: VALIDATE` is NOT emitted.
+Verdict: **Gate: CONDITIONAL — 0 FAIL / 0 new CONCERN after 1 PVL fix cycle.** All eight supplement items from cycle 1 are RESOLVED (table below). What remains is structural and recorded (K1-K4, stale context docs); none can be closed offline. **NO HUMAN accepted these gaps** — they are carried under the autonomous-run policy, and K2 is an ACTION for the user at merge time. `PHASE_COMPLETE: VALIDATE` is legal: CONDITIONAL with 1 recorded fix cycle (`results.tsv` has the `[cron-timing]` baseline row 6 and cycle-1 row 7; `wc -l` = 9 ≥ 3).
 
-**Evidence (scratch copies only; repo untouched):** baseline 38 existing tests pass; with the plan's end state (crons 11:17/11:47/12:17/12:47/13:17, buffer 600, guard step, renamed test, new parametrized test) = 41 passed (38 + 3). 13:17 = 797 + 600 = 1397 < 1440 holds; 14:17 fails the budget test; stagger min gap 30. Mutations (guard removed, wrong `cron_hour`, cron 14:17, 10-min stagger) each fail exactly the intended test. Guard shell, `bash -e`, stub `date`: warns at every hour < cron_hour, silent at cron_hour..23, `10#` handles 08/09 (bare `$((08))` errors), empty/garbage/failing `date` output gives rc 0 with stderr noise and no warning (never fails the job). Guard as `steps[0]` before checkout works (`date` needs no repo). Spurious warning on manual runs CONFIRMED (09:00 dispatch warns for all three; a liqtide dispatch at 12:47-12:59 warns even at the plan's own K2 timing). Fix `if: github.event_name == 'schedule'` proven: tests 41 passed with the schedule-only assertion, and dropping the `if` fails it.
+**Cycle-1 supplement verification (each checked against the plan text):**
 
-Test gates (C3 table; final list after supplement — G4/G5/G6 below REPLACE the inline versions):
+| # | Concern | Status | Where / wording |
+|---|---|---|---|
+| 1 | Guard false-warns on `workflow_dispatch` | RESOLVED | D5 YAML carries `if: github.event_name == 'schedule'` + rationale; D6 test asserts that exact value; checklist 3; E1; AC-2 |
+| 2 | G4 partly dead | RESOLVED | G4a/G4b in Verification Evidence and the gate list. One further hole found and patched here: `least 3h` cannot match the un-renamed test name `test_cron_starts_at_least_3h_...` (underscores) and G1's count cannot see a missed rename, so `least_3h` was added to G4a (plan row and gate list) |
+| 3 | Pairs/liquidity header sentences false after reorder | RESOLVED | D7 stagger paragraph + checklist 2 + E4 give the new sentences; G4b `after liqtide-snapshot` grep |
+| 4 | K2 per-workflow, K4 pytrends, D2 tolerances, D1 growth rate | RESOLVED | D4 (per-workflow K2 incl. LiqTide permanent loss), K4, D2 (narrative 11h13m, liqtide ~11h08m, arithmetic re-checked), D1 (+2h/day; chain +2h13m, narrative +1h55m, liqtide +1h54m, re-computed from the Problem table) |
+| 5 | G5 blind to untracked files | RESOLVED | G5 = `git status --porcelain` + BOOTSTRAP numstat; proven satisfiable (see Evidence) |
+| 6 | G1 skips, G6 unspecified | RESOLVED | G1 `-rs`, 0 skipped; G6 script embedded and executed (see Evidence) |
+| 7 | Context docs stale | RESOLVED (handoff) | Resume item 6 routes `all-context.md` and `all-data-sources.md:139` to UPDATE PROCESS; line 356 added to the list by this pass |
+| 8 | Stale literal PASS verdict | RESOLVED | the mechanical PASS-verdict grep on the plan returns 0 before and after this write (this contract writes only the CONDITIONAL verdict) |
+
+**Evidence (scratch copy in the session scratchpad; the repo was never modified, `git status --porcelain` empty before and after, including after the full suite):**
+- Baseline on the current tree: guard test file 38 passed, 0 skipped; full api suite **817 passed, 5 deselected** (G2 baseline; post-EXECUTE count must be 820).
+- End state built on scratch (crons 11:17/11:47/12:17/12:47/13:17, buffer 600, schedule-only guard step as `steps[0]`, renamed test, new parametrized test, BOOTSTRAP times): **41 passed, 0 skipped**. G3 `ok` on 5 workflows (current and end state).
+- Mutations, each failing exactly the intended assertion: drop the `if:` (guard test fails at the `if` assertion); wrong `cron_hour` (13→12); cron 14:17 (budget test + cron_hour test); guard not `steps[0]`.
+- G4a/G4b checked both directions: on the CURRENT tree they match (~10 and ~18 lines, plus `after liqtide-snapshot` at pairs:23, plus `least_3h` at test:119); on the end state all three return no output (rc 1). Inert alternatives, harmless: `21:10` and `least 3h` cannot match in the scoped files (the gate as a whole still fails correctly).
+- G5: the BOOTSTRAP §8 edit is exactly 2 lines (diff 2 removed / 2 added → numstat `2 2`), so the check is satisfiable and fails on any wider edit. The tree stays clean after the full G2 run (no stray untracked files).
+- G6: the embedded script extracted from this plan and run from the scratch repo root: `G6 ok` (72 cases) on the end state. It fails on: `if:` removed, `-lt` mutated to `-le` (spurious warning at the cron hour), `10#` removed (`08`/`09` crash), and on the current tree (no guard step). The stubbed clock exercises the shell only; the `if:` is a workflow-level condition, covered by a separate assertion in G1 and G6.
+- Scope: touchpoints exactly the five workflows, the guard test, BOOTSTRAP.md §8, this task folder; Blast Radius and Public Contracts keep every `api/` source file, `web/`, `process/context/**`, deploy/CORS, `pytrends_adapter.py` (+ test), `watchlist.py`, `ccxt_adapter.py`, `conftest.py`, `.gitignore` out of scope; no script's archiving or dating behaviour changes.
+- No gate that cannot pass or cannot fail remains on the intended end state.
+
+Test gates (C3 table):
 
 | criterion id | behavior | strategy | proving test | gap-resolution |
 |---|---|---|---|---|
@@ -193,12 +214,12 @@ Legacy line form:
 
 **Final offline gate list (run from repo root by a spawned vc-tester):**
 - G1 `uv run --project api pytest api/tests/scripts/test_snapshot_workflow_schedules.py -q -rs` -> 41 passed, 0 failed, **0 skipped** (a skip means PyYAML was missing and the structural tests silently did not run; that is a failure).
-- G2 `uv run --project api pytest api/ -q` -> 0 failed; tester records the baseline pass count BEFORE EXECUTE and the count must be baseline + 3.
+- G2 `uv run --project api pytest api/ -q` -> 0 failed; baseline recorded by this validation = 817 passed / 5 deselected on the current tree, so after EXECUTE it must read **820 passed / 5 deselected** (tester re-records the baseline if the tree has moved).
 - G3 `uv run --project api python -c "import yaml,glob; [yaml.safe_load(open(f)) for f in glob.glob('.github/workflows/*.yml')]; print('ok')"` -> `ok`.
-- G4a `grep -rnE "~2h|2h20m|~3h\+|21:10|3h before|least 3h|lands well|well before UTC midnight" .github/workflows api/tests/scripts/test_snapshot_workflow_schedules.py api/scripts/BOOTSTRAP.md` -> no output (exit 1). (The inline `well before UTC midnight` alone was dead: in pairs and liquidity the phrase is wrapped across two comment lines and matches 0 times today; `lands well` catches the wrapped form.)
-- G4b `grep -rnE "\b(17:47|18:17|18:47|19:17|19:47)\b|\"(47 17|17 18|47 18|17 19|47 19) \* \* \*\"" .github/workflows api/tests/scripts/test_snapshot_workflow_schedules.py api/scripts/BOOTSTRAP.md` -> no output, AND `grep -n "after liqtide-snapshot" .github/workflows/pairs-refresh-snapshot.yml` -> no output. (Proven satisfiable on a scratch end state.)
+- G4a `grep -rnE "~2h|2h20m|~3h\+|21:10|3h before|least 3h|least_3h|lands well|well before UTC midnight" .github/workflows api/tests/scripts/test_snapshot_workflow_schedules.py api/scripts/BOOTSTRAP.md` -> no output (exit 1).
+- G4b `grep -rnE "\b(17:47|18:17|18:47|19:17|19:47)\b|\"(47 17|17 18|47 18|17 19|47 19) \* \* \*\"" .github/workflows api/tests/scripts/test_snapshot_workflow_schedules.py api/scripts/BOOTSTRAP.md` -> no output, AND `grep -n "after liqtide-snapshot" .github/workflows/pairs-refresh-snapshot.yml` -> no output.
 - G5 `git status --porcelain` (NOT `git diff --name-only HEAD`, which cannot see new untracked files) -> every path is one of the five workflows, `api/tests/scripts/test_snapshot_workflow_schedules.py`, `api/scripts/BOOTSTRAP.md`, or under `process/general-plans/active/pipeline-completeness_28-09-26/`; plus `git diff --numstat HEAD -- api/scripts/BOOTSTRAP.md` <= `2 2` (times only).
-- G6 from repo root, `uv run --project api python <script>` where the script: for each of chain-growth (12), narrative (12), liqtide (13) loads `steps[0]` via yaml, asserts name `Warn when the run crossed UTC midnight` and `if == "github.event_name == 'schedule'"` and `cron_hour=` equals the cron hour; then for every hour 00..23 runs `bash -e -c <run>` with a PATH-shim `date` (`+%H` -> `$FAKE_HOUR`, `+%H:%M` -> `$FAKE_HOUR:05`) and asserts rc 0, empty stderr, and `::warning::` present iff `int(hour,10) < cron_hour` (72 cases). Reference implementation (proven green on the scratch end state, red when the `if` is absent) — save to a temp file OUTSIDE the repo and run from repo root:
+- G6 from repo root, `uv run --project api python <script>` where the script loads `steps[0]` of chain-growth (12), narrative (12), liqtide (13), asserts name `Warn when the run crossed UTC midnight`, `if == "github.event_name == 'schedule'"` and `cron_hour=` equals the cron hour, then for hours 00..23 runs `bash -e -c <run>` with a PATH-shim `date` (`+%H` -> `$FAKE_HOUR`, `+%H:%M` -> `$FAKE_HOUR:05`) and asserts rc 0, empty stderr, `::warning::` present iff `int(hour,10) < cron_hour` (72 cases). Reference implementation (executed on the scratch end state: green; red under the four mutations above) — save to a temp file OUTSIDE the repo and run from repo root:
 
 ```python
 import glob, os, pathlib, stat, subprocess, tempfile, re, yaml
@@ -225,40 +246,41 @@ raise SystemExit(1 if bad else 0)
 ```
 
 **Execute-agent instructions:**
-- E1 Guard step MUST carry `if: github.event_name == 'schedule'`; `10#` in the hour arithmetic; never `exit 1`.
+- E1 Guard step MUST carry `if: github.event_name == 'schedule'`; `10#` in the hour arithmetic; never `exit 1`; it is `steps[0]` (before checkout).
 - E2 Keep strict `git add <dir>` lines in the three legacy workflows byte-identical; keep tolerant lines in the two new ones.
 - E3 Do not touch any `api/` source file or `process/context/**`; no git add/commit/push.
-- E4 Rewrite pairs and liquidity header stagger sentences for the NEW order: pairs first (30 min before liquidity, 60 before chain-growth); liquidity 30 after pairs and 30 before chain-growth. Chain/narrative/liqtide neighbor sentences remain true; drop every old clock time.
-- E5 Test edit exactly per D6 with the `if` assertion in place of "no if"; do not weaken any existing assertion.
+- E4 Rewrite pairs and liquidity header stagger sentences for the NEW order: pairs first (30 min before liquidity, 60 before chain-growth); liquidity 30 after pairs and 30 before chain-growth. Chain/narrative/liqtide neighbor sentences remain true; drop every old clock time; keep no "~2h", "2h20m", "~3h+", "lands well", "well before UTC midnight".
+- E5 Test edit exactly per D6 with the `if` assertion in place of "no if"; rename `test_cron_starts_at_least_3h_before_utc_midnight` (no `least_3h` may remain); do not weaken any existing assertion.
+- E6 BOOTSTRAP.md §8: change only the two time strings (19:17→11:17, 19:47→11:47); numstat must stay `2 2`.
 
-**Open gaps (none accepted by any human):**
-- K1 Real scheduler delay and cron firing unobservable here; post-merge `gh run list` for the first 2-3 nights (not just "3+" — the measured delay grew ~2h/day recently, so a 10h budget could be consumed within days if that continues); every no-history run must start on the cron's UTC day.
-- K2 Merge-day loss window, per workflow (the inline text framed only narrative at 12:47): a workflow that is merged after its OWN new cron time and before its old slot has no scheduled run that UTC day. narrative: day's point lost; LiqTide: that day's file (published ~00:25) is overwritten at the next publish and never recoverable (Standing Rule 8) — dispatch before ~00:25 UTC; chain-growth: harmless (full revisable series). Correct user action: after merge, `gh workflow run` the three no-history workflows the same UTC day if merged after 12:17/12:47/13:17 respectively; merge as early as possible, the current crons may already be crossing midnight.
+**Open gaps (none accepted by any human; carried under the autonomous-run policy):**
+- K1 Real scheduler delay and cron firing unobservable here; post-merge `gh run list` for the first 2-3 nights (the delay grew ~2h/day recently, so a 10h budget could be consumed within days); every no-history run must start on the cron's UTC day.
+- K2 Merge-day loss window, per workflow — **ACTION for the user at merge time.** A workflow merged after its OWN new cron time and before its old slot has no scheduled run that UTC day. narrative: day's point lost; LiqTide: that day's file (published ~00:25) is overwritten at the next publish and never recoverable (Standing Rule 8) — dispatch before ~00:25 UTC; chain-growth: harmless. If merged after 12:17 / 12:47 / 13:17 respectively, run `gh workflow run chain-growth-snapshot.yml` / `narrative-snapshot.yml` / `liqtide-snapshot.yml` the same UTC day; merge as early as possible.
 - K3 Guard detects only "started after UTC midnight"; a start close to but before midnight, or a delay >= 24h, is undetected.
-- K4 (new) Moving the narrative run from ~18:17 to ~12:47 shifts the sampling hour of pytrends' single hourly last-complete-hour reading (`_fetch_live`, `now 7-d`); the archived series has a one-time diurnal-phase discontinuity at the switch. The inline D4 claim "No meaning change" is overstated for pytrends; Reddit/CoinGecko/exchange are rolling windows and unaffected.
-- Out-of-scope stale docs (UPDATE PROCESS must fix; forbidden to EXECUTE): `process/context/all-context.md` (cron times at ~lines 14, 199-213, 706-708) and `process/context/data-sources/all-data-sources.md:139` state the old 17:47/18:17/18:47 times and the "~2h" delay.
+- K4 The narrative run moving from ~18:17 to ~12:47 shifts the sampling hour of pytrends' single hourly last-complete-hour reading; the archived series has a one-time diurnal-phase discontinuity. Reddit/CoinGecko/exchange are rolling windows and unaffected.
+- Out-of-scope stale docs (UPDATE PROCESS must fix; forbidden to EXECUTE): `process/context/all-context.md` (about lines 14, 199-213, 356, 706-708) and `process/context/data-sources/all-data-sources.md:139` state the old times and the "~2h" delay.
 
 **What This Coverage Does NOT Prove:**
 - G1/G3: only that the YAML text has the intended cron/step shape; not that GitHub honours the schedule or how late it starts (K1).
-- G6: only the shell arithmetic on a stubbed `date`; not that Actions' `if: github.event_name == 'schedule'` evaluates as expected on a real run, and not delays >= 24h (K3).
+- G6: only the shell arithmetic on a stubbed `date`; not that Actions evaluates `if: github.event_name == 'schedule'` as expected on a real run (G1/G6 assert the string only), and not delays >= 24h (K3).
 - G2: no regression in the existing suite; it does not exercise any workflow.
 - G4a/G4b: absence of the enumerated stale strings; not that every remaining comment is factually right (E4 and reviewer read cover order statements).
 - G5: nothing outside the touchpoint list changed; not that the BOOTSTRAP §8 wording is good.
 - Nothing offline proves data-day correctness at the new times (K2/K4) or that a 10h budget is enough (K1).
 
 Dimension findings:
-- Infra fit: CONCERN — guard step fires on `workflow_dispatch` (false "crossed midnight" warning; also at K2's own manual-run timing for liqtide); D1 rationale says "growing ~1h/day" while the last day's measured increments were ~+2h (narrative +1h55m, chain-growth +2h13m, liqtide +1h54m); cron/step shape itself is valid (parses, `steps[0]` before checkout works).
-- Test coverage: CONCERN — G4's `well before UTC midnight` matches 0 times today (wrapped phrase) and G4 misses `3h before`/old clock times; G5 `git diff --name-only HEAD` is blind to untracked files; G6 procedure unspecified; G1 must assert 0 skipped. All corrected in the gate list above.
-- Breaking changes: PASS — no script, contract, dating or archive-key change (verified against snapshot_narrative.py has_row, snapshot_chain_growth.py utc_now/merge_onchain_series, snapshot_liqtide.py/`write_liqtide_payload` first-write-by-payload-date); 38 existing tests unchanged and green.
+- Infra fit: PASS — guard is schedule-only, `steps[0]` before checkout works, crons parse, 13:17 + 600 = 1397 < 1440; delay-growth rationale now matches the measured numbers.
+- Test coverage: PASS — G1-G6 each proven satisfiable on the end state and failing under mutation or on the old text; one residual hole (un-renamed test name) closed by `least_3h` in G4a.
+- Breaking changes: PASS — no script, contract, dating or archive-key change; 38 existing tests unchanged and green.
 - Security surface: PASS — permissions/triggers/concurrency unchanged; guard has no secrets and no `${{ }}` interpolation.
-- Section D2 crons: PASS — proven on scratch (41 passed; boundary 13:59 ok, 14:00 fails).
-- Section D5 guard: CONCERN — dispatch false-warn (fix: schedule-only `if`); shell otherwise verified; prose sentence "a delay >= 24h - ... wraps" is garbled.
-- Section D6 test edits: PASS with the `if` assertion swapped in (mutation-checked: 4 mutations each caught).
-- Section D7 comments: CONCERN — pairs header ("30 minutes after liqtide (18:47)") and liquidity ("after pairs (19:17)") become false/stale after the move and no gate caught them; now G4b + E4.
-- Section D4 data semantics: CONCERN — no duplicate/missing point arises from the earlier cron itself (points dated by run day; `has_row` skips a same-day duplicate; LiqTide keyed by `generated_utc[:10]` first-write; chain-growth merge idempotent), BUT the merge-day advice is incomplete (K2), pytrends sampling hour shifts (K4), and D2's "liqtide has ~11h55m more tolerance than narrative" is wrong (narrative 24:00-12:47 = 11h13m; liqtide ~24:25-13:17 = 11h08m).
-- Handoff hygiene: CONCERN — Resume section line 3 still contains the literal text of the inline PASS verdict, which falsely satisfies the mechanical PASS-grep that gates EXECUTE; the supplement must change it to CONDITIONAL/current status.
+- Section D2 crons: PASS — 41 passed; boundary 13:59 ok, 14:00 fails; min stagger 30.
+- Section D5 guard: PASS — schedule-only `if`; shell proven for all 24 hours x 3 workflows.
+- Section D6 test edits: PASS — mutation-checked.
+- Section D7 comments: PASS — new stagger sentences specified (E4); stale text gated by G4a/G4b.
+- Section D4 data semantics: CONCERN (recorded, not fixable offline) — K2 per-workflow merge-day loss and K4 pytrends sampling-hour shift.
+- Handoff hygiene: PASS — Resume updated; no literal stale verdict.
 
-Accepted by: none — NO HUMAN accepted any gap in this validation. K1-K4 and the stale-docs item are structural/recorded, not accepted; CONDITIONAL rests on the SUPPLEMENT REQUEST being applied and re-validated.
+Accepted by: none — NO HUMAN accepted any gap in this validation. K1-K4 and the stale-docs item are structural/recorded; the CONDITIONAL verdict is carried under the autonomous-run policy, and K2 is an ACTION for the user at merge time.
 
 Gate: CONDITIONAL
 
