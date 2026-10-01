@@ -63,7 +63,7 @@ Final full suite: **820 passed / 5 deselected** (714 at baseline → 789 → 817
   `os.replace` with an open reader are untested.
 - `[Correction]` **Cron move + measured delay.** New schedules (UTC): pairs-refresh `17 11`,
   liquidity-backfill `47 11`, chain-growth `17 12`, narrative `47 12`, liqtide `17 13`. Measured GitHub
-  start delay was **2h39m–5h01m on 2026-09-27/28 (recorded 2026-09-29), growing ≈ +2h/day** — not
+  start delay was **2h39m–5h01m on 2026-09-27/28 (recorded 2026-09-29)**; it varies by hours rather than growing steadily — on 2026-09-29/30 narrative and liqtide were about 4h late (narrative 4h02m/4h01m, liqtide 3h52m/3h52m) — not
   the "~2h" the 2026-09-27 entry recorded; the guard test now budgets 10h (`SCHEDULER_DELAY_BUFFER_MIN
   = 600`). The three no-history workflows gained a schedule-only step that warns (never fails) if a run
   starts after UTC midnight. **These times take effect only once merged to `main`; real firing is
@@ -264,7 +264,7 @@ Plan: `process/general-plans/active/snapshot-cron-timing_27-09-26/`.
   Google's incomplete `isPartial` hour (e.g. memecoins 34→0, RWA all 0). Not fixed — see Open
   Questions and `process/general-plans/backlog/pytrends-partial-hour-zeros_NOTE_27-09-26.md`.
 - `[Correction]` **Superseded 2026-10-01:** the "~2h" delay and the 17:47/18:17/18:47 UTC times above
-  were too optimistic — measured delay was 2h39m–5h01m and growing ≈ +2h/day. All five workflows now
+  were too optimistic — measured delay was 2h39m–5h01m on 09-27/28 and about 4h on 09-29/30 — it varies by hours rather than growing steadily. All five workflows now
   run 11:17–13:17 UTC with a 10h delay budget (pending merge; unverified). See the 2026-10-01 entry.
 
 ## Changes Since Last Update (2026-09-24 → 2026-09-25)

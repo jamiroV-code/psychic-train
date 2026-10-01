@@ -20,7 +20,9 @@ name: Pairs refresh snapshot
 #
 # Scheduled 11:17 UTC, off the top of the hour. GitHub started these runs
 # 2h39m-5h01m late on 2026-09-27/28 (measured from the Actions run list,
-# 2026-09-29), and the delay was growing (about +2h in one day); 11:17 survives a
+# 2026-09-29), and on 2026-09-29/30 narrative and liqtide were about 4h
+# late (narrative 4h02m/4h01m, liqtide 3h52m/3h52m), so it varies by hours
+# rather than growing steadily; 11:17 survives a
 # 10h delay budget. A late or even wrong-UTC-day run is harmless here: both
 # scripts are idempotent full re-fetch/recompute and the next run repairs
 # anything. The newest daily bar is always the in-progress current-UTC-day bar

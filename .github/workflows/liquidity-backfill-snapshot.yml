@@ -14,7 +14,9 @@ name: Liquidity backfill snapshot
 #
 # Scheduled 11:47 UTC, off the top of the hour. GitHub started these runs
 # 2h39m-5h01m late on 2026-09-27/28 (measured from the Actions run list,
-# 2026-09-29), and the delay was growing (about +2h in one day); 11:47 survives a
+# 2026-09-29), and on 2026-09-29/30 narrative and liqtide were about 4h
+# late (narrative 4h02m/4h01m, liqtide 3h52m/3h52m), so it varies by hours
+# rather than growing steadily; 11:47 survives a
 # 10h delay budget. A late or even wrong-UTC-day run is harmless here:
 # backfill_primaries re-fetches the full FRED series idempotently and the next
 # run repairs anything. Runs 30 minutes after pairs-refresh-snapshot.yml and

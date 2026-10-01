@@ -9,7 +9,9 @@ name: Narrative daily snapshot
 # slot did exactly that and left 2026-09-25 with no point at all).
 # Scheduled for 12:47 UTC: GitHub started these runs
 # 2h39m-5h01m late on 2026-09-27/28 (measured from the Actions run list,
-# 2026-09-29), and the delay was growing (about +2h in one day); 12:47 survives a 10h delay budget. The
+# 2026-09-29), and on 2026-09-29/30 narrative and liqtide were about 4h
+# late (narrative 4h02m/4h01m, liqtide 3h52m/3h52m), so it varies by hours
+# rather than growing steadily; 12:47 survives a 10h delay budget. The
 # first step warns if a scheduled run started after UTC midnight.
 # Runs 30 minutes after chain-growth-snapshot.yml and 30 before
 # liqtide-snapshot.yml, so the pushes to main don't overlap. Pinned by

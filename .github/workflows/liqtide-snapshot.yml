@@ -8,7 +8,9 @@ name: LiqTide daily snapshot
 # long as it lands before the next publish. Scheduled for 13:17 UTC, ~12h
 # after that day's publish: GitHub started these runs
 # 2h39m-5h01m late on 2026-09-27/28 (measured from the Actions run list,
-# 2026-09-29), and the delay was growing (about +2h in one day); 13:17 survives a 10h delay budget. The
+# 2026-09-29), and on 2026-09-29/30 narrative and liqtide were about 4h
+# late (narrative 4h02m/4h01m, liqtide 3h52m/3h52m), so it varies by hours
+# rather than growing steadily; 13:17 survives a 10h delay budget. The
 # first step warns if a scheduled run started after UTC midnight. Runs 30
 # minutes after narrative-snapshot.yml and 60 after chain-growth-snapshot.yml,
 # so the pushes to main don't overlap. Pinned by
