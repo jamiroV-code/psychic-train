@@ -4,15 +4,20 @@ name: LiqTide daily snapshot
 # endpoint. A day this workflow doesn't capture is gone forever (Standing
 # Rule 8, data-sources/all-data-sources.md). LiqTide actually publishes
 # around 00:25-01:12 UTC (observed `generated_utc`), and the archive file is
-# keyed by generated_utc[:10], not by when this job runs. Scheduled for
-# 18:47 UTC, so even with GitHub's ~2h scheduler delay (observed up to ~2h20m)
-# the run lands the same UTC day, ~18h after that day's publish. Runs 30
+# keyed by generated_utc[:10], not by when this job runs, so a run is safe as
+# long as it lands before the next publish. Scheduled for 13:17 UTC, ~12h
+# after that day's publish: GitHub started these runs
+# 2h39m-5h01m late on 2026-09-27/28 (measured from the Actions run list,
+# 2026-09-29), and on 2026-09-29/30 narrative and liqtide were about 4h
+# late (narrative 4h02m/4h01m, liqtide 3h52m/3h52m), so it varies by hours
+# rather than growing steadily; 13:17 survives a 10h delay budget. The
+# first step warns if a scheduled run started after UTC midnight. Runs 30
 # minutes after narrative-snapshot.yml and 60 after chain-growth-snapshot.yml,
 # so the pushes to main don't overlap. Pinned by
 # api/tests/scripts/test_snapshot_workflow_schedules.py.
 on:
   schedule:
-    - cron: "47 18 * * *"
+    - cron: "17 13 * * *"
   workflow_dispatch: {}
 
 permissions:
@@ -26,6 +31,15 @@ jobs:
   snapshot:
     runs-on: ubuntu-latest
     steps:
+      - name: Warn when the run crossed UTC midnight
+        if: github.event_name == 'schedule'
+        run: |
+          cron_hour=13   # must equal this workflow's cron hour
+          now_hour=$((10#$(date -u +%H)))
+          if [ "$now_hour" -lt "$cron_hour" ]; then
+            echo "::warning::scheduled for ${cron_hour}:xx UTC but started at $(date -u +%H:%M) UTC - the run crossed UTC midnight; today's no-history point may be dated the wrong day"
+          fi
+
       - uses: actions/checkout@v4
 
       - uses: astral-sh/setup-uv@v3

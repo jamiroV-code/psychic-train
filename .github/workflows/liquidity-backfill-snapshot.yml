@@ -1,0 +1,89 @@
+name: Liquidity backfill snapshot
+
+# Refreshes the 5 primary FRED liquidity series (`/regime` inputs) nightly
+# (pipeline-completeness D2).
+#
+# HONESTY — what this buys today:
+#   * The commit step is INERT. `api/data/cache/liquidity/` is gitignored
+#     (D1) and the runner is ephemeral, so nothing persists between runs and
+#     the commit step always reports "nothing new to commit". It becomes real,
+#     with zero rewrite, once P2 provides a persistent disk.
+#   * The real value now is a nightly integration canary: a crash (any exit
+#     code other than 0 or 2) fails the job loudly. A total provider outage
+#     (exit 2) is a warning annotation only.
+#
+# Scheduled 11:47 UTC, off the top of the hour. GitHub started these runs
+# 2h39m-5h01m late on 2026-09-27/28 (measured from the Actions run list,
+# 2026-09-29), and on 2026-09-29/30 narrative and liqtide were about 4h
+# late (narrative 4h02m/4h01m, liqtide 3h52m/3h52m), so it varies by hours
+# rather than growing steadily; 11:47 survives a
+# 10h delay budget. A late or even wrong-UTC-day run is harmless here:
+# backfill_primaries re-fetches the full FRED series idempotently and the next
+# run repairs anything. Runs 30 minutes after pairs-refresh-snapshot.yml and
+# 30 before chain-growth-snapshot.yml, so the pushes to main don't overlap.
+# Pinned by api/tests/scripts/test_snapshot_workflow_schedules.py.
+#
+# No secrets: FRED's fredgraph.csv export is keyless.
+on:
+  schedule:
+    - cron: "47 11 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: liquidity-backfill-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install api/ dependencies
+        run: uv sync --project api
+
+      - name: Backfill FRED primaries
+        id: backfill
+        run: |
+          set +e
+          uv run --project api python -m api.scripts.backfill_primaries
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Warn when no series was ok
+        if: steps.backfill.outputs.exit_code == '2'
+        run: |
+          echo "::warning::backfill_primaries.py - no FRED series returned ok, see the job log above"
+
+      - name: Commit refreshed liquidity cache
+        if: steps.backfill.outputs.exit_code == '0' || steps.backfill.outputs.exit_code == '2'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Tolerant staging: under D1 this directory is gitignored and on a
+          # fresh runner it may not exist at all. A bare `git add` exits 128
+          # (missing) or 1 (present but ignored) and would fail the job every
+          # night. Never use -f/--force: that would bypass D1.
+          git add -A -- api/data/cache/liquidity/ 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "nothing new to commit"
+            exit 0
+          fi
+          git commit -m "chore: liquidity backfill snapshot $(date -u +%Y-%m-%d)"
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
+            echo "push attempt $attempt failed; retrying"
+            sleep $((attempt * 10))
+          done
+          exit 1
+
+      - name: Fail the job when the step crashed
+        if: steps.backfill.outputs.exit_code != '0' && steps.backfill.outputs.exit_code != '2'
+        run: |
+          echo "::error::backfill=${{ steps.backfill.outputs.exit_code }} - the step exited outside the 0/2 contract (crash); commit skipped"
+          exit 1
