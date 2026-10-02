@@ -478,13 +478,144 @@ Docs/process only through Gate 4 (risk class: T0). Gate 5 adds git-index and ign
 
 ## Validate Contract
 
-(placeholder - vc-validate-agent writes this section before EXECUTE). VALIDATE must run before any Gate 2 write; gate must be `Gate: PASS` (or user-accepted CONDITIONAL after a supplement cycle).
+Status: CONDITIONAL
+Date: 02-10-26
+date: 2026-10-02
+generated-by: outer-pvl
+Scope: this contract gates the START of Gate 2 only (F1-F8, R13, R14). Gates 3-6 each re-enter VALIDATE (plan rule); the Gate 3+ findings below are carried forward as requirements, not as approval.
+
+Parallel strategy: sequential (single validate session; Layer 1 and Layer 2 checks ran inline as read-only commands, no sub-agent spawn tool was available to this session)
+Rationale: signal score 2/7 (S6 high-risk class named in plan: deploy/secrets/auth under the self-merge authorization; S7 14 files in blast radius). MEDIUM band would normally recommend parallel read-only subagents; dominant signal is S7. Findings below are evidence-based (validators were read and run read-only; remote refs and repo settings were queried read-only).
+
+Baseline measured 02-10-26 (read-only runs on branch claude/pensive-albattani-ou0cgv, before any Gate 2 write). Every Gate 2/3 validator gate is "no NEW failure vs this baseline", not "exit 0":
+
+| Validator | Baseline failures | Cause |
+|---|---|---|
+| validate-context-discovery.mjs | 1: `.agents/skills does not resolve to .claude/skills` | `.agents/skills` is 339 tracked regular files (mode 100644), not a symlink |
+| validate-skills.mjs | 1: same message | same cause |
+| validate-guide-sync.mjs | 1: `README.md does not exist` | no root README (F13 is Gate 5) |
+| validate-agent-parity.mjs --strict | 18 (all "normalized body differs" / "descriptions differ") | pre-existing Claude/Codex agent drift; non-strict run = 0 failures, 18 warnings |
+| validate-protocol-wiring.mjs, validate-kit-portability.mjs, validate-agent-frontmatter.mjs, validate-skill-invocation-wiring.mjs, validate-protocol-discovery.mjs, validate-all-context.mjs, `discover-context.mjs --check-routing`, `git diff --check`, validate-plan-artifact.mjs (this plan) | 0 | clean |
+
+Test gates (C3 5-column table; Gate 2 start scope; Gate 3+ rows are carried forward):
+
+| criterion id | behavior | strategy | proving test | gap-resolution |
+|---|---|---|---|---|
+| AC-R2 | all-context.md reduced to the line cap | Fully-Automated | `test "$(wc -l < process/context/all-context.md)" -le 300` | B (plan must add the disposition table, Gap 2, to make the cap reachable) |
+| AC-R2 | changelog block preserved whole in context-changelog.md | Fully-Automated | pinned `comm -23` of sorted changelog block (base all-context.md lines 33-568) vs sorted context-changelog.md = empty (exact command to be written by Gap 2) | B |
+| AC-R4 | context docs indexed and routing intact, no new failures | Fully-Automated | `node .claude/skills/vc-audit-context/scripts/validate-context-discovery.mjs` -> failures exactly equal the 1-item baseline | B (baseline-aware wording, Gap 1) |
+| AC-R4 | all-context.md keeps validator-required sections | Fully-Automated | `node .claude/skills/vc-generate-context/scripts/validate-all-context.mjs` -> 0 failures; `node .claude/skills/vc-context-discovery/scripts/discover-context.mjs --check-routing` -> in sync | B (not in plan today, Gap 2) |
+| AC-R4 | master-planner.md wired and discoverable in the same gate it is created | Fully-Automated | `node .claude/skills/vc-audit-vc/scripts/validate-protocol-wiring.mjs` and `node .claude/skills/vc-audit-context/scripts/validate-protocol-discovery.mjs` -> 0 failures | B (F11 moves to Gate 2, Gap 5) |
+| AC-R3/AC-R4 | no non-portable concrete context path in protocols or entry files | Fully-Automated | `node .claude/skills/vc-audit-vc/scripts/validate-kit-portability.mjs` -> 0 failures | B (Gap 4) |
+| AC-R4 | agent parity not worsened | Fully-Automated | `node .claude/skills/vc-audit-vc/scripts/validate-agent-parity.mjs` (non-strict) -> 0 failures | B (plan says --strict, Gap 1) |
+| AC-R3 | retired wording gone from entry points | Fully-Automated | `grep -niE "confidence over direction\|open it to other users\|redistribution-safe\|redistribution is a first-class" CLAUDE.md AGENTS.md process/context/all-context.md process/context/north-star.md` -> no matches | B (pattern set, Gap 13) |
+| AC-R1 | default load no longer imports big files | Fully-Automated | `grep -nE '(^\|[ (])@[A-Za-z./_-]+\.md' CLAUDE.md` -> no matches; `wc -c` entry-set table at or under the numeric cap (Gate 3) | B (Gap 3, Gap 13) |
+| AC-R8 | product code untouched | Fully-Automated | `git diff --stat <gate-base-sha>..HEAD` lists only `process/`, `CLAUDE.md`, `AGENTS.md` | B (base SHA pinned, Gap 13) |
+| all | whitespace and conflict markers | Fully-Automated | `git diff --check` -> exit 0 | A |
+| AC-R4/AC-R7 | plan structure valid | Fully-Automated | `node .claude/skills/vc-generate-plan/scripts/validate-plan-artifact.mjs <this plan>` -> 0 failures, 0 warnings (verified 02-10-26) | A |
+| AC-R4 (Gate 3) | README/guide sync | Fully-Automated | `node .claude/skills/vc-audit-vc/scripts/validate-guide-sync.mjs` -> baseline-aware; cannot pass until a README with an Agents table and a Skills section exists | C (decision Gap 1, Gate 3 or 5) |
+| AC-R5 | registry reconciled against evidence | Hybrid | user review of registry vs plan section 3 + `git log`/file-existence re-checks of UNVERIFIED rows; precondition: rev 6 base loaded | B (T26-T28 rows, Gap 7) |
+| AC-R6 | nothing removed without approval | Hybrid | approvals log vs `git`/session state diff; precondition: an approvals-log location exists | B (Gap 13) |
+| AC-R9 | token claims labelled measured/unmeasured | Hybrid | user review of Gate 3 report | A |
+| AC-R1 | fresh session reaches a task brief on the entry set only | Agent-Probe | fresh session reads only entry set and states task brief | A (Gate 3) |
+| AC-R7 | acceptance rule not satisfied by worker say-so | Agent-Probe | Gate 6 pilot report + registry history | C (Gate 6) |
+
+Failing stub:
+test("should keep all-context.md at or under the line cap", () => { throw new Error("NOT IMPLEMENTED - TDD stub: all-context.md reduced to the line cap") })
+Failing stub:
+test("should preserve the changelog block whole in context-changelog.md", () => { throw new Error("NOT IMPLEMENTED - TDD stub: changelog block preserved whole") })
+Failing stub:
+test("should show no new validate-context-discovery failures versus baseline", () => { throw new Error("NOT IMPLEMENTED - TDD stub: no new validate-context-discovery failures") })
+Failing stub:
+test("should pass validate-all-context and routing check after slimming", () => { throw new Error("NOT IMPLEMENTED - TDD stub: validate-all-context and check-routing clean") })
+Failing stub:
+test("should wire master-planner.md into the protocol router with discovery frontmatter", () => { throw new Error("NOT IMPLEMENTED - TDD stub: protocol wiring and discovery clean") })
+Failing stub:
+test("should pass validate-kit-portability with new entry-set references", () => { throw new Error("NOT IMPLEMENTED - TDD stub: kit portability clean") })
+Failing stub:
+test("should have no retired wording in entry points", () => { throw new Error("NOT IMPLEMENTED - TDD stub: retired wording absent") })
+Failing stub:
+test("should have no @-imports of large files in CLAUDE.md", () => { throw new Error("NOT IMPLEMENTED - TDD stub: no @-imports of large files") })
+Failing stub:
+test("should limit Gates 2-4 diff to process/ CLAUDE.md AGENTS.md", () => { throw new Error("NOT IMPLEMENTED - TDD stub: diff scope limited") })
+
+C-4 reconciliation: the `strategy` column carries only Fully-Automated / Hybrid / Agent-Probe. Known-Gap is never a strategy; it appears only as the named residuals below (gap-resolution D).
+
+Legacy line form:
+- all-context slimming: [Fully-automated: wc -l, validate-all-context, validate-context-discovery (baseline-aware), --check-routing]
+- protocol docs: [Fully-automated: validate-protocol-wiring, validate-protocol-discovery, validate-kit-portability]
+- entry files (Gate 3): [Fully-automated: @-import grep, wc -c table, retired-wording grep] | [agent-probe: fresh-session probe]
+- registry/archive: [hybrid: user review + git log/file-existence re-checks]
+- master planner lifecycle (Gate 6): [agent-probe: pilot task]
+- worker self-merge conditions: [known-gap: platform enforcement unavailable, documented below, gap-resolution D]
+
+Dimension findings:
+- Infra fit: CONCERN - all cited paths exist or are creatable (verified: MASTER-PLAN rev 6 on origin/claude/pensive-dijkstra-ko69oi = 751 lines with Revision 4/5/6 sections; bf65024 exists; ci.yml, deploy/, api/tests/deploy exist; process/archive and README.md are creatable), but: validators carry baseline failures (table above); `@`-imports at CLAUDE.md lines 20, 36, 48 are the real mechanism of the ~200 KB load and the plan never names them; validate-kit-portability blocks backticked `process/context/<new file>` refs in CLAUDE.md, AGENTS.md and protocols; F11 sits one gate after F7; F14's `.gitignore` line already exists.
+- Test coverage: CONCERN - every AC has a command, but 4 gate commands are wrong as written (`--strict` parity = 18 baseline failures; guide-sync cannot pass before a README with Agents/Skills sections exists; context-discovery/skills fail on baseline), validate-all-context and --check-routing are missing from Gate 2, AC-R2 preservation and AC-R6 approvals-log have no concrete command or artifact, AC-R1/AC-R3 thresholds are vague.
+- Breaking changes: CONCERN - slimming CLAUDE.md 28.9 KB -> 20 KB and AGENTS.md 37.9 KB -> 20 KB can drop hard rules other docs rely on (no-inline-execution, PVL/EVL gates, commit-on-main, model policy) with no section-by-section disposition; validators that grep these files: validate-context-discovery (both must contain `process/context/all-context.md`, stale-pattern scan, concrete-ref existence), validate-kit-portability (both scanned), validate-agent-parity (only normalizes the names). No hook greps CLAUDE.md content (hooks only count it). all-context.md must keep `## Repository Structure`, `## Technology Stack`, `## Context Group Lifecycle`, `Last updated: YYYY-MM-DD` and the GENERATED:routing block, or validate-all-context / validate-context-discovery FAIL.
+- Security surface: CONCERN - the self-merge authorization (accepted by user, not re-litigated) is enforced only by convention: repo is private on a plan where branch protection returns HTTP 403, `allow_auto_merge` is false, `.claude/settings.json` has no permissions block, so CI-green, ownership diff, 3-worker cap, report-committed and archive-after-merge are procedure checks, not platform gates. Fail-safe set has gaps: undefined "independent" re-run, worker-vs-planner registry-write contradiction, no up-to-date-with-main/merge serialization, control-surface self-edit (ci.yml, master-planner.md, validators), no post-merge detective control.
+- Section 2 / Gate 2 file set (F1-F8) feasibility: CONCERN - mechanical: all targets creatable/modifiable. Gaps: ordered Gate 2 checklist absent (F4 before F5; R14 -> R13 -> R3; all share all-context.md); F5 <= 300 lines is unreachable without further condensing (measured: changelog block lines 33-568 = 536 lines, 45 KB = 44% of lines / 48% of bytes, not 65%; kept sections 569-966 = about 398 lines before Open Questions 139, References 61, Scan Metadata 56). Highest-risk edit: F5 (loses validator-required sections or routing block). Mitigation: disposition table + run validate-all-context and --check-routing after the edit.
+- Section 3 registry / R14 feasibility: CONCERN - rev 6 contains T26, T27, T28; plan reconciles T1-T25 only. Rev 6 (751 lines, 43 KB) -> F6 ~250 lines needs a content-preservation rule. Highest-risk edit: F6 rebuild overwriting rev 6 content from main's rev 3a (plan already mitigates via R14).
+- Section 4 lifecycle spec: CONCERN - contradicts CLAUDE.md "commit directly on main / branch only when asked" and "never start EXECUTE without explicit approval" without reconciling; session-start staleness rule (`stamp == git rev-parse HEAD`) is always stale because nightly bot commits advance main daily.
+- R13 salvage: CONCERN - 16 files changed on exciting-meitner vs merge-base including `process/context/data-sources/all-data-sources.md` (+67) and two Python files under `lse-data-verification_17-09-26/`; none listed in F1-F14 or Touchpoints. Highest-risk edit: copying all-context.md changes (plan says drop them).
+- Section 7 housekeeping H1/H2: CONCERN - H2 `.gitignore` line already present; H1 fix needs exact commands and Windows `core.symlinks` precondition (known gap, unverified).
+- Items verified OK: AGENTS.md/Codex parity IS planned (F10) but only by pointer and with no mechanical drift check (Gap 6); 15 agents and 33 skills counts correct; `process/context/all-context.md` string requirement is satisfiable; no hook or validator reads MASTER-PLAN.md, so rebuilding it breaks none; `api/tests/deploy/test_deploy_config_shape.py` and `.github/workflows/ci.yml` exist; plan structure validator passes.
+
+Open gaps:
+- real per-session token usage is unmeasured: known-gap: documented, backlog stub due at Gate 2 (gap-resolution D)
+- symlinked `.agents/skills` on the user's Windows PC is unverified: known-gap: documented, backlog stub due at Gate 2 (gap-resolution D)
+- R12 deploy runtime behaviour (PowerShell, Task Scheduler, Tailscale) verifiable only on the user's PC: known-gap: documented, hybrid user-run (gap-resolution D)
+- MCP tool names named by the plan (`create_session`, `archive_session`, `list_events`, `set_session_tags`, `subscribe_pr_activity`, the merge tool) were not verifiable from this session: CONCERN, resolved by Gate 2 R4 step (Gap 8 (vii))
+- platform enforcement of self-merge conditions is unavailable on this repo plan: documented residual, compensating controls requested (Gap 8)
+
+What this coverage does NOT prove:
+- wc -l / validate-all-context / validate-context-discovery: not that the slimmed all-context.md still contains every current-truth fact needed by agents (only structure, routing and line count), and not that nothing was lost from the kept sections (only the changelog block is covered by the preservation check)
+- validate-protocol-wiring / validate-protocol-discovery / validate-kit-portability: not that master-planner.md content is correct or that its rules are mechanically enforceable
+- baseline-aware validator gates: not that the 18 agent-parity warnings or the `.agents/skills` failure are harmless; they only prove no regression
+- @-import grep and wc -c: not that a fresh Claude session actually follows the new entry set (only the agent-probe shows that, at Gate 3) and not real token usage
+- retired-wording grep: not that the North Star content is correct, only that old phrasing is absent from named files
+- git diff --stat scope check: not that the contents of process/ files are accurate
+- registry hybrid review: not that every UNVERIFIED T-row is true; only rows re-checked are evidenced
+- none of the gates proves that a worker honours the standing-authorization conditions; they are procedure, not platform controls, until a pilot (Gate 6) and a post-merge audit are in place
+
+SUPPLEMENT REQUEST (exact items; section ids are slugs of `##`/`###` headings in this plan):
+- Gap 1: Section 9-gate-roadmap + 10-acceptance-criteria-this-program | Concern: validator gates are not achievable as written (`validate-agent-parity --strict` has 18 baseline failures; `validate-guide-sync` fails because README.md is absent and F13's 60-line runbook README cannot satisfy its Agents-table/Skills-section checks; validate-context-discovery and validate-skills fail on the `.agents/skills` realpath check until H1) | Severity: CONCERN | Suggested addition: record the baseline table above in the plan, change every validator gate to "no new failure vs baseline", use non-strict parity, and decide README scope (satisfy guide-sync at Gate 3, or accept the baseline failure until Gate 5)
+- Gap 2: Section 2-exact-file-set (F4, F5) + 10-acceptance-criteria-this-program (AC-R2) | Concern: <=300 lines unreachable without a disposition table; required headings and routing block unnamed; F4 content undefined; preservation check has no command | Severity: CONCERN | Suggested addition: add an F5 section-by-section disposition table with line budgets; list required headings (`# ` title, `## Repository Structure`, `## Technology Stack`, `## Context Group Lifecycle`, `Last updated: YYYY-MM-DD`, GENERATED:routing block intact, each new root doc named by basename); define F4 = changelog block (+ Open Questions/References/Scan Metadata if moved) and pin the `comm -23` command; add validate-all-context.mjs and discover-context.mjs --check-routing to Gate 2 verification
+- Gap 3: Section 2-exact-file-set (F9, F10) + 5-token-efficiency-plan | Concern: the default load is driven by three `@`-imports in CLAUDE.md (lines 20, 36, 48: all-context.md, all-development-protocols.md, orchestration.md); no CLAUDE.md section disposition; TL;DR "~25 KB" contradicts the table (43-48 KB with a 20 KB CLAUDE.md) | Severity: CONCERN | Suggested addition: F9 must remove those @-imports (AGENTS.md has none); add a CLAUDE.md/AGENTS.md section disposition table keeping or relocating-with-pointer each hard rule; correct the TL;DR arithmetic
+- Gap 4: Section 2-exact-file-set (F7, F9, F10) + public-contracts | Concern: validate-kit-portability fails on backticked `process/context/<file>` refs in CLAUDE.md, AGENTS.md and process/development-protocols/*.md other than all-context.md, tests/all-tests.md, generated-skills-catalog.json | Severity: CONCERN | Suggested addition: reference north-star.md, current-state.md, decisions.md, context-changelog.md via markdown links or bare names (no backticked `process/context/` prefix), or add an explicit approved scope item to widen the validator allowlist; add validate-kit-portability to Gate 2 and Gate 3 verification
+- Gap 5: Section 2-exact-file-set (F11) + 9-gate-roadmap | Concern: validate-protocol-wiring requires all-development-protocols.md to list master-planner.md by basename and validate-protocol-discovery requires protocol frontmatter; F11 is Gate 3 but F7 is Gate 2 | Severity: CONCERN | Suggested addition: move F11 into Gate 2 and specify F7 frontmatter (`name: protocol:master-planner`, metadata node_type/type/read_order/required/read_when, date)
+- Gap 6: Section 2-exact-file-set (F10) + 12-risk-predictions | Concern: no mechanical CLAUDE.md vs AGENTS.md drift check (validate-agent-parity compares .claude/agents vs .codex/agents only); AGENTS.md is structurally different (704 vs 440 lines) and falsely says `.agents/skills` is a symlink | Severity: CONCERN | Suggested addition: define a shared delimited entry-set block present byte-identically in both files plus a diff command as the drift check; fix or qualify the symlink statement
+- Gap 7: Section 3-task-registry-schema-and-initial-population | Concern: T26, T27, T28 (present in rev 6) missing; F6 ~250 lines vs rev 6 751 lines with no preservation rule | Severity: CONCERN | Suggested addition: add T26 (open finding), T27 and T28 (fixed by P1, status review) rows; state that superseded revision text is moved to the archive index/changelog, not dropped
+- Gap 8: Section 4-master-planner-lifecycle-spec (Standing authorization) | Concern: enforceability and fail-safe completeness: (i) add an enforcement table (platform-enforced vs convention: repo is private, branch protection HTTP 403, auto-merge off, no permissions block); (ii) resolve item 2(f) vs item 5 registry-write contradiction; (iii) define "independent" re-run and CI check names/conclusions (`api - pytest`, `web - vitest, tsc, island build`, pending = not green); (iv) add up-to-date-with-main plus serialized merges; (v) address control-surface self-edit (ci.yml, master-planner.md, validators) as forbidden-for-self-merge or an explicit user-accepted residual, plus a post-merge detective control (planner checks main CI on the merge SHA, proposes revert on red); (vi) state that a denied/prompting merge or archive call means stop at `review`; (vii) add a Gate 2 R4 step to verify MCP tool names against the live tool list | Severity: CONCERN | Suggested addition: the above as one subsection "Enforcement and compensating controls" in section 4
+- Gap 9: Section 4-master-planner-lifecycle-spec | Concern: worker model conflicts with CLAUDE.md "commit directly on main; branch only when asked" and "never start EXECUTE without explicit approval"; no worker lane (quick/fast/full) or per-task VALIDATE rule | Severity: CONCERN | Suggested addition: in master-planner.md state that `approved` = standing EXECUTE consent for that task, name the worker lane rule and require the worker's own validate-contract before EXECUTE, and add the worker-branch exception to the commit-policy statement
+- Gap 10: Section 4-master-planner-lifecycle-spec (Session start/end) | Concern: staleness rule `stamp == git rev-parse HEAD` is always true-stale (nightly bot commits to main, and the commit that adds current-state.md) | Severity: CONCERN | Suggested addition: define staleness as stamp commit not an ancestor of HEAD, or non-chore commits since stamp (`git log <stamp>..HEAD --oneline -- . ':(exclude)api/data/cache'`) above a stated threshold
+- Gap 11: Section 2-exact-file-set (R13, F14) + touchpoints | Concern: R13 file set (16 files incl. all-data-sources.md and 2 .py files under process/) not enumerated or ordered against R14/R3; F14 `.gitignore` line already present | Severity: CONCERN | Suggested addition: list R13 files taken vs dropped, add the Gate 2 order (R14 -> R13 -> F4 -> F5 ...), change F14 to `git rm --cached` only
+- Gap 12: Section 7-housekeeping-candidates-no-deletion-on-static-search-alone (H1) | Concern: no exact fix commands; 339 tracked regular files; Windows symlink precondition | Severity: CONCERN | Suggested addition: add the exact git commands (remove tracked copy, add mode-120000 symlink) and the `core.symlinks` precondition; keep gated by user approval
+- Gap 13: Section 10-acceptance-criteria-this-program (AC-R1, AC-R3, AC-R5, AC-R6, AC-R8) | Concern: vague thresholds and missing artifacts: AC-R1 "~45 KB", AC-R3 grep set lacks redistribution wording, no approvals-log location for AC-R6, AC-R8 diff has no base SHA, no mechanical 11-field report check | Severity: CONCERN | Suggested addition: numeric byte cap, extended grep (case-insensitive) set, approvals-log location (a section of MASTER-PLAN or archive index), `git diff --stat <gate-base-sha>..HEAD`, and a grep that counts the 11 report headings
+
+Gate: CONDITIONAL (0 FAILs, 13 CONCERNs; first-pass, routes to a PVL supplement cycle; not terminal, EXECUTE is not legal yet)
+Accepted by: none yet. First-pass CONDITIONAL; no concern has been accepted. Acceptance is recorded after the supplement cycle (or by explicit user acceptance), listing each accepted concern by name.
+
+## Autonomous Goal Block
+
+SESSION GOAL: Master Planner recovery program, Gate 2 (docs/process only): re-verified current-state.md, north-star.md, decisions.md, context-changelog.md, slimmed all-context.md, master-planner.md protocol, MASTER-PLAN.md registry rebuilt from origin/claude/pensive-dijkstra-ko69oi rev 6, archive index skeleton, R13 selective salvage of exciting-meitner.
+Charter + umbrella plan: N/A - single plan (process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md)
+Autonomy: only what plan section 4 (Standing authorization) records: spawn workers for registry tasks already `approved` (max 3 concurrent, excluding the planner); self-merge/self-archive only when every mechanical condition holds and the worker is sure, otherwise stop at `review`. Branch/worktree deletion consent is NOT granted. Gate 2 may not start until Gate: PASS, or CONDITIONAL after at least one PVL supplement cycle or explicit user acceptance. See feedback_autonomous_phase_execution.md for autonomy removing approval pauses only.
+Hard stops / safety constraints:
+- Any write outside process/ in Gates 2-4 (CLAUDE.md and AGENTS.md edits are Gate 3 and need user review before commit)
+- Deleting any branch, file or session; archive_session before the handover report is durable and the merge is verified
+- Installs, product code (api/, web/) edits, deploy script changes, network use beyond approved ref-only fetch
+- Starting Gate N+1 before VALIDATE writes a contract for it
+- Any validator showing a NEW failure versus the recorded baseline in the Validate Contract
+Next phase: PVL supplement cycle (vc-plan-agent applies the SUPPLEMENT REQUEST, then re-spawn vc-validate-agent from V1); after Gate: PASS: EXECUTE Gate 2 via vc-execute-agent (opus), scoped to F1-F8 + R13 + R14
+Validate contract: inline in plan (## Validate Contract)
+Execute start: wc -l all-context <=300 | validate-context-discovery (failures == baseline) | validate-all-context | discover-context --check-routing | validate-protocol-wiring | validate-protocol-discovery | validate-kit-portability | validate-agent-parity non-strict | git diff --check | retired-wording grep | e2e spec: none | probe: none until Gate 3 | high-risk pack: no (Gate 5 R12 only)
 
 ## Resume and Execution Handoff
 
 1. Selected plan: `/home/user/psychic-train/process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md`
 2. Last completed step: PLAN supplement 2 (Gate 1 approved; Q4, Q8 resolved; "no exceptions" guardrail recorded; branch measurements recorded; no implementation). Working tree: plan file edits only.
-3. Validate-contract: pending.
+3. Validate-contract: written 02-10-26, Gate: CONDITIONAL (first pass, 0 FAILs, 13 CONCERNs; SUPPLEMENT REQUEST inside the contract). Next: PVL supplement cycle, then re-validate from V1.
 4. Context loaded: CLAUDE.md, all-context.md, orchestration.md, MASTER-PLAN.md (full), realignment SPEC (AC grep), repo branch list.
 5. Next step: ENTER VALIDATE MODE (all questions resolved); then Gate 2 via vc-execute-agent (opus) scoped to F1-F8 plus R13 and R14; start MASTER-PLAN work from `pensive-dijkstra` rev 6; re-verify every remaining UNVERIFIED registry item first.
 

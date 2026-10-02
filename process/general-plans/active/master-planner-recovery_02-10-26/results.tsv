@@ -1,0 +1,2 @@
+iteration	timestamp	gaps_found	fail_count	concern_count	applied	saturation_status	loop_status	notes
+0	2026-10-02T00:00:00Z	13	0	13	0	ACTIVE	baseline	Gate 1 plan outer-pvl validate-contract written; first-pass Gate: CONDITIONAL (13 plan-text concerns: validator baselines, all-context disposition, @-imports, kit-portability, F11 timing, AGENTS parity, T26-28, standing-authorization enforcement, worker-branch vs commit policy, staleness rule, R13 file set, H1 commands, AC thresholds)
