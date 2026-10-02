@@ -8,12 +8,12 @@ feature: general-plans
 # Project Recovery, Architecture Cleanup, AI Efficiency and Master Planner Orchestration — GATE 1 Proposal
 
 Date: 02-10-26
-Status: PROPOSED, Gate 1 approved (all user answers 02-10-26 recorded below; Q1-Q8 resolved). Nothing here is executed. PVL supplement cycle 2 (Gaps 14-23 plus the user-approved role-based entry-set refinement) is applied; vc-validate-agent re-runs from V1 next and must write a passing contract before any Gate 2 write. Working tree: plan file edits only (this file); no other file touched.
+Status: PROPOSED, Gate 1 approved (all user answers 02-10-26 recorded below; Q1-Q8 resolved). Nothing here is executed. PVL supplement cycle 3 (Gaps 24-30, on top of cycle 2's Gaps 14-23 and the user-approved role-based entry-set refinement) is applied; vc-validate-agent re-runs from V1 next (cycle 4) and must write a passing contract before any Gate 2 write. Working tree: plan file edits only (this file); no other file touched.
 Complexity: COMPLEX (single plan, gated roadmap Gate 2..6; each gate re-enters VALIDATE).
 
 ## Status of this plan
 
-Gate 1: approved (02-10-26). Q1-Q8 are all resolved (user answers, section 13); Q4 and Q8 are now Resolved. PVL supplement cycle 2 is applied; VALIDATE re-runs from V1 next. No Gate 2 write happens before VALIDATE writes a passing contract. Working tree: only this plan file was edited in this supplement.
+Gate 1: approved (02-10-26). Q1-Q8 are all resolved (user answers, section 13); Q4 and Q8 are now Resolved. PVL supplement cycle 3 is applied; VALIDATE re-runs from V1 next (cycle 4). No Gate 2 write happens before VALIDATE writes a passing contract. Working tree: only this plan file was edited in this supplement.
 
 ## TL;DR
 
@@ -81,15 +81,16 @@ Non-goals: executing any product task (realignment, narrative baskets, equities)
 | F3 | `process/context/decisions.md` | create | index ~60 lines; fields: decision / date / reason / alternatives / consequences / status active-or-superseded | 2 |
 | F4 | `process/context/context-changelog.md` | create (move) | the changelog block (base all-context.md, today lines 33-568, 536 lines / 45 KB; the range is recomputed with `grep -n '^## '` at Gate 2 start, never hard-coded) PLUS the moved Open Questions, References and Scan Metadata sections, whole and unedited, under one `# ` title and a short header; NOT in default load; defined in the F4/F5 subsection below | 2 |
 | F5 | `process/context/all-context.md` | modify | <= 300 lines (from 1,223; about 18-19 KB at the measured 62.5 bytes/line; the planner entry set loads only its router section, defined in the entry-set subsection) per the F5 disposition table below; keep routing, architecture, patterns, stack, open decisions; replace history with one-line pointers to F4; required headings and routing block listed below | 2 |
-| F6 | `process/MASTER-PLAN.md` | modify | ~250 lines: registry table, lifecycle summary, lane table, reconciled T-list; built FROM rev 6 (R14); all superseded revision text (rev 1-6 narrative, ~500 lines) is moved whole to `process/archive/master-plan-revisions_02-10-26.md` (created in Gate 2, linked from F8) - preservation rule: nothing from rev 6 is dropped, only relocated | 2 |
-| F7 | `process/development-protocols/master-planner.md` | create | ~200 lines: lifecycle, acceptance rule, envelope, report schema, isolation, archival semantics, worker lane + commit-policy rules (section 4); frontmatter exactly: `name: protocol:master-planner`, `description: ...`, `date: 02-10-26`, block-style nested metadata exactly as in autopilot.md: a line `metadata:` followed by five two-space-indented lines `node_type: protocol`, `type: protocol`, `read_order: 10`, `required: false`, `read_when: "Master Planner posture or worker spawn"` (validate-protocol-discovery does NOT parse a flow-style `{...}` map: verified 02-10-26 on a scratch repo, it fails with metadata.required and metadata.read_when missing). The file also holds the Master Planner posture section (the orchestrator rules moved out of CLAUDE.md) and the report template, whose 11 headings are written as `## 1 Task ID` ... `## 11 Context cost` and used nowhere else in the file (command C12 counts them) | 2 |
-| F8 | `process/archive/index.md` | create | table by date/task/status/branch/commit/location; grows by row | 2 |
-| F9 | `CLAUDE.md` | modify | session-start section rewritten to the short entry set; REMOVE the three `@`-imports (all-context.md line 20, all-development-protocols.md lines 20 and 36, orchestration.md line 48) - AC-R1 fails otherwise; follow the section disposition table below; target <= 20 KB (from 28.9 KB); ROLE-NEUTRAL (the Orchestrator Role section is removed from it; orchestrator rules move to master-planner.md with a short role-selection pointer left behind); contains the shared ENTRY-SET block listing both entry sets | 3 |
-| F10 | `AGENTS.md` | modify | same entry-set rewrite via the byte-identical ENTRY-SET block (drift check below), <= 20 KB (from 37.9 KB, 704 lines), with the same role-neutral rewrite (the sentence "You are the orchestrator, not the worker" at AGENTS.md line 56 goes); the false statement that `.agents/skills` is a symlink is corrected to: tracked copy until H1 lands | 3 |
+| F6 | `process/MASTER-PLAN.md` | modify | ~250 lines: registry table, lifecycle summary, lane table, reconciled T-list; built FROM rev 6 (R14); all superseded revision text (rev 1-6 narrative, ~500 lines) is moved whole to `process/archive/master-plan-revisions_02-10-26.md` (created in Gate 2, linked from F8) - preservation rule: nothing from rev 6 is dropped, only relocated; checked by command C14 against the pinned rev 6 commit 18ffd4f014f4e5ea0f5d654688875a9300b30ab4 (record `git rev-parse origin/claude/pensive-dijkstra-ko69oi` at Gate 2 start; if the tip has moved, the user decides which revision is the base) | 2 |
+| F7 | `process/development-protocols/master-planner.md` | create | ~200 lines: lifecycle, acceptance rule, envelope, report schema, isolation, archival semantics, worker lane + commit-policy rules (section 4); frontmatter exactly: `name: protocol:master-planner`, `description: ...`, `date: 02-10-26`, block-style nested metadata exactly as in autopilot.md: a line `metadata:` followed by five two-space-indented lines `node_type: protocol`, `type: protocol`, `read_order: 10`, `required: false`, `read_when: "Master Planner posture or worker spawn"` (validate-protocol-discovery does NOT parse a flow-style `{...}` map: verified 02-10-26 on a scratch repo, it fails with metadata.required and metadata.read_when missing). The file also holds the Master Planner posture section (the orchestrator rules moved out of CLAUDE.md) and the report template, whose 11 headings are written as `## 1 Task ID` ... `## 11 Context cost` and used nowhere else in the file (command C12 counts them); the worker envelope template inside it starts with the literal line `ROLE: WORKER` (command C14 checks it) | 2 |
+| F8 | `process/archive/index.md` | create | table by date/task/status/branch/commit/location; grows by row; ALSO a `## Approvals Log` section (exactly one such heading; one row per approval: date, what, approver quote; Gate 2 writes the row for the R13 move naming `lse-data-verification_17-09-26` with the user's Q4 answer of 02-10-26 as the quote; command C14 checks it) | 2 |
+| F9 | `CLAUDE.md` | modify | session-start section rewritten to the short entry set; REMOVE the three `@`-imports (all-context.md line 20, all-development-protocols.md lines 20 and 36, orchestration.md line 48) - AC-R1 fails otherwise; follow the section disposition table below; target <= 20 KB (from 28.9 KB); ROLE-NEUTRAL (the Orchestrator Role section is removed from it; orchestrator rules move to master-planner.md with a short role-selection pointer left behind); contains the shared ENTRY-SET block listing both entry sets; the rewrite MUST keep the literal `process/context/all-context.md` (validate-context-discovery requires it in both CLAUDE.md and AGENTS.md; validate-kit-portability allows it) | 3 |
+| F10 | `AGENTS.md` | modify | same entry-set rewrite via the byte-identical ENTRY-SET block (drift check below), <= 20 KB (from 37.9 KB, 704 lines), with the same role-neutral rewrite (the sentence "You are the orchestrator, not the worker" at AGENTS.md line 56 goes); the false statement that `.agents/skills` is a symlink is corrected to: tracked copy until H1 lands; keeps the literal `process/context/all-context.md` as in F9 | 3 |
 | F11 | `process/development-protocols/all-development-protocols.md` | modify | add master-planner.md row listed by basename (validate-protocol-wiring); mark orchestration.md as on-demand, not default; moved to Gate 2 with F7 | 2 |
 | F12 | `process/context/tests/all-tests.md` | modify | add risk-tier table (section 6) and fix stale counts after measured re-run | 4 |
 | F13 | `README.md` (root) | create | ~60 lines: start API/web, runbook pointers | 5 |
-| F14 | `web/tsconfig.tsbuildinfo` | `git rm --cached` only (the `.gitignore` line `web/tsconfig.tsbuildinfo` already exists; file still tracked, 171,544 bytes); approval required | 5 |
+| F14 | `web/tsconfig.tsbuildinfo` and `.gitignore` | untrack AND ignore: `git rm --cached web/tsconfig.tsbuildinfo` (file still tracked, 171,544 bytes) PLUS add the line `web/tsconfig.tsbuildinfo` to `.gitignore` (the line is absent today on main, HEAD and ui-shell; `git log -S tsbuildinfo -- .gitignore` is empty, so untracking alone would leave an untracked file that every tsc run recreates). `.gitignore` is a shared file: this lane is its single owner at Gate 5; approval required | 1 line added | 5 |
+| F15 | `process/general-plans/backlog/token-usage-telemetry_NOTE_02-10-26.md`, `process/general-plans/backlog/agents-skills-symlink-windows_NOTE_02-10-26.md`, `process/general-plans/backlog/deploy-runtime-user-pc-verification_NOTE_02-10-26.md` | create three backlog stubs, one per known gap named in Verification Evidence: real per-session token usage (unmeasured); behavior of a symlinked `.agents/skills` on the user's Windows PC; R12 deploy runtime behavior verifiable only on the user's PC; each ~10-15 lines (what is unproven, why, how to close it); required by the vacuous-green ban | ~3 x 1 KB | 2 |
 
 Home decision for the registry: inside `process/MASTER-PLAN.md`. Justification: it already exists, already carries T1..T25, lanes and the 3-lane cap, and is the file sessions already cite informally. A sibling file would give two boards. Risk: it is a large file; mitigation: registry holds one row per task (<= 3 lines), details live in each task folder.
 
@@ -122,7 +123,7 @@ WORKER entry set (a spawned worker session):
 
 Worker total: <= 36,000 bytes provisional (typical ~30 KB, about 7-9k tokens, about an 85% cut). NOT in the worker default set: north-star.md, current-state.md, MASTER-PLAN.md, the all-context.md router, orchestration.md (the envelope links north-star.md and current-state.md; the worker opens them only if the task needs them, and notes it in report field 11).
 
-Router section definition: from line 1 of all-context.md through the line before the `## Context Group Lifecycle` heading (title, pointer line, project summary, how-this-file-works, entry and group tables, Task Routing Table). The base Quick Start section is merged into How This File Works so the range stays contiguous. Budget ~87 lines (~5-6 KB at 62.5 bytes/line; the base equivalent, lines 1-32 plus 569-680, is 144 lines / 7,709 bytes before condensing). Command C3 measures it with `sed`, so the definition is mechanical, not a judgment.
+Router section definition: from line 1 of all-context.md through the line before the `## Context Group Lifecycle` heading (title, pointer line, project summary, how-this-file-works, entry and group tables, Task Routing Table). The base Quick Start section is merged into How This File Works so the range stays contiguous. Budget 90 lines (the F5 table rows through Task Routing Table: 15+3+10+15+25+22; ~5-6 KB at 62.5 bytes/line; the base equivalent, lines 1-32 plus 569-680, is 144 lines / 7,709 bytes before condensing). Command C3 measures it with `sed`, so the definition is mechanical, not a judgment.
 
 Honest arithmetic: the earlier "43-48 KB" entry-set claim is withdrawn. It budgeted all-context.md at ~12 KB for 300 lines (40 bytes/line), but the kept sections measure 62.5 bytes/line (base lines 569-966 = 398 lines = 24,895 bytes), so a 288-300 line F5 is ~18-19 KB; the planner loads only its ~5-6 KB router section, but the registry now joins the planner set, which is why the planner cap is 64,000. CLAUDE.md remains the largest default file for both roles; trimming it below 20 KB is a Gate 3 measurement, not a promise. The caps above are provisional: at Gate 2 close the measured bytes of F1, F2, the F5 router section and F6 are recorded in the Gate 2 report and the caps are confirmed or tightened; a cap may be raised only with user approval.
 
@@ -130,7 +131,7 @@ Role-neutral CLAUDE.md and AGENTS.md (F9, F10): CLAUDE.md line 50 ("You are the 
 
 ### Gate 2 order, R13 file list, F4/F5 definition, F9/F10 dispositions
 
-**Gate 2 execution order (all-context.md is shared, so strictly serial):** R14 (rebuild registry base from `origin/claude/pensive-dijkstra-ko69oi` rev 6) -> R13 (salvage, list below) -> F4 (create changelog from the base all-context.md, `<base>` = HEAD at Gate 2 start) -> F5 (slim all-context.md) -> F1, F2, F3 -> F7 + F11 (together) -> F6 -> F8 -> **R4 step (vii)**, run by the Master Planner (orchestrator) session itself, NOT by the vc-execute-agent subagent (verified 02-10-26: the claude-code-remote tools `create_session`, `archive_session`, `send_message`, `list_sessions`, `list_events`, `set_session_tags`, `subscribe_pr_activity`, `get_session`, `interrupt_session` and `mcp__github__merge_pull_request` / `mcp__github__enable_pr_auto_merge` are in the orchestrator session's tool list; vc-* subagents do not see them): check every tool name this plan relies on against the live tool list, AND verify behaviour, not just names, with one read-only dry-run call such as `list_sessions` (it must return a session list; nothing is spawned, archived or merged). The orchestrator records the result in the Gate 2 report and hands it to the execute agent; any name that does not exist or call that fails is corrected in master-planner.md before the gate closes.
+**Gate 2 execution order (all-context.md is shared, so strictly serial):** R14 (rebuild registry base from `origin/claude/pensive-dijkstra-ko69oi` rev 6) -> R13 (salvage, list below) -> F1, F2, F3 (they do not touch all-context.md, and F5's summary is written from north-star.md, so they come first) -> F4 (create changelog from the base all-context.md, `<base>` = HEAD at Gate 2 start) -> F5 (slim all-context.md) -> F7 + F11 (together) -> F6 -> F8 -> F15 (three backlog stubs) -> **R4 step (vii)**, run by the Master Planner (orchestrator) session itself, NOT by the vc-execute-agent subagent (verified 02-10-26: the claude-code-remote tools `create_session`, `archive_session`, `send_message`, `list_sessions`, `list_events`, `set_session_tags`, `subscribe_pr_activity`, `get_session`, `interrupt_session` and `mcp__github__merge_pull_request` / `mcp__github__enable_pr_auto_merge` are in the orchestrator session's tool list; vc-* subagents do not see them): check every tool name this plan relies on against the live tool list, AND verify behaviour, not just names, with one read-only dry-run call such as `list_sessions` (it must return a session list; nothing is spawned, archived or merged). The orchestrator records the result in the Gate 2 report and hands it to the execute agent; any name that does not exist or call that fails is corrected in master-planner.md before the gate closes.
 
 **R13 files** (exciting-meitner changed 16 files vs merge-base; the task brief re-lists them with `git diff --name-status $(git merge-base origin/main origin/claude/exciting-meitner-hy50kn) origin/claude/exciting-meitner-hy50kn` at Gate 2 start): TAKE: the LSE ADOPT-WITH-LIMITS verdict artifact(s), the plan status-strip fixes, `process/context/data-sources/all-data-sources.md` (+67 lines, LSE findings; reviewed hunk by hunk, kept only where it does not contradict main). DROP: the duplicate `## Where We Are` status-board section in all-context.md (T24: one board), EVL logs/status-board scratch. The two Python files under `lse-data-verification_17-09-26/` are process-folder artifacts: TAKE as-is into the same task folder path (they are evidence for the verdict, not product code) or DROP with a recorded reason; they are never edited. Anything not in TAKE or DROP is recorded as `unreviewed` in the registry row, not silently skipped. **R13 destinations (named):** the branch moves `process/general-plans/active/lse-data-verification_17-09-26/` to `process/general-plans/completed/lse-data-verification_17-09-26/` (git shows `VERDICT.md`, `findings.md`, two EVL reports, `results.tsv`, `test_verify_provider.py` and renames of the PVL report, the PLAN and `verify_provider.py` landing in `completed/`, with the five `active/` files deleted). TAKEN artifacts land in `completed/`; the five `active/` copies are removed as part of that move. The move is archive operation A and is logged as one row in the `## Approvals Log` of `process/archive/index.md` (date, what, approver quote = the user's Q4 answer of 02-10-26). Touchpoints therefore also include `process/context/data-sources/all-data-sources.md` and both lse-data-verification folders.
 
@@ -149,12 +150,12 @@ Role-neutral CLAUDE.md and AGENTS.md (F9, F10): CLAUDE.md line 50 ("You are the 
 | Technology Stack | keep, drop dated parentheticals | 40 |
 | Key Patterns | keep, but DROP the `Confidence over direction` paragraph (today line 910; the principle is retired, realignment AC-18 and T10 cancelled) | 25 |
 | Environment and Configuration | keep | 20 |
-| Open Decisions | keep, trim to current; DROP or reword today's line 957 (the `redistributable` wording in the narrative data-source row) and DROP line 962 (the `Redistribution is a first-class constraint` paragraph) | 25 |
+| Open Decisions | keep, trim to current; DROP or reword today's line 957 (the `redistributable` wording in the narrative data-source row), line 955 (the Equity data provider row: remove `collides with the public-later goal` and restate it with the LSE ADOPT-WITH-LIMITS verdict) and the stale Deployment target row (line 959: replace with the resolved home PC plus Tailscale path); DROP lines 962-964 (the `Redistribution is a first-class constraint` paragraph, whole) | 25 |
 | Open Questions | MOVE resolved/historical items to F4; keep only still-open ones as one-liners, reworded so none carries a retired phrase (today's line 1020 `redistributable` stays only in F4); current facts go to current-state.md | 15 |
 | References, Scan Metadata | MOVE to F4; one pointer line | 3 |
 | Total | | 288 (12 lines reserve under the 300 cap) |
 
-**Retired wording is dropped, not kept (AC-R3, command C8).** Of the 8 hits today, lines 95, 373 and 446 sit in the changelog block and 1020 in Open Questions (all move whole to F4, where they are allowed); line 582 goes with the replaced What This Project Is text; lines 910, 957 and 962 are in kept sections and are dropped or reworded per the table above. History of those phrases survives only in context-changelog.md (realignment AC-17/AC-18, T10 cancelled). north-star.md is written to avoid the retired phrases (F1 row).
+**Retired wording is dropped, not kept (AC-R3, command C8).** Of the 11 hits today (lines 95, 373, 446, 581, 582, 910, 955, 957, 962, 964, 1020): lines 95, 373 and 446 sit in the changelog block and 1020 in Open Questions (all move whole to F4, where they are allowed); lines 581 and 582 (the wrapped `open it to / other users later` and `redistribution-safe`) go with the replaced What This Project Is text; lines 910, 955, 957, 962 and 964 are in kept sections and are dropped or reworded per the table above (955 and 964 are the `public-later` / `open up later` wording; 964 sits inside the 962-964 paragraph that is dropped whole). History of those phrases survives only in context-changelog.md (realignment AC-17/AC-18, T10 cancelled). north-star.md is written to avoid the retired phrases (F1 row).
 
 **Changelog-preservation command (pinned, AC-R2): command C6 in the fenced block in section 10.** It recomputes the changelog range and each moved section's range from the base with `grep -n '^## '` (today: changelog 33-568, Open Questions 967-1105, References 1106-1166, Scan Metadata 1167-1223), then runs `comm -23` of the sorted unique base lines against the sorted unique F4 lines; it must print nothing. A dropped line prints exactly that line (negative case verified on a scratch copy). `<base>` is `git rev-parse HEAD` recorded when Gate 2 starts.
 
@@ -188,7 +189,7 @@ AGENTS.md gets the same dispositions; its extra sections (704 vs 440 lines) are 
 
 `ID | Objective | Prio (H/M/L) | Status | Parent | Deps | Worker/session | Branch/worktree | Scope + acceptance | Test req/budget | Report + commit refs | Blockers/risks | Outcome / archive location`
 
-Status values: `proposed, approved, queued, in_progress, review, accepted, archived` plus `blocked, failed, cancelled, needs_input`. IDs: keep historical `T#` for reconciled items; new work uses `R#` (recovery program) and `P#` (programs and product tasks from SPECs). The priority column is `Prio` with values H / M / L (never P0-P3 or Q1-Q4, which would collide with the P# task IDs and the Q1-Q8 open-question labels).
+Status values: `proposed, approved, queued, in_progress, review, accepted, archived` plus `blocked, failed, cancelled, needs_input`. IDs: keep historical `T#` for reconciled items; new work uses `R#` (recovery program) and `P#` (programs and product tasks from SPECs). The priority column is `Prio` with values H / M / L (never P0-P3 or Q1-Q4, which would collide with the P# task IDs and the Q1-Q8 open-question labels). Naming rule: T# always means a registry task (T1, T3 and T4 are real tasks); a test risk tier is written RT0-RT4 (section 6), so no tier label collides with a task ID.
 
 ### Initial population (reconciliation of T1..T25 against current reality)
 
@@ -281,7 +282,7 @@ review -> in_progress (acceptance rejected, with reasons; counts against retry b
 
 `accepted` requires ALL of: (a) report has all 11 fields; (b) tests named in the task's test requirement were re-run by a party other than the implementer (a spawned vc-tester, the user, or CI on the head SHA per Enforcement (iii)) and results recorded with command + timestamp; (c) changed-file list matches the task's file ownership; (d) for tasks with user-visible behavior, user acceptance or a recorded agent-probe. A worker saying "done" yields `review` only; the standing authorization lets a worker self-merge only under the mechanical conditions (a)-(f) in the Standing authorization subsection (this applies to every task including high-risk classes; there is no class exclusion). Absence of any tier-required evidence keeps the task `review` and is recorded as a gap (vacuous-green ban: known-gap cannot be PASS).
 
-**Precedence (merge versus accept):** merge follows the Standing authorization conditions (a)-(f); `accepted` is recorded by the Master Planner only if this acceptance rule (a)-(d) holds; a task that needs user acceptance or an agent-probe (rule (d), and T4 in section 6) stays `review` after the merge until that evidence exists. If the user instead wants T4 or other high-risk tasks to bypass user acceptance, that is the user's call and is recorded as an extension of Open Question 10; this plan does not assume it.
+**Precedence (merge versus accept):** merge follows the Standing authorization conditions (a)-(f); `accepted` is recorded by the Master Planner only if this acceptance rule (a)-(d) holds; a task that needs user acceptance or an agent-probe (rule (d), and RT4 in section 6) stays `review` after the merge until that evidence exists. If the user instead wants RT4 or other high-risk tasks to bypass user acceptance, that is the user's call and is recorded as an extension of Open Question 10; this plan does not assume it.
 
 ### Decomposition rules
 
@@ -344,7 +345,7 @@ Consequence: an unverifiable runtime condition means the worker cannot truthfull
 #### Worker lane, consent and commit-policy rules (written into master-planner.md)
 
 - `approved` on a registry row means standing EXECUTE consent for that task only (this reconciles with the CLAUDE.md rule 'never start EXECUTE without explicit approval'); it does not extend to other tasks.
-- Worker lane rule: the envelope names the lane, risk-tiered. A WORKER is a direct-lane session: it does not orchestrate, spawn sessions or run the multi-agent RIPER chain. Tiny tasks (T0/T1, <= ~100 lines, no schema/auth/API/billing/migration surface) use the QUICK FIX lane; every other worker writes a compact per-task validate-contract itself (the gate list from the envelope's test requirement, in its own task folder) before editing, then edits and runs its declared gates directly. Independent confirmation of those gates comes from CI or a vc-tester the Master Planner spawns, never from the worker (acceptance rule (b)). The no-inline-execution rule in CLAUDE.md is scoped to a session in orchestrator/Master Planner posture; the envelope's "you are a WORKER" line is the explicit override (user-approved refinement, 02-10-26).
+- Worker lane rule: the envelope names the lane, risk-tiered. A WORKER is a direct-lane session: it does not orchestrate, spawn sessions or run the multi-agent RIPER chain. Tiny tasks (RT0/RT1, <= ~100 lines, no schema/auth/API/billing/migration surface) use the QUICK FIX lane; every other worker writes a compact per-task validate-contract itself (the gate list from the envelope's test requirement, in its own task folder) before editing, then edits and runs its declared gates directly. Independent confirmation of those gates comes from CI or a vc-tester the Master Planner spawns, never from the worker (acceptance rule (b)). The no-inline-execution rule in CLAUDE.md is scoped to a session in orchestrator/Master Planner posture; the envelope's "you are a WORKER" line is the explicit override (user-approved refinement, 02-10-26). The user's confirmation of this lane (direct lane, compact self-written validate-contract; one vc-quick-fix-agent spawn for a tiny task is not a subagent chain) is Open Question 12.
 - Commit-policy exception: CLAUDE.md says commit directly on `main` and branch only when asked. Worker sessions are the explicit, user-authorized exception (the user's standing authorization names worker sessions that merge their own branch): workers use `claude/<task-id>-<slug>` branches and PRs; the Master Planner session itself and all direct user work still commit on `main` per policy.
 
 #### Enforcement and compensating controls
@@ -396,7 +397,7 @@ Baseline (from Gate 0, bytes; tokens estimated at ~4 bytes/token and therefore a
 | Item | Bytes | ~Tokens |
 |---|---|---|
 | CLAUDE.md | 28.9 KB | 7k |
-| all-context.md | 93.7 KB (1,223 lines; changelog block lines 33-568 = 536 lines / 45 KB = ~44% of lines, ~48% of bytes; Open Questions 139 + References 61 + Scan Metadata 56 lines are further non-durable) | 23k |
+| all-context.md | 93.7 KB (1,223 lines; changelog block lines 33-568 = 536 lines / 45 KB = ~44% of lines, ~48% of bytes; Open Questions 139 + References 61 + Scan Metadata 57 lines are further non-durable) | 23k |
 | orchestration.md | 71.3 KB | 18k |
 | Mandatory load total | ~200 KB | ~50k |
 | AGENTS.md (Codex copy) | 37.9 KB | drift unmeasured |
@@ -420,17 +421,17 @@ Measurement method: commands C3 and C4 (byte totals of the planner and worker en
 
 ## 6. Risk-Based Test Policy
 
-Commands are those named in the repo (all-tests.md, ci.yml, SPEC). Re-confirmed against `all-tests.md` in Gate 4 before being written there.
+Commands are those named in the repo (all-tests.md, ci.yml, SPEC). Re-confirmed against `all-tests.md` in Gate 4 before being written there. Naming: RT0-RT4 are risk tiers; T# is always a registry task.
 
 | Tier | Change type | Required (run once, after the last edit) | Not required |
 |---|---|---|---|
-| T0 Docs / low | markdown, process files, comments | `node .claude/skills/vc-generate-plan/scripts/validate-plan-artifact.mjs <plan>` for plans; `node .claude/skills/vc-audit-context/scripts/validate-context-discovery.mjs` for context edits; `git diff --check` | pytest, vitest, Playwright |
-| T1 Localized UI | one component/page in `web/` | `pnpm --filter web test` (affected file first, then suite), `pnpm --filter web exec tsc --noEmit` | pytest; Playwright only if a route or flow changed |
-| T2 Localized backend | one module/router in `api/` | `uv run --project api pytest <touched test file>` then `uv run --project api pytest api/ -q` once | vitest, Playwright |
-| T3 Shared interfaces / business logic | `cache.py`, response models, adapters used by 2+ routes | full pytest, full vitest, `tsc --noEmit`, `pnpm build:islands`; contract-snapshot tests unmodified | Playwright unless a route's behavior changed |
-| T4 High risk | auth, secrets, schema/migration, public API contract, deploy/proxy/runtime, destructive data ops | all of T3 + Playwright (`cd web && pnpm test:e2e`) + hybrid/agent-probe evidence pack (`vc-risk-evidence-pack`) + user acceptance or a recorded agent-probe (acceptance rule (d); bypassing user acceptance for T4 is the user's call, see the precedence note in section 4) | none skipped |
+| RT0 Docs / low | markdown, process files, comments | `node .claude/skills/vc-generate-plan/scripts/validate-plan-artifact.mjs <plan>` for plans; `node .claude/skills/vc-audit-context/scripts/validate-context-discovery.mjs` for context edits; `git diff --check` | pytest, vitest, Playwright |
+| RT1 Localized UI | one component/page in `web/` | `pnpm --filter web test` (affected file first, then suite), `pnpm --filter web exec tsc --noEmit` | pytest; Playwright only if a route or flow changed |
+| RT2 Localized backend | one module/router in `api/` | `uv run --project api pytest <touched test file>` then `uv run --project api pytest api/ -q` once | vitest, Playwright |
+| RT3 Shared interfaces / business logic | `cache.py`, response models, adapters used by 2+ routes | full pytest, full vitest, `tsc --noEmit`, `pnpm build:islands`; contract-snapshot tests unmodified | Playwright unless a route's behavior changed |
+| RT4 High risk | auth, secrets, schema/migration, public API contract, deploy/proxy/runtime, destructive data ops | all of RT3 + Playwright (`cd web && pnpm test:e2e`) + hybrid/agent-probe evidence pack (`vc-risk-evidence-pack`) + user acceptance or a recorded agent-probe (acceptance rule (d); bypassing user acceptance for RT4 is the user's call, see the precedence note in section 4) | none skipped |
 
-Test budget rule: each task declares its tier and the max number of full-suite runs (T0: 0, T1/T2: 1, T3: 2, T4: 2 plus one EVL confirmation by a spawned vc-tester). No re-running unchanged tests: record in the report the commit SHA each result applies to; a run is repeated only if files changed after that SHA. Bounded retry: a failing gate gets at most 2 fix cycles by the same worker, then escalates to `blocked`/`needs_input`; flake handling: one isolated re-run is allowed to classify a flake, and the flake is logged as a backlog note rather than retried again (consistent with the screener flake note). Environment limits recorded, not hidden: container blocks live provider egress, so live-data checks are user-PC steps (hybrid, `needs_input`). CI (`ci.yml`) is the shared proving ground for T1-T3 on PRs; it does not run e2e or lint, so T4 UI/route changes still need local Playwright.
+Test budget rule: each task declares its tier and the max number of full-suite runs (RT0: 0, RT1/RT2: 1, RT3: 2, RT4: 2 plus one EVL confirmation by a spawned vc-tester). No re-running unchanged tests: record in the report the commit SHA each result applies to; a run is repeated only if files changed after that SHA. Bounded retry: a failing gate gets at most 2 fix cycles by the same worker, then escalates to `blocked`/`needs_input`; flake handling: one isolated re-run is allowed to classify a flake, and the flake is logged as a backlog note rather than retried again (consistent with the screener flake note). Environment limits recorded, not hidden: container blocks live provider egress, so live-data checks are user-PC steps (hybrid, `needs_input`). CI (`ci.yml`) is the shared proving ground for RT1-RT3 on PRs; it does not run e2e or lint, so RT4 UI/route changes still need local Playwright.
 
 Known-gap policy: any developed behavior proven only by a known-gap stays CONDITIONAL and gets a backlog stub (vacuous-green ban).
 
@@ -441,7 +442,7 @@ Known-gap policy: any developed behavior proven only by a known-gap stays CONDIT
 | ID | Candidate | Evidence | Risk | Needs approval |
 |---|---|---|---|---|
 | H1 | `.agents/skills` (17 MB) duplicate of `.claude/skills` | Gate 0; fails `validate-skills.mjs`/`validate-context-discovery.mjs` per MASTER-PLAN | Codex discovery might rely on it; symlink behavior on the Windows PC unverified | yes (replace with symlink or doc), validators before/after |
-| H2 | `web/tsconfig.tsbuildinfo` tracked | Gate 0 | low; `git rm --cached` + ignore | yes |
+| H2 | `web/tsconfig.tsbuildinfo` tracked | Gate 0 | low; untrack (`git rm --cached`) and ignore (add `web/tsconfig.tsbuildinfo` to `.gitignore`, where it is absent today) | yes |
 | H3 | Remote branches (kind-tesla, compassionate-goldberg, narrative-v2, p1-pipeline, p2-deploy, ui-shell, vigilant-hamilton, fix/narrative-sufficiency-gating-rfc1, inspiring-pasteur, pensive-dijkstra) | MEASURED 02-10-26, see the measured table below | deleting an unmerged branch loses work; large all-differ counts are confounded by files archived/moved on main | yes, per branch, after a per-file review; only compassionate-goldberg is a safe-to-delete candidate |
 | H4 | split-all-context (2 ahead / 38 behind; 35 of 35 files differ) | holds the context-changelog split commit bf65024 (unique `context-changelog.md`) | losing it before salvage | salvage first, delete never without approval |
 | H5 | exciting-meitner (7 ahead / 87 behind) | 7 unique commits of LSE-verification work (script fixes, EVL logs, ADOPT-WITH-LIMITS verdict, status board) | do not delete; Q4 resolved: salvage selectively as R13 (LSE verdict + status-strip fixes; drop duplicate status board section in `all-context.md`) | branch deletion: yes |
@@ -504,7 +505,7 @@ Rebuild requirement: any `web/` change needs `build-web.ps1` (or `pnpm build`) b
 |---|---|---|---|
 | 0 | audit (done) | n/a | done |
 | 1 | this proposal | user review | approve/modify plan, answer Q1-Q8 |
-| 2 | R14, R13, R1-R5 in the order in section 2 (F1-F8 + F11): current-state.md (re-verified), north-star.md, decisions.md, context-changelog.md, slimmed all-context.md, master-planner.md (block-style frontmatter, Master Planner posture, envelope and report templates) wired into all-development-protocols.md, MASTER-PLAN registry from rev 6, archive index skeleton (with the Approvals Log), R4 step (vii) tool-name and behaviour check run by the orchestrator session | VALIDATE first; commands C5 (line cap), C6 (changelog and moved sections preserved), C7 (validator set, failures == baseline), C8 (retired wording), C9 (scope), C12 (11 report headings, run against master-planner.md) and C13 (`git diff --check`); the measured bytes of F1, F2, F6 and the F5 router section are recorded to confirm the entry-set caps | VALIDATE contract; no source edits; ref-only fetch for branch facts requires approval |
+| 2 | R14, R13, R1-R5 in the order in section 2 (F1-F8 + F11): current-state.md (re-verified), north-star.md, decisions.md, context-changelog.md, slimmed all-context.md, master-planner.md (block-style frontmatter, Master Planner posture, envelope and report templates) wired into all-development-protocols.md, MASTER-PLAN registry from rev 6, archive index skeleton (with the Approvals Log), R4 step (vii) tool-name and behaviour check run by the orchestrator session | VALIDATE first; commands C5 (line cap), C6 (changelog and moved sections preserved), C7 (validator set, failures == baseline), C8 (retired wording), C9 (scope), C11 (every registry ID has a row), C12 (11 report headings, run against master-planner.md), C13 (whitespace and conflict markers in tracked, staged and untracked files) and C14 (Gate 2 deliverables, approvals log, `ROLE: WORKER`, north-star topics, R13 outcome, rev 6 preservation, F15 stubs); the measured bytes of F1, F2, F6 and the F5 router section (the informational `wc -c` lines of C14) are recorded to confirm the entry-set caps | VALIDATE contract; no source edits; ref-only fetch for branch facts requires approval |
 | 3 | R6, R7: CLAUDE.md/AGENTS.md rewrite (F9, F10; role-neutral), byte baselines for BOTH entry sets, sampled session token baseline | commands C1 (no @-imports), C2 (role-neutral), C3 (planner bytes), C4 (worker bytes), C9 (scope, Gate 3 form allows CLAUDE.md and AGENTS.md), C10 (ENTRY-SET); validate-kit-portability.mjs, validate-protocol-wiring.mjs, validate-agent-parity.mjs non-strict (0 failures; the 18 warnings are baseline); validate-guide-sync.mjs: baseline-aware, README decision below; two agent-probes: a fresh PLANNER session reaches a task brief reading only the planner set, and a fresh WORKER session given only a sample envelope states ROLE: WORKER, spawns nothing and reaches its task reading only the worker set | CLAUDE.md/AGENTS.md edits (high-visibility, user review before commit) |
 | 4 | R8: test policy in all-tests.md, re-measured test counts | run the three suites once (measured, timestamped) | none beyond Gate approval; installs need approval |
 | 5 | R9-R12: housekeeping (approved items), README, deploy-path doc/guard proposal, session triage + archive index (R13 and R14 are Gate 2 work, ahead of R5, and are not repeated here) | per-item evidence re-check; validators; no deletion without per-item approval; R12 verified on the user's PC (hybrid) | branch deletion, `archive_session`, `.agents/skills` replacement, tsbuildinfo untrack, deploy-script changes, any installs |
@@ -523,6 +524,7 @@ Every validator gate in this plan means **no NEW failure versus this baseline**,
 | validate-guide-sync.mjs | 1 | no root README |
 | validate-agent-parity.mjs --strict | 18 | pre-existing Claude/Codex agent drift; non-strict = 0 failures, 18 warnings; this plan uses NON-strict |
 | protocol-wiring, kit-portability, agent-frontmatter, skill-invocation-wiring, protocol-discovery, validate-all-context, `discover-context.mjs --check-routing`, `git diff --check` | 0 | clean |
+| validate-plan-inventory.mjs (in C7 because Gate 2 moves a plan folder, R13) | 0 failures, 6 warnings | baseline; no new failure or warning allowed |
 
 README scope decision: F13 stays Gate 5 and is a ~60-line runbook README; validate-guide-sync (needs an Agents table and a Skills section) is NOT satisfied at Gate 3 and is accepted at its baseline failure (1) until Gate 5; at Gate 5 the README gains the two sections or the 1-failure baseline is carried as a recorded known-gap. This is stated, not hidden.
 
@@ -532,9 +534,9 @@ README scope decision: F13 stays Gate 5 and is a ~60-line runbook README; valida
 
 | ID | Criterion | proven by | strategy |
 |---|---|---|---|
-| AC-R1 | TWO role-based entry sets (caps provisional, confirmed at Gate 2 close): PLANNER (CLAUDE.md + north-star.md + current-state.md + MASTER-PLAN.md + all-context.md router section + task brief) <= 64,000 bytes; WORKER (CLAUDE.md + task envelope <= 8,000 + task PLAN/SPEC) <= 36,000 bytes. Neither set loads the changelog or orchestration.md; CLAUDE.md has no `@`-imports and is role-neutral | commands C1 (no output after Gate 3; 3 lines today), C2 (no output after Gate 3; 2 lines today), C3 and C4 (byte totals), plus a fresh-session probe for each role at Gate 3 | Fully-Automated + Agent-Probe |
+| AC-R1 | TWO role-based entry sets (caps provisional, confirmed at Gate 2 close): PLANNER (CLAUDE.md + north-star.md + current-state.md + MASTER-PLAN.md + all-context.md router section + task brief) <= 64,000 bytes; WORKER (CLAUDE.md + task envelope <= 8,000 + task PLAN/SPEC) <= 36,000 bytes. Neither set loads the changelog or orchestration.md; CLAUDE.md has no `@`-imports and is role-neutral | commands C1 (no output after Gate 3; 3 lines today), C2 (no output after Gate 3; 8 lines today), C3 and C4 (byte totals), plus a fresh-session probe for each role at Gate 3 | Fully-Automated + Agent-Probe |
 | AC-R2 | all-context.md <= 300 lines; changelog and moved sections fully preserved in context-changelog.md | commands C5 (line cap) and C6 (preservation; prints nothing) | Fully-Automated |
-| AC-R3 (=AC-19) | Single North Star doc exists with personal-use, data-not-verdicts, Tailscale-only, page list, non-goals; old confidence/public-later/redistribution wording gone from entry points (history lives only in context-changelog.md) | command C8 -> no output after Gate 2 (8 hits today, all in all-context.md); case-insensitive | Fully-Automated |
+| AC-R3 (=AC-19) | Single North Star doc exists with personal-use, data-not-verdicts, Tailscale-only, page list, non-goals; old confidence/public-later/redistribution wording gone from entry points (history lives only in context-changelog.md) | command C8 -> no output after Gate 2 (11 hits today, all in all-context.md); case-insensitive | Fully-Automated |
 | AC-R4 (=AC-20) | Current-state, task registry, archive index, MASTER-PLAN reconciled and referenced from CLAUDE.md/AGENTS.md/all-context | link/grep check + validator set C7 (failures == baseline) + command C10 at Gate 3 | Fully-Automated |
 | AC-R5 | Registry holds all T-tasks (T1, T1b, T3-T5, T7-T28; T2 and T6 are recorded as unknown, not invented), with T26-T28 from rev 6, each with a status and evidence note; unverified items labelled UNVERIFIED | review of registry vs section 3 + command C11 (checks each ID individually; a row count is not used because other tables also start with `| T`: counts today are 18 on main and 20 on rev 6) | Hybrid (user review) |
 | AC-R6 | No branch, session, or file removed without recorded approval | git/session state diff vs the approvals log, which is the `## Approvals Log` section of `process/archive/index.md` (one row per approval: date, what, approver quote); an empty log means no removal is permitted | Hybrid |
@@ -554,16 +556,20 @@ grep -nE '[[:space:](]@[A-Za-z./_-]+\.md' CLAUDE.md
 # (the retired form with an escaped pipe inside -E printed 0 lines today: vacuous)
 
 # C2  AC-R1: CLAUDE.md and AGENTS.md are role-neutral
-grep -n 'You are the orchestrator' CLAUDE.md AGENTS.md
-# expected today: 2 lines (CLAUDE.md:50, AGENTS.md:56). After Gate 3: no output.
+grep -nE 'You are the orchestrator|You do NOT|Your responsibilities|Orchestrator Role' CLAUDE.md AGENTS.md
+# expected today: 8 lines (CLAUDE.md 46, 50, 52, 59; AGENTS.md 50, 56, 58, 65). After Gate 3: no output; the one role-scoped
+# sentence the plan keeps in CLAUDE.md must avoid these literals.
 
 # C3  AC-R1: PLANNER entry set bytes (after Gate 3). TASK = the task PLAN or SPEC being worked
 TASK=<path>
+MISS=0; for f in CLAUDE.md process/context/north-star.md process/context/current-state.md process/MASTER-PLAN.md "$TASK"; do test -s "$f" || { echo "MISSING $f"; MISS=1; }; done
 ROUTER=$(sed '/^## Context Group Lifecycle/,$d' process/context/all-context.md | wc -c)
-REST=$(cat CLAUDE.md process/context/north-star.md process/context/current-state.md process/MASTER-PLAN.md "$TASK" | wc -c)
-echo $((ROUTER + REST))
-# must be <= 64000 (provisional). Today it cannot run to completion: north-star.md and current-state.md
-# do not exist yet, and the router range still contains the 45 KB changelog.
+REST=$(cat CLAUDE.md process/context/north-star.md process/context/current-state.md process/MASTER-PLAN.md "$TASK" 2>/dev/null | wc -c)
+total=$((ROUTER + REST)); echo total=$total
+test "$MISS" -eq 0 && test "$total" -le 64000; echo rc=$?
+# must print rc=0 (provisional cap 64000). Today (verified 02-10-26 with TASK = this plan): prints MISSING for north-star.md and
+# current-state.md, total=240454 and rc=1. The earlier `cat | wc -c` form printed 234253 with two stderr errors because a failing
+# cat does not fail wc, which is why the file check comes first. The router range still contains the 45 KB changelog today.
 
 # C4  AC-R1: WORKER entry set bytes (after Gate 3). ENVELOPE = the saved envelope file, TASK = its task PLAN/SPEC
 ENVELOPE=<path>; TASK=<path>
@@ -594,17 +600,24 @@ node .claude/skills/vc-audit-vc/scripts/validate-protocol-wiring.mjs
 node .claude/skills/vc-audit-context/scripts/validate-protocol-discovery.mjs
 node .claude/skills/vc-audit-vc/scripts/validate-kit-portability.mjs
 node .claude/skills/vc-audit-vc/scripts/validate-agent-parity.mjs
-# expected today: validate-context-discovery 1 failure (the .agents/skills symlink baseline); all others 0 failures.
+node .claude/skills/vc-audit-plans/scripts/validate-plan-inventory.mjs
+# expected today: validate-context-discovery 1 failure (the .agents/skills symlink baseline); all others 0 failures;
+# validate-plan-inventory 0 failures and 6 warnings (baseline; Gate 2 moves a plan folder in R13, so no new failure or warning is allowed).
+# Gate 3 only: grep -c 'process/context/all-context.md' CLAUDE.md AGENTS.md must print a count >= 1 for BOTH files (today 9 and 12);
+# validate-context-discovery requires the literal path in each.
 
 # C8  AC-R3: retired wording absent from entry points (case-insensitive)
-grep -niE 'confidence over direction|open it to other users|public later|redistribution-safe|redistribution is a first-class|redistributab|licens(e|ing) is a design constraint' CLAUDE.md AGENTS.md process/context/all-context.md process/context/north-star.md
-# expected today: 8 hits, all in all-context.md (lines 95, 373, 446, 582, 910, 957, 962, 1020). After Gate 2: no output.
+grep -niE 'confidence over direction|open it to other users|public[ -]later|open up later|other users later|intended to open|redistribution-safe|redistribution is a first-class|redistributab|licens(e|ing) is a design constraint' CLAUDE.md AGENTS.md process/context/all-context.md process/context/north-star.md
+# expected today: 11 hits, all in all-context.md (lines 95, 373, 446, 581, 582, 910, 955, 957, 962, 964, 1020; verified 02-10-26). After Gate 2: no output.
+# The widened alternatives catch the hyphenated `public-later` (line 955), the wrapped `open it to / other users later` (580-581) and `open up later` (964).
 # (the same pattern written with escaped pipes printed 0 hits today: vacuous)
 
 # C9  AC-R8: scope check that also sees uncommitted and untracked files
 git status --porcelain | cut -c4- | grep -vE '^process/'
 # Gates 2 and 4: no output (grep exit 1). Today: no output (clean tree). Gate 3 form:
 git status --porcelain | cut -c4- | grep -vE '^(process/|CLAUDE\.md$|AGENTS\.md$)'
+# Gate 5 form (README, ignore-file and tsbuildinfo untrack only; deploy/ and `.agents/skills` paths are added to the filter only when the user approves R12 or H1):
+git status --porcelain | cut -c4- | grep -vE '^(process/|README\.md$|\.gitignore$|web/tsconfig\.tsbuildinfo$)'
 # after a commit, the post-commit form is: git diff --name-only <gate-base-sha>..HEAD (same filters)
 
 # C10  AC-R4: ENTRY-SET block identical in CLAUDE.md and AGENTS.md (Gate 3; needs bash for <( ))
@@ -622,15 +635,46 @@ grep -cE '^(#+ )?(1 Task ID|2 Outcome|3 Summary|4 Files changed|5 Commits|6 Test
 # Gate 2: must print 11 (template lives in master-planner.md). Gate 6: same grep on the pilot report, must print 11.
 # Verified on a full fixture (11) and a partial one (8). Today master-planner.md does not exist.
 
-# C13  whitespace, conflict markers and plan structure
+# C13  whitespace, conflict markers and plan structure (tracked, staged AND untracked files)
 git diff --check
+git diff --cached --check
+for f in $(git ls-files --others --exclude-standard); do git diff --check --no-index /dev/null "$f"; done
 node .claude/skills/vc-generate-plan/scripts/validate-plan-artifact.mjs process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md
-# expected: no output / exit 0; plan validator 0 failures.
+# expected: NO OUTPUT from the first three lines; the gate is "no output", not an exit code (git diff --check --no-index exits 1 for any
+# added file). Plain `git diff --check` is blind to untracked and staged-only files, which is every new Gate 2 file: verified on a scratch
+# repo, a new file with trailing whitespace and a conflict marker left it at exit 0, while the loop printed both offending lines, a clean
+# file printed nothing, and `git diff --cached --check` caught a staged-only file. Today: no output (clean tree); plan validator 0 failures.
+
+# C14  AC-R3, AC-R5, AC-R6, AC-R10: Gate 2 deliverables exist and carry their required parts (no MISSING/FAIL line and no comm output = pass)
+for f in process/context/north-star.md process/context/current-state.md process/context/decisions.md process/context/context-changelog.md process/development-protocols/master-planner.md process/archive/index.md process/archive/master-plan-revisions_02-10-26.md process/general-plans/backlog/token-usage-telemetry_NOTE_02-10-26.md process/general-plans/backlog/agents-skills-symlink-windows_NOTE_02-10-26.md process/general-plans/backlog/deploy-runtime-user-pc-verification_NOTE_02-10-26.md; do
+  test -s "$f" || echo "MISSING $f"
+done
+test "$(grep -c '^## Approvals Log' process/archive/index.md 2>/dev/null)" -eq 1 || echo "FAIL approvals-log heading"
+test "$(sed -n '/^## Approvals Log/,$p' process/archive/index.md 2>/dev/null | grep -c 'lse-data-verification')" -ge 1 || echo "FAIL approvals-log lse row"
+test "$(grep -c 'ROLE: WORKER' process/development-protocols/master-planner.md 2>/dev/null)" -ge 1 || echo "FAIL ROLE: WORKER"
+for t in 'personal[- ]use' 'not verdicts' 'tailscale' '^#+ .*pages' '^#+ .*non-goals'; do
+  test "$(grep -ciE "$t" process/context/north-star.md 2>/dev/null)" -ge 1 || echo "FAIL north-star topic $t"
+done
+test -d process/general-plans/completed/lse-data-verification_17-09-26 || echo "FAIL R13 completed/ folder missing"
+test ! -d process/general-plans/active/lse-data-verification_17-09-26 || echo "FAIL R13 active/ folder still present"
+REV6=18ffd4f014f4e5ea0f5d654688875a9300b30ab4; TMPDIR=${TMPDIR:-/tmp}
+git show "$REV6:process/MASTER-PLAN.md" | sort -u > "$TMPDIR/rev6.txt"
+cat process/MASTER-PLAN.md process/archive/master-plan-revisions_02-10-26.md 2>/dev/null | sort -u > "$TMPDIR/f6.txt"
+comm -23 "$TMPDIR/rev6.txt" "$TMPDIR/f6.txt" | grep -vE '^\| (T|P)'
+# informational, for the Gate 2 report (confirms or tightens the provisional caps; a cap is raised only with user approval):
+wc -c process/context/north-star.md process/context/current-state.md process/MASTER-PLAN.md
+sed '/^## Context Group Lifecycle/,$d' process/context/all-context.md | wc -c
+# expected today (measured 02-10-26): 10 MISSING lines (7 deliverables + 3 stubs), 10 FAIL lines (approvals-log heading, approvals-log
+# lse row, ROLE: WORKER, 5 north-star topics, R13 completed/ missing, R13 active/ still present) and 210 comm lines (rev 6 lines absent
+# from today's rev 3a MASTER-PLAN.md), followed by the three informational byte lines (213 output lines in all). After Gate 2: no MISSING, no FAIL, no comm output. Verified on a scratch tree: a complete fixture
+# prints nothing, and one dropped non-row rev 6 line prints exactly that line. Residual: the `| T`/`| P` filter lets re-expressed
+# registry rows through (C11 checks each ID by name), so a dropped row is caught by C11, not here. The F5 router-section byte line uses the
+# same sed range as C3.
 ```
 
 ## Verification Evidence
 
-Commands C1-C13 are the fenced block in section 10.
+Commands C1-C14 are the fenced block in section 10.
 
 | Gate / Scenario | Strategy | Proves SPEC criterion |
 |---|---|---|
@@ -642,6 +686,8 @@ Commands C1-C13 are the fenced block in section 10.
 | G2 command C12 against the report template inside master-planner.md (after F7) | Fully-Automated | AC-R10 |
 | G2 R4 (vii): tool names and one read-only list_sessions dry-run, run by the orchestrator session | Agent-Probe | AC-R7 |
 | G2/G5 registry reviewed against evidence, command C11 | Hybrid | AC-R5 |
+| G2 command C13 (whitespace and conflict markers in tracked, staged and untracked files; no output) | Fully-Automated | AC-R4 |
+| G2 command C14 (deliverables exist; `## Approvals Log` with the R13 row; `ROLE: WORKER`; north-star topics; R13 outcome; rev 6 preserved in F6 plus the archive file; F15 stubs) | Fully-Automated | AC-R3, AC-R5, AC-R6, AC-R10 |
 | G3 commands C1 and C2 (no @-imports, role-neutral) | Fully-Automated | AC-R1 |
 | G3 commands C3 and C4 (planner and worker byte tables; tokens labelled approximate) | Fully-Automated | AC-R1, AC-R9 |
 | G3 two fresh-session probes (PLANNER reaches a task brief on the planner set; WORKER given only a sample envelope states ROLE: WORKER, spawns nothing, reaches its task on the worker set) | Agent-Probe | AC-R1 |
@@ -653,7 +699,7 @@ Commands C1-C13 are the fenced block in section 10.
 | G6 command C12 against the pilot report | Fully-Automated | AC-R10 |
 | G4 command C9 (scope) | Fully-Automated | AC-R8 |
 
-Known gaps (named residuals, keep gates CONDITIONAL): real per-session token usage; behavior of a symlinked `.agents/skills` on the user's Windows PC; deploy fixes verified only on the user's PC (hybrid, user-run). Backlog stubs for these are written at Gate 2.
+Known gaps (named residuals, keep gates CONDITIONAL): real per-session token usage; behavior of a symlinked `.agents/skills` on the user's Windows PC; deploy fixes verified only on the user's PC (hybrid, user-run). Backlog stubs for these are written at Gate 2 as F15 (checked by command C14).
 
 ## 12. Risk Predictions
 
@@ -693,7 +739,9 @@ Resolved 02-10-26 (user answers, authoritative; numbering kept stable because ot
 
 Still OPEN:
 
-10. OPEN (needs the user's explicit accept or decline): control-surface self-merge. Recommendation: forbid self-merge for diffs that touch ci.yml, validators, master-planner.md, CLAUDE.md/AGENTS.md or `.claude/`, stopping at `review`. This does not override 'no exceptions'; until answered the plan follows the user's decision and records the residual as user-accepted with a post-merge main-CI check and revert proposal (section 4, Enforcement and compensating controls). Non-blocking for Gate 2 start. Two related extensions are also recorded here for the user's call, neither assumed by this plan: (a) whether T4 / high-risk tasks may bypass user acceptance (section 4 precedence note); (b) whether the Master Planner may merge a worker's PR when the worker's own tool list lacks a merge tool (section 4, (vii)).
+10. OPEN (needs the user's explicit accept or decline): control-surface self-merge. Recommendation: forbid self-merge for diffs that touch ci.yml, validators, master-planner.md, CLAUDE.md/AGENTS.md or `.claude/`, stopping at `review`. This does not override 'no exceptions'; until answered the plan follows the user's decision and records the residual as user-accepted with a post-merge main-CI check and revert proposal (section 4, Enforcement and compensating controls). Non-blocking for Gate 2 start. Two related extensions are also recorded here for the user's call, neither assumed by this plan: (a) whether RT4 / high-risk tasks may bypass user acceptance (section 4 precedence note); (b) whether the Master Planner may merge a worker's PR when the worker's own tool list lacks a merge tool (section 4, (vii)).
+
+12. OPEN, user decision, non-blocking for Gate 2 start: confirm the worker lane as a DIRECT lane. A worker does not run the multi-agent RIPER chain; it writes a compact per-task validate-contract itself and runs its declared gates directly (section 4, worker lane rule). Clarification: one vc-quick-fix-agent spawn for a tiny task is not a subagent chain, so it does not conflict with the Role Selection text "do not spawn sessions or subagent chains". Until answered, the plan follows this lane as user-approved on 02-10-26.
 
 Still OPEN: none blocking. Standing consent for branch deletion remains NOT granted (separate, future decision; no deletion by this plan without per-branch approval).
 
@@ -701,7 +749,7 @@ Still OPEN: none blocking. Standing consent for branch deletion remains NOT gran
 
 ## Touchpoints
 
-Gate 2-5 writes: `process/context/*` (new and slimmed), `process/MASTER-PLAN.md`, `process/archive/index.md`, `process/development-protocols/master-planner.md`, `all-development-protocols.md`, `CLAUDE.md`, `AGENTS.md`, `README.md`, `web/tsconfig.tsbuildinfo` (untrack), `.gitignore`, `process/context/data-sources/all-data-sources.md` and the lse-data-verification task folder (R13: moved from `process/general-plans/active/` to `process/general-plans/completed/`). Reads: git state, MCP session list, `deploy/`. This plan itself writes only its own file.
+Gate 2-5 writes: `process/context/*` (new and slimmed), `process/MASTER-PLAN.md`, `process/archive/index.md`, `process/development-protocols/master-planner.md`, `all-development-protocols.md`, `CLAUDE.md`, `AGENTS.md`, `README.md`, `web/tsconfig.tsbuildinfo` (untrack), `.gitignore` (add the tsbuildinfo ignore line; single owner at Gate 5), `process/context/data-sources/all-data-sources.md`, `process/archive/master-plan-revisions_02-10-26.md`, three backlog stubs under `process/general-plans/backlog/` (F15: `token-usage-telemetry_NOTE_02-10-26.md`, `agents-skills-symlink-windows_NOTE_02-10-26.md`, `deploy-runtime-user-pc-verification_NOTE_02-10-26.md`) and the lse-data-verification task folder (R13: moved from `process/general-plans/active/` to `process/general-plans/completed/`). Reads: git state, MCP session list, `deploy/`. This plan itself writes only its own file.
 
 ## Public Contracts
 
@@ -709,7 +757,7 @@ Behavior contracts other sessions rely on: the default entry set; the task statu
 
 ## Blast Radius
 
-Docs/process only through Gate 4 (risk class: T0). Gate 5 adds git-index and ignore changes (T0-T1) and optional deploy script changes (T4, separately approved). No product code.
+Docs/process only through Gate 4 (risk class: RT0). Gate 5 adds git-index and ignore changes (RT0-RT1) and optional deploy script changes (RT4, separately approved). No product code.
 
 ## Test Infra Improvement Notes
 
@@ -907,7 +955,14 @@ Plan updates applied (PVL cycle 2, 02-10-26, vc-plan-agent PVL-supplement; every
 - Gap 23: (a)-(f) accuracy fixes. VERIFIED.
 - Additional verified fact recorded (orchestrator session, 02-10-26): the claude-code-remote session tools and the GitHub merge tools are in the Master Planner (orchestrator) session's tool list and not visible to vc-* subagents; Gate 2 step R4 (vii) runs in the orchestrator session. Consistent with what this validate session can see (no session or merge tools).
 
-Plan updates pending (PVL cycle 3): none applied yet. Gaps 24-30 above are the supplement request; vc-validate-agent re-runs from V1 afterwards (cycle 4).
+Plan updates applied (PVL cycle 3, 02-10-26, vc-plan-agent PVL-supplement; every new or changed command was run read-only, positive and negative cases on scratch copies; NOT yet re-verified by vc-validate-agent, which re-runs from V1 as cycle 4):
+- Gap 24: risk tiers renamed RT0-RT4 at every occurrence outside this contract's history (section 4 precedence note and worker lane, section 6 table and budget rule, Open Question 10(a), Blast Radius); naming rule stated in section 3 and section 6 (T# = registry task, RT# = risk tier); `L` not used (it is a Prio value).
+- Gap 25: F14 = `git rm --cached` PLUS adding `web/tsconfig.tsbuildinfo` to `.gitignore` (verified absent today); false parenthetical removed; H2, Touchpoints and a Gate 5 form of C9 updated.
+- Gap 26: command C14 added (deliverable existence, `## Approvals Log` with an lse-data-verification row, `ROLE: WORKER`, five north-star topics, R13 outcome, rev 6 preservation pinned to 18ffd4f014f4e5ea0f5d654688875a9300b30ab4, informational byte lines); expected today 10 MISSING + 10 FAIL + 210 comm lines; positive and negative verified on a scratch tree; F15 (three backlog stubs) added to the file set, Touchpoints and C14; F8 row extended with the Approvals Log; Gate 2 row and Verification Evidence name C11 and C14.
+- Gap 27: C13 now also runs `git diff --cached --check` and the untracked-file loop; the gate is "no output"; verified on a scratch repo.
+- Gap 28: C8 widened (`public[ -]later|open up later|other users later|intended to open`): 11 hits today (lines 95, 373, 446, 581, 582, 910, 955, 957, 962, 964, 1020); every "8 hits" statement outside this contract's history updated; line 955 (Equity data provider row), the stale Deployment target row (line 959) and lines 962-964 added to the F5 drop/reword list.
+- Gap 29: C3 asserts each input with `test -s`, ends with `test "$total" -le 64000; echo rc=$?`, expected-today note corrected (240454 / rc=1, not "cannot run"); C2 widened to `You are the orchestrator|You do NOT|Your responsibilities|Orchestrator Role` (8 lines today).
+- Gap 30: (a) Gate 2 order now F1, F2, F3 before F4 and F5; (b) section 9 Gate 2 row names C11, C13, C14; (c) router budget 90 lines (sum of table rows); (d) Scan Metadata 57 lines; (e) Open Question 12 added (worker lane confirmation, non-blocking); (f) validate-plan-inventory.mjs added to C7 and the baseline table (0 failures, 6 warnings); (g) F9/F10 rows and C7 require the literal `process/context/all-context.md` (counts today 9 and 12).
 
 Gate: CONDITIONAL (0 FAILs, 7 CONCERNs (Gaps 24-30, all plan-text); PVL cycle 3; EXECUTE of Gate 2 is not legal yet; PHASE_COMPLETE: VALIDATE is NOT emitted; routes to PVL supplement cycle 3 then a re-spawn of vc-validate-agent from V1)
 Accepted by: none yet. No concern has been accepted by the user. Acceptance, if any, is recorded after the next supplement cycle (or by explicit user acceptance), listing each accepted concern by name. User decisions pending but non-blocking for Gate 2 start: Open Question 10 (control-surface self-merge; T4 bypass; Master Planner merging on a worker's behalf); the worker-lane confirmation; standing consent for branch deletion.
@@ -923,7 +978,7 @@ Hard stops / safety constraints:
 - Installs, product code (api/, web/) edits, deploy script changes, network use beyond approved ref-only fetch
 - Starting Gate N+1 before VALIDATE writes a contract for it
 - Any validator showing a NEW failure versus the recorded baseline in the Validate Contract
-Next phase: PVL cycle 3 validate done (Gate: CONDITIONAL, 0 FAIL, 7 CONCERN = Gaps 24-30); run PVL supplement cycle 3 (vc-plan-agent), then re-spawn vc-validate-agent from V1 (cycle 4); after Gate: PASS: EXECUTE Gate 2 via vc-execute-agent (opus), scoped to F1-F8 + F11 + R13 + R14
+Next phase: PVL supplement cycle 3 applied (Gaps 24-30); re-spawn vc-validate-agent from V1 (cycle 4); after Gate: PASS: EXECUTE Gate 2 via vc-execute-agent (opus), scoped to F1-F8 + F11 + R13 + R14
 Validate contract: inline in plan (## Validate Contract)
 Execute start: wc -l all-context <=300 | validate-context-discovery (failures == baseline) | validate-all-context | discover-context --check-routing | validate-protocol-wiring | validate-protocol-discovery | validate-kit-portability | validate-agent-parity non-strict | git diff --check | retired-wording grep | e2e spec: none | probe: none until Gate 3 | high-risk pack: no (Gate 5 R12 only)
 
@@ -931,7 +986,7 @@ Execute start: wc -l all-context <=300 | validate-context-discovery (failures ==
 
 1. Selected plan: `/home/user/psychic-train/process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md`
 2. Last completed step: PVL cycle 3 validate (re-run from V1 after the cycle-2 supplement of Gaps 14-23): Gaps 14-23 verified closed live; 7 new plan-text concerns (Gaps 24-30). No implementation. Working tree: plan file edits only.
-3. Validate-contract: written 02-10-26 (cycle 3), Gate: CONDITIONAL, 0 FAIL, 7 CONCERN (Gaps 24-30, see its SUPPLEMENT REQUEST). Next: PVL supplement cycle 3 (vc-plan-agent), then re-spawn vc-validate-agent from V1.
+3. Validate-contract: written 02-10-26 (cycle 3), Gate: CONDITIONAL, 0 FAIL, 7 CONCERN (Gaps 24-30, see its SUPPLEMENT REQUEST). PVL supplement cycle 3 is applied (Gaps 24-30); next: re-spawn vc-validate-agent from V1 (cycle 4).
 4. Context loaded: CLAUDE.md, all-context.md, orchestration.md, MASTER-PLAN.md (full), realignment SPEC (AC grep), repo branch list.
 5. Next step: ENTER VALIDATE MODE (all questions resolved); then Gate 2 via vc-execute-agent (opus) scoped to F1-F8 plus R13 and R14; start MASTER-PLAN work from `pensive-dijkstra` rev 6; re-verify every remaining UNVERIFIED registry item first.
 
