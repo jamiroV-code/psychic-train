@@ -8,21 +8,21 @@ feature: general-plans
 # Project Recovery, Architecture Cleanup, AI Efficiency and Master Planner Orchestration — GATE 1 Proposal
 
 Date: 02-10-26
-Status: PROPOSED, Gate 1 approved in part (user answers 02-10-26 recorded below). Nothing here is executed. VALIDATE must run before any Gate 2 write.
+Status: PROPOSED, Gate 1 approved (all user answers 02-10-26 recorded below; Q1-Q8 resolved). Nothing here is executed. VALIDATE is next and must run before any Gate 2 write. Working tree: plan file edits only (this file); no other file touched.
 Complexity: COMPLEX (single plan, gated roadmap Gate 2..6; each gate re-enters VALIDATE).
 
 ## Status of this plan
 
-Gate 1 approved in part on 02-10-26: Q1, Q2, Q3, Q5, Q6, Q7 are resolved (user answers, see section 13); Q4 and Q8 stay open. VALIDATE is the next phase. No Gate 2 write happens before VALIDATE writes a contract.
+Gate 1: approved (02-10-26). Q1-Q8 are all resolved (user answers, section 13); Q4 and Q8 are now Resolved. VALIDATE is the next phase. No Gate 2 write happens before VALIDATE writes a contract. Working tree: only this plan file was edited in this supplement.
 
 ## TL;DR
 
 - Today every session loads ~200 KB (~50k tokens) before work starts; ~65% of the biggest file is changelog. Target: a default entry set of ~25 KB (~6k tokens), a ~88% cut, by moving history out of default load, not by deleting it.
 - No new doc system. Reuse `process/context/` + `all-context.md` routing, RIPER-5 task folders, `results.tsv`, closeout packets, `completed/` archival. Promote the existing, unreferenced `process/MASTER-PLAN.md` to the ONE task board and registry.
 - Add only five small things: `north-star.md`, `current-state.md`, `decisions.md`, `process/archive/index.md`, worker envelope + report templates.
-- Master Planner never marks a task `accepted` on a worker's word: acceptance needs independent evidence (CI, a spawned vc-tester, or the user) recorded in the registry. Under the user's standing authorization (section 4) a worker may self-merge and self-archive only when every mechanical safety condition holds; high-risk classes always stop at `review`.
+- Master Planner never marks a task `accepted` on a worker's word: acceptance needs independent evidence (CI, a spawned vc-tester, or the user) recorded in the registry. Under the user's standing authorization (section 4, "no exceptions", including high-risk classes) a worker may self-merge and self-archive only when every mechanical safety condition holds and it is sure; a worker that is unsure, or whose conditions cannot be verified from the cloud container or CI, stops at `review`.
 - Four archive operations stay separate: archive docs, mark logically complete, archive a session (allowed only after the handover report is durable and merge verified), delete branch/worktree (never automatic; needs the registry marking `accepted` plus recorded user consent, not yet granted).
-- 6 of 8 questions are resolved; 2 remain open (Q4 exciting-meitner, Q8 ref-only fetch). Nothing in Gate 2+ runs before VALIDATE.
+- All 8 questions are resolved (Q4: salvage exciting-meitner selectively; Q8: ref-only fetch done, measured results in section 7). One new HIGH-PRIORITY item surfaced: branch `pensive-dijkstra` holds an unmerged, newer MASTER-PLAN (rev 6 vs main's rev 3a); Gate 2 must start from it. Nothing in Gate 2+ runs before VALIDATE.
 
 ---
 
@@ -41,7 +41,7 @@ Gate 1 approved in part on 02-10-26: Q1, Q2, Q3, Q5, Q6, Q7 are resolved (user a
 | 9 | test-runner | uv run pytest | vitest (not triggered by docs work) |
 | 10 | validate-contract | none (pending) |
 
-Sources used (not re-audited): Gate 0 audit conclusions; session inventory; remote branch list; `process/MASTER-PLAN.md` (read in full this session, last verified 2026-09-28, stale); realignment SPEC (AC-19, AC-20 moved into this plan). Sandbox note: `git branch -a` here shows only `main` and one working branch; the 13-remote-branch picture is the user-supplied inventory and is NOT re-verified.
+Sources used (not re-audited): Gate 0 audit conclusions; session inventory; remote branch list; `process/MASTER-PLAN.md` (read in full this session, last verified 2026-09-28, stale); realignment SPEC (AC-19, AC-20 moved into this plan). Sandbox note: `git branch -a` here shows only `main` and one working branch; the remote-branch picture is now MEASURED by a ref-only fetch (02-10-26, user-approved; results in section 7), not re-verified by this container's `git branch -a`.
 
 ## Goals / Non-goals
 
@@ -130,8 +130,8 @@ Rule: a status stronger than `review` is written only where independent evidence
 | T8 | refresh context docs | superseded by R2/R3 | folded into this program |
 | T9 | charting page | cancelled | realignment AC-17: charts page not built |
 | T10 | cross-signal confidence view | cancelled | realignment AC-18: principle retired |
-| T11 | lying plan status strips | proposed | fix lives on unmerged `exciting-meitner`; UNVERIFIED |
-| T12 | equity provider decision | proposed -> superseded in part | LSE verdict ADOPT-WITH-LIMITS on unmerged branch; realignment SPEC adopts LSE private-use equities page (queued as P4) |
+| T11 | lying plan status strips | approved (salvage via R13) | fix lives on unmerged `claude/exciting-meitner-hy50kn` (7 ahead of main, measured 02-10-26); salvage selectively |
+| T12 | equity provider decision | proposed -> superseded in part | LSE verdict ADOPT-WITH-LIMITS on unmerged exciting-meitner (salvage via R13); realignment SPEC adopts LSE private-use equities page (queued as P6) |
 | T13 | CI | accepted | `.github/workflows/ci.yml` exists (pytest + vitest/tsc/island build; no e2e/lint) |
 | T14 | UI shell | review | Direction D merged (PR #9); no human visual acceptance recorded |
 | T15 | redistribution flags | proposed (P3, low priority) | Q7 resolved 02-10-26: demoted; licensing is no longer a design constraint (personal use) |
@@ -142,9 +142,9 @@ Rule: a status stronger than `review` is written only where independent evidence
 | T20 | tsbuildinfo tracked | proposed | confirmed tracked (Gate 0) |
 | T21 | cache.py refactor | proposed | solo task, deferred; low value vs personal-use goal |
 | T22 | cache-isolation trap | proposed | not a live bug |
-| T23 | reconcile branches | in_progress -> partially done | five branches sit at merged-PR heads; needs ref-only fetch for ahead/behind (approval) |
+| T23 | reconcile branches | in_progress | ref-only fetch DONE 02-10-26; raw and content-level results in section 7; per-file review still required before any deletion |
 | T24 | one status board | superseded by R2/R6 | decided here: MASTER-PLAN is the one board |
-| T25 | delete stale branches | proposed | deletion needs approval (H-list) |
+| T25 | delete stale branches | proposed | deletion needs per-branch user approval; only `compassionate-goldberg` is a safe-to-delete candidate (0 files differ from main) |
 | T2, T6 | not present in MASTER-PLAN 09-28 | n/a | numbering gaps; recorded as unknown, not invented |
 | P1 | pipeline completeness | review | PR #11 merged; CODE DONE, three CONDITIONAL gaps (real cron firing unverified, etf_flows write non-atomic, inert commits) |
 | P2 | deployability (home PC + Tailscale) | review | PR #10 merged; Q3 resolved 02-10-26: build the 3 deploy fixes as R12 |
@@ -166,7 +166,9 @@ New recovery tasks (this program):
 | R9 | Housekeeping (approved items only) | proposed | 5 |
 | R10 | Deploy path doc + stale-build guard proposal | proposed | 5 |
 | R11 | Archive index + session triage | proposed | 5 |
-| R12 | Deploy fixes (Q3 resolved 02-10-26): stop the old web process (kill-by-port) before build; stale-build guard in `start-web`; post-start smoke check. Own task, high-risk class (deploy/runtime/proxy): never self-merged, stops at `review`, user runs deploy-script verification on the PC | proposed (decision to build recorded; becomes `approved` on confirmation of its task brief) | 5 |
+| R12 | Deploy fixes (Q3 resolved 02-10-26): stop the old web process (kill-by-port) before build; stale-build guard in `start-web`; post-start smoke check. Own task, high-risk class (deploy/runtime/proxy). Eligible for self-merge under the standing authorization ("no exceptions") only if every mechanical condition holds; the PowerShell/Task Scheduler/Tailscale runtime behaviour cannot be verified from the cloud container, so a worker cannot truthfully be sure and in practice stops at `review` (see section 4, verifiability consequence) | proposed (decision to build recorded; becomes `approved` on confirmation of its task brief) | 5 |
+| R13 | Salvage `claude/exciting-meitner-hy50kn` selectively (Q4 resolved 02-10-26): bring over the LSE verdict (ADOPT-WITH-LIMITS) and the plan status-strip fixes; DROP its duplicate status board section in `all-context.md`; branch not deleted | proposed | 2 |
+| R14 | HIGH PRIORITY: reconcile `pensive-dijkstra`'s `process/MASTER-PLAN.md` revision 6 (CI wired, uvicorn fix; 5 ahead / 3 behind main, main has rev 3a) into the registry rebuild. Gate 2 (R5) must start from rev 6, not main's rev 3a | proposed | 2 |
 
 Queued product tasks (from SPECs; `proposed`, NOT executed, NOT approved):
 
@@ -197,7 +199,7 @@ review -> in_progress (acceptance rejected, with reasons; counts against retry b
 
 ### Acceptance rule (hard)
 
-`accepted` requires ALL of: (a) report has all 11 fields; (b) tests named in the task's test requirement were re-run by a party other than the implementer (spawned vc-tester or the user) and results recorded with command + timestamp; (c) changed-file list matches the task's file ownership; (d) for tasks with user-visible behavior, user acceptance or a recorded agent-probe. A worker saying "done" yields `review` only; the standing authorization lets a worker self-merge only under the mechanical conditions in the Standing authorization subsection, and never for high-risk classes. Absence of any tier-required evidence keeps the task `review` and is recorded as a gap (vacuous-green ban: known-gap cannot be PASS).
+`accepted` requires ALL of: (a) report has all 11 fields; (b) tests named in the task's test requirement were re-run by a party other than the implementer (spawned vc-tester or the user) and results recorded with command + timestamp; (c) changed-file list matches the task's file ownership; (d) for tasks with user-visible behavior, user acceptance or a recorded agent-probe. A worker saying "done" yields `review` only; the standing authorization lets a worker self-merge only under the mechanical conditions in the Standing authorization subsection (this applies to every task including high-risk classes; there is no class exclusion). Absence of any tier-required evidence keeps the task `review` and is recorded as a gap (vacuous-green ban: known-gap cannot be PASS).
 
 ### Decomposition rules
 
@@ -228,12 +230,33 @@ Operational reading (this is the written authorization; anything not listed is N
 
 1. Spawn: the Master Planner may `create_session` a worker for any registry task whose status is `approved`, without asking again. Max 3 concurrent worker sessions, excluding the Master Planner's own.
 2. Self-merge and self-archive: a worker may merge its own branch and archive its own session WITHOUT asking only when ALL mechanical safety conditions hold: (a) CI green on the head commit; (b) the task's risk-tier tests (section 6 table) all passed and were independently re-run or confirmed by CI; (c) the diff touches only files in the task's declared ownership; (d) no merge conflicts; (e) the completion report (11 fields) is persisted and committed; (f) the registry entry is updated to `accepted` then `archived` with commit refs.
-3. Excluded: tasks in a high-risk class (auth/identity, billing, schema/data migration, public API contract, deploy/runtime/proxy, secrets/trust boundary) are excluded from self-merge. They stop at `review` and need the user. FLAGGED FOR USER CONFIRMATION: the user may loosen this.
+3. No exceptions (user decision 02-10-26): the user declined the high-risk exclusion. Workers may self-merge and self-archive ANY task, including high-risk classes (deploy/runtime/proxy, schema/migration, public API contract, auth/identity, billing, secrets/trust boundary), provided ALL mechanical conditions in item 2 hold. Non-negotiable fail-safes the user did not remove: (i) a worker that is unsure stops at `review`; (ii) every item-2 condition must be evidenced (CI green on head, risk-tier tests passed, diff inside declared ownership, no conflicts, completion report committed, registry updated); (iii) the verifiability consequence below; (iv) branch deletion standing consent is NOT granted.
 4. The four archive operations stay separate. A session may be archived (`archive_session`) only after its handover report is durable and the merge is verified. Branches are never deleted and worktrees never removed automatically unless the registry marks the task `accepted` AND the user's standing consent for branch deletion is recorded; that consent is NOT granted by this answer.
 5. The Master Planner, not the worker, writes the registry and `current-state.md` updates after each merge.
 6. Fail-safe: any worker that is unsure stops at `review`.
 
 Tension with the acceptance rule ("never mark accepted because a worker says done") and its resolution: item 2 does not rest on the worker's say-so. Self-merge requires independent evidence (CI on the head commit, or a re-run by a party other than the implementer) plus mechanical diff-ownership and report checks. If any evidence is missing, the task stays `review`. So "worker is sure" is a necessary trigger, never a sufficient one.
+
+#### Verifiability consequence (documented consequence, not a new restriction)
+
+Some tasks change behaviour that cannot be observed from the cloud container or CI: Windows PowerShell deploy scripts (`deploy/*.ps1`), Windows Task Scheduler registration, Tailscale reachability, the live home PC. For such tasks:
+
+| Condition | Verifiable from cloud/CI? | How |
+|---|---|---|
+| Shape/parse of scripts and configs | Yes | existing shape tests (e.g. `api/tests/deploy/test_deploy_config_shape.py`), PowerShell parse check where tooling exists, `.github/workflows/ci.yml` green on head |
+| Diff inside declared ownership, no conflicts, report committed, registry updated | Yes | git and registry checks |
+| Script runtime behaviour on Windows (kill-by-port, stale-build guard, smoke check), Task Scheduler, Tailscale, live-PC serving | NO | only the user's PC can show this |
+
+Consequence: an unverifiable runtime condition means the worker cannot truthfully be "sure", so under fail-safe (i) it stops at `review` and the user runs the PC verification. This follows from the standing authorization's own "if it's sure" wording; it adds no restriction beyond it. If a deploy task's runtime behaviour were proven by CI or a shape test alone, self-merge remains allowed.
+
+#### Risk accepted by user
+
+| Item | Detail |
+|---|---|
+| Decision | User chose "no exceptions" on 02-10-26: high-risk classes may self-merge when all mechanical conditions hold |
+| What can go wrong | An auto-merged deploy, migration, API, auth, billing or secrets change passes shape tests and CI but breaks the live PC or data (for example a deploy script that parses but misbehaves on Windows) |
+| Mitigations | Post-start smoke check (R12); documented revert-commit procedure (`git revert <merge sha>`, recorded in the report and registry row); max 3 concurrent workers; evidenced mechanical conditions; fail-safe (i) unsure means `review`; verifiability consequence above; no branch deletion consent |
+| Residual | Cloud cannot observe the live PC; a bad merge can reach `main` before the user notices. Accepted by the user |
 
 ### Completion lifecycle and the four separate operations
 
@@ -305,9 +328,9 @@ Known-gap policy: any developed behavior proven only by a known-gap stays CONDIT
 |---|---|---|---|---|
 | H1 | `.agents/skills` (17 MB) duplicate of `.claude/skills` | Gate 0; fails `validate-skills.mjs`/`validate-context-discovery.mjs` per MASTER-PLAN | Codex discovery might rely on it; symlink behavior on the Windows PC unverified | yes (replace with symlink or doc), validators before/after |
 | H2 | `web/tsconfig.tsbuildinfo` tracked | Gate 0 | low; `git rm --cached` + ignore | yes |
-| H3 | Remote branches: kind-tesla-tat3vo, compassionate-goldberg-o2iq49 (on main per PRs #1/#3/#4), narrative-v2 (duplicate of PR #7 RFC-1), merged-PR branches p1-pipeline, p2-deploy, ui-shell, vigilant-hamilton, fix/narrative-sufficiency-gating-rfc1 | MASTER-PLAN 09-28, NOT re-verified | deleting an unmerged branch loses work; must check ahead/behind and PR state per branch | yes, per branch; first a ref-only fetch (needs approval) |
-| H4 | split-all-context (bf65024) | holds unique `context-changelog.md` | losing it before salvage | salvage first, delete never without approval |
-| H5 | exciting-meitner | holds unmerged LSE verdict and plan-strip fixes | do not delete; merge or salvage decision (Q4) | yes |
+| H3 | Remote branches (kind-tesla, compassionate-goldberg, narrative-v2, p1-pipeline, p2-deploy, ui-shell, vigilant-hamilton, fix/narrative-sufficiency-gating-rfc1, inspiring-pasteur, pensive-dijkstra) | MEASURED 02-10-26, see the measured table below | deleting an unmerged branch loses work; large all-differ counts are confounded by files archived/moved on main | yes, per branch, after a per-file review; only compassionate-goldberg is a safe-to-delete candidate |
+| H4 | split-all-context (2 ahead / 38 behind; 35 of 35 files differ) | holds the context-changelog split commit bf65024 (unique `context-changelog.md`) | losing it before salvage | salvage first, delete never without approval |
+| H5 | exciting-meitner (7 ahead / 87 behind) | 7 unique commits of LSE-verification work (script fixes, EVL logs, ADOPT-WITH-LIMITS verdict, status board) | do not delete; Q4 resolved: salvage selectively as R13 (LSE verdict + status-strip fixes; drop duplicate status board section in `all-context.md`) | branch deletion: yes |
 | H6 | Dead `cache.write_confirmed_boundaries/read_confirmed_boundaries` | MASTER-PLAN says zero callers | static search misses dynamic use and scripts | needs grep over `api/scripts` + tests, plus run full pytest; user approval |
 | H7 | Stale entries in `process/general-plans/active/` (e.g. momentum-screener_17-09-26 with verified sub-plans) | MASTER-PLAN T19 | archiving moves history; reversible via git | yes, via archive index |
 | H8 | No root README | Gate 0 | none | no (additive) |
@@ -315,6 +338,27 @@ Known-gap policy: any developed behavior proven only by a known-gap stays CONDIT
 | H10 | Scout-block hook blocks commands containing `.next`/`node_modules`/`.venv` | Gate 0 | may hinder build/clean steps in Gate 5 | document, no change without approval |
 
 ---
+
+### Measured branch state (Q8 resolved 02-10-26: ref-only fetch approved and done)
+
+Method: `git fetch` (refs only; no merge, no deletion), then per-branch comparison against `origin/main` (main is at the 40e66e9-era plus session-branch commits; session branch `claude/pensive-albattani-ou0cgv` is 6 ahead / 0 behind). Raw ahead/behind counts commits not reachable from main; squash-merged PRs inflate "ahead". Content-level check = files each branch changed since its merge-base that still differ from main.
+
+| Branch | Ahead / behind (raw) | Files still differing from main | Reading |
+|---|---|---|---|
+| compassionate-goldberg | 0 / 90 | 0 of 0 | fully on main; safe-to-delete candidate (still needs user approval) |
+| exciting-meitner | 7 / 87 | 16 of 16 | LSE-verification work; salvage target (R13) |
+| inspiring-pasteur (PR #5, open draft) | 2 / 38 | 36 of 36 | needs per-file review |
+| kind-tesla | 1 / 38 | 34 of 34 | needs per-file review |
+| narrative-v2 | 3 / 42 | 18 of 18 | needs per-file review |
+| p1-pipeline | 16 / 15 | 2 of 39 (`.gitignore`, `all-context.md`) | likely main's later edits; unverified per file |
+| p2-deploy | 9 / 15 | 2 of 20 (`api/tests/deploy/test_deploy_config_shape.py`, `deploy/start-api.ps1`) | likely main's later edits; unverified per file |
+| pensive-dijkstra | 5 / 3 | 1 of 1 (`process/MASTER-PLAN.md`) | holds MASTER-PLAN revision 6 (6 later revisions on branch); HIGH PRIORITY reconcile (R14) |
+| split-all-context | 2 / 38 | 35 of 35 | holds context-changelog split commit bf65024; salvage before any deletion |
+| ui-shell | 12 / 18 | 2 of 77 (`.gitignore`, `web/tsconfig.tsbuildinfo`) | likely main's later edits; unverified per file |
+| vigilant-hamilton | 5 / 22 | 3 of 7 (`pytrends_adapter.py`, `test_pytrends_adapter.py`, `all-context.md`) | likely main's later edits; unverified per file |
+| fix/narrative-sufficiency-gating-rfc1 | 11 / 21 | 9 of 51 | needs per-file review |
+
+Caveats (must travel with these numbers): (1) "still differ" means the file differs from main's CURRENT content, which includes edits made on main after the PR merged, so small counts (p1, p2, ui-shell, vigilant) are most likely main's later edits, NOT unmerged work, but this is unverified per file. (2) Large all-differ counts (kind-tesla, inspiring-pasteur, narrative-v2, split-all-context, exciting-meitner) are confounded by files archived or moved on main and need a per-file review before any deletion. (3) pensive-dijkstra's MASTER-PLAN revision 6 (CI wired, uvicorn fix) is NEWER than main's rev 3a and unmerged: Gate 2 must start from rev 6 (task R14). (4) No branch is deleted by this plan without user approval.
 
 ## 8. Performance and Deploy Path
 
@@ -324,7 +368,7 @@ Windows deployment path (from `deploy/` and the 2026-10-01 incident):
 
 `source (git pull on PC) -> test (pytest/vitest/tsc as tier requires) -> build (pnpm build:islands then next build, i.e. pnpm build) -> deploy (restart API and web tasks) -> smoke`
 
-Rebuild requirement: any `web/` change needs `build-web.ps1` (or `pnpm build`) before restart; pulling source alone does not update the served app. Known issue: on 2026-10-01 the live PC served a stale build because `Stop-ScheduledTask` did not kill the node process. Gaps: no auto rebuild after pull, no stale-build guard, no deployed smoke test. This plan only documents the path and proposes the fixes (guard comparing build id/commit to HEAD, kill-by-port in the restart script, a one-request smoke check); Q3 resolved 02-10-26: the fixes will be built as task R12 (own task, Gate 5, high-risk deploy class: stops at `review`, never self-merged). Deploy changes never run unattended.
+Rebuild requirement: any `web/` change needs `build-web.ps1` (or `pnpm build`) before restart; pulling source alone does not update the served app. Known issue: on 2026-10-01 the live PC served a stale build because `Stop-ScheduledTask` did not kill the node process. Gaps: no auto rebuild after pull, no stale-build guard, no deployed smoke test. This plan only documents the path and proposes the fixes (guard comparing build id/commit to HEAD, kill-by-port in the restart script, a one-request smoke check); Q3 resolved 02-10-26: the fixes will be built as task R12 (own task, Gate 5, high-risk deploy class). Under the "no exceptions" authorization R12 may self-merge only if all mechanical conditions hold; Windows runtime behaviour is not verifiable from cloud/CI, so the worker cannot be sure and stops at `review` (section 4, verifiability consequence). The deploy script itself never runs unattended from the cloud.
 
 ---
 
@@ -337,8 +381,8 @@ Rebuild requirement: any `web/` change needs `build-web.ps1` (or `pnpm build`) b
 | 2 | R1-R5: current-state.md (re-verified), north-star.md, decisions.md, context-changelog.md, slimmed all-context.md, master-planner.md, MASTER-PLAN registry, archive index skeleton | VALIDATE first; `wc -l all-context.md` <= 300; `validate-context-discovery.mjs`; `vc-audit-context`; check every moved changelog line exists in F4 (line-count + diff); grep no remaining "confidence over direction"/"public later" in entry points | VALIDATE contract; no source edits; ref-only fetch for branch facts requires approval |
 | 3 | R6, R7: CLAUDE.md/AGENTS.md rewrite, protocol router update, byte baselines, sampled session token baseline | `wc -c` before/after table; `validate-agent-parity.mjs --strict`, `validate-protocol-wiring.mjs`, `validate-guide-sync.mjs`; a fresh session must reach a task brief reading only the entry set | CLAUDE.md/AGENTS.md edits (high-visibility, user review before commit) |
 | 4 | R8: test policy in all-tests.md, re-measured test counts | run the three suites once (measured, timestamped) | none beyond Gate approval; installs need approval |
-| 5 | R9-R12: housekeeping (approved items), README, deploy-path doc/guard proposal, session triage + archive index | per-item evidence re-check; validators; no deletion without per-item approval; R12 verified on the user's PC (hybrid) | branch deletion, `archive_session`, `.agents/skills` replacement, tsbuildinfo untrack, deploy-script changes, any installs |
-| 6 | Master Planner pilot: dispatch ONE low-risk task (e.g. P7 guard test or R-level docs task) through the registry end-to-end; then start approved product tasks | pilot task reaches `accepted` through the rule in section 4; report has 11 fields | each product task `approved` by user; spawning workers for `approved` tasks is covered by the standing authorization (section 4, max 3 concurrent); high-risk tasks stop at `review` |
+| 5 | R9-R14: housekeeping (approved items), README, deploy-path doc/guard proposal, session triage + archive index; R13 exciting-meitner salvage and R14 MASTER-PLAN rev 6 reconcile (these two run in Gate 2 ahead of R5) | per-item evidence re-check; validators; no deletion without per-item approval; R12 verified on the user's PC (hybrid) | branch deletion, `archive_session`, `.agents/skills` replacement, tsbuildinfo untrack, deploy-script changes, any installs |
+| 6 | Master Planner pilot: dispatch ONE low-risk task (e.g. P7 guard test or R-level docs task) through the registry end-to-end; then start approved product tasks | pilot task reaches `accepted` through the rule in section 4; report has 11 fields | each product task `approved` by user; spawning workers for `approved` tasks is covered by the standing authorization (section 4, max 3 concurrent); high-risk tasks are covered too ("no exceptions"), but self-merge needs every mechanical condition and the worker being sure; unverifiable runtime conditions mean `review` |
 
 Each gate ends with a closeout (UPDATE PROCESS) and a commit on `main` only when you ask (repo policy).
 
@@ -387,7 +431,9 @@ Known gaps (named residuals, keep gates CONDITIONAL): real per-session token usa
 | Worker report claims unverified | high | acceptance rule requires independent re-run |
 | Branch deletion destroys unmerged work | low-med | per-branch ahead/behind check, per-branch approval |
 | Cloud sessions with unresolved asks get archived | med | C-operation blocked while asks unresolved; list_events review first |
-| Self-merge ships a bad change | med | all six mechanical conditions required; independent CI/re-run evidence; high-risk classes excluded; unsure means `review`; user may tighten or loosen |
+| Self-merge ships a bad change (RISK ACCEPTED BY USER, 02-10-26, "no exceptions", includes high-risk classes) | med | all six mechanical conditions required and evidenced; independent CI/re-run evidence; unsure means `review`; unverifiable runtime conditions mean `review`; smoke check; revert-commit procedure; 3-worker cap; no branch deletion consent |
+| Auto-merged deploy change breaks the live PC (RISK ACCEPTED BY USER) | low-med | R12 smoke check; revert procedure (`git revert <merge sha>`); shape tests + ci.yml; cloud cannot observe the PC so worker stops at `review` for runtime behaviour |
+| Newer MASTER-PLAN rev 6 on `pensive-dijkstra` is overwritten by a rebuild from main's rev 3a | med | R14 high priority; Gate 2 R5 starts from rev 6 |
 | Parallel lanes collide on `all-context.md`/`.gitignore` | med | single-owner rule for shared files |
 | Token savings overstated | med | bytes measured, tokens approximate, usage unmeasured |
 
@@ -401,14 +447,16 @@ Resolved 02-10-26 (user answers, authoritative):
 2. Q2 RESOLVED 02-10-26: CLAUDE.md target up to ~20 KB.
 3. Q3 RESOLVED 02-10-26: build the 3 deploy fixes (stop old web process before build / kill-by-port, stale-build guard in `start-web`, post-start smoke check) as own task R12 (high-risk deploy class).
 4. Q5 RESOLVED 02-10-26: realignment SPEC split into `personal-tracker-realignment_02-10-26` (19 active ACs) and `narrative-baskets_02-10-26` (12 active ACs); docs/process criteria owned here as AC-R3/AC-R4.
-5. Q6 RESOLVED 02-10-26: standing authorization recorded verbatim in section 4; high-risk exclusion flagged for user confirmation.
+5. Q6 RESOLVED 02-10-26: standing authorization recorded verbatim in section 4; the high-risk exclusion was declined by the user ("no exceptions").
 6. Q7 RESOLVED 02-10-26: T15 demoted to low priority; licensing is no longer a design constraint (personal use).
 
 Still OPEN:
 
-- Q4: exciting-meitner (LSE verdict, status-strip fixes): merge, salvage selectively, or leave?
-- Q8: approve a ref-only fetch to measure ahead/behind for all remote branches (no merge, no deletion)?
-- Confirm (new, from Q6): are high-risk classes to stay excluded from self-merge, or loosen? Also, is standing consent for branch deletion to be granted later? (Neither is granted now.)
+7. Q4 RESOLVED 02-10-26: salvage `claude/exciting-meitner-hy50kn` selectively (LSE verdict + status-strip fixes; drop the duplicate status board section in `all-context.md`) as registry task R13.
+8. Q8 RESOLVED 02-10-26: ref-only fetch approved and done; measured results recorded in section 7 (replacing the earlier UNVERIFIED branch statements).
+9. Self-merge guardrail RESOLVED 02-10-26: "No exceptions" (user declined the high-risk exclusion); fail-safes and the verifiability consequence are in section 4. The earlier "flagged for confirmation" item is closed.
+
+Still OPEN: none blocking. Standing consent for branch deletion remains NOT granted (separate, future decision; no deletion by this plan without per-branch approval).
 
 ---
 
@@ -435,10 +483,10 @@ Docs/process only through Gate 4 (risk class: T0). Gate 5 adds git-index and ign
 ## Resume and Execution Handoff
 
 1. Selected plan: `/home/user/psychic-train/process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md`
-2. Last completed step: PLAN (Gate 1 proposal written; no implementation).
+2. Last completed step: PLAN supplement 2 (Gate 1 approved; Q4, Q8 resolved; "no exceptions" guardrail recorded; branch measurements recorded; no implementation). Working tree: plan file edits only.
 3. Validate-contract: pending.
 4. Context loaded: CLAUDE.md, all-context.md, orchestration.md, MASTER-PLAN.md (full), realignment SPEC (AC grep), repo branch list.
-5. Next step: ENTER VALIDATE MODE (Q4 and Q8 still open; they do not block VALIDATE); then Gate 2 via vc-execute-agent (opus) scoped to F1-F8; re-verify every UNVERIFIED registry item first.
+5. Next step: ENTER VALIDATE MODE (all questions resolved); then Gate 2 via vc-execute-agent (opus) scoped to F1-F8 plus R13 and R14; start MASTER-PLAN work from `pensive-dijkstra` rev 6; re-verify every remaining UNVERIFIED registry item first.
 
 ## Phase Completion Rules
 
