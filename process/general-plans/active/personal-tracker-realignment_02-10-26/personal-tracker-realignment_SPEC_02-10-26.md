@@ -1,6 +1,6 @@
 ---
 name: spec:personal-tracker-realignment
-description: "Realign my_site from a confidence/verdict screener to a personal-use data-display tracker: slimmer screener with RSI, groups and a spaghetti comparison chart, BTC leg strip, clean /narrative data, user-picked LSE equities page, label purge, and a rewritten North Star + slimmed docs (Amendment 1 applied 02-10-26)"
+description: "Realign my_site from a confidence/verdict screener to a personal-use data-display tracker: slimmer screener with RSI, groups and a spaghetti comparison chart, BTC leg strip, clean /narrative data, user-picked LSE equities page, label purge, and a rewritten North Star + slimmed docs (Amendments 1 and 2 applied 02-10-26)"
 date: 02-10-26
 feature: general-plans
 metadata:
@@ -29,7 +29,7 @@ The original product goal was "turn separate signals into one confidence level t
 - **US-3 (Locked) My own coin groups.** As a trader, I want to create, rename and delete named groups, drag coins between and within groups, and sort each group by name, % change or RSI, so the board matches how I think about the market.
 - **US-4 (Locked) Manage coins in the app.** I want to add and remove coins from the UI, so I never edit config files.
 - **US-5 (SUPERSEDED by amendment — tag part deferred; editing part carried by US-5b) Narrative tags on coin boxes.** Original: see each coin's narrative name with its raw attention change on its box. Deferred: no tag until /narrative data shows whether trends give an actionable edge.
-- **US-5b (Open, see OQ-10) My own narratives, edited in the app.** I want to create, edit and delete narratives (a name plus a list of coins) in the app, so my own groupings of coins are stored without editing files. Kept as locked from the earlier round, but the user is asked to confirm it is still wanted now that the tag is deferred.
+- **US-5b (Locked, A2: OQ-10 resolved) My own narratives, edited in the app.** I want to create, edit and delete narratives (a name plus a list of coins) in the app, so my own groupings of coins are stored without editing files. The user confirmed (A2) the narrative section is still wanted: "very useful to track the narrative".
 - **US-6 (Locked, amended) Clean raw attention on /narrative.** I want /narrative to show only raw attention levels and changes per source, with missing, partial or insufficient data clearly marked, so I can trust what I see and judge the narrative myself.
 - **US-7 (Locked) Where are we in the cycle.** I want a BTC price-history strip at the top of the screener with legs shaded and leg-boundary dates marked, so I see where we may be in history.
 - **US-8 (Locked) Fresh without babysitting.** I want coin data to refresh when I open the page and it is more than 15 minutes old, so I need no background job running.
@@ -37,6 +37,7 @@ The original product goal was "turn separate signals into one confidence level t
 - **US-10 (Locked) Docs that match reality.** As the owner (and as any future agent session), I want a rewritten North Star, a short current-state doc, a task registry and an archive index, so I do not need to read a 1,200-line changelog to know what the product is.
 - **US-11 (Locked, new) See who beats HYPE and BTC at a glance.** When I look at the screener, I want one chart with a line per coin showing % change from the start of my selected timeframe, with BTC and HYPE as reference lines, so I can see by eye which coins are ahead of or behind HYPE and BTC.
 - **US-12 (Locked, new) Declutter the comparison chart.** I want to switch each coin's line off and on individually and have that choice remembered, so I can focus on the coins I am comparing.
+- **US-14 (Locked, A2, new) Hard cap of 30 coins.** As a trader, I want the screener to hold at most 30 coins and refuse a 31st with a clear message, so the board, the refresh on page load and the spaghetti chart stay fast and readable.
 - **US-13 (Locked, new) Trust the narrative data.** When data for a source is missing, partial or insufficient, I want to see that stated plainly instead of a zero or a quietly wrong number, so my read of /narrative is not corrupted.
 
 ## What The User Wants (Behavioral Outcomes)
@@ -46,11 +47,11 @@ The original product goal was "turn separate signals into one confidence level t
 3. **Coin management (Locked).** Add and remove coins from the screener UI.
 4. **Groups (Locked).** User-named groups: create, rename, delete. Drag coins between groups and reorder within a group. Each group has a quick sort: by name, % change, or RSI.
 5. **Narrative tags on coin boxes (SUPERSEDED by amendment — deferred).** Coin boxes carry no narrative tag in this scope.
-6. **Narrative editor (Locked pending OQ-10).** Create, edit, delete narratives (name + coin list) inside the app. The app persists them; the user never edits JSON.
+6. **Narrative editor (Locked, A2: OQ-10 resolved).** Create, edit, delete narratives (name + coin list) inside the app. The app persists them; the user never edits JSON.
 7. **/narrative page (Locked, amended).** Per source, show raw attention level and change only. No flags, no trust weight. Missing, partial or insufficient data is shown explicitly (see items 15–16).
 8. **BTC leg strip (Locked).** At the top of the screener: BTC price history, leg periods shaded, leg-boundary dates marked. The existing leg-boundary maths feeds it as plain data. The per-coin leg tag is deleted.
 9. **Refresh (Locked).** On page load, any coin whose data is older than 15 minutes is refreshed. No background job is required for this.
-10. **Lean data (Locked).** Keep about 2 days (~200 bars) of 15m history per coin. Other timeframes keep only what their RSI and price line need. Anything fetched or stored that no page displays is removed. Designed for up to ~50 coins (ceiling; actual count unconfirmed, OQ-1).
+10. **Lean data (Locked).** Keep about 2 days (~200 bars) of 15m history per coin. Other timeframes keep only what their RSI and price line need. Anything fetched or stored that no page displays is removed. **(A2) Hard cap: the crypto screener holds NOT MORE THAN 30 coins at any moment (OQ-1 resolved); refresh sizing, spaghetti chart, groups and tests all use 30.**
 11. **Equities page (Locked, amended).** A separate section/page showing LSE equity data with an "Add" button; the user picks the tickers (no preset list). Used under LSE's private-use terms.
 12. **Other pages stay (Locked, amended).** /regime, /narrative, /pairs, /onchain remain. Their data stays, including the /pairs significance banner and p-value ranking, the /regime composite liquidity index, and status/data-quality labels (onchain floor/ramp, pairs status banners). Only verdict-style outputs on the removed-list (item 1) go.
 13. **Dropped (Locked).** The standalone charts/indicators page is not built; RSI on the screener replaces it.
@@ -58,6 +59,8 @@ The original product goal was "turn separate signals into one confidence level t
 15. **Clean /narrative data (Locked, new).** Only raw attention levels/changes per source. Where a source has missing, partial or insufficient data, the view says so explicitly. No zero-fill, no silently wrong numbers.
 16. **Data-quality guarantees kept in scope (Locked, new).** The pytrends partial-hour fix (incomplete current-hour readings never archived as real values) and the nightly archive of non-refetchable history stay in scope and must keep working.
 17. **Scalp view removed (Locked, new).** Only the drill-down "Scalp PASS/FAIL" view is deleted (code, tests, docs). Drill-down price and RSI stay.
+18. **30-coin cap (Locked, A2, new).** Adding a 31st coin to the crypto screener is refused with a clear message (for example "Screener is full: 30 coins maximum. Remove a coin to add another."); nothing is added and the board is unchanged. The cap applies to the crypto screener only; the LSE equities section is not capped and its size stays unspecified.
+19. **Narrative data deep-dive (placeholder, A2, new).** The content of the /narrative page is under review (see OQ-11): which raw views and sources it should show to be genuinely useful is not yet decided. Until that review concludes, the page keeps its current raw-only content and the data-cleanliness criteria AC-24 and AC-25 stay binding. No new narrative views are specified or built by this SPEC.
 
 ## Flow / State Diagram
 
@@ -82,13 +85,14 @@ Board: Group A | Group B | ... (user-named, drag to reorder / move)
    |
    +--> Timeframe switch (15m/1h/4h/1d/1w) --> price, %chg, RSI, spaghetti all follow
    +--> Group sort (name | %chg | RSI)
-   +--> Add / remove coin
+   +--> Add / remove coin  (A2: 31st coin --> refused, "30 coins maximum" message, board unchanged)
    +--> Create / rename / delete group
    +--> Failure: data unavailable --> box says "no data" (never 0 or blank number)
 
 /narrative: raw attention level + change per source
    +--> source missing / partial / insufficient --> explicit label (never 0, never silent)
-   +--> narrative editor (name + coins), pending OQ-10 confirmation
+   +--> narrative editor (name + coins), wanted (A2)
+   +--> page content under review (OQ-11); AC-24 / AC-25 stay binding meanwhile
 
 /equities (LSE): [Add ticker] --> user-picked tickers listed; private-use note shown
 
@@ -101,7 +105,7 @@ Retired outputs: confidence, agreement, trend tag, momentum/scalp PASS/FAIL, leg
 
 Strategy tags: FA = Fully-Automated, HY = Hybrid, AP = Agent-Probe. Scenarios come from the existing test surfaces: pytest (`api/tests/{analytics,data,routers,scripts}`), vitest (`web/components/*/__tests__`, `web/lib/__tests__`), Playwright (`web/e2e/*.spec.ts`), plus the repo validators.
 
-Note: the 20-criteria cap is exceeded by Amendment 1 (see Amendment 1 concerns). IDs are not renumbered; AC-10 is superseded, AC-21 to AC-25 are new.
+Note: the 20-criteria cap is exceeded by Amendments 1 and 2 (see their concerns). IDs are not renumbered; AC-10 is superseded, AC-21 to AC-25 are new (A1), AC-26 is new (A2).
 
 **AC-1 (Locked) No verdict output in screener data.** The screener API response and page contain no confidence, leg_context, narrative_state, momentum state, trend direction, or narrative tag fields/labels.
 - proven by: pytest contract test asserting absent fields; vitest render test; Playwright `screener.spec.ts` asserting no badge/tag elements. strategy: FA
@@ -127,7 +131,7 @@ Note: the 20-criteria cap is exceeded by Amendment 1 (see Amendment 1 concerns).
 **AC-8 (Locked) Group sorting.** Sort by name, % change, RSI orders a group correctly, with unavailable values placed last and labelled.
 - proven by: vitest sort tests; Playwright. strategy: FA
 
-**AC-9 (Locked pending OQ-10) Narratives CRUD in app.** User can create, edit, delete a narrative (name + coin list) in the UI; changes persist and need no file editing. Becomes SUPERSEDED if the user answers OQ-10 "not now".
+**AC-9 (Locked, A2: no longer pending) Narratives CRUD in app.** User can create, edit, delete a narrative (name + coin list) in the UI; changes persist and need no file editing. OQ-10 resolved: the user wants the narrative section.
 - proven by: pytest router/persistence tests; Playwright CRUD flow. strategy: FA
 
 **AC-10 (SUPERSEDED by amendment — narrative tag deferred) Narrative tags.** Original: every coin in a narrative shows a tag with narrative name and raw attention change. No longer required; AC-1 now asserts that no narrative tag appears on coin boxes.
@@ -140,9 +144,9 @@ Note: the 20-criteria cap is exceeded by Amendment 1 (see Amendment 1 concerns).
 - proven by: pytest leg-strip payload test using existing leg-boundary maths; Playwright asserting strip present with shaded regions and date markers on seeded data. strategy: FA (visual correctness of shading: HY, user eyeball once)
 
 **AC-13 (Locked) 15-minute refresh on load.** Loading the page refreshes only coins whose stored data is older than 15 minutes; fresher coins are not refetched.
-- proven by: pytest staleness test with a controlled clock and mocked exchange adapter; Playwright with seeded stale/fresh coins. Live exchange behaviour at up to ~50 coins: agent-probe on user PC (rate-limit check). strategy: HY
+- proven by: pytest staleness test with a controlled clock and mocked exchange adapter; Playwright with seeded stale/fresh coins. Live exchange behaviour at the 30-coin cap (A2): agent-probe on user PC (rate-limit check). strategy: HY
 
-**AC-14 (Locked) Lean storage.** Per coin, 15m history is capped near 200 bars (~2 days); other timeframes retain only what RSI and the price line need; no cache file exists for data no page displays. History that cannot be re-fetched (nightly snapshots, OQ-8 adopted) is exempt.
+**AC-14 (Locked, A2: sized for 30 coins) Lean storage.** Per coin, 15m history is capped near 200 bars (~2 days); other timeframes retain only what RSI and the price line need; no cache file exists for data no page displays. History that cannot be re-fetched (nightly snapshots, OQ-8 adopted) is exempt.
 - proven by: pytest retention/trim tests; a repo-level check listing cache categories against displayed pages. strategy: FA
 
 **AC-15 (Locked, amended) Equities page.** A separate equities page shows LSE data for tickers the user adds via an Add button; there is no preset ticker list; added tickers persist after reload; no equity appears in any crypto group; the page states the data is private-use.
@@ -163,7 +167,7 @@ Note: the 20-criteria cap is exceeded by Amendment 1 (see Amendment 1 concerns).
 **AC-20 (Locked) Docs slimmed and navigable.** (a) `all-context.md` is reduced to a router plus current state, with its changelog moved to a dated archive file (target: under ~300 lines; the 1,223-line, ~65% changelog shape is gone); (b) a current-state doc exists; (c) a task registry exists listing tasks, status and owner, with a worker report schema; (d) an archive index lists archived plans and changelogs; (e) `MASTER-PLAN.md` is either rewritten to match or retired, and is referenced from entry points either way.
 - proven by: line-count and link-reachability check; `vc-audit-context` and `validate-context-discovery.mjs` green. strategy: FA
 
-**AC-21 (Locked, new) Spaghetti chart content.** The screener shows one chart with a line per screener coin, each plotting % change from the start of the currently selected timeframe, with every line starting at 0%; BTC and HYPE are drawn as distinguishable reference lines; all screener coins are shown by default; no text label or ranking states that any coin is "outperforming" or "underperforming".
+**AC-21 (Locked, new; A2: legible at 30 coins) Spaghetti chart content.** The screener shows one chart with a line per screener coin, each plotting % change from the start of the currently selected timeframe, with every line starting at 0%; BTC and HYPE are drawn as distinguishable reference lines; all screener coins are shown by default; no text label or ranking states that any coin is "outperforming" or "underperforming".
 - proven by: pytest series-payload test (per-coin % change from its own window start, 0% anchor) on seeded bars; vitest chart render test (line count, reference lines, absence of comparative wording); Playwright asserting the chart and reference lines render on seeded data. strategy: FA (readability of the visual: HY, user eyeball once)
 
 **AC-22 (Locked, new) Per-coin toggles persist.** The user can toggle each coin's line off and on individually; the choice survives a page reload.
@@ -177,6 +181,9 @@ Note: the 20-criteria cap is exceeded by Amendment 1 (see Amendment 1 concerns).
 
 **AC-25 (Locked, new) Data-quality fix and archive stay intact.** An incomplete current-hour pytrends reading is never archived as a real value (it yields "unavailable", not 0), and the nightly archive of non-refetchable history still writes one point per source per day.
 - proven by: existing and retained `api/tests/data/test_pytrends_adapter.py` partial-hour cases; archive-writer pytest tests in `api/tests/scripts/`; workflow-schedule guard test stays green. strategy: FA
+
+**AC-26 (Locked, A2, new) Hard cap of 30 coins.** With 30 coins on the screener, attempting to add a 31st is refused with a clear, visible message; the coin is not added, the board, groups and spaghetti chart are unchanged, and the refusal is also enforced by the API (not only the UI). Removing a coin then allows an add again. The cap does not apply to the LSE equities page.
+- proven by: pytest watchlist router test (30 accepted, 31st rejected with a clear error, count stays 30, remove-then-add succeeds); vitest message render; Playwright add-31st flow on a seeded 30-coin board. strategy: FA
 
 ## Impact Surface (what gets deleted / changed)
 
@@ -199,14 +206,14 @@ Names only, derived from reads. "Audit" = file likely carries verdict wording an
 | API analytics | `api/analytics/indicators/momentum.py`, `trend.py` | Delete or reduce (incl. scalp PASS/FAIL logic); add RSI (Wilder, 14) |
 | API analytics | `api/analytics/screener_board.py`, `api/routers/screener.py` | Change (add per-coin start-of-window % change series for spaghetti) |
 | API analytics | `api/analytics/regime/leg_boundary.py` | Keep as data for the BTC strip |
-| API narrative | `api/analytics/narrative/trigger.py`, `scoring.py`, `mapping.py` | Delete/reduce trigger, confirmation, trust weight; mapping replaced by in-app narratives (if OQ-10 confirmed) |
-| API narrative | `api/routers/narrative.py`, `api/models/narrative.py` | Change: remove triggered/confirmed/trust_weight; explicit missing/partial/insufficient states; narrative CRUD (pending OQ-10) |
-| API narrative | `api/analytics/narrative/narrative_config.py`, `api/data/narratives.json`, `narrative_categories.json`, `narrative_category_map.json` | Change: app-managed store replaces hand-edited JSON (pending OQ-10) |
-| API narrative | `momentum.py`, `mindshare.py` (+ `MomentumView.tsx`, `MindshareView.tsx`) | Audit for state labels and for silent zero/average handling (A1) |
+| API narrative | `api/analytics/narrative/trigger.py`, `scoring.py`, `mapping.py` | Delete/reduce trigger, confirmation, trust weight; mapping replaced by in-app narratives (OQ-10 resolved: wanted, A2) |
+| API narrative | `api/routers/narrative.py`, `api/models/narrative.py` | Change: remove triggered/confirmed/trust_weight; explicit missing/partial/insufficient states; narrative CRUD (A2: no longer pending) |
+| API narrative | `api/analytics/narrative/narrative_config.py`, `api/data/narratives.json`, `narrative_categories.json`, `narrative_category_map.json` | Change: app-managed store replaces hand-edited JSON (A2: no longer pending) |
+| API narrative | `momentum.py`, `mindshare.py` (+ `MomentumView.tsx`, `MindshareView.tsx`) | Audit for state labels and for silent zero/average handling (A1). **(A2) Page content under review (OQ-11): do not add or remove views until the research pass is answered.** |
 | API data | `api/data/pytrends_adapter.py` and nightly archive scripts | **(A1) Keep: partial-hour fix and nightly archive are protected by AC-25** |
 | Web narrative | `NarrativeDashboard.tsx`, `CategoryHistoryPanel.tsx`, `ComparisonView.tsx`, `ChangeInAttentionView.tsx`, `DataQualityCaveat.tsx` | Change/Audit: raw-only, explicit missing-data states (A1) |
 | Web narrative | `RedistributionBadge.tsx` | Delete (licensing no longer a constraint; confirm in PLAN) |
-| API data | `api/routers/watchlist.py`, `api/data/watchlist.py` | Change: groups, ordering |
+| API data | `api/routers/watchlist.py`, `api/data/watchlist.py` | Change: groups, ordering; **(A2) enforce 30-coin cap with a clear refusal message** |
 | API data | `api/data/cache.py`, `ccxt_adapter.py` | Change: 15-min staleness, retention trim |
 | API data | New LSE adapter + user-ticker store; `l2beat`/`hyperliquid`/`etf_flows`/others carrying redistribution flags | Add LSE (user adds tickers, no preset list, A1); drop redistribution flags (Audit) |
 | API scripts | `refresh_cache.py`, `backfill_primaries.py`, nightly workflows in `.github/workflows/` | Audit: remove fetches nothing displays; keep nightly history snapshots (OQ-8 adopted) |
@@ -235,17 +242,18 @@ Names only, derived from reads. "Audit" = file likely carries verdict wording an
 - "Numbers are never silently wrong" stays: unavailable, partial or insufficient data shows an explicit state, never 0/NaN, never zero-filled (applies to the screener, spaghetti chart and /narrative).
 - One source of numerical truth stays: RSI, % change, spaghetti series and leg data are computed in Python and rendered by the web app.
 - Providers stay behind adapters under `api/data/`.
-- Design target: up to ~50 coins (ceiling, OQ-1 still open); ~200 bars of 15m per coin.
+- **(A2) Hard cap: the crypto screener holds not more than 30 coins; a 31st add is refused (OQ-1 resolved).** Design target: 30 coins; ~200 bars of 15m per coin. The cap does not apply to the LSE equities section, whose size stays unspecified.
 - Every requirement above must remain testable; no verdict logic may be reintroduced under another name.
 - Nightly snapshot jobs for sources with no history (narrative, liqtide, chain-growth) stay on their current schedule (OQ-8 adopted).
 - RSI: Wilder smoothing, period 14 (OQ-9 adopted).
 - **(A1) Priority order for /narrative work: data cleanliness first; any further narrative feature waits on what the clean data shows.**
+- **(A2) /narrative content is under review (OQ-11); AC-24 and AC-25 stay binding in the meantime.**
 
 ## Open Questions
 
 | # | Question | Owner | Status |
 |---|---|---|---|
-| OQ-1 | How many coins will you actually track? (Answer was ambiguous; design ceiling stays ~50.) Affects rate limits and refresh strategy on page load, and spaghetti chart legibility. | user | **Open** (ceiling ~50 adopted meanwhile) |
+| OQ-1 | How many coins will you actually track? | user | **Resolved (A2): hard cap of 30 crypto coins at any moment; a 31st add is refused (AC-26). Not applied to LSE equities.** |
 | OQ-2 | /pairs significance banner and p-value ranking. | user | **Resolved (A1): keep as data.** |
 | OQ-3 | /regime composite liquidity index. | user | **Resolved (A1): keep as data.** |
 | OQ-4 | /onchain `FloorRampStateLabel` and /pairs status banners. | user | **Resolved (A1): keep as data-quality labels.** |
@@ -254,9 +262,10 @@ Names only, derived from reads. "Audit" = file likely carries verdict wording an
 | OQ-7 | Equities tickers, timeframes, RSI/groups. | user | **Resolved (A1): user picks tickers with an Add button, no preset list.** Whether the equities page also needs timeframes/RSI/groups is not stated; PLAN assumes the same price, % change and RSI box as crypto unless the user says otherwise. |
 | OQ-8 | Nightly narrative/liqtide/chain-growth snapshots. | user | **Resolved (A1, default adopted): keep nightly snapshots of history that cannot be re-fetched.** |
 | OQ-9 | RSI smoothing method. | user | **Resolved (A1, default adopted): Wilder smoothing, period 14.** |
-| OQ-10 | With the narrative tag deferred, do you still want in-app narrative create/edit/delete (name + coins) built now, or should it wait until /narrative proves useful? | user | **Open (new)** |
+| OQ-10 | With the narrative tag deferred, do you still want in-app narrative create/edit/delete? | user | **Resolved (A2): yes, the narrative section is wanted ("very useful to track the narrative"); in-app create/edit/delete stays Locked. The screener narrative TAG remains deferred.** |
+| OQ-11 | Narrative data design: which raw views/sources should the /narrative page show to be genuinely useful? (User: "maybe we have to think deeper on what data it's showing".) | user, after research | **Open (A2, new).** To be answered after a read-only research pass on current narrative data quality is returned. |
 
-Handling: OQ-1 and OQ-10 remain open and are flagged for the confirm/push-back gate. Locked items above do not depend on them except US-5b/AC-9 (OQ-10) and the sizing note (OQ-1).
+Handling (A2): only OQ-11 remains open. It depends on a read-only research pass of current narrative data quality and does not block any Locked item; it only gates any change to what /narrative displays beyond the cleanliness work (AC-24, AC-25).
 
 ## Background / Research Findings
 
@@ -293,3 +302,22 @@ Source: user answers A to E of the amendment pass. These override earlier text w
 **Concerns:** (1) The 20-criteria cap is exceeded (24 active criteria after AC-10 is superseded). Recommended: accept at the confirm gate, since the scope grew by user request, or split into two SPECs. (2) Deferring the narrative tag leaves much of the narrative backend (CRUD, mapping replacement) without a visible consumer; OQ-10 exists to settle that. (3) Equities page features beyond the Add button (timeframes, RSI, groups) are assumed, not confirmed.
 
 **Remaining open questions:** OQ-1 (coin count; ceiling ~50 adopted) and OQ-10 (confirm in-app narrative editing is still wanted now).
+
+## Amendment 2 (02-10-26, user answers)
+
+Source: two user answers. They override earlier text where they conflict. No IDs renumbered; changes are marked "(A2)" in place.
+
+**What changed**
+
+| Topic | Change |
+|---|---|
+| Coin cap (OQ-1 resolved) | The crypto screener holds NOT MORE THAN 30 coins at any moment. The earlier ~50 design ceiling is replaced everywhere by a hard cap of 30 (outcome 10, AC-13, AC-14, AC-21, Constraints). A 31st add is refused with a clear message: new outcome 18, new US-14, new AC-26 (also enforced by the API). Refresh sizing, spaghetti chart, groups and tests use 30. |
+| Cap scope | Crypto screener only. The LSE equities section is not capped; its size stays unspecified. |
+| Narrative section (OQ-10 resolved) | The user still wants the /narrative page ("very useful to track the narrative"). In-app narrative create/edit/delete stays Locked ("pending OQ-10" removed from US-5b, outcome 6, AC-9, Impact Surface). The screener narrative TAG remains deferred. |
+| Narrative data design (new OQ-11) | The user said "maybe we have to think deeper on what data it's showing". OQ-11 asks which raw views/sources /narrative should show to be genuinely useful; Open until a read-only research pass on current narrative data quality is returned. |
+
+**Narrative data deep-dive (placeholder requirement).** The narrative page's content is under review. Until OQ-11 is answered, no narrative view is added or removed by this SPEC, and the data-cleanliness criteria AC-24 (clean, honest, explicit missing/partial/insufficient states) and AC-25 (pytrends partial-hour fix and nightly archive intact) stay binding. A later amendment will replace this placeholder with concrete requirements once the research is in.
+
+**Concerns:** (1) Active criteria now 25 (AC-1 to AC-9, AC-11 to AC-26), well above the 20 cap; recommend accepting at the confirm gate or splitting into two SPECs (screener vs narrative). (2) Equities page size is unspecified, so its refresh load is unbounded by this SPEC; PLAN should note a sensible fetch strategy. (3) A 30-coin cap vs a larger existing watchlist: if the current watchlist already exceeds 30, PLAN must decide how existing extras are handled (not stated by the user).
+
+**Remaining open questions:** OQ-11 only.
