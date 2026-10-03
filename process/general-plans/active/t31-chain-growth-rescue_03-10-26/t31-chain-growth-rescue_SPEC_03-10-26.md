@@ -1,13 +1,13 @@
 ---
 name: spec:t31-chain-growth-rescue
-description: "Brief T31 (proposed, NOT approved, no envelope): rescue the chain-growth archive and on-chain source notes from three unmerged branches onto main, fresh"
+description: "Brief T31 (approved by the user 03-10-26; envelope _REF_ exists): rescue the chain-growth archive and on-chain source notes from three unmerged branches onto main, fresh"
 date: 03-10-26
 feature: general
 ---
 
-# T31 - chain-growth rescue (brief only, proposed)
+# T31 - chain-growth rescue (approved)
 
-**TL;DR:** The chain-growth closeout (archive move `active/` -> `completed/`, CLOSEOUT note, two review-decision files) and a new "On-chain Activity" section in `all-data-sources.md` exist only on unmerged branches (`kind-tesla-tat3vo` commit `4fd60bd`, `inspiring-pasteur-awqxk3`, `split-all-context`). User decision 03-10-26: "Rescue it via a task". Status `proposed`: no worker until the user approves; no envelope exists yet. Registry row: T31 in `process/MASTER-PLAN.md`.
+**TL;DR:** The chain-growth closeout (archive move `active/` -> `completed/`, CLOSEOUT note, two review-decision files) and a new "On-chain Activity" section in `all-data-sources.md` exist only on unmerged branches (`kind-tesla-tat3vo` commit `4fd60bd`, `inspiring-pasteur-awqxk3`, `split-all-context`). User decision 03-10-26: "Rescue it via a task". Status `approved` by the user 03-10-26; the envelope `t31-chain-growth-rescue_REF_03-10-26.md` exists. Registry row: T31 in `process/MASTER-PLAN.md`.
 
 ## Scope (apply onto main fresh, not a rebase of the old branches)
 
