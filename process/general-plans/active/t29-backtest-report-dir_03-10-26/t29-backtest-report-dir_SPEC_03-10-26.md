@@ -14,7 +14,7 @@ Registry row: T29 in `process/MASTER-PLAN.md` (workers do not edit it). Approved
 ## Evidence (planner, 03-10-26, main `487fa65`)
 
 - Line 68: `REPORT_DIR = Path(__file__).resolve().parents[2] / "process" / "general-plans" / "active" / "momentum-screener_17-09-26"`. Used at lines 206-207 (`mkdir(parents=True, exist_ok=True)`, then the atomic write of `leg-boundary-backtest-report-<ts>.json`).
-- Nothing calls the script (manual run only: `uv run python scripts/backtest_leg_boundaries.py --cycle 2017`); no test imports it (`git grep -ln backtest_leg -- api/tests` is empty).
+- Nothing calls the script (manual run only: `uv run python scripts/backtest_leg_boundaries.py --cycle 2017`); no test imports it (`git grep -ln backtest_leg -- api/tests` is empty). The only other textual hit for the name is a comment at `api/scripts/compare_composite_variants.py:156` (allowed; any import, call, test or workflow hit means STOP).
 - Not in scope: `api/scripts/compare_composite_variants.py` points at `liqtide-snapshot-tooling_20-09-26`, which is still in `active/`. The 18 files that still name the old momentum-screener path stay as history (user decision 03-10-26).
 
 ## Scope
