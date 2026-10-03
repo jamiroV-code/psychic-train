@@ -70,7 +70,7 @@ NIGHTLY_QUERY_COUNT = 17  # plan RFC-1: 4 chains x 3 metrics + 5 chains x new_ad
 
 DEFAULT_OUT = (
     Path(__file__).resolve().parents[2]
-    / "process/features/onchain-activity/active/chain-growth_25-09-26"
+    / "process/features/onchain-activity/completed/chain-growth_25-09-26"
     / "chain-growth-probe-result_25-09-26.json"
 )
 

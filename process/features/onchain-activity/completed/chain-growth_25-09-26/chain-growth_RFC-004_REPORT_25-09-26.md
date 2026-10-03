@@ -3,7 +3,7 @@ phase: rfc-004
 date: 2026-09-26
 status: COMPLETE
 feature: onchain-activity
-plan: process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
+plan: process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
 ---
 
 # chain-growth RFC-4: floor/ramp analytics + `GET /api/onchain/growth`, `/chains`

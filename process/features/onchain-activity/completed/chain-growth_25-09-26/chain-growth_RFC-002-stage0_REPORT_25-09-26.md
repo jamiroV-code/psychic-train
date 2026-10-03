@@ -3,7 +3,7 @@ phase: rfc-002-stage0
 date: 2026-09-25
 status: COMPLETE_WITH_GAPS
 feature: onchain-activity
-plan: process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
+plan: process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
 ---
 
 # chain-growth RFC-2 Stage 0 — What RFC-2 builds under the locked fallback

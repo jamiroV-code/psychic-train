@@ -3,7 +3,7 @@ phase: rfc-005-onchain-frontend
 date: 2026-09-26
 status: COMPLETE
 feature: onchain-activity
-plan: process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
+plan: process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
 ---
 
 # RFC-5 — `/onchain` frontend: report
@@ -154,7 +154,7 @@ The Stage 0 list said range `6m`. The user's decision (Q2) made the options 1y/2
 - jsdom has no canvas, so chart visuals (log axis appearance, shading, marker placement) are asserted only through mock options and calls. Visual judgment is RFC-6 Agent-Probe work.
 
 ## Closeout Packet
-- Selected plan: `process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md`
+- Selected plan: `process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md`
 - Finished: RFC-5 code and tests.
 - Verified: vitest, tsc, api suite.
 - Unverified: real-data visual (AC-14).

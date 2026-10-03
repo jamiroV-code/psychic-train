@@ -3,7 +3,7 @@ phase: rfc-003
 date: 2026-09-26
 status: COMPLETE
 feature: onchain-activity
-plan: process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
+plan: process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
 ---
 
 # chain-growth RFC-3: storage and nightly workflow (fallback: no Dune, no backfill script)
@@ -122,7 +122,7 @@ One addition beyond Stage 0: `OnchainMergeResult` also counts `dropped_future` a
 - The evidence-pack validator does not support per-RFC subfolders.
 
 ## Closeout Packet
-- Plan: `process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md`.
+- Plan: `process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md`.
 - Finished: RFC-3 code, tests and evidence pack.
 - Verified: automated gates, YAML, gitignore and diff checks.
 - Unverified: the live run and the first commit on `main`; the review decision is PENDING.

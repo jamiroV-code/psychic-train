@@ -1,0 +1,12 @@
+{
+  "reviewer": "user",
+  "decision": "approved",
+  "rationale": "User reviewed the nightly chain-growth-snapshot.yml workflow and its first run's archived output after the AC-14 real-archive /onchain walkthrough on their own PC and approved it in chat on 2026-09-28: \"looks good , approve both\".",
+  "timestamp": "2026-09-28",
+  "task": "RFC-3: chain-growth nightly archive (storage + workflow)",
+  "blockingFindings": [],
+  "nonBlockingFindings": [
+    "L2BEAT REDISTRIBUTABLE=False: archived for personal use; the display layer (RFC-4+) must honour the flag."
+  ],
+  "notes": "Decision recorded 2026-09-28 by vc-update-process-agent from the user's verbatim chat approval. Non-blocking findings accepted as-is."
+}

@@ -3,7 +3,7 @@ phase: rfc-006-stage0
 date: 2026-09-27
 status: COMPLETE
 feature: onchain-activity
-plan: process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
+plan: process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
 ---
 
 # RFC-6 Stage 0 — seeded E2E proof + AC-14 handoff (proposal, no code written)
