@@ -23,6 +23,7 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/active/master-p
 | D-6 | Workers may self-merge under mechanical conditions | 02-10-26 | active |
 | D-7 | Standing consent to delete merged worker task branches | 02-10-26 | active |
 | D-8 | Two role-based session entry sets | 02-10-26 | active |
+| D-9 | Drop the "Before Any Substantial Task" `find` ritual from CLAUDE.md | 03-10-26 | active |
 | D-0 | Original goal: one confidence level that sizes positions | 17-09-26 | superseded by D-1, D-2 |
 
 ## Entries
@@ -88,3 +89,10 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/active/master-p
 - **Date:** 17-09-26 (setup). **Reason:** original project brief.
 - **Alternatives:** n/a. **Consequences:** shaped the momentum screener's confidence badge and adapter provider-term flags.
 - **Status:** superseded by D-1 and D-2 (02-10-26). History: context-changelog.md.
+
+### D-9 Drop the "Before Any Substantial Task" `find` ritual from CLAUDE.md
+- **Decision:** CLAUDE.md no longer orders two full `find` listings of `process/context/` and `process/development-protocols/` (a "mandatory gate") before any context is loaded. The ENTRY-SET block (PLANNER and WORKER file lists) replaces it.
+- **Date:** 03-10-26 (RECOVERY Gate 3, validate-contract instruction E6). **Reason:** the ritual contradicts the minimal entry sets of D-8 and adds a large listing to every session; the `vc-context-discovery` skill already performs discovery when a task needs it.
+- **Alternatives:** keep the ritual (rejected: costs every session, including workers); keep it for planners only (rejected: planners already read the router section of all-context.md, which routes to every group).
+- **Consequences:** sessions load only their entry set and open deeper docs on demand. The removed text stays recoverable from git (CLAUDE.md at commit 3faeff4, section "Before Any Substantial Task"). AGENTS.md had no such section; its "consult before substantial work" list is replaced by the same ENTRY-SET block.
+- **Status:** active.
