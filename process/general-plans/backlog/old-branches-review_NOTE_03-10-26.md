@@ -11,11 +11,11 @@ feature: general
 
 | Branch | Tip | Facts | User decision 03-10-26 |
 |---|---|---|---|
-| `exciting-meitner-hy50kn` | 08cd839 | all content on main or superseded; only a 5-line addition to `backlog/yfinance-equity-source_24-09-26.md` is not (dropped by decision) | DELETE |
-| `narrative-v2` | 2cf85a0 | code already on main via PR #7; only 3 RFC-001 reports plus a PLAN handoff edit not on main; model retired by baskets SPEC AC-11 (dropped by decision) | DELETE |
-| `pensive-dijkstra-ko69oi` | 18ffd4f | PR #6 merged; MASTER-PLAN revisions superseded by the Gate 2 rebuild; not tree-diffed | DELETE |
-| `kind-tesla-tat3vo` | 4fd60bd | its one commit (chain-growth closeout) is NOT on main. The earlier "probably DELETE-SAFE" call was WRONG | HOLD until T31 merges |
-| `inspiring-pasteur-awqxk3` | efe69aa | carries 4fd60bd; PR #5 (open) targets base `kind-tesla-tat3vo`, 2 files +2/-2 (`growth.py` docstring, `probe_chain_sources.py:73` DEFAULT_OUT -> completed); merging it onto main would break the probe script path; no CI | HOLD until T31; user closes PR #5 ("T31 carries the rescue") |
+| `exciting-meitner-hy50kn` | 08cd839 | all content on main or superseded; only a 5-line addition to `backlog/yfinance-equity-source_24-09-26.md` is not (dropped by decision) | DELETED by the user (verified ~19:33Z) |
+| `narrative-v2` | 2cf85a0 | code already on main via PR #7; only 3 RFC-001 reports plus a PLAN handoff edit not on main; model retired by baskets SPEC AC-11 (dropped by decision) | DELETED by the user (verified ~19:33Z) |
+| `pensive-dijkstra-ko69oi` | 18ffd4f | PR #6 merged; MASTER-PLAN revisions superseded by the Gate 2 rebuild; not tree-diffed | DELETED by the user (verified ~19:33Z) |
+| `kind-tesla-tat3vo` | 4fd60bd | its one commit (chain-growth closeout) is NOT on main. The earlier "probably DELETE-SAFE" call was WRONG | HOLD until T31 merges (still on origin) |
+| `inspiring-pasteur-awqxk3` | efe69aa | carries 4fd60bd; PR #5 (open) targets base `kind-tesla-tat3vo`, 2 files +2/-2 (`growth.py` docstring, `probe_chain_sources.py:73` DEFAULT_OUT -> completed); merging it onto main would break the probe script path; no CI | HOLD until T31; PR #5 closed by the user ("T31 carries the rescue") |
 | `split-all-context` | bf65024 | UNIQUE: chain-growth archive folder, CLOSEOUT note, 2 review-decision.json, and an "On-chain Activity" section in `all-data-sources.md` (main has 0 matches for growthepie); its other context edits are superseded | HOLD until T31 |
 
-- **Rescue:** T31 (`active/t31-chain-growth-rescue_03-10-26/`, `proposed`, not approved) applies the unique content onto main fresh. After T31 merges, the three held branches are deletable.
+- **Rescue:** T31 (`active/t31-chain-growth-rescue_03-10-26/`, `approved`, not spawned) applies the unique content onto main fresh. After T31 merges, the three held branches are deletable.
