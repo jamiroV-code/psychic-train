@@ -40,7 +40,7 @@ RT = risk tier; T# is always a registry task. Run once, after the last edit, fro
 | RT3 Shared logic | `cache.py`, response models, adapters used by 2+ routes | `uv run --project api pytest api/ -q`; `pnpm --filter web test`; `pnpm --filter web exec tsc --noEmit`; `cd web && pnpm build:islands`; contract snapshots unmodified | Playwright unless a route changed |
 | RT4 High risk | auth, secrets, schema, public API, deploy/runtime, destructive data ops | all of RT3 + `cd web && pnpm test:e2e` + evidence pack (`vc-risk-evidence-pack`) + user acceptance or a recorded agent-probe | none |
 
-Validator scripts live under `.claude/skills/*/scripts/`. Local `tsc` rewrites the tracked `web/tsconfig.tsbuildinfo`: add `--incremental false`, or restore it with `git checkout -- web/tsconfig.tsbuildinfo`. Set `UV_FROZEN=1` so `uv run` never rewrites `uv.lock`.
+Validator scripts live under `.claude/skills/*/scripts/`. `web/tsconfig.tsbuildinfo` is untracked and ignored (T20, `54157e2`); `tsc` may still write it locally, harmless. Add `--incremental false` to avoid it. A clone that still has it tracked and modified: `git checkout -- web/tsconfig.tsbuildinfo` once before pulling. Set `UV_FROZEN=1` so `uv run` never rewrites `uv.lock`.
 
 **Test budget:** full-suite runs RT0 0, RT1/RT2 1, RT3 2, RT4 2 plus one vc-tester confirmation.
 

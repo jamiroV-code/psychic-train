@@ -23,7 +23,7 @@ Staleness rule (master-planner.md): stale when the stamp is not an ancestor of H
 | Remote refs | 14: `main`, this branch, 12 older branches (MASTER-PLAN.md T23/T25) | `git branch -r` |
 | Workflows | 6: `ci.yml` plus five snapshot jobs | `ls .github/workflows` |
 | `.agents/skills` | 339 tracked regular files (a copy, not a symlink) | `git ls-files .agents/skills \| wc -l` |
-| `web/tsconfig.tsbuildinfo` | still tracked | `git ls-files web/tsconfig.tsbuildinfo` |
+| `web/tsconfig.tsbuildinfo` | untracked and ignored since T20 (`54157e2`, PR #15) | `git ls-files web/tsconfig.tsbuildinfo` |
 | Tests, MEASURED at `753db23` (`git diff --quiet 753db23 HEAD -- api web` rc=0, so still current) | pytest 873 passed, 1 skipped, 5 deselected, 1 xfailed (163.75 s); vitest 223 passed (30 files); `tsc --noEmit --incremental false` exit 0; 05:09-05:12Z | all-tests.md, Current evidence (Gate 4) |
 | CI | `ee72237` and `cc0c7f6` fully green; `d09d92e` web job green, api job pending when the EVL looked; newest runs at this stamp still in progress, to be confirmed by `gh run list` | `gh run list` |
 
@@ -45,7 +45,7 @@ Outside the baseline: `validate-backlog-notes` reports 45 failing notes (older n
 
 Gates 2, 3 and 4 are complete. Reports are in `process/general-plans/active/master-planner-recovery_02-10-26/`: `..._GATE2-REPORT_03-10-26.md`, `..._GATE3-REPORT_03-10-26.md` (probe token figures), `..._GATE4-REPORT_03-10-26.md` (test tiers, bounded retry with a same-failure stop, no-re-run rule, planner budget). The Gate 4 independent EVL (vc-tester, iteration 002) was green at cycle 0. Gates 5 and 6 remain, so the plan stays in `active/`.
 
-**Gate 5 prep (03-10-26, local commits after `125d39b`, not pushed):** worker briefs and envelopes for T20 and T16 written (`process/general-plans/active/t20-untrack-tsbuildinfo_03-10-26/`, `.../t16-root-readme_03-10-26/`); G5-1 and G5-2 silent; registry T16, T20 `approved`, T17 `cancelled`; user decisions in the Approvals Log. No worker spawned. Workers start from `main` only after the user merges PR #13 (G5-K1 = B).
+**Gate 5 prep (03-10-26, local commits after `125d39b`, not pushed):** worker briefs and envelopes for T20 and T16 written (`process/general-plans/active/t20-untrack-tsbuildinfo_03-10-26/`, `.../t16-root-readme_03-10-26/`); G5-1 and G5-2 silent; registry T16, T20 `approved`, T17 `cancelled`; user decisions in the Approvals Log. Update 03-10-26: T16 merged as PR #14 (`351f946`) and T20 as PR #15 (`54157e2`), CI green, independent vc-tester PASS on `54157e2`; registry `accepted`, not yet `archived`.
 
 Planner budget, MEASURED by the PLANNER-BUDGET block in master-planner.md section 12 (bytes only), re-run after the closeout edits: fixed part 48,346 B of 56,000 (headroom 7,654 B); with an 8,000 B brief 56,346 B of 64,000; with master-planner.md 64,670 B (informational, not a cap). At the Gate 4 execute commit the fixed part was 47,699 B (headroom 8,301 B); the closeout added 647 B. Tokens as bytes/4 are ESTIMATED.
 
@@ -68,6 +68,6 @@ Planner budget, MEASURED by the PLANNER-BUDGET block in master-planner.md sectio
 
 ## Next actions
 
-1. The planner pushes the Gate 5 prep commits to the session branch (G5-K3); the user merges PR #13; then the planner spawns the T20 and T16 workers from `main` (spend ceiling 40 USD).
-2. After the merges: independent vc-tester per task, registry `accepted` then `archived`, Approvals Log rows, Gate 5 report. Home-PC step before the first pull that carries T20: if `git status --short web/tsconfig.tsbuildinfo` shows `M`, run `git checkout -- web/tsconfig.tsbuildinfo` first.
+1. Done: PR #13 merged, T20 and T16 workers spawned from `main` and merged (cost 1.64 of the 40 USD ceiling).
+2. Next: archive_session and task-folder archival (registry `archived`), Gate 5 report. Home-PC step before the first pull that carries T20: if `git status --short web/tsconfig.tsbuildinfo` shows `M`, run `git checkout -- web/tsconfig.tsbuildinfo` first.
 3. Open Questions 10 and 12 stay open and non-blocking. Registry: MASTER-PLAN.md.
