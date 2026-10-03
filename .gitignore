@@ -34,6 +34,7 @@ api/data/watchlist.json
 node_modules/
 web/.next/
 web/node_modules/
+web/tsconfig.tsbuildinfo
 
 # Playwright E2E (see web/playwright.config.ts)
 web/test-results/
