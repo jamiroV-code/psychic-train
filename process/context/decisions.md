@@ -112,3 +112,10 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/active/master-p
 - **Alternatives:** routes B and C (alternatives named in the Gate 3 contract probe design, section "Probe design"; not chosen); static byte estimates only (kept as the pinned gate, but not real tokens).
 - **Consequences:** results are single-run samples, and about 32k tokens of each run is the fixed headless system prompt, not CLAUDE.md. Hook output and the skill listing are unmeasured. Real per-session usage stays a backlog item (`token-usage-telemetry_NOTE_02-10-26.md`). Standing authorization does not cover probes: any new probe needs fresh approval.
 - **Status:** active.
+
+### D-12 Pinned planner budget, per-file ceilings and the same-failure stop
+- **Decision:** one PLANNER-BUDGET block in master-planner.md section 12 is the only planner byte formula: fixed part (router section + CLAUDE.md + north-star.md + current-state.md + MASTER-PLAN.md) <= 56,000 B, so a task brief <= 8,000 B keeps the 64,000 B cap. Ceilings: CLAUDE.md 16,000; north-star.md 6,000; current-state.md 8,000; MASTER-PLAN.md 19,000; router 7,000; plus a trim rule below 3,000 B headroom. Retry: a worker gets 2 fix cycles; the same failure (same test or gate id and same first error line) twice in a row stops at once; the 10-cycle EVL ceiling is the outer bound. No re-run of unchanged tests (skip check by `git diff --quiet` against the recorded SHA).
+- **Date:** 03-10-26 (RECOVERY Gate 4, validate-contract instructions E2-E4). **Reason:** the Gate 3 planner totals could not be reproduced (testers used different sums), and the real margin was 4,045 B, not 9,408 B; three retry numbers disagreed.
+- **Alternatives:** keep an informational total only (rejected: not reproducible); raise the cap (rejected: needs the user); a third retry number per gate (rejected: one worker number plus the EVL ceiling).
+- **Consequences:** current-state.md and MASTER-PLAN.md were trimmed at Gate 4; compliance with the retry and re-run rules is observable only at the Gate 6 pilot. Rules live in operating-instructions.md; the envelope carries the retry line.
+- **Status:** active.
