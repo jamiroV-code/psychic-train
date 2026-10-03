@@ -26,6 +26,8 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/active/master-p
 | D-9 | Drop the "Before Any Substantial Task" `find` ritual from CLAUDE.md | 03-10-26 | active |
 | D-10 | Worker sessions need no `[MODE:]` response prefix; no `[MODE: ORCHESTRATOR]` note restored | 03-10-26 | active |
 | D-11 | Gate 3 live token probes by headless `claude -p` (route A), cap 1 USD per run | 03-10-26 | active |
+| D-12 | Pinned planner budget, per-file ceilings and the same-failure stop | 03-10-26 | active |
+| D-13 | Gate 4 test counts measured by installing frozen dependencies and running each suite once (G4-K1 = A) | 03-10-26 | active |
 | D-0 | Original goal: one confidence level that sizes positions | 17-09-26 | superseded by D-1, D-2 |
 
 ## Entries
@@ -117,5 +119,12 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/active/master-p
 - **Decision:** one PLANNER-BUDGET block in master-planner.md section 12 is the only planner byte formula: fixed part (router section + CLAUDE.md + north-star.md + current-state.md + MASTER-PLAN.md) <= 56,000 B, so a task brief <= 8,000 B keeps the 64,000 B cap. Ceilings: CLAUDE.md 16,000; north-star.md 6,000; current-state.md 8,000; MASTER-PLAN.md 19,000; router 7,000; plus a trim rule below 3,000 B headroom. Retry: a worker gets 2 fix cycles; the same failure (same test or gate id and same first error line) twice in a row stops at once; the 10-cycle EVL ceiling is the outer bound. No re-run of unchanged tests (skip check by `git diff --quiet` against the recorded SHA).
 - **Date:** 03-10-26 (RECOVERY Gate 4, validate-contract instructions E2-E4). **Reason:** the Gate 3 planner totals could not be reproduced (testers used different sums), and the real margin was 4,045 B, not 9,408 B; three retry numbers disagreed.
 - **Alternatives:** keep an informational total only (rejected: not reproducible); raise the cap (rejected: needs the user); a third retry number per gate (rejected: one worker number plus the EVL ceiling).
-- **Consequences:** current-state.md and MASTER-PLAN.md were trimmed at Gate 4; compliance with the retry and re-run rules is observable only at the Gate 6 pilot. Rules live in operating-instructions.md; the envelope carries the retry line.
+- **Consequences:** current-state.md and MASTER-PLAN.md were trimmed at Gate 4; compliance with the retry and re-run rules is observable only at the Gate 6 pilot. Rules live in operating-instructions.md (single home of the retry wording; master-planner.md points there); the envelope carries the retry line.
+- **Status:** active.
+
+### D-13 Gate 4 test counts measured by install-and-run (G4-K1 = A)
+- **Decision:** for Gate 4 the user approved installing frozen dependencies (`uv sync --project api --frozen`, `cd web && pnpm install --frozen-lockfile`) and running pytest, vitest and `tsc --noEmit --incremental false` once each, so the counts in all-tests.md are measured and stamped rather than estimated.
+- **Date:** 03-10-26 (user answer to the single V5 question G4-K1). **Reason:** the earlier counts were stale estimates; measured numbers are the only basis for the no-re-run rule.
+- **Alternatives:** keep estimates labelled as such (branch B, not chosen).
+- **Consequences:** at `753db23`: pytest 873 passed, 1 skipped, 5 deselected, 1 xfailed; vitest 223 in 30 files; tsc exit 0. The island build and Playwright were not in the approval and are not re-measured locally. Standing authorization does not cover installs: any new install needs fresh approval.
 - **Status:** active.

@@ -1,14 +1,14 @@
 ---
 phase: gate-4-token-and-test-efficiency
 date: 2026-10-03
-status: COMPLETE
+status: COMPLETE_WITH_GAPS
 feature: general-plans
 plan: process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md
 ---
 
 # Gate 4 Report: token and test efficiency (docs only)
 
-**TL;DR:** Gate 4 is implemented and every execute-side gate is green (G4-1 to G4-9, plus G4-11 for the last pushed SHA). Installs were run under G4-K1 = A. pytest, vitest and tsc each ran once at `753db23`: 873 passed, 223 passed, exit 0. Planner fixed part is 47,699 B of 56,000. The independent EVL by vc-tester and the user's acceptance are still pending.
+**TL;DR:** Gate 4 is implemented and every execute-side gate is green (G4-1 to G4-9, plus G4-11 for the last pushed SHA). Installs were run under G4-K1 = A. pytest, vitest and tsc each ran once at `753db23`: 873 passed, 223 passed, exit 0. Planner fixed part is 47,699 B of 56,000. The independent EVL by vc-tester (iteration 002) was green at cycle 0; the user's acceptance of R8 and AC-R9 is still pending (UPDATE PROCESS closeout below).
 
 ## What Was Done
 
@@ -60,7 +60,7 @@ All at commit `753db23` (api/ and web/ unchanged since `96d2d18`). After the run
 | G4-8 | no output |
 | G4-9 | C10 rc=0; G3-1, G3-2, G3-6, G3-8, G3-9 no output; C11 no output; C12 = 11; C13 no output; operating-instructions.md 66 lines, 6,148 B; C14 rev 6 preservation no output; validator output identical to the pre-edit run (diffed) |
 | G4-10 | run once, see above |
-| G4-11 | `gh run list`: run 37098862216 at `ee72237`, completed, success (newest pushed SHA; later commits are local) |
+| G4-11 | `gh run list`: run 37098862216 at `ee72237`, completed, success (newest pushed SHA at execute; the EVL later saw `cc0c7f6` green too) |
 
 ## Token figures (AC-R9 labels)
 
@@ -72,7 +72,7 @@ All at commit `753db23` (api/ and web/ unchanged since `96d2d18`). After the run
 
 1. The contract's E1 says "do not commit". The orchestrator told me to commit locally after each step, so I did. Nothing was pushed by me.
 2. `ee72237` was committed and pushed by something other than this agent, with message "checkpoint", between my edit and my own commit attempt. It holds exactly my operating-instructions.md edit. I did not push.
-3. MASTER-PLAN.md is 17,693 B: under the 19,000 ceiling, 193 B over the 17,500 target.
+3. MASTER-PLAN.md was 17,693 B at execute (193 B over the 17,500 target) and 17,834 B after the closeout: under the 19,000 ceiling, 334 B over the target.
 
 ## Test Infra Gaps Found
 
@@ -81,8 +81,24 @@ All at commit `753db23` (api/ and web/ unchanged since `96d2d18`). After the run
 
 ## Closeout Packet
 
-- Plan: the plan path in the frontmatter. Classification: Keep in active/testing until the independent EVL runs and the user accepts. Next: vc-tester (sonnet) runs G4-1 to G4-9 and G4-11, and confirms with `git diff --quiet 753db23 HEAD -- api web` instead of re-running suites. Then UPDATE PROCESS.
-- Follow-up stubs created: none (branch A ran, so no `test-counts-remeasure` stub).
+- Plan: the plan path in the frontmatter (stays in `active/`; Gates 5 and 6 remain).
+- Classification: **Keep in active/testing** (plan-level: Gates 5-6 remain; Gate 4 itself is verified). Not archivable: R8 stays `review` until CI on the newest head is confirmed and the user accepts; AC-R9 token claims are hybrid and await the user's review.
+- Validate-contract: present (Gate 4 section of the plan, now CONSUMED). SPEC: the program has no single frozen SPEC for these gates; acceptance criteria AC-R1, AC-R5, AC-R8, AC-R9 were scored through G4-1..G4-11 (met by automated gates, except AC-R9 token claims: unmet pending user review, backlog `token-usage-telemetry_NOTE_02-10-26.md`).
+- Follow-up stubs created: none (branch A ran, so no `test-counts-remeasure` stub). Stub wording of the token-usage-telemetry note refreshed at closeout.
+
+## Independent EVL result (UPDATE PROCESS review, 03-10-26)
+
+vc-tester EVL iteration 002 (`master-planner-recovery-evl-iteration-002_REPORT_03-10-26.md`, `results-evl.tsv`): HALTED_SUCCESS at cycle 0 at HEAD `d09d92e`. G4-1..G4-9 matched, G4-1 recomputed independently (47,699 / 56,000 / 8,301), `git diff --quiet 753db23 HEAD -- api web` rc=0 so the recorded counts stay current, validators equal baseline, scope outside `process/` is exactly CLAUDE.md and AGENTS.md from Gate 3. CI: `ee72237` and `cc0c7f6` fully green; `d09d92e` web job green, api job pending at check time.
+
+Accuracy review of this report against the EVL: byte figures, test counts, scope and CI claims agree. Corrections made at closeout: status line and TL;DR (EVL no longer pending), G4-11 note (CI also green at `cc0c7f6`), the MASTER-PLAN size, the current-state size.
+
+## UPDATE PROCESS closeout
+
+- Drift score: MEDIUM (3 signals: more than 1 file touched; `process/development-protocols/master-planner.md` changed; 3 or more memory-worthy decisions D-12, D-13 and the retry single home). Recommend UPDATE PROCESS -- significant changes detected.
+- Closeout edits: current-state.md refreshed to `0004d5b` (6,028 B, ceiling 8,000); MASTER-PLAN.md R8 row and stamp (17,834 B, under the 19,000 ceiling, 334 B over the 17,500 target); decisions.md D-12 indexed and D-13 added (G4-K1 = A approved by the user, 03-10-26); master-planner.md section 6 retry line now points to operating-instructions.md "Bounded retry", the single home (2 fix cycles per failing gate, same failure twice stops, 10-cycle outer ceiling); token-usage-telemetry note wording; plan Status, Resume and contract CONSUMED marker. Planner fixed part after closeout: 48,346 B of 56,000 (headroom 7,654 B; the closeout added 647 B).
+- R8 acceptance check (acceptance rule (a)-(d)): (b) independent re-run done by vc-tester, but CI on the head SHA of the newest pushed commit is not confirmed; (d) no user-visible behavior, but the plan's G4-7 contract pins the R8 row at `review`. Result: R8 stays `review`; AC-R9 not marked accepted.
+- Validators after closeout: equal to the baseline (context-discovery 1, skills 1, guide-sync 1, parity 0 failures and 18 warnings, plan-inventory 0 and 6, the rest 0); no new failure; routing block in sync.
+- Next: confirm CI on the newest head; the user reviews AC-R5, AC-R6, AC-R9; Gate 5 re-enters VALIDATE, then the user's explicit ENTER EXECUTE MODE (several approvals needed: H1 symlink, tsbuildinfo untrack, R12 deploy fixes). Commit checkpoint: process commits only; nothing pushed.
 
 ## Forward Preview
 

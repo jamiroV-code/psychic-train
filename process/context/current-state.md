@@ -7,27 +7,27 @@ date: 03-10-26
 
 # Current State
 
-**Stamp: commit `cc0c7f6` on branch `claude/pensive-albattani-ou0cgv`, observed 2026-10-03T05:13:00Z (UTC).** Base: `origin/main` at `5878b16` (merge of PR #12). "Observed" rows were read or run at that stamp; "Historical" rows are copied and labelled with their source.
+**Stamp: commit `0004d5b` on branch `claude/pensive-albattani-ou0cgv`, observed 2026-10-03T05:18:25Z (UTC).** Base: `origin/main` at `5878b16` (merge of PR #12). "Observed" rows were read or run at that stamp; "Historical" rows are copied and labelled with their source.
 
-Staleness rule (master-planner.md): stale when the stamp is not an ancestor of HEAD (`git merge-base --is-ancestor cc0c7f6 HEAD` fails) or when more than 10 non-cache commits landed since it (`git log cc0c7f6..HEAD --oneline -- . ':(exclude)api/data/cache' | wc -l`). Nightly bot snapshot commits do not make it stale; neither do the Gate 4 commits that record this refresh.
+Staleness rule (master-planner.md): stale when the stamp is not an ancestor of HEAD (`git merge-base --is-ancestor 0004d5b HEAD` fails) or when more than 10 non-cache commits landed since it (`git log 0004d5b..HEAD --oneline -- . ':(exclude)api/data/cache' | wc -l`). Nightly bot snapshot commits do not make it stale; neither do the Gate 4 closeout commits that record this refresh.
 
-## Observed (2026-10-03T05:13Z UTC, commit cc0c7f6)
+## Observed (2026-10-03T05:18Z UTC, commit 0004d5b)
 
 | Fact | Value | Command |
 |---|---|---|
-| Branch | `claude/pensive-albattani-ou0cgv`; PR #13 open; Gate 4 commits local except `ee72237` (on origin) | `git status -sb` |
-| Last commits | Gate 4: `cc0c7f6` (all-tests evidence), `753db23` (budget block), `ee72237` (RT table); Gate 3: `0b3c9bf`, `eee7709`; base `5878b16` | `git log --oneline -8` |
-| Working tree | only Gate 4 doc edits under `process/` | `git status --short` |
+| Branch | `claude/pensive-albattani-ou0cgv`; PR #13 open, not merged; all commits to `0004d5b` pushed; the Gate 4 closeout commits are local | `git status -sb` |
+| Last commits | `0004d5b` (Gate 4 EVL records), `d09d92e` (Gate 4 report), `a96d7b3` (D-12), `753db23` (budget block); Gate 3: `0b3c9bf`, `eee7709`; base `5878b16` | `git log --oneline -8` |
+| Working tree | clean at `0004d5b` before the closeout edits (the closeout edits are process/ text only) | `git status --short` |
 | Entry files | `CLAUDE.md` 13,443 B, `AGENTS.md` 12,572 B; identical ENTRY-SET block; no `@`-imports | `wc -c CLAUDE.md AGENTS.md` |
 | `process/context/all-context.md` | 193 lines, 11,380 B | `wc -lc` |
-| Remote refs | 14: `main`, this branch, 12 older branches (MASTER-PLAN.md T23/T25), checked 2026-10-03T00:31Z | `git branch -r` |
+| Remote refs | 14: `main`, this branch, 12 older branches (MASTER-PLAN.md T23/T25) | `git branch -r` |
 | Workflows | 6: `ci.yml` plus five snapshot jobs | `ls .github/workflows` |
 | `.agents/skills` | 339 tracked regular files (a copy, not a symlink) | `git ls-files .agents/skills \| wc -l` |
 | `web/tsconfig.tsbuildinfo` | still tracked | `git ls-files web/tsconfig.tsbuildinfo` |
-| Tests at `753db23` (api/, web/ unchanged since) | pytest 873 passed, 1 skipped, 5 deselected, 1 xfailed; vitest 223 passed (30 files); `tsc --noEmit --incremental false` exit 0; 05:09-05:12Z | all-tests.md, Current evidence (Gate 4) |
-| CI | run 37098862216 at `ee72237`: success, both jobs | `gh run list` |
+| Tests, MEASURED at `753db23` (`git diff --quiet 753db23 HEAD -- api web` rc=0, so still current) | pytest 873 passed, 1 skipped, 5 deselected, 1 xfailed (163.75 s); vitest 223 passed (30 files); `tsc --noEmit --incremental false` exit 0; 05:09-05:12Z | all-tests.md, Current evidence (Gate 4) |
+| CI | `ee72237` and `cc0c7f6` fully green; `d09d92e` web job green, api job pending when the EVL looked; newest runs at this stamp still in progress, to be confirmed by `gh run list` | `gh run list` |
 
-### Validator results (re-run 2026-10-03 at cc0c7f6; equal to the baseline)
+### Validator results (re-run 2026-10-03 at 0004d5b plus closeout edits; equal to the baseline, no new failure)
 
 | Validator | Failures | Warnings | Note |
 |---|---|---|---|
@@ -43,14 +43,15 @@ Outside the baseline: `validate-backlog-notes` reports 45 failing notes (older n
 
 ## Gate status
 
-Gates 2 and 3 are complete; reports `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_GATE2-REPORT_03-10-26.md` and `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_GATE3-REPORT_03-10-26.md` (probe token figures are there). Gate 4 (test tiers with full commands, bounded retry with a same-failure stop, no-re-run rule, planner budget) is executed and awaits the independent EVL; report `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_GATE4-REPORT_03-10-26.md`.
+Gates 2, 3 and 4 are complete. Reports are in `process/general-plans/active/master-planner-recovery_02-10-26/`: `..._GATE2-REPORT_03-10-26.md`, `..._GATE3-REPORT_03-10-26.md` (probe token figures), `..._GATE4-REPORT_03-10-26.md` (test tiers, bounded retry with a same-failure stop, no-re-run rule, planner budget). The Gate 4 independent EVL (vc-tester, iteration 002) was green at cycle 0. Gates 5 and 6 remain, so the plan stays in `active/`.
 
-Planner budget, MEASURED by the PLANNER-BUDGET block in master-planner.md section 12 (bytes only): fixed part 47,699 B of 56,000 (headroom 8,301 B); with an 8,000 B brief 55,699 B of 64,000; with master-planner.md 63,945 B (informational, not a cap). Reconciliation: the planner-set total is the C3 total plus master-planner.md; two earlier figures differed because one omitted the router cut.
+Planner budget, MEASURED by the PLANNER-BUDGET block in master-planner.md section 12 (bytes only), re-run after the closeout edits: fixed part 48,346 B of 56,000 (headroom 7,654 B); with an 8,000 B brief 56,346 B of 64,000; with master-planner.md 64,670 B (informational, not a cap). At the Gate 4 execute commit the fixed part was 47,699 B (headroom 8,301 B); the closeout added 647 B. Tokens as bytes/4 are ESTIMATED.
 
-## Not run (unverified at the stamp)
+## Not run or unverified at the stamp
 
-- Playwright and the island build locally (CI covers the island build; CI has no e2e).
-- Real per-session token usage: no telemetry (backlog `token-usage-telemetry_NOTE_02-10-26.md`).
+- Playwright and the island build locally (CI covers the island build; CI has no e2e); last local Playwright run 35/35 on 4 specs (28-09-26), 6 specs exist now.
+- Real per-session token usage: only single-run first-request probes exist (backlog `token-usage-telemetry_NOTE_02-10-26.md`). AC-R9 token claims await the user's review.
+- Compliance with the retry, same-failure and no-re-run rules (observable only at the Gate 6 pilot).
 - Snapshot crons firing at their new times; the two canary jobs.
 - Anything on the user's PC (deployed app, Task Scheduler, Tailscale, Windows deploy scripts, `.agents/skills` there) and live provider reachability.
 - Branch-delete mechanism and worker merge/archive tools (Gate 6 pilot).
@@ -65,7 +66,6 @@ Planner budget, MEASURED by the PLANNER-BUDGET block in master-planner.md sectio
 
 ## Next actions
 
-1. Independent EVL of Gate 4 (vc-tester: G4-1 to G4-9, G4-11; confirms the SHA, no suite re-run), then UPDATE PROCESS.
-2. User review of AC-R5, AC-R6 and AC-R9 (not yet accepted).
-3. Gate 5 (housekeeping, README linking operating-instructions.md, tsbuildinfo untrack): re-enter VALIDATE.
-4. Open Questions 10 and 12 stay open and non-blocking. Registry: MASTER-PLAN.md.
+1. Confirm CI on the newest pushed head; the user reviews AC-R5, AC-R6 and AC-R9 (not yet accepted).
+2. Gate 5 (cleanup and performance): re-enter VALIDATE, then the user's explicit ENTER EXECUTE MODE. Several steps need approvals: `.agents/skills` symlink (H1), `web/tsconfig.tsbuildinfo` untrack, root README, the deploy fixes R12, housekeeping candidates.
+3. Open Questions 10 and 12 stay open and non-blocking. Registry: MASTER-PLAN.md.

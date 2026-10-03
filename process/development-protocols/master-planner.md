@@ -81,7 +81,7 @@ Nothing above is platform-enforced (private repo, no branch protection, `allow_a
 
 - A WORKER is a direct-lane session: it does not orchestrate, spawn sessions or run the multi-agent RIPER chain. Tiny tasks (RT0 or RT1, about 100 lines or less, no schema, auth, API, billing or migration surface) use the QUICK FIX lane; one `vc-quick-fix-agent` spawn is not a subagent chain. Every other worker writes a compact validate-contract in its own task folder (the gate list from the envelope) before editing, then edits and runs its gates.
 - Workers commit on `claude/<task-id>-<slug>` and open a PR. The Master Planner session and direct user work commit on `main`, only when the user asks.
-- Retry budget: 2 fix cycles per task by default, then `blocked` or `needs_input`.
+- Retry budget: see "Bounded retry" in operating-instructions.md (single home: 2 fix cycles per failing gate, same failure twice stops, 10-cycle outer ceiling).
 
 ## 7. Isolation
 
