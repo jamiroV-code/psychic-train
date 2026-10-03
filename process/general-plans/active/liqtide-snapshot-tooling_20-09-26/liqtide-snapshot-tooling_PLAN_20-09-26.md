@@ -8,7 +8,7 @@ feature: general-plans
 # LiqTide Snapshot Tooling — Plan
 
 Date: 20-09-26
-Status: Ready for VALIDATE review / EXECUTE pending approval
+Status: EXECUTE COMPLETE_WITH_GAPS (updated 24-09-26 by UPDATE PROCESS — see `liqtide-snapshot-tooling_REPORT_20-09-26.md` frontmatter `status: COMPLETE_WITH_GAPS`; all 6 test gates passed, but the tool's actual purpose — full-vs-reduced composite agreement — remains unanswered because the LiqTide archive has too little history yet, see `process/context/all-context.md`'s 18:47 amendment). This line previously said "Ready for VALIDATE review / EXECUTE pending approval", which predates EXECUTE and is stale.
 Complexity: SIMPLE (4 small, mostly-independent additive changes; no schema/auth/API surface;
 one shared file touched additively). CI/scheduling (`.github/workflows/liqtide-snapshot.yml`) is
 explicitly OUT OF SCOPE — that requires separate user sign-off for push-permission automation.
@@ -225,13 +225,19 @@ or read fields), so the added field/kwarg cannot break call sites.
 ## Resume and Execution Handoff
 
 1. Selected plan file path: `process/general-plans/active/liqtide-snapshot-tooling_20-09-26/liqtide-snapshot-tooling_PLAN_20-09-26.md`
-2. Last completed phase/step: PLAN written, VALIDATE run inline below (FAST MODE)
-3. Validate-contract status: written below (this session)
+2. Last completed phase/step: EXECUTE COMPLETE_WITH_GAPS (see `liqtide-snapshot-tooling_REPORT_20-09-26.md`, all 6 test gates passed) — updated 24-09-26 by UPDATE PROCESS; this line previously said "PLAN written, VALIDATE run inline below" which predates EXECUTE.
+3. Validate-contract status: written below (Gate: CONDITIONAL, pre-EXECUTE)
 4. Supporting context files loaded: `process/context/all-context.md`, `process/context/data-sources/all-data-sources.md` (§Macro Liquidity), `api/data/liqtide_adapter.py`, `api/data/cache.py`, `api/analytics/regime/liquidity_composite.py`, `api/analytics/regime/leg_boundary.py`, `api/scripts/backtest_leg_boundaries.py`, `api/data/ccxt_adapter.py`
-5. Next step for a fresh agent: read this plan's Implementation Checklist top to bottom; item 1
-   (`liqtide_adapter.py`) must land before items 2 and 4 since both new scripts import from it;
-   item 3 (`.gitignore`) is fully independent and can be done in any order. Run the full pytest
-   suite gate after item 1 before moving to items 2/4.
+5. Next step for a fresh agent (updated 24-09-26 by UPDATE PROCESS — this line previously
+   described pre-EXECUTE implementation-checklist ordering, which is done): all 4 implementation
+   items landed and all 6 test gates passed. This plan is an **archive candidate** — it is not
+   "next step: keep implementing", it is "next step: user decides whether to archive now (the code
+   is done and gated green) or keep active until the full-vs-reduced composite comparison this
+   tooling exists for actually produces a result". That comparison is structurally blocked on the
+   LiqTide archive accumulating enough daily history (currently one file per day since 20-09-26,
+   growing forward only — see `process/context/all-context.md`'s Open Questions for the
+   "full-vs-reduced liquidity composite agreement question"). No further code work is proposed
+   here.
 
 ## Validate Contract
 

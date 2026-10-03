@@ -13,7 +13,7 @@ metadata:
 
 **Complexity**: Complex (standard — single authoritative plan, not a phase program)
 **Date**: 17-09-26
-**Status**: PLANNED
+**Status**: RFC-001/002/003 ✅ VERIFIED, RFC-004 DONE_WITH_CONCERNS (updated 24-09-26 by UPDATE PROCESS — see Status strip and `## Phased Delivery Plan`'s "Current Status" line for the authoritative per-RFC state; this header previously said "PLANNED" which was stale)
 **Upstream inputs:** `momentum-screener_SPEC_17-09-26.md` (locked) + INNOVATE Decision Summary (locked, pasted into the delegation prompt — not re-litigated here)
 **Location:** `process/general-plans/active/momentum-screener_17-09-26/momentum-screener_PLAN_17-09-26.md`
 
@@ -60,7 +60,7 @@ Builds the first application code in `my_site`: a single-page, watchlist-driven 
 - [Test Infra Improvement Notes](#test-infra-improvement-notes)
 - [Resume and Execution Handoff](#resume-and-execution-handoff)
 
-**Status strip:** ⏳ PLANNED (all RFCs) — no code exists yet; this is the first plan to enter EXECUTE against `api/` and `web/`.
+**Status strip (updated 24-09-26 by UPDATE PROCESS):** RFC-001 ✅ VERIFIED · RFC-002 ✅ VERIFIED · RFC-003 ✅ VERIFIED · RFC-004 DONE_WITH_CONCERNS (backend real-tested, frontend scoped-tested; full-suite EVL gate item 71 + Agent-Probe item 70 still pending on the user's own machine). This line previously said "⏳ PLANNED (all RFCs) — no code exists yet", which was true only at the plan's creation on 17-09-26 and is stale now — see `## Phased Delivery Plan`'s "Current Status" line (below) for the authoritative, previously-updated per-RFC state this header should have matched.
 
 ---
 

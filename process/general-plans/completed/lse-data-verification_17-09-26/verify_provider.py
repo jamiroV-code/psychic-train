@@ -6,6 +6,10 @@ Usage (on the user's PC, never in the cloud container -- its proxy blocks LSE/St
     python verify_provider.py --phase 1   # access + quota cost of one small request
     python verify_provider.py --phase 2   # depth/coverage + delisted probe
     python verify_provider.py --phase 3   # cross-source diff, split probes, OHLC integrity
+        [--xsource stooq|alpaca|yfinance]  # default stooq -> alpaca; yfinance = keyless,
+                                           # verification-only, never stored
+        [--yf-adjust split|total]          # split (default) = Close, auto_adjust=False
+        [--compare-both]                   # yfinance: both bases side by side
     python verify_provider.py --phase 4   # 50-symbol backfill + DuckDB query
 
 Keys come ONLY from the environment: LSE_API_KEY (and ALPACA_API_KEY /
@@ -36,7 +40,7 @@ import os
 import sys
 import tempfile
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -72,6 +76,7 @@ EARLIEST = "1990-01-01"      # request floor; the vault reports US stocks from 2
 CROSS_SOURCE_YEARS = 5
 STORE_QUERY_YEARS = 3
 OHLC_COLS = ["open", "high", "low", "close"]
+CALLS_PER_MINUTE = 200       # /usage calls_per_minute (free tier, observed 24-09-26)
 
 
 # --------------------------------------------------------------------------
@@ -88,11 +93,15 @@ def normalize_candles(rows: Iterable[dict] | pd.DataFrame) -> pd.DataFrame:
     cols = ["date", *OHLC_COLS, "volume"]
     if df.empty:
         return pd.DataFrame(columns=cols)
+    if isinstance(df.index, pd.DatetimeIndex):
+        # history()/yfinance exports may carry the bar time in the index
+        df = df.reset_index(names="__index_time__")
     df.columns = [str(c).lower() for c in df.columns]
-    time_col = next((c for c in ("timestamp", "ts", "date", "time", "t") if c in df.columns), None)
+    time_col = next((c for c in ("timestamp", "ts", "date", "datetime", "time", "t",
+                                 "__index_time__") if c in df.columns), None)
     if time_col is None:
         raise ValueError(f"no time column in candle rows; columns={list(df.columns)}")
-    ts = pd.to_datetime(df[time_col], utc=True)
+    ts = _to_utc(df[time_col])
     df["date"] = ts.dt.tz_convert(None).dt.normalize()
     for c in OHLC_COLS:
         if c not in df.columns:
@@ -101,6 +110,29 @@ def normalize_candles(rows: Iterable[dict] | pd.DataFrame) -> pd.DataFrame:
     if "volume" not in df.columns:
         df["volume"] = 0.0
     return df[cols].reset_index(drop=True)
+
+
+def _to_utc(col: pd.Series) -> pd.Series:
+    """Parse ISO strings / datetimes / numeric epochs (s, ms, us or ns) to UTC."""
+    if pd.api.types.is_numeric_dtype(col) and not pd.api.types.is_bool_dtype(col):
+        mx = float(pd.Series(col).abs().max())
+        unit = "s" if mx < 1e11 else "ms" if mx < 1e14 else "us" if mx < 1e17 else "ns"
+        return pd.to_datetime(col, unit=unit, utc=True)
+    return pd.to_datetime(col, utc=True)
+
+
+def calendar_anomalies(df: pd.DataFrame, sessions: Iterable, sample: int = 5) -> dict:
+    """Report (never fix) rows whose date is not an exchange session, and repeated dates."""
+    if df.empty:
+        return {"extra_rows": 0, "duplicate_dates": 0,
+                "extra_sample": [], "duplicate_sample": []}
+    dates = pd.to_datetime(df["date"]).dt.normalize()
+    expected = pd.DatetimeIndex(pd.to_datetime(list(sessions))).normalize()
+    extra = dates[~dates.isin(expected)]
+    dup = dates[dates.duplicated()]
+    fmt = lambda s: [str(d.date()) for d in s.drop_duplicates().sort_values().head(sample)]
+    return {"extra_rows": int(len(extra)), "duplicate_dates": int(len(dup)),
+            "extra_sample": fmt(extra), "duplicate_sample": fmt(dup)}
 
 
 def compute_coverage(df: pd.DataFrame, sessions: Iterable) -> dict:
@@ -112,10 +144,12 @@ def compute_coverage(df: pd.DataFrame, sessions: Iterable) -> dict:
     """
     if df.empty:
         return {"first_date": None, "last_date": None, "rows": 0,
-                "missing_sessions": None, "longest_gap": None}
+                "missing_sessions": None, "longest_gap": None,
+                **calendar_anomalies(df, [])}
     have = pd.DatetimeIndex(pd.to_datetime(df["date"])).normalize().unique()
     first, last = have.min(), have.max()
-    expected = pd.DatetimeIndex(pd.to_datetime(list(sessions))).normalize()
+    sessions = list(sessions)
+    expected = pd.DatetimeIndex(pd.to_datetime(sessions)).normalize()
     expected = expected[(expected >= first) & (expected <= last)].unique().sort_values()
     present = expected.isin(have)
     longest = run = 0
@@ -123,7 +157,8 @@ def compute_coverage(df: pd.DataFrame, sessions: Iterable) -> dict:
         run = 0 if p else run + 1
         longest = max(longest, run)
     return {"first_date": first.date(), "last_date": last.date(), "rows": int(len(df)),
-            "missing_sessions": int((~present).sum()), "longest_gap": int(longest)}
+            "missing_sessions": int((~present).sum()), "longest_gap": int(longest),
+            **calendar_anomalies(df, sessions)}
 
 
 def classify_delisted(df: pd.DataFrame) -> dict:
@@ -144,6 +179,32 @@ def cross_source_diff(a: pd.DataFrame, b: pd.DataFrame) -> dict:
     pct = (m["close_a"] - m["close_b"]).abs() / m["close_b"].abs() * 100.0
     return {"n": int(len(pct)), "median": float(pct.median()),
             "p99": float(pct.quantile(0.99)), "max": float(pct.max())}
+
+
+def worst_days(a: pd.DataFrame, b: pd.DataFrame, n: int = 5) -> list[dict]:
+    """The `n` shared dates with the largest abs % close diff (a = LSE, b = cross-source)."""
+    m = a[["date", "close"]].merge(b[["date", "close"]], on="date", suffixes=("_a", "_b"))
+    m = m.dropna()
+    m = m[m["close_b"] != 0]
+    if m.empty:
+        return []
+    m = m.assign(pct=(m["close_a"] - m["close_b"]).abs() / m["close_b"].abs() * 100.0)
+    top = m.nlargest(n, "pct")
+    return [{"date": d.date().isoformat(), "lse_close": float(ca), "xsource_close": float(cb),
+             "pct": round(float(p), 4)}
+            for d, ca, cb, p in zip(top["date"], top["close_a"], top["close_b"], top["pct"])]
+
+
+def interpret_bases(symbol: str, by_basis: dict[str, dict]) -> str:
+    """One-line verdict: which yfinance basis (split / total) LSE matches best (lower median)."""
+    med = {k: v.get("median") for k, v in by_basis.items() if v.get("median") is not None}
+    if not med:
+        return f"{symbol}: no comparable data on either basis"
+    best = min(med, key=med.get)
+    others = ", ".join(f"{k} {v:.3f}%" for k, v in sorted(med.items()))
+    label = {"split": "split-adjusted only (NOT dividend-adjusted)",
+             "total": "dividend + split adjusted"}.get(best, best)
+    return f"{symbol}: LSE closest to yfinance `{best}` basis -> {label} (median {others})"
 
 
 def detect_split_discontinuity(df: pd.DataFrame, split_date: str, expected_ratio: float,
@@ -207,20 +268,44 @@ def quota_delta(before: dict, after: dict) -> dict:
     return {k: a[k] - b[k] for k in sorted(set(a) & set(b)) if a[k] != b[k]}
 
 
+STORE_COLS = ["symbol", "date", *OHLC_COLS, "volume"]
+
+
 def write_store(frames: dict[str, pd.DataFrame], root: Path) -> int:
-    """One Parquet file per symbol under root/symbol=XXX/. Returns bytes on disk."""
+    """One Parquet file per symbol under root/symbol=XXX/data.parquet with the explicit
+    STORE_COLS schema. Every frame (candles, history() export, anything) goes through
+    normalize_candles first. Returns bytes of the store files on disk."""
     root = Path(root)
     for sym, df in frames.items():
         part = root / f"symbol={sym}"
         part.mkdir(parents=True, exist_ok=True)
-        df.assign(symbol=sym).to_parquet(part / "data.parquet", index=False)
-    return sum(p.stat().st_size for p in root.rglob("*.parquet"))
+        norm = normalize_candles(df)
+        norm["date"] = pd.to_datetime(norm["date"])
+        norm = norm.assign(symbol=sym)[STORE_COLS]
+        norm.to_parquet(part / "data.parquet", index=False)
+    return sum(p.stat().st_size for p in root.glob("symbol=*/data.parquet"))
+
+
+def _store_glob(root: Path) -> str:
+    return str(Path(root) / "symbol=*" / "data.parquet").replace("\\", "/")
+
+
+def store_columns(root: Path) -> list[str]:
+    """Actual column names in the store files (diagnostic for a failed query)."""
+    import duckdb
+    con = duckdb.connect()
+    try:
+        return [r[0] for r in con.execute(
+            f"DESCRIBE SELECT * FROM read_parquet('{_store_glob(root)}', union_by_name=true)"
+        ).fetchall()]
+    finally:
+        con.close()
 
 
 def query_store(root: Path, start: str, end: str) -> pd.DataFrame:
     """DuckDB: per-symbol row count / date span / mean close in [start, end]."""
     import duckdb
-    glob = str(Path(root) / "*" / "*.parquet").replace("\\", "/")
+    glob = _store_glob(root)
     sql = f"""
         SELECT symbol, count(*) AS rows, min(date) AS first, max(date) AS last,
                avg(close) AS mean_close
@@ -233,6 +318,39 @@ def query_store(root: Path, start: str, end: str) -> pd.DataFrame:
         return con.execute(sql, [start, end]).df()
     finally:
         con.close()
+
+
+def plan_fetch_methods(symbols: list[str], usage: dict) -> dict[str, str]:
+    """Bulk history() export for the first N symbols where N = exports left this hour
+    (exports_cap_hour - exports_this_hour, from /usage); paged candles() for the rest.
+    Unknown/missing usage fields => 0 exports (candles only). Never waits for the hour."""
+    flat = _flatten(usage)
+    pick = lambda key: next((v for k, v in flat.items() if k.split(".")[-1] == key), None)
+    cap, used = pick("exports_cap_hour"), pick("exports_this_hour")
+    left = max(0, int(cap) - int(used or 0)) if cap is not None else 0
+    return {s: ("history" if i < left else "candles") for i, s in enumerate(symbols)}
+
+
+def clamp_end(end: date | str, today: date | None = None) -> date:
+    """Never request past today (UTC): Stooq 404s on a future d2."""
+    today = today or datetime.now(timezone.utc).date()
+    end = date.fromisoformat(end) if isinstance(end, str) else end
+    return min(end, today)
+
+
+class RateLimiter:
+    """Minimal spacing limiter: at most `per_minute` calls per 60 s."""
+
+    def __init__(self, per_minute: int, clock=time.monotonic, sleep=time.sleep):
+        self.interval = 60.0 / per_minute
+        self.clock, self.sleep, self.last = clock, sleep, None
+
+    def wait(self) -> None:
+        now = self.clock()
+        if self.last is not None and now - self.last < self.interval:
+            self.sleep(self.interval - (now - self.last))
+            now = self.clock()
+        self.last = now
 
 
 def to_markdown(rows: list[dict]) -> str:
@@ -262,7 +380,8 @@ def lse_client():
     return LSE(api_key=_require_env("LSE_API_KEY"))
 
 
-def fetch_candles(client, symbol: str, start: str, end: str | None = None) -> pd.DataFrame:
+def fetch_candles(client, symbol: str, start: str, end: str | None = None,
+                  limiter: RateLimiter | None = None) -> pd.DataFrame:
     """Daily candles, paging past the 5000-row per-call cap by advancing `start`.
 
     VERIFIED call: client.candles(symbol, "1d", start=, end=, limit=5000, order="asc").
@@ -270,6 +389,8 @@ def fetch_candles(client, symbol: str, start: str, end: str | None = None) -> pd
     """
     frames, cursor = [], start
     for _ in range(50):
+        if limiter is not None:
+            limiter.wait()
         rows = client.candles(symbol, "1d", start=cursor, end=end, limit=5000, order="asc")
         if not rows:
             break
@@ -304,10 +425,11 @@ def fetch_stooq(symbol: str, start: str, end: str) -> pd.DataFrame:
     url = (f"https://stooq.com/q/d/l/?s={symbol.lower()}.us&i=d"
            f"&d1={start.replace('-', '')}&d2={end.replace('-', '')}")
     r = httpx.get(url, timeout=30, follow_redirects=True)
-    r.raise_for_status()
+    if r.status_code != 200:
+        raise RuntimeError(f"Stooq HTTP {r.status_code} for {url}; body[:300]={r.text[:300]!r}")
     text = r.text.strip()
     if not text or not text.lower().startswith("date"):
-        raise RuntimeError(f"Stooq returned non-CSV for {symbol}: {text[:120]!r}")
+        raise RuntimeError(f"Stooq returned non-CSV for {symbol}: body[:300]={text[:300]!r}")
     return normalize_candles(pd.read_csv(io.StringIO(text)))
 
 
@@ -324,7 +446,8 @@ def fetch_alpaca(symbol: str, start: str, end: str) -> pd.DataFrame:
     while True:
         r = httpx.get(f"https://data.alpaca.markets/v2/stocks/{symbol}/bars",
                       params=params, headers=headers, timeout=30)
-        r.raise_for_status()
+        if r.status_code != 200:
+            raise RuntimeError(f"Alpaca HTTP {r.status_code}; body[:300]={r.text[:300]!r}")
         j = r.json()
         bars += j.get("bars") or []
         if not j.get("next_page_token"):
@@ -333,6 +456,50 @@ def fetch_alpaca(symbol: str, start: str, end: str) -> pd.DataFrame:
     rows = [{"timestamp": b["t"], "open": b["o"], "high": b["h"], "low": b["l"],
              "close": b["c"], "volume": b.get("v", 0)} for b in bars]
     return normalize_candles(rows)
+
+
+YF_ADJUST = ("split", "total")
+
+
+def fetch_yfinance(symbol: str, start: str, end: str, adjust: str = "split") -> pd.DataFrame:
+    """Keyless yfinance cross-check. VERIFICATION ONLY (personal-use terms): the result
+    is compared in memory and never stored or served. Lazy import.
+
+    adjust="split": auto_adjust=False, uses `Close` (split-adjusted, NOT dividend-adjusted);
+    `Adj Close` is dropped so it can never leak into `close`.
+    adjust="total": auto_adjust=True (split + dividend adjusted)."""
+    if adjust not in YF_ADJUST:
+        raise ValueError(f"adjust must be one of {YF_ADJUST}, got {adjust!r}")
+    import yfinance as yf
+    # yfinance `end` is exclusive
+    end_x = (date.fromisoformat(end) + timedelta(days=1)).isoformat()
+    df = yf.download(symbol, start=start, end=end_x, auto_adjust=(adjust == "total"),
+                     progress=False)
+    if df is None or df.empty:
+        raise RuntimeError(f"yfinance returned no rows for {symbol}")
+    if isinstance(df.columns, pd.MultiIndex):  # newer yfinance: (field, ticker)
+        df.columns = df.columns.get_level_values(0)
+    df = df[[c for c in df.columns if str(c).strip().lower() not in ("adj close", "adj_close",
+                                                                        "adjclose")]]
+    return normalize_candles(df)
+
+
+XSOURCES = {"stooq": ["stooq", "alpaca"], "alpaca": ["alpaca"], "yfinance": ["yfinance"]}
+
+
+def fetch_cross_check(chain: list[str], symbol: str, start: str, end: str,
+                      fetchers: dict | None = None) -> tuple[str, pd.DataFrame, list[str]]:
+    """Try each source in `chain` in order. Returns (source used, frame, error notes).
+    Raises RuntimeError with all errors if every source fails."""
+    fetchers = fetchers or {"stooq": fetch_stooq, "alpaca": fetch_alpaca,
+                            "yfinance": fetch_yfinance}
+    errors: list[str] = []
+    for src in chain:
+        try:
+            return src, fetchers[src](symbol, start, end), errors
+        except (Exception, SystemExit) as e:  # _require_env exits on a missing key
+            errors.append(f"{src}: {type(e).__name__}: {e}")
+    raise RuntimeError("; ".join(errors))
 
 
 def nyse_sessions(start, end) -> pd.DatetimeIndex:
@@ -399,34 +566,57 @@ def phase2() -> None:
     print(to_markdown(probe))
 
 
-def phase3() -> None:
+def phase3(xsource: str = "stooq", yf_adjust: str = "split", compare_both: bool = False) -> None:
     client = lse_client()
-    end = date.today()
+    end = clamp_end(date.today())
     start = end.replace(year=end.year - CROSS_SOURCE_YEARS).isoformat()
     end_s = end.isoformat()
     print("## Phase 3 — accuracy and corporate actions\n")
-    second = "stooq"
-    diffs, integrity, lse_full = [], [], {}
+    chain = list(XSOURCES[xsource])
+    diffs, integrity, lse_full, worst, verdicts = [], [], {}, {}, []
+    is_yf = xsource == "yfinance"
+    bases = list(YF_ADJUST) if (is_yf and compare_both) else [yf_adjust if is_yf else "n/a"]
     for sym in FIXED_SYMBOLS:
         lse_df = fetch_candles(client, sym, EARLIEST, end_s)
         lse_full[sym] = lse_df
         integrity.append({"symbol": sym, "rows": len(lse_df), **assert_ohlc_integrity(lse_df)})
         win = lse_df[lse_df["date"] >= pd.Timestamp(start)]
-        try:
-            other = fetch_stooq(sym, start, end_s) if second == "stooq" else None
-        except Exception as e:
-            print(f"> Stooq failed for {sym} ({type(e).__name__}: {e}); switching to Alpaca.\n")
-            second = "alpaca"
-            other = None
-        if other is None:
+        by_basis = {}
+        for basis in bases:
+            fetchers = None
+            if is_yf:
+                fetchers = {"yfinance": lambda s_, a_, b_, _bs=basis: fetch_yfinance(s_, a_, b_, _bs)}
             try:
-                other = fetch_alpaca(sym, start, end_s)
-            except Exception as e:
-                diffs.append({"symbol": sym, "source": second, "error": f"{type(e).__name__}: {e}"})
+                src, other, errs = fetch_cross_check(chain, sym, start, end_s, fetchers)
+            except RuntimeError as e:
+                print(f"> all cross-check sources failed for {sym} ({basis}): {e}\n")
+                diffs.append({"symbol": sym, "source": "/".join(chain), "basis": basis,
+                              "error": str(e)[:300]})
                 continue
-        diffs.append({"symbol": sym, "source": second, **cross_source_diff(win, other)})
+            for note in errs:
+                print(f"> {sym}: {note}\n")
+            if errs and src != chain[0]:
+                chain = chain[chain.index(src):]  # stick with the source that works
+            d = cross_source_diff(win, other)
+            by_basis[basis] = d
+            diffs.append({"symbol": sym, "source": src, "basis": basis, **d})
+            worst[f"{sym} ({basis})"] = worst_days(win, other)
+        if is_yf and compare_both:
+            verdicts.append(interpret_bases(sym, by_basis))
     print(f"### Cross-source close diff ({start}..{end_s}, abs %)\n")
+    if is_yf:
+        print("> yfinance is verification-only (personal-use); nothing is stored. "
+              "basis: split = `Close` (auto_adjust=False), total = auto_adjust=True.\n")
     print(to_markdown(diffs) + "\n")
+    if verdicts:
+        print("### Adjustment-basis interpretation (lower median diff wins)\n")
+        for v in verdicts:
+            print(f"- {v}")
+        print()
+    print("### Worst 5 days per symbol (abs % close diff)\n")
+    for key, rows in worst.items():
+        print(f"**{key}**\n")
+        print((to_markdown(rows) if rows else "_no overlapping dates_") + "\n")
     print("### Split probes\n")
     for sym, d, ratio in SPLITS:
         df = lse_full.get(sym)
@@ -447,50 +637,81 @@ def phase4(store_dir: str | None) -> None:
     root = Path(store_dir) if store_dir else Path(tempfile.mkdtemp(prefix="lse-store-"))
     if "process" in root.resolve().parts:
         sys.exit("ERROR: refusing to write the scratch store under process/ (never committed).")
-    dl = root / "_downloads"
-    dl.mkdir(parents=True, exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True)
+    # raw history() exports live OUTSIDE the store so the query glob never sees them
+    dl = Path(tempfile.mkdtemp(prefix="lse-exports-"))
     print("## Phase 4 — screener-scale feasibility\n")
-    print(f"store: `{root}`\n")
+    print(f"store: `{root}`  raw exports: `{dl}`\n")
     u0 = fetch_usage(client)
+    plan = plan_fetch_methods(PHASE4_UNIVERSE, u0)
+    n_hist = sum(1 for m in plan.values() if m == "history")
+    print(f"export budget: {n_hist} bulk history() export(s) this hour; "
+          f"{len(plan) - n_hist} symbol(s) via paged candles() at <= {CALLS_PER_MINUTE}/min\n")
+    limiter = RateLimiter(CALLS_PER_MINUTE)
     t0 = time.perf_counter()
     frames, failures, method = {}, [], {}
     for sym in PHASE4_UNIVERSE:
         try:
-            frames[sym] = fetch_history_bulk(client, sym, str(dl))
-            method[sym] = "history"
-        except Exception as e:
-            try:
-                frames[sym] = fetch_candles(client, sym, EARLIEST)
-                method[sym] = f"candles (history failed: {type(e).__name__})"
-            except Exception as e2:
-                failures.append({"symbol": sym, "error": f"{type(e2).__name__}: {e2}"})
+            if plan[sym] == "history":
+                try:
+                    frames[sym] = fetch_history_bulk(client, sym, str(dl))
+                    method[sym] = "history"
+                    continue
+                except Exception as e:
+                    print(f"> history() failed for {sym} ({type(e).__name__}: {e}); using candles()\n")
+                    method[sym] = "candles (history failed)"
+            frames[sym] = fetch_candles(client, sym, EARLIEST, limiter=limiter)
+            method.setdefault(sym, "candles")
+        except Exception as e2:
+            method.pop(sym, None)
+            failures.append({"symbol": sym, "error": f"{type(e2).__name__}: {e2}"})
     elapsed = time.perf_counter() - t0
     u1 = fetch_usage(client)
     size = write_store(frames, root)
-    end = date.today()
-    q0 = time.perf_counter()
-    q = query_store(root, end.replace(year=end.year - STORE_QUERY_YEARS).isoformat(), end.isoformat())
-    qt = time.perf_counter() - q0
+    # metrics first, so a query failure can never lose them
     summary = [{"symbols_ok": len(frames), "symbols_failed": len(failures),
-                "elapsed_s": round(elapsed, 1), "store_mb": round(size / 1e6, 2),
-                "duckdb_query_s": round(qt, 3), "query_symbols": len(q)}]
+                "elapsed_s": round(elapsed, 1), "store_mb": round(size / 1e6, 2)}]
     print(to_markdown(summary) + "\n")
+    print("fetch method count: `" + json.dumps({m: sum(1 for v in method.values() if v == m)
+                                                for m in sorted(set(method.values()))}) + "`\n")
+    print(to_markdown([{"symbol": k, "method": v} for k, v in method.items()]) + "\n")
     print("quota delta: `" + json.dumps(quota_delta(u0, u1)) + "`\n")
     print("usage AFTER:\n```json\n" + json.dumps(u1, indent=2, default=str) + "\n```\n")
-    print("fetch method: `" + json.dumps({m: sum(1 for v in method.values() if v == m)
-                                          for m in set(method.values())}) + "`\n")
     if failures:
         print(to_markdown(failures) + "\n")
+    end = date.today()
     print(f"### DuckDB {STORE_QUERY_YEARS}-year window\n")
+    q0 = time.perf_counter()
+    try:
+        q = query_store(root, end.replace(year=end.year - STORE_QUERY_YEARS).isoformat(),
+                        end.isoformat())
+    except Exception as e:
+        try:
+            cols = store_columns(root)
+        except Exception as e3:
+            cols = f"<could not read: {type(e3).__name__}: {e3}>"
+        print(f"DuckDB query FAILED: {type(e).__name__}: {e}\nstore columns: `{cols}`")
+        return
+    qt = time.perf_counter() - q0
+    print(f"duckdb_query_s: {qt:.3f}, query_symbols: {len(q)}\n")
     print(to_markdown(q.astype({"first": str, "last": str}).to_dict("records")))
 
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--phase", type=int, choices=[1, 2, 3, 4], required=True)
+    ap.add_argument("--xsource", choices=sorted(XSOURCES), default="stooq",
+                    help="Phase 3 cross-check: stooq (falls back to alpaca), alpaca, or "
+                         "yfinance (keyless, verification-only)")
+    ap.add_argument("--yf-adjust", choices=YF_ADJUST, default="split",
+                    help="yfinance basis: split = Close with auto_adjust=False (default), "
+                         "total = auto_adjust=True (dividend + split adjusted)")
+    ap.add_argument("--compare-both", action="store_true",
+                    help="with --xsource yfinance: fetch both bases and print them side by side")
     ap.add_argument("--store-dir", help="Phase 4 scratch store (default: new temp dir; never under process/)")
     a = ap.parse_args(argv)
-    {1: phase1, 2: phase2, 3: phase3}.get(a.phase, lambda: phase4(a.store_dir))()
+    {1: phase1, 2: phase2, 3: lambda: phase3(a.xsource, a.yf_adjust, a.compare_both),
+     4: lambda: phase4(a.store_dir)}[a.phase]()
 
 
 if __name__ == "__main__":

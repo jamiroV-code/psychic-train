@@ -8,7 +8,9 @@ date: 24-09-26
 # Data Sources Context
 
 Last updated: 2026-09-28 (pair screener v1 — deep-history ccxt/Hyperliquid fetch pattern, apparent
-Hyperliquid history floor; supersedes the 2026-09-24 entry below, which is retained)
+Hyperliquid history floor; supersedes the 2026-09-24 entry below, which is retained). LSE
+verification findings (2026-09-24, ADOPT-WITH-LIMITS, private use) salvaged into this file on
+2026-10-03 from `claude/exciting-meitner-hy50kn` (registry task R13).
 
 Canonical entrypoint for the `data-sources` context group in my_site.
 
@@ -207,11 +209,16 @@ see the Open Questions entry in `all-context.md` for the current state of that q
 ## Equity Providers
 
 There is no free equity feed with the quality of the free crypto feeds. This is a structural
-difference, not a search failure — with one possible exception, below.
+difference, not a search failure.
+
+**Verdict, 2026-09-24: London Strategic Edge is ADOPT-WITH-LIMITS (private use).** Verified via
+`process/general-plans/completed/lse-data-verification_17-09-26/VERDICT.md` (and
+`findings.md` in the same task folder) — no equity adapter is built yet; equities stay
+out of scope for now ("crypto only for now"). The unverified caveat below is retired.
 
 | Provider | Free-tier limits | Caveats |
 |---|---|---|
-| **London Strategic Edge** | One free API key, "no paywall, no credit card". Streaming and downloads share a single allowance, checkable at `GET /vault/usage` | **Redistribution prohibited — see Licensing below.** Claims 133bn ticks / 118,000 datasets / 30+ years, 14 candle resolutions, options chains with greeks, macro series for 194 countries, bond yields, bulk Parquet export. Python client `lse-data` on GitHub (MIT, ~160 stars, active) |
+| **London Strategic Edge** — verified 2026-09-24 | One free API key, no card required. `GET /vault/usage`: `bytes_cap_month` 53.7 GB, `bytes_cap_week` 16.1 GB, `exports_cap_hour` 5, `calls_per_minute` 200, `max_rows_per_request` 5000, `historical_data_months` unlimited, `vault_concurrency` 2. A 50-symbol full-history backfill costs ~0.06% of the monthly cap (~33 MB) and runs in ~2 minutes | **Redistribution prohibited without a separate licence — see Licensing below.** Verified: ~23 years of daily history on tested large-caps (AAPL/MSFT/SPY/XOM/KO/NVDA from 2003-09-10); 0 missing NYSE sessions but bars also appear on NYSE-closed days (holidays, weekends) — filter to a real exchange calendar before use; delisted tickers (SIVB, FRC) 404 — survivorship bias is present; default series is split-adjusted (confirmed on AAPL 2020 4:1 and NVDA 2024 10:1) but NOT dividend-adjusted; daily close can include extended-hours trading (last trade of the calendar day, not the official 4pm close) — cross-source diffs cluster on after-close earnings/news dates. Cross-checked against yfinance split-only basis: median abs. daily-close diff <0.3% on all 6 tested symbols. Python client `lse-data` on GitHub (MIT), PyPI 0.14.0 |
 | Alpaca | Free tier with IEX-sourced data; key required | Practical starting point; IEX-only coverage is thinner than a consolidated feed |
 | Finnhub | ~60 calls/min | Advertised as real-time; approximately 20-minute delay in practice. Limited history |
 | Alpha Vantage | 5 calls/min | Daily bars only, ~15-minute delay. Reliable but too slow for a screener |
@@ -221,30 +228,49 @@ difference, not a search failure — with one possible exception, below.
 
 **Avoid:**
 
-- **Yahoo Finance** (and the unofficial wrappers around it) — no supported API; rate limits are
-  enforced without warning and calls fail unpredictably. Acceptable for a throwaway experiment,
-  never as a dependency.
+- **Yahoo Finance / `yfinance`** — no officially supported API; rate limits are enforced without
+  warning. Used only as the 2026-09-24 LSE verification cross-check (Stooq's keyless CSV had gone
+  404 by then), not adopted as a provider. See
+  `process/general-plans/backlog/yfinance-equity-source_24-09-26.md`. Acceptable for a one-off
+  cross-check, never as a dependency.
+- **Stooq keyless CSV** — was the plan's intended primary cross-check source; returned 404 when
+  tried on 2026-09-24. Treat as dead until re-checked; do not assume it still works.
 - **IEX Cloud** — sunset in 2025. Do not build on it.
 
-**Recommendation:** history depth, not rate limit, is the binding constraint for equities —
-cointegration needs long samples and most free tiers cap history short. London Strategic Edge
-is the only free option found that plausibly solves that, so **evaluate it first, but verify
-before committing**: pull a known symbol over a long window and check it against a second
-source for gaps, splits and adjustment handling. "133 billion ticks, free" is a strong claim
-from a small operator and deserves one afternoon of verification rather than trust. If it
-verifies, Alpaca becomes the fallback; if it does not, plan a one-time paid historical pull
-rather than a monthly subscription.
+**Adapter rules for a future `api/data/` equity adapter** (not built yet — separate, later plan
+gated on this verdict):
+
+1. Drop bars not on the real exchange calendar (LSE returns holiday/weekend bars).
+2. Series are split-adjusted price only — dividends need a separate series for total return.
+3. Close ≠ official exchange close (extended-hours inclusion) — flag it; be cautious around
+   earnings/news dates.
+4. Survivorship bias is present — no delisted-name history.
+5. `redistributable=false` on every LSE-derived value, per Standing Rule 7.
 
 ### Licensing — the constraint that decides this
 
-The `lse-data` client is MIT, but **the data is not**: it may be used for personal research and
-trading and **may not be redistributed or resold to third parties**.
+The `lse-data` client is MIT, but **the data is not**. Verbatim, from
+`https://londonstrategicedge.com/terms/` ("Last updated: 19 January 2026", accessed 2026-09-24),
+§6:
+
+> "Redistribute or resell our data, or operate a competing feed, download service or API sourced
+> from London Strategic Edge"
+
+> "Using our data in your own research, trading, models or internal work, including for
+> commercial purposes, is permitted and free of charge. The restrictions above concern
+> redistribution: making our data available to third parties, whether in bulk or through a
+> competing feed, download service or API. For redistribution or enterprise licensing, contact
+> support@londonstrategicedge.com."
+
+Also relevant: §7 (no derivative works without express written consent), §14 (terms can change at
+any time), §8 (data "as is").
 
 That splits my_site's two phases:
 
-- **Personal use (now):** fully usable. Screener, backtests, research — all fine.
+- **Personal use (now):** fully usable, including commercial internal use. Screener, backtests,
+  research — all fine.
 - **Public later (stated goal):** serving LSE-derived values to other users is redistribution.
-  A public my_site cannot ship LSE data to its users without separate permission.
+  A public my_site cannot ship LSE data to its users without contacting LSE for a separate licence.
 
 This is exactly why providers sit behind adapters. Keep every LSE-derived series flowing through
 one adapter and tag it as non-redistributable at the boundary, so that the day the app opens up,
@@ -252,8 +278,8 @@ the question is "which adapter do we swap" and not "which of these numbers are w
 show". Crypto via ccxt and exchange public endpoints does not carry this restriction; LiqTide
 requires attribution but permits use.
 
-Re-read the actual terms before the public launch decision — this note is a summary, not a
-licence.
+Re-read the actual terms before the public launch decision — terms can change (§14) and this
+note is a summary of the 19-01-26 version, not a licence.
 
 ## Narrative / Mindshare Data
 

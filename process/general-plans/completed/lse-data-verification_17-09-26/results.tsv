@@ -1,0 +1,9 @@
+iteration	timestamp	gaps_found	fail_count	concern_count	applied	saturation_status	loop_status	notes
+0	2026-09-24T00:00:00Z	TBD	0	0	0	ACTIVE	baseline	Plan 17-09-26 with outer-pvl validate-contract written; first-pass Gate: CONDITIONAL (3 CONCERNs: delisted ticker unnamed, NVDA missing from symbol set, 50-symbol universe undefined)
+1	2026-09-24T00:30:00Z	3	0	3	3	ACTIVE	CONTINUE	V3 CONDITIONAL: G1 delisted ticker unnamed, G2 NVDA absent from fixed set, G3 50-symbol universe undefined. All 3 applied, none backlogged. Re-validate from V1.
+2	2026-09-24T01:00:00Z	0	0	0	0	SATURATED	HALTED_SUCCESS	V1-V7 re-run: Gate: PASS. G1-G3 confirmed closed (50 unique tickers, 6 fixed symbols present); one stale coverage-note line fixed by validate-agent. EXECUTE legal.
+3	2026-09-24T02:00:00Z	4	2	2	0	ACTIVE	CONTINUE	EVL cycle 1 (live user-PC run): E1 phase4 DuckDB date-column crash, E2 Stooq 404, E3 phase2 rows vs 0-missing inconsistency, E4 5-exports/hour cap vs 50-symbol bulk. Route to execute supplement.
+4	2026-09-24T03:00:00Z	0	0	0	4	ACTIVE	CONTINUE	EVL cycle 1 fixes E1-E4 confirmed offline by vc-tester (38 passed, all -k groups >=1). Live re-run of phases 2-4 on user PC pending; user chose --xsource yfinance for phase 3.
+5	2026-09-24T04:00:00Z	2	0	2	0	ACTIVE	CONTINUE	EVL cycle 2 (live phases 2-4 ran): E5 yfinance auto_adjust=True vs split-only LSE (diff tracks dividend yield), E6 unexplained max-diff tails (NVDA 25%). Route to execute supplement.
+6	2026-09-24T05:00:00Z	0	0	0	2	ACTIVE	CONTINUE	EVL cycle 2 fixes E5-E6 confirmed offline by vc-tester (45 passed). Live phase 3 --compare-both run on user PC pending.
+7	2026-09-24T06:00:00Z	0	0	0	0	SATURATED	HALTED_SUCCESS	Live phase 3 --compare-both on user PC: LSE matches split-only basis (median 0.007-0.30%), not dividend-adjusted; worst days cluster on after-close earnings/news dates (LSE close likely includes extended hours). All live ACs 1-8 have data; verdict + context update pending UPDATE PROCESS.

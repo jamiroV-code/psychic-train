@@ -8,7 +8,8 @@ feature: general-plans
 # London Strategic Edge — Data Verification
 
 **Date**: 17-09-26
-**Status**: ⏳ PLANNED
+**Status**: ✅ VERIFIED — verdict ADOPT-WITH-LIMITS (private use), recorded in `VERDICT.md`;
+archived 2026-09-24
 **Complexity**: Simple
 **Owner**: unassigned
 **Task folder**: `process/general-plans/active/lse-data-verification_17-09-26/`
@@ -669,30 +670,27 @@ Execute start: Fully-auto: `uv run --with pytest,pandas,duckdb,pyarrow,pandas_ma
 
 ## Resume and Execution Handoff
 
-1. **Selected plan file path**
-   `process/general-plans/active/lse-data-verification_17-09-26/lse-data-verification_PLAN_17-09-26.md`
+1. **Selected plan file path (archived)**
+   `process/general-plans/completed/lse-data-verification_17-09-26/lse-data-verification_PLAN_17-09-26.md`
 
 2. **Last completed phase or step**
-   VALIDATE re-run (cycle 2, 24-09-26): confirmed all three plan-supplement cycle 1 fixes
-   (delisted-ticker name, NVDA symbol-set inclusion, 50-symbol universe definition) are closed
-   and internally consistent. Gate: PASS.
+   UPDATE PROCESS closeout, 2026-09-24: `findings.md` and `VERDICT.md` written, context docs
+   updated, plan archived. All 10 acceptance criteria met.
 
 3. **Validate-contract status**
-   Written, `## Validate Contract` above, Gate: PASS, `generated-by: outer-pvl` (supersedes the
-   24-09-26 first-pass CONDITIONAL contract).
+   Written, `## Validate Contract` above, Gate: PASS, `generated-by: outer-pvl`. EXECUTE and EVL
+   both completed (2 EVL cycles, both HALTED_SUCCESS — see `results.tsv`).
 
-4. **Supporting context files loaded**
-   - `process/context/all-context.md`
-   - `process/context/data-sources/all-data-sources.md`
-   - `process/context/tests/all-tests.md`
+4. **Final verdict**
+   **ADOPT-WITH-LIMITS (private use only)** — see `VERDICT.md` in this task folder. Redistribution
+   is prohibited without a separate LSE licence, which blocks the public-later goal until obtained;
+   private use is unaffected. Context docs updated:
+   `process/context/data-sources/all-data-sources.md`, `process/context/all-context.md`.
 
-5. **Next step for a fresh agent picking up mid-execution**
-   VALIDATE has reached Gate: PASS (cycle 2, 24-09-26). `ENTER EXECUTE MODE` is now legal. When
-   EXECUTE does run: read `findings.md` in this task folder first — if it exists, its last
-   completed section tells you which phase to resume; if not, start at Phase 1.
-
-   **Do not** begin the `api/data/` adapter from this plan even if the verdict looks favourable
-   mid-flight. Adapter work is a separate plan gated on a written ADOPT verdict.
+5. **What comes next**
+   The `api/data/` equity adapter is a **separate, later plan**, gated on this verdict, and is not
+   started here — equities remain out of scope for now ("crypto only for now"). When that plan is
+   written, apply the 5 adapter rules recorded in `VERDICT.md` and `all-data-sources.md`.
 
 ## Cursor + RIPER-5 Guidance
 
