@@ -8,7 +8,7 @@ plan: process/general-plans/active/master-planner-recovery_02-10-26/master-plann
 
 # Master-planner recovery: final handover and acceptance record (docs only)
 
-**TL;DR:** The recovery program is done: slim role-based entry files, one registry, written protocols, a bounded-retry test policy, and a worker pilot of eight self-merged tasks (all independently verified, 0 fix cycles reported, 6.9042678 USD of 40). Acceptance: 10 PASS, 1 PARTIAL, 0 OPEN. Not achieved: nothing is platform-enforced; the planner cannot delete branches. Recommendation: archive the plan folder after you accept this handover. The planner now pauses until you say go; no product work is started.
+**TL;DR:** The recovery program is done: slim role-based entry files, one registry, written protocols, a bounded-retry test policy, and a worker pilot of eight self-merged tasks (all independently verified, 0 fix cycles stated, 6.9042678 USD of 40). Acceptance: 10 PASS, 1 PARTIAL, 0 OPEN. Not achieved: nothing is platform-enforced; the planner cannot delete branches. Recommendation: archive the plan folder after you accept this handover. The planner now pauses until you say go; no product work is started.
 
 ## What exists now
 
@@ -19,7 +19,7 @@ plan: process/general-plans/active/master-planner-recovery_02-10-26/master-plann
 
 ## How a new session starts
 
-The first message decides the role. `ROLE: WORKER` on line 1 means worker set: CLAUDE.md plus the envelope (at most 8,000 B), the named PLAN/SPEC, and operating-instructions.md only if named (cap 36,000 B; 43,000 with it). Anything else means planner set: CLAUDE.md, north-star.md, current-state.md, MASTER-PLAN.md, the all-context.md router part, and the task brief (cap 64,000 B). Measured now: planner fixed part 49,232 B against the 56,000 B gate (headroom 6,768); CLAUDE.md 13,443 B, north-star.md 5,225 B, current-state.md 5,748 B, MASTER-PLAN.md 18,985 B, router part 5,831 B.
+The first message decides the role. `ROLE: WORKER` on line 1 means worker set: CLAUDE.md plus the envelope (at most 8,000 B), the named PLAN/SPEC, and operating-instructions.md only if named (cap 36,000 B; 43,000 with it). Anything else means planner set: CLAUDE.md, north-star.md, current-state.md, MASTER-PLAN.md, the all-context.md router part, and the task brief (cap 64,000 B). Measured now: planner fixed part 48,751 B against the 56,000 B gate (headroom 7,249); CLAUDE.md 13,443 B, north-star.md 5,225 B, current-state.md 5,748 B, MASTER-PLAN.md 18504 B, router part 5,831 B. MASTER-PLAN.md is at 18504 of its 19,000 B ceiling (above its 17,500 target; headroom 496 B): trim before a large registry edit.
 
 ## Acceptance (plan section 10)
 
@@ -50,14 +50,14 @@ Whole-session usage, retry waste and repeated-test cost: unmeasured (backlog `to
 
 ## Worker pilot
 
-Eight worker tasks, all self-merged, 0 fix cycles reported, each independently verified by a vc-tester: T20 and T16 (pilot), T18, T19, PERF, T29, T30, T31. Cost (platform `cost_usd`): 0.882417 + 0.7556444 + 0.8634002 + 0.868232 + 0.9787132 + 1.0054736 + 0.9862586 + 0.5641288 = 6.9042678 USD of 40. Accepted deviations, all documentation: T16, T18, PERF and T31 report heading 11 abbreviated or omitted tool names; T20 headings 2 and 3 stale; T29 envelope gate fixed after review; T30 ran tsc with `--incremental false` and measured the chunk once; T31 report heading 9/2 wording. PERF left four web rows unmeasured; T30 measured them (medians: test 12.53 s, tsc 4.40 s, build:islands 7.30 s, entry chunk 184,870 B gzip against the adopted 185 kB).
+Eight worker tasks, all self-merged, 0 fix cycles stated, each independently verified by a vc-tester: T20 and T16 (pilot), T18, T19, PERF, T29, T30, T31. Cost (platform `cost_usd`): 0.882417 + 0.7556444 + 0.8634002 + 0.868232 + 0.9787132 + 1.0054736 + 0.9862586 + 0.5641288 = 6.9042678 USD of 40. Accepted deviations, all documentation: T16, T18, PERF and T31 report heading 11 abbreviated or omitted tool names; T20 headings 2 and 3 stale; T29 envelope gate fixed after review; T30 ran tsc with `--incremental false` and measured the chunk once; T31 report heading 9/2 wording. Fix cycles: heading 9 of each report says 0 explicitly (T18, T29, T30, T31, PERF; T19 says '0 of 2'); T16 and T20 are 0 per the Gate 5 report. T31's pytest (870/1/5/1) was claimed by the worker and not re-run by the tester. PERF left four web rows unmeasured; T30 measured them (medians: test 12.53 s, tsc 4.40 s, build:islands 7.30 s, entry chunk 184,870 B gzip against the adopted 185 kB).
 
 ## Not achieved and known gaps
 
-- Nothing is platform-enforced on workers (no branch protection, auto-merge off; master-planner.md section 5 says "private", while G5-K8 records the repo as public: unreconciled): every control is procedure and independent checking.
+- Nothing is platform-enforced on workers (no branch protection): every control is procedure and independent checking.
 - The planner cannot delete branches (git hangs up, REST 403, no MCP tool); the user deletes. Ten were deleted; three remain deletable (`kind-tesla-tat3vo`, `inspiring-pasteur-awqxk3`, `split-all-context`).
 - `validate-backlog-notes` fails 45 notes (older schema); `.agents/skills` is a real copy, an accepted baseline failure (H1, T17 cancelled); agent-parity shows 18 baseline warnings.
-- Repo public with non-redistributable data (G5-K8): left as a known risk.
+- Repo visibility: master-planner.md line 78 said private; the repo is public (G5-K8 known risk, left as is). Measured 03-10-26: `allow_auto_merge` true and `delete_branch_on_merge` true, which explains why worker branches vanished at merge; line 78 now states this.
 - Eight old sessions were archived at the user's request (reversible); two items live only in their transcripts: P3 'app name' and 'owl asset' decisions, and the home-PC Stop-Process workaround.
 - The big-task subagent lane cap values (count, dollar cap) are not decided.
 - Playwright, island build, and the user's PC (deploy, Task Scheduler, Tailscale) are not verified locally; snapshot crons firing is unverified.

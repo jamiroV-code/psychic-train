@@ -18,7 +18,7 @@ Staleness rule (master-planner.md): stale when the stamp is not an ancestor of H
 | Working tree | `origin/main` plus uncommitted process/ text only: T30 and T31 task folders moved to `completed/`, MASTER-PLAN.md, archive/index.md, master-planner.md section 6 paragraph, the recovery HANDOVER file, this file | `git status --short` |
 | Entry files | `CLAUDE.md` 13,443 B, `AGENTS.md` 12,572 B, `north-star.md` 5,225 B | `wc -c` |
 | `process/context/all-context.md` | 193 lines, 11,380 B; router part 5,831 B | `wc -lc`, PLANNER-BUDGET block |
-| Planner budget | planner_fixed 49,232 B, cap 56,000, headroom 6,768, rc=0 | PLANNER-BUDGET block |
+| Planner budget | planner_fixed 48,751 B, cap 56,000, headroom 7,249, rc=0 | PLANNER-BUDGET block |
 | Root context docs | `operating-instructions.md` 6,509 B, `architecture.md` 6,572 B | `wc -c` |
 | Remote heads | 5: `main`, `claude/pensive-albattani-ou0cgv`, `claude/inspiring-pasteur-awqxk3`, `claude/kind-tesla-tat3vo`, `claude/split-all-context`. The last three are deletable by the user (content rescued by T31); the planner cannot delete branches. PR #5 closed | `git ls-remote --heads origin` |
 | Workflows | 6: `ci.yml` plus five snapshot jobs | `ls .github/workflows` |

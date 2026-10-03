@@ -75,7 +75,7 @@ User's words: "it spawns workers for tasks you already marked approved, without 
 7. **Post-merge check:** after each self-merge the Master Planner checks CI on the merge SHA on `main`; on red it proposes `git revert <merge sha>` and halts further self-merges until the user responds.
 8. **Decided 03-10-26 (Open Question 10):** a worker may self-merge anything inside its owned files except a diff touching CLAUDE.md or AGENTS.md (stops at `review`, see (g)); direct worker lane (Open Question 12): keep as is. Still open: RT4 bypass of user acceptance.
 
-Nothing above is platform-enforced (private repo, no branch protection, `allow_auto_merge` false): every control is procedure.
+Nothing above is platform-enforced (repo PUBLIC, verified 03-10-26 with `gh api repos/jamiroV-code/psychic-train --jq .private` = false; `main` unprotected, `branches/main` protected = false; `allow_auto_merge` = true and `delete_branch_on_merge` = true, as returned): every control is procedure.
 
 ## 6. Worker lane and commit policy
 
