@@ -1738,6 +1738,351 @@ Next phase: EXECUTE Gate 4 via one vc-execute-agent (opus), sequential, order E1
 Validate contract: inline in plan (## Validate Contract — Gate 4)
 Execute start: G4-1 budget | G4-2 one block | G4-3 RT commands | G4-4 commands real | G4-5 retry and re-run rules | G4-6 all-tests | G4-7 stale claims | G4-8 scope and entry files | G4-9 regression + validators == baseline | G4-10 counts (A only) | G4-11 CI at head | e2e spec: none new | probe: none | high-risk pack: no
 
+## Validate Contract — Gate 5
+
+Status: CONDITIONAL (0 FAILs; five blocking user decisions G5-K1, G5-K2, G5-K3, G5-K7 and G5-K9 gate the START of EXECUTE; four more are non-blocking; fourteen execute instructions E1-E14 below)
+Date: 03-10-26
+date: 2026-10-03
+generated-by: outer-pvl
+Relation to earlier contracts: the Gate 2, Gate 3 and Gate 4 contracts above are retained as history and NOT overwritten (Gates 3 and 4 are marked CONSUMED). The earlier mechanical greps (`Gate: PASS` count, `results.tsv` line count) are satisfied by that history and prove nothing for Gate 5. The only legal VALIDATE-to-EXECUTE tests for Gate 5 are the Gate line inside this section (`sed -n '/^## Validate Contract — Gate 5/,/^## Autonomous Goal Block — Gate 5/p' <plan>`) or the user's quoted acceptance of the five blocking decisions.
+Scope: Gate 5 and the Gate 6 pilot as ONE run (user decision 03-10-26, item 2 below), nothing else. Gate 6's acceptance gates (G6-1 to G6-12) are carried in this contract, so a separate Gate 6 VALIDATE is needed only if the pilot forces a plan change (G5-K9).
+
+User decisions 03-10-26 that define the scope (authoritative; recorded as given):
+1. H1 `.agents/skills` symlink: LEAVE AS IS. No work. Documented accepted gap: validate-context-discovery 1 failure and validate-skills 1 failure stay at the baseline; backlog stub `agents-skills-symlink-windows_NOTE_02-10-26.md` already exists (F15). Registry: T17 becomes `cancelled` with that reason (reopen on the user's word).
+2. The small cleanups run AS THE WORKER PILOT: register T20 and T16 as `approved`, and the Master Planner (the orchestrator session only) spawns real worker sessions via `create_session` (max 3 concurrent; standing authorization; self-merge only when every mechanical condition holds; an unsure worker stops at `review`; merged task branches are deleted after a verified merge under the standing consent only if a deletion mechanism works, else the branch stays and the Approvals Log row says `deletion deferred`). Task A = T20 (untrack `web/tsconfig.tsbuildinfo` and add the missing `.gitignore` line); Task B = T16 (root README.md that clears the guide-sync baseline failure and links to operating-instructions.md). No third task (reasoned below; nothing invented).
+3. Deploy fixes R12 (high-risk class, Windows scripts): DEFERRED, not in Gate 5.
+4. Branch deletion: the user allows PROPOSING deletion of exactly six branches (`claude/compassionate-goldberg-o2iq49` plus the five whose PRs merged: `claude/p1-pipeline`, `claude/p2-deploy`, `claude/ui-shell`, `claude/vigilant-hamilton-grr18c`, `fix/narrative-sufficiency-gating-rfc1`). Nothing is deleted without the user's final OK on the list. Other housekeeping candidates and performance baselines were not chosen: deferred with one backlog note.
+
+Parallel strategy: sequential for this validate session (all Layer 1 and Layer 2 checks ran inline as read-only commands and read-only REST GETs; no spawn tool was available; scratch files lived in the session scratchpad only, including a scratch git repo and a scratch copy of the tracked tree). For EXECUTE see E1 (sequential orchestration, two worker lanes, independent testers).
+Rationale: signal score 2/7 (S7: more than 5 files in the blast radius; S6 does not apply because no high-risk class is touched by T20 or T16). The two worker lanes are the user's chosen pilot design, not a fan-out for speed. Evidence below was measured live at HEAD 296d96e (== origin/claude/pensive-albattani-ou0cgv, clean tree, 2026-10-03T05:30Z).
+
+Live baseline today (read-only; every Gate 5 command below was run on the live tree or a scratch copy and its red-today result recorded):
+
+| Item | Measured today |
+|---|---|
+| Branch and PR | HEAD `296d96e` == origin; PR #13 open, DRAFT, `mergeable: true`, `mergeable_state: clean`; 29 commits ahead of `main`, 0 behind; `main` = `5878b16` |
+| What `main` still has | the OLD `CLAUDE.md` (28,903 B) and NO `master-planner.md` and NO `operating-instructions.md`: every Gate 2-4 deliverable exists only on the PR #13 branch (44 files changed; outside `process/` only `AGENTS.md` and `CLAUDE.md`) |
+| CI at `296d96e` | run `completed`, `success`; check-runs `api — pytest` and `web — vitest, tsc, island build` (em dash) both `success`; the run took 2m42s (jobs of the `ee72237` run: api about 2m53s, web about 35 s); `ci.yml` triggers on `pull_request` with no branch or path filter, so a README-only or ignore-file-only PR still runs both jobs; `concurrency: cancel-in-progress` per ref means a newer push cancels the older run (`d09d92e` and `0004d5b` read `cancelled` for that reason) |
+| Repository settings (GitHub REST, admin token) | `visibility: public` (`private: false`), `allow_auto_merge: true`, `delete_branch_on_merge: true`, merge, squash and rebase all allowed; `branches/main/protection` returns 404 "Branch not protected"; rulesets `[]`; secret scanning disabled. The plan's section 4 (i) text (private, protection 403, `allow_auto_merge` false) is STALE (repo `updated_at` 2026-10-03T00:16:45Z, six seconds after PR #12 merged) |
+| GitHub from a session | REST works through the proxy (`gh api`); GraphQL is blocked (HTTP 403 "GitHub GraphQL is not available from Claude Code sessions"), so `gh pr create/view/list/merge` do not work and PRs must be created and merged by MCP tools or REST. Seen from this vc-validate-agent subagent only; a spawned worker's tool list is UNVERIFIED |
+| `web/tsconfig.tsbuildinfo` | tracked (171,544 B, last touched by `94f3981`); `.gitignore` has no line for it; `web/tsconfig.json` sets `incremental: true`; the only other mentions outside `process/` are `api/tests/deploy/test_deploy_config_shape.py` line 251 and `deploy/README.md` line 126, which both only say "never copy it" and are unaffected |
+| README | no root `README.md` (`MISSING README.md`); validate-guide-sync: 1 failure `README.md does not exist` |
+| Disk inventory | 15 agents in `.claude/agents/`, 33 skill folders (each with a SKILL.md) |
+| Remote heads | 14 (`git ls-remote --heads origin`): `main`, the session branch and the 12 older branches |
+| Planner budget | fixed part 48,346 B of 56,000 (headroom 7,654 B); MASTER-PLAN.md 17,819 B of 19,000 |
+| Validators | unchanged from the Gate 4 closeout (context-discovery 1, skills 1, guide-sync 1, parity 0/18, plan-inventory 0/6, others 0/0, routing in sync) |
+
+### Layer 1 and Layer 2 findings
+
+| Question asked | Result | Evidence |
+|---|---|---|
+| (a) Are the two briefs and envelopes complete, self-contained and disjoint? | Yes once written from the field table below; sizes and gates measured on drafts | Drafts built in the scratchpad from the master-planner.md template: envelopes 4,849 B and 4,760 B (cap 8,000); worker entry set with operating-instructions.md named about 26.4 KB (cap 43,000), about 20.3 KB without it (cap 36,000); C4 returns rc=0 for both; G5-1 and G5-2 pass on the drafts and are red today (30 and 3 lines). Ownership: T20 owns `.gitignore`, the index entry of `web/tsconfig.tsbuildinfo` and its task folder; T16 owns `README.md` and its task folder; `.gitignore` has exactly one owner; no shared file. Tier: RT0 for both (T20 adds three exact checks and relies on CI's tsc run from a checkout without the file) |
+| (a2) Does untracking break tsc or CI? | No | `pnpm --filter web exec tsc --noEmit --tsBuildInfoFile <scratchpad file>` with no existing build-info file exited 0 in 4.8 s and recreated a 198 KB file (written outside the repo; the live tree stayed clean). In a scratch repo, `git rm --cached` plus the ignore line left `git status` showing only ` M .gitignore` and `D  web/tsconfig.tsbuildinfo`; a recreated file stayed invisible; `git check-ignore -v` named the new line; the C9 Gate 5 filter printed nothing. `ci.yml` never references the file |
+| (a3) Any consumer of the tracked file on the user's PC? | One transition hazard, outside cloud verification | Deploy Stage A runs `git pull --ff-only` and is non-fatal (`deploy/_common.ps1` lines 75-88: a refusal logs "starting on current code"). Scratch repo test: a locally MODIFIED tracked file that upstream stops tracking makes `git pull --ff-only` abort ("Your local changes ... would be overwritten"); an unmodified one is simply deleted. So the first pull that carries T20 can leave the PC serving the old build if its copy of the file is modified. Mitigation: a one-line PC step (E9); residual: user-PC only |
+| (b) Are the mechanical self-merge conditions checkable here? | Yes by REST for (a)-(e); condition (f) and the archive step are the planner's | See the table after this one |
+| (b2) What if a worker lacks a merge tool? | Not covered by the standing authorization | Default: it stops at `review`; whether the Master Planner may merge for it is the user's call (G5-K7, an extension of Open Question 10) |
+| (c) README vs the entry sets and the validators | Safe | README is in neither entry set: the ENTRY-SET block, the C3, C4 and G4-1 formulas and CLAUDE.md never name it (0 hits). Scratch copy with a README (generated from disk): guide-sync 0 failures; kit-portability 0/0 (its scanned text surface is `CLAUDE.md`, `AGENTS.md`, kit files, `.claude/`, `.codex/`, `process/development-protocols/`: README is not scanned); context-discovery 1 (baseline; its README check is only for `process/context/`); validate-all-context 0/0; protocol-wiring 0/0; skills 1 (baseline); agent-parity 0/18; routing in sync (checked in a scratch git repo) |
+| (c2) What exactly does guide-sync read? | Format constraints that a hand-written README would break | Agents: a heading `## Agents` (digits optional) whose section holds table cells that are a backticked name, one per agent, ending at the next `##` heading or a line starting `---`. Skills: the heading MUST carry a number (`## 2 Skills`; with `## Skills` the scratch run printed 33 failures), then inline backticked folder names, section ends at the next `##` heading. Every disk agent and skill missing is a failure; extra names only warn |
+| (d) Cost and runaway risk of real sessions | Unbounded by the platform; estimate below | `create_session` has no budget cap; controls are procedural (see the cost section) |
+| (e) Are the Gate 6 criteria testable with commands? | Yes except one named residual | G6-1 to G6-12 below; the no-re-run check was fixture-tested (it printed only the duplicated line); the same-failure stop cannot be forced without inventing a failing task, so it is a named residual (D) |
+| (f) Post-pilot verification and handover | Defined | G6 set, E12 and the handover list in E12 |
+| Base-branch dependency | NEW, decides the pilot's validity | Main lacks the new entry files. A worker started from `main` would load the old 28.9 KB CLAUDE.md and none of the protocol, so the pilot would test nothing of the new system. A worker based on the session branch whose PR targets `main` would drag 29 commits (including CLAUDE.md and AGENTS.md) into `main`, failing ownership condition (c). Hence G5-K1 |
+| Branch-deletion mechanism | Partly evidenced, probe designed | `delete_branch_on_merge: true` is a built-in mechanism for merged head branches (proof only at the first merge: the five older merged branches survived because they merged before the setting changed, or it was changed after); the six proposed branches need an explicit delete; design below |
+| Third task? | No | Candidates (trim the housekeeping list, token-usage-telemetry) are bookkeeping or measurement, add cost and no new proof of the lane; two disjoint concurrent lanes already exercise ownership, serialization, CI-gated merge and the report |
+
+Self-merge conditions: can each be checked in this environment (all read-only REST, verified on PR #13 and the session branch):
+
+| Condition (plan section 4, item 2 and Enforcement iii-vi) | Check | State |
+|---|---|---|
+| (a) CI green on head | `GET repos/jamiroV-code/psychic-train/commits/<head>/check-runs`: both names `completed` and `success` on the CURRENT head | verified live at `296d96e`; names exact (em dash); `cancelled` on an older sha is expected and not red; pending, queued, skipped, neutral are not green; CI is needed because there is no required-check protection (404) |
+| (b) risk-tier tests passed and independently confirmed | RT0 gates plus CI on head; then an independent vc-tester per merged task re-runs the gates | CI check verified; tester step is E6 |
+| (c) diff inside declared ownership | `GET pulls/<n>/files` names only owned files | endpoint is standard REST; run at the pilot (G5-5) |
+| (d) no merge conflicts | `GET pulls/<n>`: `mergeable` true and `mergeable_state` not `dirty`; `mergeable` is null until GitHub computes it, so poll again; `clean` says nothing about CI here (no protection) | PR #13 reads `true` and `clean` |
+| (e) report committed | `git log` on the branch, `GET pulls/<n>/files` lists the REPORT | at the pilot |
+| (f) registry updated | planner only, after the merge (Enforcement ii) | by design, not a worker condition |
+| Branch contains the base tip | `GET compare/<base>...<branch>`: `behind_by` is 0 | verified: session branch 29 ahead, 0 behind `main` |
+| Serialized merges | convention: the second worker re-checks `behind_by` after the first merge lands; a race of a few seconds between disjoint-file merges is accepted | no platform lock exists |
+| PR creation and merge by the worker | MCP `create_pull_request` and `merge_pull_request`, or REST `POST pulls` and `PUT pulls/<n>/merge` (squash); `gh pr` subcommands are blocked | write paths UNVERIFIED for workers (the pilot proves them; report heading 11 lists the tools) |
+| Archive of the session | `archive_session`: planner only, after the merge is verified and the report is durable | unchanged |
+
+### Pilot design (what EXECUTE does, and what stays with the user)
+
+Base branch (G5-K1, default A): workers branch from and open PRs against `claude/pensive-albattani-ou0cgv`. Merges land in that branch (inside PR #13); nothing reaches `main` until the user merges PR #13. Consequences recorded, not hidden: the pilot proves spawn, ownership, CI-gated self-merge, report and acceptance, but NOT a merge into `main`; "CI on the merge SHA" means the CI run PR #13 starts on the new head (the `push` trigger exists only for `main`); the first real `main` merge stays a named residual (C) for the first product task. Alternative B: the user merges PR #13 first and the pilot targets `main` (the faithful path; the planner then works on `main` per repo policy). The envelopes below use `<BASE>`; EXECUTE substitutes the answer. Under A the planner pushes to the base only before spawning (the two task folders) and after both merges (bookkeeping), never while a worker PR is open.
+
+Task field table (each envelope is written from this table plus the shared block that follows; the REF file is the exact text sent as the first `create_session` message):
+
+| Field | T20 (Task A) | T16 (Task B) |
+|---|---|---|
+| Folder | `process/general-plans/active/t20-untrack-tsbuildinfo_03-10-26/` with `_SPEC_` (brief), `_REF_` (envelope), later `_REPORT_` | `process/general-plans/active/t16-root-readme_03-10-26/` with the same three |
+| Task line | `T20 - stop tracking web/tsconfig.tsbuildinfo and ignore it` | `T16 - add a root README.md that satisfies validate-guide-sync` |
+| Acceptance | after the merge `git ls-files web/tsconfig.tsbuildinfo` prints nothing, `.gitignore` contains the exact line `web/tsconfig.tsbuildinfo`, and the PR diff names only owned files | README.md exists, links to `process/context/operating-instructions.md` instead of copying commands, lists all 15 agents and 33 skills as guide-sync reads them, and `validate-guide-sync.mjs` reports 0 failures |
+| Owned files | `.gitignore` (single owner), `web/tsconfig.tsbuildinfo` (index removal only: `git rm --cached`, keep the working copy), its task folder | `README.md` (created), its task folder |
+| Forbidden | `README.md`, CLAUDE.md, AGENTS.md, `.claude/**`, `.codex/**`, `.github/**`, `api/**`, every other `web/**` path, `deploy/**`, `process/MASTER-PLAN.md`, `process/context/**`, `process/archive/**`, `process/development-protocols/**` | `.gitignore`, CLAUDE.md, AGENTS.md, `.claude/**`, `.codex/**`, `.github/**`, `api/**`, `web/**`, `deploy/**`, `process/MASTER-PLAN.md`, `process/context/**`, `process/archive/**`, `process/development-protocols/**` |
+| Branch | `claude/t20-untrack-tsbuildinfo` from `<BASE>` | `claude/t16-root-readme` from `<BASE>` |
+| Read | its SPEC; operating-instructions.md NAMED (RT0 row, bounded retry, skip check, branch rules) | its SPEC; operating-instructions.md NAMED (the README links to it) |
+| Tests line | `Tests: tier RT0; full-suite budget 0` then the gates: no local pytest, vitest or tsc (CI on the PR head runs tsc and the island build from a checkout without the file). Gates: (1) `git ls-files web/tsconfig.tsbuildinfo \| wc -l` prints 0; (2) `grep -cxF 'web/tsconfig.tsbuildinfo' .gitignore` prints 1; (3) `git check-ignore -q web/tsconfig.tsbuildinfo` exits 0; (4) `git diff --check` prints nothing; (5) `git diff --name-only origin/<BASE>..HEAD` names only owned files; (6) CI green on head | `Tests: tier RT0; full-suite budget 0` then the gates in order: (0) run `node .claude/skills/vc-audit-vc/scripts/validate-guide-sync.mjs` BEFORE writing and record the red result (1 failure); (1) guide-sync 0 failures; (2) `validate-kit-portability.mjs` 0 failures; (3) `validate-context-discovery.mjs` exactly the baseline failure `.agents/skills does not resolve to .claude/skills`; (4) `validate-all-context.mjs` 0 failures; (5) `grep -cE 'uv run\|pnpm (--\|install\|test\|build\|exec)\|pytest\|vitest\|uvicorn' README.md` prints 0 and `grep -c 'operating-instructions.md' README.md` prints at least 1; (6) `git diff --check`; (7) diff names only owned files; (8) CI green on head |
+| SPEC (brief) must carry | the five exact steps (`git rm --cached`, append the line under `# Node (web/)`, run gates 1-4, commit with a `chore:` prefix, push and PR); why (CI and every tsc run recreate the file; untracking stops the churn); the PC note of E9 | the guide-sync format constraints of finding (c2) verbatim; generate both lists from disk with `ls .claude/agents` and `ls .claude/skills` instead of typing them; content outline (what the project is in two sentences with a link to north-star.md, layout, link to operating-instructions.md for commands, `api/scripts/BOOTSTRAP.md`, `deploy/README.md`, the RIPER-5 and worker pointers); public-repo rule: no secrets, no IP addresses, no personal details beyond north-star.md; size at most 120 lines and 8,000 B (the F13 estimate of about 60 lines grows with 15 agent rows) |
+| Autonomy line extra | report headings 9 and 10 carry the registry-update request (accepted then archived with the merge SHA) and the PC note of E9 | report headings 9 and 10 carry the registry-update request and say whether the guide-sync baseline failure cleared |
+
+Shared envelope block (verbatim in both REF files after the task-specific lines; line 1 of each file is exactly `ROLE: WORKER`, line 2 is the template sentence plus "This envelope is your EXECUTE approval for this task only: do not wait for ENTER EXECUTE MODE."):
+
+```
+Preflight (before anything else): git fetch origin <BASE>; test -f process/development-protocols/master-planner.md; git merge-base --is-ancestor 296d96e HEAD. If either of the last two fails: git checkout -B <your branch> origin/<BASE> once and re-run them; still failing: stop, reply NEEDS_CONTEXT, change nothing.
+Lane: direct. Edit the files yourself; do not spawn vc-quick-fix-agent or any subagent. The gate list above is your contract: run each gate once after the last edit, record command, result, UTC time (date -u +%FT%TZ) and commit SHA for report heading 6; before re-running a command apply the skip check in operating-instructions.md.
+Retry budget: 2 fix cycles; same failure twice stops
+Budget: at most 60 tool calls and 40 minutes wall clock; at most 8 CI polls, 90 s apart. Exceeding any: stop at review.
+PR and merge (gh pr subcommands use GraphQL, which is blocked here; use the GitHub MCP tools if your tool list has them, else REST via gh api): create the PR with base <BASE> (POST repos/jamiroV-code/psychic-train/pulls). CI is green only when GET repos/jamiroV-code/psychic-train/commits/<your head sha>/check-runs shows BOTH `api — pytest` and `web — vitest, tsc, island build` completed with conclusion success on your CURRENT head (a cancelled run on an older sha after a push is expected). Self-merge (squash) only if ALL hold: CI green on head; every gate passed; GET pulls/<n>/files lists only owned files; mergeable true and mergeable_state not dirty; GET compare/<BASE>...<branch> has behind_by 0 (else merge the base into your branch once, push, wait for CI again); the report is committed on your branch. A denied or prompting tool call: stop at review, never retry around it. Merge call: MCP merge_pull_request or PUT pulls/<n>/merge with merge_method squash.
+You do NOT: edit process/MASTER-PLAN.md, current-state.md or process/archive/index.md; call archive_session; delete any branch (the repository may delete your head branch at merge; that is expected); push to the base branch directly; force-push; touch any file outside Owned files.
+Stop and report at review if: irreversible or outward-facing action, scope expansion, unverifiable condition, any doubt
+Report: commit <task folder>/<slug>_REPORT_03-10-26.md using the 11-heading template of master-planner.md before you merge; heading 5 lists branch commits (the Master Planner records the merge SHA); heading 11 lists the session and merge tools your own tool list contains and which line told you that you are a WORKER; the final reply is the same report.
+```
+
+### Branch-deletion proposal and the safe probe (nothing here runs without the user)
+
+Proposal table (evidence read-only today; each tip equals the PR head the merge used, so no commit was added after the merge, and `refs/pull/<n>/head` keeps the content; no open PR names any of them):
+
+| Branch | Tip (full sha) | Evidence | Recovery |
+|---|---|---|---|
+| `claude/compassionate-goldberg-o2iq49` | `ecb5e3921645aebe19ca32b6b628e41a59282207` | 0 commits ahead of `main` (116 behind): fully inside main's history | `git push origin ecb5e3921645aebe19ca32b6b628e41a59282207:refs/heads/claude/compassionate-goldberg-o2iq49` |
+| `claude/p1-pipeline` | `60fd9262e8a7e2f2be18bcddc6729f10cbcda4bf` | PR #11 merged 2026-10-01; tip == PR head | same form with this sha; also `refs/pull/11/head` |
+| `claude/p2-deploy` | `618cea0da2dc1f788ea0dc73e9ac9d8d38e81622` | PR #10 merged 2026-10-01; tip == PR head | same form; `refs/pull/10/head` |
+| `claude/ui-shell` | `8b4497fa51b2c0e59482a20508fd29f54bdbc5aa` | PR #9 merged 2026-10-01; tip == PR head | same form; `refs/pull/9/head` |
+| `claude/vigilant-hamilton-grr18c` | `465ea2c97b6f2ae221baa84b2ee3e5b662fe48ba` | PR #8 merged 2026-09-28; tip == PR head | same form; `refs/pull/8/head` |
+| `fix/narrative-sufficiency-gating-rfc1` | `ca8e68b5c3c5e45eac7519725fe8af1d2c6309fb` | PR #7 merged 2026-09-28; tip == PR head | same form; `refs/pull/7/head` |
+
+"Ahead" counts of 5-16 for the five PR branches are squash-merge artefacts (the commits are not reachable by sha, their content is in `main`); this matches plan section 7 caveat 1. Before any deletion the planner re-reads the tip (it must still equal the sha above), runs `list_sessions` to see that no live session uses the branch, writes one Approvals Log row (date, branch, tip sha, evidence line, the user's quote of the final OK, status `pending`), deletes, then sets `done`, `failed` or `deletion deferred`. These six are NOT covered by the standing consent; the user's final OK on the list is their approval.
+
+Probe design (the mechanism is unverified; the user approves running it, G5-K5; only the Master Planner session runs it, and never against any of the 14 existing refs):
+
+```
+R=repos/jamiroV-code/psychic-train; SHA=$(gh api $R/git/ref/heads/main --jq .object.sha)   # read-only
+guard() { case "$1" in claude/probe-delete-03-10-26-[ab]|claude/probe-delete-03-10-26-nonexistent) ;; *) echo REFUSE "$1"; return 1;; esac; }
+# step 0, changes nothing: DELETE on a ref that cannot exist. 422 "Reference does not exist" = the method reaches GitHub with delete rights; a proxy 403 or 405 = blocked
+guard claude/probe-delete-03-10-26-nonexistent && gh api -X DELETE $R/git/refs/heads/claude/probe-delete-03-10-26-nonexistent -i 2>&1 | head -3
+# step 1, only if step 0 printed 422: a throwaway branch AT main's sha (zero content), then delete it, then confirm it is gone
+N=claude/probe-delete-03-10-26-a; guard $N && gh api -X POST $R/git/refs -f ref="refs/heads/$N" -f sha="$SHA" && gh api -X DELETE $R/git/refs/heads/$N && gh api $R/branches/$N --jq .name 2>&1 | head -1    # expect HTTP 404
+# step 2, only if step 0 or 1 was blocked: the git path with a second throwaway
+N=claude/probe-delete-03-10-26-b; guard $N && git push origin "$SHA:refs/heads/$N" && git push origin --delete "$N" && git ls-remote --heads origin "$N"    # expect no output
+```
+
+Safety properties: the guard refuses any name outside three fixed throwaway names; each throwaway points at main's own sha, so even a mistaken delete cannot lose content; no wildcard or empty-source refspec is used; `git push origin --delete` takes one explicit name. Result lines go into the Gate 5 report and one Approvals Log row ("probe, approved by the user: <quote>"). If both mechanisms are blocked the six branches stay and every row says `deletion deferred`. `git push --dry-run` of a delete refspec is not authoritative and is not used. Today's repo setting `delete_branch_on_merge: true` makes the worker-branch deletion automatic at merge; it does not delete the six.
+
+### Cost and runaway risk (ESTIMATE, not measured)
+
+`create_session` has no budget cap. Platform usage seen so far ranged from about 2.6 to 172 USD per session; the Gate 2 session was about 51 USD (125.7M cache-read tokens, 0.84M output). Method of the estimate: first-request context of a worker is 37,921 tokens (measured, Gate 3 probe P2); assume 25-60 tool calls growing to about 60k tokens; cache-read tokens about 1.2-3.5M per worker; implied all-in rate about 0.40 USD per million cache-read tokens (derived from the Gate 2 figure, so a rough ratio); multiply by 3-4 for output and cache writes.
+
+| Item | Estimate (USD) |
+|---|---|
+| Worker T20 (about 25-40 calls) | 1-4 |
+| Worker T16 (about 35-60 calls, README generation, four validators) | 2-6 |
+| Master Planner overhead (spawn, monitoring, REST checks, two merge verifications, registry, Approvals Log, current-state, report) | 3-10 |
+| Two independent vc-tester runs (sonnet) | 1-4 |
+| Probe (a handful of REST calls) | under 1 |
+| Total | about 8-24, central about 14 |
+
+Tail risk: a worker that loops (CI polling, retries, re-reading) can spend tens of USD before anyone notices; the plan's two-fix-cycle bound is prompt-level only. Controls available: the envelope's budgets (60 tool calls, 40 minutes, 8 CI polls, 2 fix cycles, same failure stops); max 2 lanes of the allowed 3; `interrupt_session` by the planner (interrupt at 45 minutes wall clock, or earlier if `get_session` or `list_sessions` exposes cost and a worker passes 12 USD; whether cost is exposed is UNVERIFIED); no third task. EXECUTE may spawn real sessions only after the user states a spend ceiling (G5-K2; proposal: approve up to 40 USD for the whole pilot, about three times the central estimate, and stop and ask when the platform-reported total passes it). The user chose the pilot knowing it costs a fresh session per task; the figures above are an estimate until the Gate 5 report records the platform-reported usage per session.
+
+### Gate 5 command set (all run from the repo root in bash; red-today results were observed live where stated)
+
+```
+# G5-1  AC-R7/R10: briefs and envelopes exist, are complete and small (orchestrator writes them BEFORE spawning)
+for t in t20-untrack-tsbuildinfo t16-root-readme; do
+  d=process/general-plans/active/${t}_03-10-26; E=$d/${t}_REF_03-10-26.md; K=$d/${t}_SPEC_03-10-26.md
+  for f in "$E" "$K"; do test -s "$f" || echo "MISSING $f"; done
+  [ "$(head -1 "$E" 2>/dev/null)" = "ROLE: WORKER" ] || echo "FAIL first line $t"
+  for tok in 'Retry budget: 2 fix cycles; same failure twice stops' 'Owned files:' 'Forbidden:' 'Branch: claude/' 'Report:' 'Stop and report at review' 'Autonomy:' 'Tests: tier RT0' 'check-runs' 'behind_by' 'NEEDS_CONTEXT'; do grep -qF -- "$tok" "$E" 2>/dev/null || echo "MISSING token $t: $tok"; done
+  test "$(wc -c < "$E" 2>/dev/null || echo 99999)" -le 8000 || echo "FAIL envelope over 8000 $t"
+  TOT=$(cat CLAUDE.md "$E" "$K" process/context/operating-instructions.md 2>/dev/null | wc -c); test "$TOT" -le 43000 || echo "FAIL worker set over 43000 $t ($TOT)"
+done
+# red today: 30 stdout lines (4 MISSING files, 2 FAIL first line, 22 MISSING token, 2 FAIL envelope size) plus 2 shell-error lines on stderr. Scratch-verified: drafts built from this contract print nothing (bytes 4,849 and 4,760; totals 26,440 and 26,351).
+
+# G5-2  disjoint ownership; .gitignore and README.md each have exactly one owner
+A=process/general-plans/active/t20-untrack-tsbuildinfo_03-10-26/t20-untrack-tsbuildinfo_REF_03-10-26.md; B=process/general-plans/active/t16-root-readme_03-10-26/t16-root-readme_REF_03-10-26.md
+for g in '\.gitignore' 'README\.md'; do test "$(grep -l "^Owned files: .*$g" $A $B 2>/dev/null | wc -l)" -eq 1 || echo "FAIL owners of $g"; done
+test "$(grep -h '^Owned files:' $A $B 2>/dev/null | wc -l)" -eq 2 || echo "FAIL owned lines"
+# red today: 3 lines. Scratch-verified: prints nothing on the drafts.
+
+# G5-3  AC-R8 (Gate 5 form): T20 end state, run on the integration branch after the merge
+git ls-files web/tsconfig.tsbuildinfo | wc -l; grep -cxF 'web/tsconfig.tsbuildinfo' .gitignore; git check-ignore -q web/tsconfig.tsbuildinfo; echo rc=$?
+# red today: 1, 0, rc=1. After T20: 0, 1, rc=0.
+
+# G5-4  T16 end state, run on the integration branch after the merge
+test -s README.md || echo "MISSING README.md"
+node .claude/skills/vc-audit-vc/scripts/validate-guide-sync.mjs | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log("guide-sync failures="+j.failures.length)})'
+grep -cE '^## [0-9]* ?Agents' README.md; grep -cE '^## [0-9]+ Skills' README.md
+grep -cE 'uv run|pnpm (--|install|test|build|exec)|pytest|vitest|uvicorn' README.md; grep -c 'operating-instructions.md' README.md
+grep -nE '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' README.md
+for p in $(grep -oE '`(api|web|deploy|process)/[A-Za-z0-9_./-]*`|`[A-Za-z0-9_./-]+\.(md|ps1)`' README.md | tr -d '`' | sort -u); do test -e "$p" || echo "BROKEN LINK $p"; done
+test "$(wc -l < README.md)" -le 120 && test "$(wc -c < README.md)" -le 8000 || echo "FAIL README size"
+# red today: MISSING README.md and guide-sync failures=1. After T16: no MISSING line, failures=0, 1, 1, 0, a number >= 1, no IP line, no BROKEN LINK, no FAIL.
+# Scratch-verified: a README generated from disk gave guide-sync 0 failures, 0 command hits, 1 link to operating-instructions.md, no broken link.
+
+# G5-5  AC-R8 scope: only owned files changed (planner checkout after the merges are pulled; pre-pilot sha 296d96e)
+git status --porcelain | cut -c4- | grep -vE '^(process/|README\.md$|\.gitignore$|web/tsconfig\.tsbuildinfo$)'
+git diff --name-only 296d96e..HEAD | grep -vE '^(process/|README\.md$|\.gitignore$|web/tsconfig\.tsbuildinfo$)'
+for n in <pr-t20> <pr-t16>; do gh api repos/jamiroV-code/psychic-train/pulls/$n/files --jq '.[].filename'; done    # T20: .gitignore, web/tsconfig.tsbuildinfo, its task folder only; T16: README.md and its task folder only
+# today: no output from the first two (clean tree, nothing since 296d96e). After the pilot: no output from the first two; the third lists exactly the owned files per PR.
+
+# G5-6  validator set: no NEW failure versus the Gate 4 baseline; guide-sync must reach 0 failures
+# context-discovery 1 (.agents/skills), skills 1 (same), guide-sync 0, agent-parity 0 failures and 18 warnings, plan-inventory 0 failures and the same six warning categories
+# (the number in "active plan count is high: N" rises by the files of the two task folders: same warning, cosmetic), all-context, protocol-wiring, protocol-discovery,
+# kit-portability, skill-invocation-wiring, skill-routing, skill-keywords 0/0; discover-context.mjs --check-routing in sync. Scratch-verified with README and two task folders present.
+
+# G5-7  hybrid, read-only REST: CI and PR facts (names with the em dash; judge the CURRENT head only)
+for sha in <head-pr-t20> <head-pr-t16> <base-tip-after-both-merges>; do gh api repos/jamiroV-code/psychic-train/commits/$sha/check-runs --jq '.check_runs[]|[.name,.status,.conclusion]|@tsv'; done
+gh api repos/jamiroV-code/psychic-train/pulls/<n> --jq '[.merged,.merge_commit_sha,.base.ref]|@tsv'
+# today at 296d96e: api — pytest completed success; web — vitest, tsc, island build completed success.
+
+# G5-8  AC-R6: nothing deleted that the log does not permit
+git ls-remote --heads origin | wc -l     # 14 today; after the pilot 14 (worker branches deleted by the repo setting or kept with a 'deletion deferred' row); never fewer until the user's final OK
+# every deletion has an Approvals Log row in process/archive/index.md written before (manual) or right after the merge (automatic, K4 = A)
+
+# G5-9  regression set (must stay green)
+# C10 exit 0; G3-1, G3-2, G3-6, G3-8, G3-9 no output; C11 no output; C12 prints 11 on master-planner.md; C13 no output;
+# G4-1 (PLANNER-BUDGET block) rc=0 with the registry rows added (MASTER-PLAN.md at most 19,000 B); G4-3 to G4-7 no output
+```
+
+### Gate 6 command set (AC-R7, AC-R10 and the handover; run after both PRs merged and the testers finished)
+
+```
+# G6-1  AC-R10: each pilot report carries the 11 headings (C12 form); must print 11 twice
+for t in t20-untrack-tsbuildinfo t16-root-readme; do grep -cE '^(#+ )?(1 Task ID|2 Outcome|3 Summary|4 Files changed|5 Commits|6 Tests run|7 Tests NOT run|8 Deviations|9 Blockers|10 Follow-up|11 Context cost)' $(ls process/general-plans/*/${t}_03-10-26/${t}_REPORT_03-10-26.md); done
+
+# G6-2  AC-R7: no (command, result, SHA) repeated in heading 6 (timestamps stripped); must print nothing
+for f in $(ls process/general-plans/*/t20-untrack-tsbuildinfo_03-10-26/*_REPORT_* process/general-plans/*/t16-root-readme_03-10-26/*_REPORT_*); do sed -n '/^## 6 Tests run/,/^## 7 /p' "$f" | grep -E '^[-|*] ' | sed -E 's/[ ]*\|?[ ]*[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+Z[ ]*\|?//' | sort | uniq -d; done
+# fixture-tested: a clean report prints nothing, a duplicated line prints exactly that line.
+
+# G6-3  AC-R7: retry budget respected and stated (review: cycles used, at most 2 per failing gate, no same failure twice in a row)
+for f in <the two reports>; do sed -n '/^## 9 /,/^## 10 /p' "$f" | grep -ciE 'fix cycle|retry'; done      # each at least 1
+
+# G6-4  AC-R7: accepted on independent evidence, not on the worker's word
+grep -E '^\| (T20|T16) \|' process/MASTER-PLAN.md | grep -c 'vc-tester'      # 2 (the evidence cell names the tester report with command and UTC time)
+
+# G6-5  registry and Approvals Log written only by the planner: no worker PR touches them
+for n in <pr-t20> <pr-t16>; do gh api repos/jamiroV-code/psychic-train/pulls/$n/files --jq '.[].filename' | grep -E '^process/(MASTER-PLAN\.md|archive/index\.md|context/current-state\.md)$'; done   # prints nothing
+
+# G6-6  archive operations separate: the Gate 5 report names A (documents), B (registry), C (archive_session result) and D (branch) per task, each stated only if its call returned success
+# G6-7  merge facts: merged true, merge sha reachable from the base, CI green on the base tip  (G5-7 output; git merge-base --is-ancestor <merge sha> origin/<BASE>)
+# G6-8  branch-deletion evidence: git ls-remote --heads origin 'claude/t20-*' 'claude/t16-*' prints nothing (auto-deleted) or the Approvals Log row says deletion deferred; the probe result row exists if K5 was approved
+# G6-9  tools and role: each report heading 11 names the session and merge tools and the line that identified the WORKER role: sed -n '/^## 11 /,$p' <report> | grep -ciE 'merge|create_pull_request|gh api'   # each at least 1
+# G6-10 final validators and budget: G5-6 and G5-9 (guide-sync 0; context-discovery 1 and skills 1 stay as the accepted H1 gap)
+# G6-11 PR #13 untouched by the pilot: gh api repos/jamiroV-code/psychic-train/pulls/13 --jq '[.merged,.state]|@tsv'    # false open (unless the user merged it)
+# G6-12 cost recorded: the Gate 5 report states platform-reported usage per session and total, labelled measured, against the estimate above
+```
+
+### Test gates (5-column table; Gate 5 and Gate 6 scope; strategies are the three proving strategies only)
+
+| criterion id | behavior | strategy | proving test | gap-resolution |
+|---|---|---|---|---|
+| AC-R7, AC-R10 | the two envelopes are complete, role-first, within 8,000 B, worker sets within cap | Fully-Automated | G5-1 (red today, 30 lines; scratch-verified green on drafts) | B |
+| AC-R7 | ownership is disjoint and `.gitignore` and README.md each have one owner | Fully-Automated | G5-2 (red today, 3 lines) | B |
+| AC-R8 | T20 end state: untracked, ignored line present, `git check-ignore` rc 0 | Fully-Automated | G5-3 (red today: 1, 0, rc=1) plus CI tsc on the PR head | B |
+| AC-R8 | T16 end state: guide-sync 0 failures, links not copied, no IP, no broken link | Fully-Automated | G5-4 (red today: MISSING README.md, 1 failure) | B |
+| AC-R8 | only owned files changed, per planner checkout and per PR | Fully-Automated | G5-5 | A |
+| AC-R4, AC-R11 | no new validator failure; guide-sync cleared; budget and regression set green | Fully-Automated | G5-6, G5-9 | A |
+| AC-R7 | CI green on every PR head and on the base tip | Hybrid | G5-7 (read-only REST; precondition: PRs exist) | A at the pilot |
+| AC-R6 | no branch lost; every deletion logged; probe result recorded | Hybrid | G5-8, probe design, G6-8 (precondition: user approvals K4, K5, K6) | A if approved; else C (deletion deferred, branches stay) plus D (backlog note) |
+| AC-R10 | each pilot report has all 11 headings | Fully-Automated | G6-1 | B |
+| AC-R7 | worker obeyed the no-re-run rule; retry budget stated and respected | Fully-Automated + Agent-Probe | G6-2 (fixture-tested), G6-3 (review) | B |
+| AC-R7 | acceptance rests on independent evidence; registry and Approvals Log written only by the planner | Fully-Automated | G6-4, G6-5 | B |
+| AC-R7 | a real worker session reads the envelope, identifies as WORKER, opens a PR, self-merges only under the conditions, stops when unsure | Agent-Probe | the pilot itself: report headings 6, 9, 11 and G6-9 | C (Gate 6 is this pilot) |
+| AC-R7 | the same-failure stop is obeyed | Agent-Probe | not exercisable without a failing task; it fires only if a gate fails during the pilot | D (named residual; no invented failure) |
+| AC-R9 | pilot cost recorded against the estimate | Hybrid | G6-12 | D (`token-usage-telemetry_NOTE_02-10-26.md`, update with the platform-reported figures) |
+
+Failing stub:
+test("should write two complete role-first envelopes within 8000 bytes", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G5-1 30 lines today") })
+Failing stub:
+test("should give .gitignore and README.md exactly one owner each", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G5-2 3 lines today") })
+Failing stub:
+test("should untrack web/tsconfig.tsbuildinfo and ignore it", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G5-3 1,0,rc=1 today") })
+Failing stub:
+test("should add a README that clears the guide-sync failure and links instead of copying", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G5-4 MISSING README.md today") })
+Failing stub:
+test("should carry all 11 report headings in each pilot report", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G6-1 no reports today") })
+Failing stub:
+test("should repeat no command and sha pair in heading 6", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G6-2 no reports today") })
+
+Legacy line form (retained so existing contract consumers still parse):
+- envelopes: [fully-automated: G5-1, G5-2] | T20: [fully-automated: G5-3 + hybrid: CI] | T16: [fully-automated: G5-4] | scope: [fully-automated: G5-5] | validators and regression: [fully-automated: G5-6, G5-9] | CI and PR facts: [hybrid: G5-7] | deletions: [hybrid: G5-8 + probe, needs approvals] | reports: [fully-automated: G6-1, G6-2, G6-4, G6-5] | worker behaviour: [agent-probe: pilot] | same-failure stop: [known-gap: documented, backlog] | cost: [hybrid: G6-12]
+
+### Execute-agent and orchestrator instructions (concerns the plan text cannot hold; EXECUTE must follow all)
+
+| # | Instruction |
+|---|---|
+| E1 | Who does what. The orchestrator (Master Planner session, the only holder of `create_session`, `archive_session`, `list_sessions`, `interrupt_session`, `send_message` and the GitHub merge tools) drives, sequentially: (1) one vc-execute-agent (opus) writes the two task folders (SPEC and REF from the field table and shared block), the registry rows, the lane table and the backlog note, and runs G5-1 and G5-2; (2) the orchestrator commits and pushes only those files to the base (needs G5-K3); (3) the orchestrator spawns both workers (2 of 3 lanes) with the REF text as the first message and stays on `list_events` and `get_session` for status; (4) after each worker reports, the orchestrator verifies the merge by REST (G5-7), pulls the base, and spawns one independent vc-tester (sonnet) per merged task to run G5-3 or G5-4, G5-5 and the read-only REST checks; (5) the planner records `accepted` then `archived`, the Approvals Log row and `archive_session` as four separate operations (report wording rule: state C and D only when the call returned success); (6) closeout by UPDATE PROCESS. Gate commands are never run by the orchestrator itself; no worker edits the registry. Agent count: 1 orchestrator + 2 workers + 2 testers + 1 or 2 execute-agent runs = 6-7, below every cost-guard threshold; strategy score 2/7, so sequential orchestration; the two workers run in parallel only because the user chose a concurrent pilot |
+| E2 | Pre-spawn checks (all read-only): `git status --porcelain` empty; G5-1 and G5-2 silent; `list_sessions` shows fewer than 3 live workers; user approvals G5-K1, G5-K2, G5-K3, G5-K7, G5-K9 are quoted in the report; `git rev-parse HEAD` equals `origin/<BASE>`. Do not spawn a third lane. Verify after spawn that the first worker event shows `ROLE: WORKER` recognised and a preflight pass; a `NEEDS_CONTEXT` reply means stop and read it, not respawn blindly |
+| E3 | Registry (planner only, text edits): T20 and T16 to `approved` with the branch names, owned and forbidden globs, RT0, Report paths; lane table gets two rows and the merge token; T17 to `cancelled` (user decision 03-10-26, reopen on request); T25 scope note: the user allowed proposing the six branches; R9 note: H2 is T20, H8 is T16, H1 declined, the rest deferred (backlog note); R12 stays `proposed` and is NOT set to `approved` (approved means standing spawn consent for a high-risk deploy task with no brief; the user's "approved-but-queued" is recorded in its blockers cell as "deferred past Gate 5; becomes approved only on confirmation of its brief", G5-K8); keep every C11 ID row and every T and P row intact; MASTER-PLAN.md stays at most 19,000 B (cells at most 300 B) |
+| E4 | Backlog note `process/general-plans/backlog/gate5-deferred-candidates_NOTE_03-10-26.md` (frontmatter like the Gate 2 stubs), one list, nothing new invented: R12 deploy fixes; R10 deploy-path doc; R11 session triage; the pre-existing branches not in the six (kind-tesla, narrative-v2, inspiring-pasteur with PR #5 open, pensive-dijkstra, exciting-meitner, split-all-context: per-branch review); H4 and H5 salvage state; H6 dead `cache` functions; H7 and T19 stale active plans; H10 scout-hook note; performance baselines (section 8 list); T18, T21, T22; token-usage-telemetry. State for each: not chosen by the user on 03-10-26 |
+| E5 | Merge procedure facts the planner checks after each worker says merged: `pulls/<n>` merged true and `merge_commit_sha` reachable from `origin/<BASE>`; CI on the new base tip (the run PR #13 starts); the report file present in the PR files; then registry, then Approvals Log, then (only then) `archive_session` for that session. If CI on the base tip is red the planner stops further merges and proposes `git revert <merge sha>` (Enforcement v) |
+| E6 | Tester rule (E8 of Gate 4 applies): each vc-tester runs its gates once, confirms CI by read-only REST and heading 6 instead of re-running anything unchanged, records command, UTC time and SHA, and does not edit files |
+| E7 | Deletion handling under G5-K4: the default A treats the repo setting as the mechanism: the planner writes the Approvals Log row right after it sees the merge (status `done`, note "auto-deleted by delete_branch_on_merge; recoverable from the merged PR and the base tip") and issues no delete call of its own for a branch that is already gone (404). The six-branch proposal and the probe run only after G5-K5 and G5-K6; the probe uses the guarded commands above verbatim |
+| E8 | Fallbacks, all recorded as named gaps and never retried around: a worker without a merge or PR tool, or with a denied call, stops at `review` (the planner then reports; merging for it only if G5-K7 allows); a worker that cannot reach the base branch content reports NEEDS_CONTEXT; a failed or blocked CI keeps the task at `review`; a worker over a budget is interrupted by the planner, and the cost is recorded. At the spend ceiling of G5-K2 the planner stops and asks |
+| E9 | T20 report must carry the one-time PC note: before the first `git pull` that brings T20 to the home PC, run `git status --short web/tsconfig.tsbuildinfo` there; if it shows `M`, run `git checkout -- web/tsconfig.tsbuildinfo` first (deploy Stage A is `--ff-only` and non-fatal, so a refused pull leaves the old build serving). Copy it into current-state.md and the Gate 5 handover. It is a user-PC step the cloud cannot verify (known gap, D) |
+| E10 | Closeout text fixes (cosmetic, not gates): operating-instructions.md "Local tsc rewrites the tracked web/tsconfig.tsbuildinfo" line (now ignored after T20; keep the `--incremental false` advice only if still useful); current-state.md rows for `.agents/skills`, tsbuildinfo, remote refs, repository settings (public, auto-merge on, delete on merge on, no protection) and the Gate 5 status; plan section 4 (i) facts and section 9 Gate 5 and Gate 6 rows per the user's 03-10-26 decisions; one line in operating-instructions.md that `gh pr` subcommands are blocked and REST or MCP is used (only if the planner's byte budget allows) |
+| E11 | Hard stops: any write outside the allowed set (E1 step 2 and the two PRs); touching CLAUDE.md, AGENTS.md, `.claude/`, `.github/`, `deploy/`, api/ or web/ beyond the one index entry; merging PR #13; deleting any branch without the log row and the user's OK; spawning more than 2 lanes; a worker or planner action not listed in the envelope; spend past the user's ceiling; avoid the scout-block shell strings in every command; no push to `main` |
+| E12 | Gate 5 report (`master-planner-recovery_GATE5-REPORT_03-10-26.md`) and handover contents: pilot outcome per task (statuses, PR numbers, merge SHAs, report paths), the G5 and G6 outputs with SHA and UTC, the probe result, the six-branch proposal table with current tips, the cost actual versus estimate (labelled), the worker tool lists from the two reports, retry and no-re-run evidence, what the pilot did NOT prove (a merge into `main`; the same-failure stop; Windows runtime), open user items (Open Questions 10 and 12, the K-decisions, the PC step, the PR #13 merge, enabling main protection if wanted), the accepted H1 gap, the deferred-list pointer, and the Gate 6 final-verification verdict |
+| E13 | If the answer to G5-K1 is B (user merges PR #13 first), re-run the pre-spawn checks against `main`, replace `<BASE>` with `main`, and note that PR #13's branch is deleted by the repository setting at that merge; the planner then works on `main` per repo policy |
+| E14 | Do not run anything in this contract that is not listed; the validate session itself ran no write call to GitHub, no push, no `create_session`, no DELETE and no merge (its only writes were scratchpad files and this plan section) |
+
+Dimension findings:
+- Infra fit: CONCERN — the platform changed since the plan's facts (public, auto-merge on, delete on merge on, no protection) and `main` lacks every Gate 2-4 deliverable, so the pilot's base branch must be chosen (G5-K1); `gh pr` is blocked by the GraphQL policy (REST or MCP only). CI names, triggers and duration verified live.
+- Test coverage: CONCERN — Gate 5 and the end states have non-vacuous red-today gates (G5-1 to G5-4, G6-1, G6-2); the live worker behaviour, the same-failure stop and a merge into `main` cannot be proven before the pilot (named residuals C and D).
+- Breaking changes: CONCERN — untracking `web/tsconfig.tsbuildinfo` can make the home PC's non-fatal `git pull --ff-only` refuse once (scratch-verified); one documented user-PC step (E9). No code, API or schema change; `api/tests/deploy` and `deploy/README.md` unaffected.
+- Security surface: CONCERN — the repository is now public with no protection and a worker token with admin REST rights, so the envelope's prohibitions are the only fence; README must carry no secret or address; recommendation G5-K8 (block force-push and deletion on `main`). No auth, billing or secret code is touched.
+- Section feasibility, Task A (T20): PASS — mechanical, scratch-verified end to end; highest-risk edit is the `.gitignore` shared file (single owner, one line).
+- Section feasibility, Task B (T16): PASS — guide-sync constraints measured and verified on a generated README; highest-risk edit is a hand-typed agent or skill list (generate from disk).
+- Section feasibility, pilot mechanics: CONCERN — create_session semantics, the worker's tool list, send_message resumption and cost exposure are UNVERIFIED runtime behaviour; the envelope preflight and the report's heading 11 make the pilot the probe, and every failure mode stops at `review` or NEEDS_CONTEXT at small cost. Probe candidate (not run here): `VC-FEASIBILITY-PROBE-NEEDED: does create_session(prompt, branch) check out the named base and start from the prompt's first line? — cost-class: one small worker session`; it is the pilot's first minutes, not a separate spend.
+- Section feasibility, branch deletion: CONCERN — mechanism unverified; zero-risk step 0 and a guarded throwaway probe designed; six tips and recovery recorded; needs G5-K4 to G5-K6.
+- Section feasibility, cost: CONCERN — no platform cap; estimate 8-24 USD (central about 14) marked an estimate; needs the user's spend ceiling (G5-K2).
+
+User decisions (G5-K1, G5-K2, G5-K3, G5-K7 and G5-K9 gate the START of EXECUTE; the other four can be answered during the run, each before its step):
+- G5-K1 (blocking) pilot base branch. A (default, recommended): stacked on `claude/pensive-albattani-ou0cgv`, PR #13 stays unmerged, nothing reaches `main`; the first merge into `main` stays a named residual. B: you merge PR #13 first, then the pilot targets `main` (the faithful path; the session branch is deleted by the repository setting at that merge).
+- G5-K2 (blocking) spend. Approve real worker sessions with a ceiling: proposal up to 40 USD for the whole pilot (estimate 8-24, central about 14; not measured). Sessions have no platform cap; the planner interrupts and stops at the ceiling.
+- G5-K3 (blocking) commit authority. The planner needs to commit and push `process/` bookkeeping on the session branch only: the two task folders before spawning and the registry, Approvals Log, current-state and report after the merges. Recommended: yes for Gate 5 and 6 only, never to `main`, never merging PR #13. Without it the workers cannot see their envelope.
+- G5-K7 (blocking) worker lane and fallback. Confirm Open Question 12 (direct lane; for these two RT0 tasks the worker edits itself and spawns no quick-fix agent), and decide Open Question 10 extension (b): may the planner merge a worker's PR when the worker lacks a merge tool or its call is denied? Default and the plan's reading: no, the task stays `review`. Recommended for the pilot: yes, once, only if every mechanical condition is evidenced by the planner's own REST checks.
+- G5-K9 (blocking) Gate 6 folded into this contract (recommended): the pilot's acceptance runs under G6-1 to G6-12 and the closeout, with a second VALIDATE only if the pilot changes the plan.
+- G5-K4 deletion order. `delete_branch_on_merge` is on, so GitHub deletes a worker branch at merge, before the registry shows `archived`. A (recommended): accept it as the mechanism, log the row right after the merge (recovery is trivial: the merged PR and the base tip). B: you switch the setting off so the plan's order (log first, delete after) holds and the planner deletes by hand.
+- G5-K5 probe. May the Master Planner run the guarded deletion probe above (step 0 changes nothing; steps 1 and 2 create and delete throwaway branches that carry no content)? Recommended: yes. Without it the six deletions cannot start (the mechanism would be unproven).
+- G5-K6 final OK on the six-branch list, asked later with current tips after the probe. Nothing is deleted before it.
+- G5-K8 optional hardening and facts. (i) Confirm the repository being public is intended (the plan recorded private). (ii) Recommended: enable minimal protection on `main` (block force-push and deletion only; no required reviews, so planner commits still work); it is your repository setting, outside this plan. (iii) R12 stays `proposed` in the registry (not `approved`) until its brief is confirmed.
+
+Open gaps:
+- G5-K1 to G5-K9 above (K1, K2, K3, K7 and K9 block the start).
+- Named residuals (D, not PASS-by-silence): a merge into `main` by a worker (only under K1 = B); the same-failure stop; compliance with the retry rule if no gate fails; live worker tool list and `create_session` base semantics until the pilot reports; Windows PC behaviour of the T20 pull (E9) and of `.agents/skills` (H1 accepted); real per-session cost until the report records it.
+- Known gaps carried: hook output and skill listing outside every measure; the Gate 3 report's AC-R9 review; AC-R5, AC-R6, AC-R9 await the user (they do not block Gate 5).
+- Deferred by the user (backlog note E4, no work now): R12, the remaining housekeeping candidates, performance baselines, R10, R11.
+- Cosmetic - may be accepted as known gaps: (1) plan section 4 (i) platform facts and the Enforcement table are stale (fixed at closeout, E10); (2) F13 says about 60 lines, the README needs about 45-120 because guide-sync forces 15 agent rows; (3) the "active plan count is high: N" message grows with the task folders; (4) the operating-instructions.md line about the tracked build-info file goes stale after T20 (E10); (5) the 45 validate-backlog-notes failures are repo-wide and outside the baseline.
+- Accepted gap, user decision 03-10-26: H1 `.agents/skills` stays a copy; context-discovery 1 and skills 1 remain; no work.
+
+What this coverage does NOT prove:
+- G5-1, G5-2: that envelopes are complete as text, tokens present, size and first line right, and ownership lines disjoint; not that a real session reads them correctly, and not that `create_session` delivers the first line unchanged.
+- G5-3, G5-4: the end states of two small files; not that the home PC pulls cleanly (E9), not that the README stays in sync when skills or agents change (guide-sync will fail then, by design).
+- G5-5, G5-7: scope and CI as REST reads at a moment in time; with no branch protection they do not stop a bad merge, they only record it.
+- G5-8 and the probe: no branch is lost and every deletion is logged; the probe proves the delete call on throwaway refs only, not that deleting any of the six is wise beyond the evidence table.
+- G6-1 to G6-5: report shape, absence of repeated runs, planner-only registry writes; not that the worker never would have misbehaved, and the same-failure stop is not exercised.
+- The pilot as a whole: spawn, ownership, CI-gated self-merge and acceptance under K1 = A; not a merge into `main`, not a high-risk task, not Windows runtime, not cost beyond one run.
+- Nothing here proves the Master Planner lifecycle for product tasks; this pilot is the first evidence.
+
+Plan updates applied by this validate session: none to the plan body (history left as written); the corrections live in this contract and E1-E14, and the SUPPLEMENT REQUEST in the V7 hand-off lists the same items as plan-text additions for the strict path.
+
+Gate: CONDITIONAL (0 FAILs; five blocking user decisions G5-K1, G5-K2, G5-K3, G5-K7, G5-K9; first-pass CONDITIONAL is not terminal: EXECUTE may start only after the user accepts those decisions with a quoted answer, or after one PVL supplement cycle; scope: START of Gate 5 and the Gate 6 pilot only)
+Accepted by: pending; not accepted by this session. Cosmetic items (1)-(5) are recorded as known gaps, not accepted concerns.
+
+## Autonomous Goal Block — Gate 5
+
+SESSION GOAL: Master Planner recovery program, Gate 5 plus the Gate 6 worker pilot as one run: two real worker sessions do T20 (untrack web/tsconfig.tsbuildinfo, add the .gitignore line) and T16 (root README that clears the guide-sync baseline failure and links to operating-instructions.md); the planner verifies merges, an independent vc-tester per merged task re-runs the gates, the planner records accepted then archived; a six-branch deletion proposal and a guarded deletion probe wait for the user.
+Charter + umbrella plan: N/A - single plan (process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md)
+Autonomy: autonomy removes approval pauses only; valid only after the Gate 5 contract above is accepted (G5-K1, K2, K3, K7, K9 answered with quotes). Standing authorization covers spawning workers for approved tasks and their self-merge under all mechanical conditions; it does not cover deletions of the six branches, the probe, spend past the user's ceiling, merging PR #13 or pushing to main.
+Hard stops / safety constraints:
+- No spawn before G5-1 and G5-2 are silent and the spend ceiling is stated; at most 2 worker lanes
+- Writes only by the two workers (their owned files) and the planner's process/ bookkeeping on the session branch; no CLAUDE.md, AGENTS.md, .claude/, .github/, deploy/, api/ edits; no push to main; no merge of PR #13
+- No branch deleted except worker branches removed by the repository setting; the six proposed branches and any probe need the user's explicit OK; every deletion has an Approvals Log row
+- A worker that is unsure, denied a tool call, or over budget (60 tool calls, 40 minutes, 8 CI polls, 2 fix cycles, same failure twice) stops at review; the planner interrupts runaway sessions
+- Avoid the scout-block shell strings; no secrets, no IP addresses in README
+Next phase: EXECUTE Gate 5 per E1 (orchestrator-driven, sequential; one vc-execute-agent (opus) for the process/ text, workers via create_session, one vc-tester (sonnet) per merged task); requires the explicit ENTER EXECUTE MODE and the blocking decisions
+Validate contract: inline in plan (## Validate Contract — Gate 5)
+Execute start: G5-1 envelopes | G5-2 ownership | G5-3 T20 end state | G5-4 T16 end state | G5-5 scope | G5-6 validators == baseline (guide-sync 0) | G5-7 CI and PR facts | G5-8 no branch lost | G5-9 regression | G6-1..G6-12 pilot acceptance | e2e spec: none | probe: deletion probe only if G5-K5 approved | high-risk pack: no
+
 ## Resume and Execution Handoff
 
 **Update 03-10-26 (Gate 4 closeout): Gate 4 complete; Gate 5 requires VALIDATE then explicit ENTER EXECUTE MODE.** Gate 4 report: `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_GATE4-REPORT_03-10-26.md`; EVL records `master-planner-recovery-evl-iteration-002_REPORT_03-10-26.md` and `results-evl.tsv`. Next step: re-enter VALIDATE for Gate 5 (cleanup and performance: H1 `.agents/skills` symlink, `web/tsconfig.tsbuildinfo` untrack plus `.gitignore` line, root README per validate-guide-sync, deploy fixes R12, housekeeping candidates with evidence), then the user's explicit ENTER EXECUTE MODE. Several Gate 5 steps need user approvals (sections 7 and 9). Open Questions 10 and 12 stay open and non-blocking. The Gate 3 update below is history.
