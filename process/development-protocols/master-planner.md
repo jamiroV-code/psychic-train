@@ -106,7 +106,7 @@ Owned files: <globs>      Forbidden: <globs>
 Branch: claude/<task-id>-<slug>
 Read: <task PLAN or SPEC path>; only if needed: north-star.md, current-state.md, architecture.md; operating-instructions.md: <named | not named>
 Tests: tier RT<n>; required commands: <list>; full-suite budget: <n>
-Retry budget: 2 fix cycles
+Retry budget: 2 fix cycles; same failure twice stops
 Report: <task folder>/<slug>_REPORT_<dd-mm-yy>.md using the 11-heading template
 Stop and report at `review` if: irreversible or outward-facing action, scope expansion, unverifiable condition, any doubt
 Autonomy: <what this task may do without asking>
@@ -158,6 +158,30 @@ Wording rule: say "report file written" for A and "registry updated" for B; stat
 
 **Start (worker):** read the envelope and only what it names.
 
-**End (planner):** refresh current-state.md (branch, commit, uncommitted work, test results with timestamps, next action); update the registry row; write the report; commit or list any uncommitted work.
+**End (planner):** refresh current-state.md (branch, commit, uncommitted work, test results with timestamps, next action); update the registry row; write the report; commit or list any uncommitted work. Before closing, run the PLANNER-BUDGET block in section 12 and trim if headroom is below 3,000 B.
 
 **End (worker):** commit the report on the task branch; request the registry update in report headings 9 and 10.
+
+## 12. Planner entry-set budget
+
+Fixed part = all-context.md router section (top through the line before `## Context Group Lifecycle`) + CLAUDE.md + north-star.md + current-state.md + MASTER-PLAN.md. Gate: fixed part <= 56,000 B, which keeps the 64,000 B planner cap for any task brief <= 8,000 B. Per-file ceilings (sum 56,000): CLAUDE.md 16,000; north-star.md 6,000; current-state.md 8,000 (target <= 7,000); MASTER-PLAN.md 19,000 (target <= 17,500); router 7,000. The lines with master-planner.md and a worst-case brief are reported only, never gated and never used to raise a cap. Run from the repo root in bash; pass is no OVER-CAP or MISSING line and `rc=0`.
+
+```
+# PLANNER-BUDGET:BEGIN
+BRIEF_CAP=8000; FIXED_CAP=$((64000 - BRIEF_CAP)); MISS=0
+for f in CLAUDE.md process/context/north-star.md process/context/current-state.md process/MASTER-PLAN.md process/context/all-context.md process/development-protocols/master-planner.md; do test -s "$f" || { echo "MISSING $f"; MISS=1; }; done
+over() { n=$(wc -c < "$1"); [ "$n" -le "$2" ] || { echo "OVER-CAP $1 $n > $2"; MISS=1; }; }
+ROUTER=$(sed '/^## Context Group Lifecycle/,$d' process/context/all-context.md | wc -c)
+over CLAUDE.md 16000; over process/context/north-star.md 6000; over process/context/current-state.md 8000; over process/MASTER-PLAN.md 19000
+[ "$ROUTER" -le 7000 ] || { echo "OVER-CAP router $ROUTER > 7000"; MISS=1; }
+FIXED=$((ROUTER + $(cat CLAUDE.md process/context/north-star.md process/context/current-state.md process/MASTER-PLAN.md | wc -c)))
+MP=$(wc -c < process/development-protocols/master-planner.md)
+echo "planner_fixed=$FIXED cap=$FIXED_CAP headroom=$((FIXED_CAP-FIXED))"
+echo "info_with_master_planner=$((FIXED+MP)) info_worst_case_brief=$((FIXED+MP+BRIEF_CAP)) gated_worst_case_brief=$((FIXED+BRIEF_CAP)) of 64000"
+test "$MISS" -eq 0 && test "$FIXED" -le "$FIXED_CAP"; echo rc=$?
+# PLANNER-BUDGET:END
+```
+
+**Brief cap:** a task brief is at most 8,000 B; for a larger PLAN read only its status, TL;DR and acceptance sections.
+
+**Trim rule:** when headroom under 56,000 is below 3,000 B at a planner session end, trim before closing: (1) current-state.md is rewritten in place, one status block per gate at most, older gate narrative replaced by a link to its report; (2) MASTER-PLAN.md: R-row evidence cells at most 300 B with the report path, rows of finished NEW tasks (status `archived`) move to the archive index, historical T-rows and every registry ID stay; (3) router: Task Routing Table rows one line each; (4) CLAUDE.md only with the user.
