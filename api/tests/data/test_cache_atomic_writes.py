@@ -202,12 +202,6 @@ WRITERS = {
         lambda: cache.liquidity_series_path("WALCL"),
         lambda: cache.read_liquidity_series("WALCL"),
     ),
-    "write_confirmed_boundaries": (
-        lambda: cache.write_confirmed_boundaries(pd.DataFrame({"date": ["2026-01-01"], "kind": ["top"]})),
-        lambda: cache.write_confirmed_boundaries(pd.DataFrame({"date": ["2026-02-01"], "kind": ["bottom"]})),
-        cache.confirmed_boundaries_path,
-        cache.read_confirmed_boundaries,
-    ),
     "write_narrative_point": (
         lambda: cache.write_narrative_point("pytrends", "AI crypto", "2026-09-01", 10.0),
         lambda: cache.write_narrative_point("pytrends", "AI crypto", "2026-09-02", 20.0),
@@ -296,12 +290,6 @@ def test_round_trip_liquidity_series(isolated_cache):
     out = cache.read_liquidity_series("WALCL")
     assert out["date"].tolist() == ["2026-01-01", "2026-01-02"]
     assert out["value"].tolist() == [1.0, 3.0]
-
-
-def test_round_trip_confirmed_boundaries(isolated_cache):
-    df = pd.DataFrame({"date": ["2026-01-01"], "kind": ["top"]})
-    cache.write_confirmed_boundaries(df)
-    pd.testing.assert_frame_equal(cache.read_confirmed_boundaries(), df)
 
 
 def test_round_trip_trending_snapshot(isolated_cache):

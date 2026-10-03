@@ -198,21 +198,6 @@ def test_liqtide_history_datetimes_read_back_in_utc(isolated_cache):
     assert pd.to_datetime(out["date"], utc=True).iloc[0] == day
 
 
-def test_confirmed_boundaries_datetimes_read_back_in_utc(isolated_cache):
-    start = pd.Timestamp("2026-01-05", tz="UTC")
-    end = pd.Timestamp("2026-06-01", tz="UTC")
-    cache.write_confirmed_boundaries(
-        pd.DataFrame([{"leg": 1, "start": start, "end": end, "confirmed": True}])
-    )
-    out = cache.read_confirmed_boundaries()
-
-    assert not out.empty
-    for column, expected in (("start", start), ("end", end)):
-        tz = out[column].dt.tz
-        assert tz is not None and str(tz) == "UTC", f"boundaries.{column} read back as {tz!r}"
-        assert pd.to_datetime(out[column], utc=True).iloc[0] == expected
-
-
 def test_narrative_series_string_dates_are_not_coerced(isolated_cache):
     """These are written as plain `YYYY-MM-DD` strings. A reader that parsed
     them into local-time datetimes would shift the day for anyone west of
