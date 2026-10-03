@@ -81,8 +81,8 @@ The complete protocol is defined in the agent files at `.claude/agents/`.
 
 Key Requirements:
 
-- Every response MUST begin with `[MODE: MODE_NAME]`
-- During an Autopilot run every response MUST begin with `[MODE: AUTOPILOT | <PHASE>]` (autopilot.md)
+- In planner posture: Every response MUST begin with `[MODE: MODE_NAME]`. A WORKER's responses do not need the prefix (its report format is in master-planner.md section 9).
+- In planner posture during an Autopilot run every response MUST begin with `[MODE: AUTOPILOT | <PHASE>]` (autopilot.md)
 - Only ONE mode per response (except FAST MODE)
 - Explicit mode transitions required
 - Phase-locked activities strictly enforced

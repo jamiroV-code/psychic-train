@@ -79,7 +79,7 @@ The complete protocol is defined in the agent files under `.claude/agents/` (mir
 
 Key Requirements:
 
-- Every response in an explicit RIPER-5 workflow should begin with `[MODE: MODE_NAME]`
+- In planner posture every response in an explicit RIPER-5 workflow should begin with `[MODE: MODE_NAME]`. A WORKER's responses do not need the prefix (its report format is in master-planner.md section 9).
 - Only one mode per response, except FAST MODE
 - Explicit mode transitions are required
 - Phase-locked activities are strictly enforced
