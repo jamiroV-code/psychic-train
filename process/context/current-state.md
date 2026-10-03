@@ -7,45 +7,43 @@ date: 03-10-26
 
 # Current State
 
-**Stamp: commit `0f3dfa3` (`origin/main`, merge of PR #16), observed 2026-10-03T06:42Z (UTC) from branch `claude/pensive-albattani-ou0cgv`, which equals `origin/main` plus uncommitted T16/T20 archival edits.** "Observed" rows were read or run at that stamp; "Historical" rows are copied and labelled with their source commit.
+**Stamp: commit `34e3bb3` (`origin/main`, T31 PR #30), observed 2026-10-03 (UTC, after the 20:00Z session archives) from branch `claude/pensive-albattani-ou0cgv`, which equals `origin/main` plus uncommitted process/ text.** "Observed" rows were read or run at that stamp; "Historical" rows are copied and labelled with their source commit.
 
-Staleness rule (master-planner.md): stale when the stamp is not an ancestor of HEAD (`git merge-base --is-ancestor 0f3dfa3 HEAD` fails) or when more than 10 non-cache commits landed since it (`git log 0f3dfa3..HEAD --oneline -- . ':(exclude)api/data/cache' | wc -l`). Nightly bot snapshot commits do not make it stale.
+Staleness rule (master-planner.md): stale when the stamp is not an ancestor of HEAD (`git merge-base --is-ancestor 34e3bb3 HEAD` fails) or when more than 10 non-cache commits landed since it (`git log 34e3bb3..HEAD --oneline -- . ':(exclude)api/data/cache' | wc -l`). Nightly bot snapshot commits do not make it stale.
 
-## Observed (2026-10-03T06:42Z UTC, commit 0f3dfa3)
+## Observed (commit 34e3bb3)
 
 | Fact | Value | Command |
 |---|---|---|
-| Working tree | `origin/main` `487fa65` (PR #24 PERF merged) plus uncommitted process/ text only: T18/T19 T18/T19/PERF task folders moved to `completed/`, T29 and T30 task folders, MASTER-PLAN.md, archive/index.md, two protocol lines, this file | `git status --short` |
+| Working tree | `origin/main` plus uncommitted process/ text only: T30 and T31 task folders moved to `completed/`, MASTER-PLAN.md, archive/index.md, master-planner.md section 6 paragraph, the recovery HANDOVER file, this file | `git status --short` |
 | Entry files | `CLAUDE.md` 13,443 B, `AGENTS.md` 12,572 B, `north-star.md` 5,225 B | `wc -c` |
-| `process/context/all-context.md` | 193 lines, 11,380 B | `wc -lc` |
-| Remote heads | 5 at ~19:33Z 03-10-26: `main`, `claude/pensive-albattani-ou0cgv`, `claude/inspiring-pasteur-awqxk3`, `claude/kind-tesla-tat3vo`, `claude/split-all-context`. The user deleted seven approved branches earlier and `exciting-meitner-hy50kn`, `narrative-v2`, `pensive-dijkstra-ko69oi` now, and closed PR #5 (`gh api pulls/5` state closed). The three remaining are held until T31 merges (`process/general-plans/backlog/old-branches-review_NOTE_03-10-26.md`). `delete_branch_on_merge` unverified | `git ls-remote --heads origin` |
+| `process/context/all-context.md` | 193 lines, 11,380 B; router part 5,831 B | `wc -lc`, PLANNER-BUDGET block |
+| Planner budget | planner_fixed 48,751 B, cap 56,000, headroom 7,249, rc=0 | PLANNER-BUDGET block |
+| Root context docs | `operating-instructions.md` 6,509 B, `architecture.md` 6,572 B | `wc -c` |
+| Remote heads | 5: `main`, `claude/pensive-albattani-ou0cgv`, `claude/inspiring-pasteur-awqxk3`, `claude/kind-tesla-tat3vo`, `claude/split-all-context`. The last three are deletable by the user (content rescued by T31); the planner cannot delete branches. PR #5 closed | `git ls-remote --heads origin` |
 | Workflows | 6: `ci.yml` plus five snapshot jobs | `ls .github/workflows` |
 | `.agents/skills` | 339 tracked regular files, not a symlink | `git ls-files .agents/skills \| wc -l` |
-| `web/tsconfig.tsbuildinfo` | not tracked (empty `git ls-files`; T20, `54157e2`) | `git ls-files web/tsconfig.tsbuildinfo` |
-| `README.md` | present at repo root (T16, `351f946`) | `ls README.md` |
-| api/web diff vs `753db23` | only the `web/tsconfig.tsbuildinfo` deletion (1 line) | `git diff --stat 753db23 HEAD -- api web` |
-| Tests, HISTORICAL, measured at `753db23`, NOT re-run now | pytest 873 passed, 1 skipped, 5 deselected, 1 xfailed; vitest 223 passed (30 files); `tsc --noEmit --incremental false` exit 0 | all-tests.md, Current evidence (Gate 4) |
-| CI | PR #14 and #15 CI green; vc-tester PASS on `54157e2` (06:33Z); main tip `c063290` CI green (api pytest, web vitest/tsc/island build, checked ~06:50Z) | MASTER-PLAN.md T16, T20 |
+| `web/tsconfig.tsbuildinfo` | not tracked (empty `git ls-files`) | `git ls-files web/tsconfig.tsbuildinfo` |
+| `README.md` | present at repo root | `ls README.md` |
+| Tests, HISTORICAL, measured at `753db23`, NOT re-run now | pytest 873 passed, 1 skipped, 5 deselected, 1 xfailed; vitest 223 passed (30 files); `tsc --noEmit --incremental false` exit 0. Later: api 870/1/5/1 after T18 (PERF tester, `42d8ca8`) | all-tests.md, PERF report |
+| CI | T30 and T31 PRs: api pytest and web vitest/tsc/island build both success (worker and tester checks) | MASTER-PLAN.md T30, T31 |
 
-### Validator results (re-run 2026-10-03T06:42Z at 0f3dfa3 plus archival edits; only validate-guide-sync changed)
+### Validator results (run now at 34e3bb3 plus the uncommitted edits)
 
 | Validator | Failures | Warnings | Note |
 |---|---|---|---|
-| validate-context-discovery | 1 | 0 | `.agents/skills does not resolve to .claude/skills` (baseline) |
-| validate-skills | 1 | 0 | same cause (baseline) |
-| validate-guide-sync | 0 | 0 | was 1 (README.md missing); fixed by T16 |
+| validate-all-context | 0 | 0 | |
+| validate-context-discovery | 1 | 0 | `.agents/skills does not resolve to .claude/skills` (accepted baseline) |
+| validate-skills | 1 | 0 | same cause (accepted baseline) |
+| validate-guide-sync | 0 | 0 | |
+| validate-plan-inventory | 0 | 6 | baseline warnings |
 | validate-agent-parity (non-strict) | 0 | 18 | baseline `.claude/agents` vs `.codex/agents` drift |
-| validate-plan-inventory | 0 | 6 | baseline |
-| validate-all-context (re-run now), protocol-wiring, protocol-discovery, kit-portability, skill-invocation-wiring, skill-routing, skill-keywords | 0 | 0 | clean |
-| `discover-context.mjs --check-routing` | in sync | | |
 
-Outside the baseline: `validate-backlog-notes` 45 failing notes (older schema), recorded earlier, not re-run now.
+`validate-backlog-notes` 45 failing notes (older schema), recorded earlier, not re-run now.
 
 ## Gate status
 
-Gates 2, 3 and 4 are complete. Reports are in `process/general-plans/active/master-planner-recovery_02-10-26/`: `..._GATE2-REPORT_03-10-26.md`, `..._GATE3-REPORT_03-10-26.md` (probe token figures), `..._GATE4-REPORT_03-10-26.md` (test tiers, bounded retry with a same-failure stop, no-re-run rule, planner budget). The Gate 4 independent EVL (vc-tester, iteration 002) was green at cycle 0. Gates 5 and 6 remain, so the plan stays in `active/`.
-
-**Gate 5 pilot (03-10-26):** T16 merged as PR #14 (`351f946`), T20 as PR #15 (`54157e2`); CI green; vc-tester PASS on `54157e2`; registry `archived`, task folders under `process/general-plans/completed/`; archive_session done; Gate 5 report written; user decisions recorded 03-10-26.
+Gates 2 to 6 are complete; reports are in `process/general-plans/active/master-planner-recovery_02-10-26/`, ending with `..._HANDOVER_03-10-26.md` (final handover and acceptance record, awaiting the user's acceptance). The recovery plan stays in `active/` until the user accepts the handover.
 
 Planner budget: run the PLANNER-BUDGET block in master-planner.md section 12 (bytes only); figures are in the closeout reply, not stored here.
 
@@ -68,6 +66,6 @@ Planner budget: run the PLANNER-BUDGET block in master-planner.md section 12 (by
 
 ## Next actions
 
-1. Done: T20, T16, T18, T19, PERF, T29 merged and archived (sessions archived). T30 (PR #28 `2eb6e25`) verified by vc-tester and archived; its session archive pending. T31 (chain-growth rescue) approved, not spawned, envelope in its task folder. Measured cost so far 6.340139 USD of 40 (T31 not included). After T31 and the branch deletions, the next planner step is the final handover and acceptance record; then pause until the user says go. No product work is started.
-2. Home-PC step for the T20 pull: done, reported by the user 03-10-26 (planner cannot verify).
-3. Ten branches deleted by the user so far; three held until T31 merges (`kind-tesla-tat3vo`, `inspiring-pasteur-awqxk3`, `split-all-context`), then the user deletes them. Then housekeeping candidates from the Gate 5 backlog note. Open Question 10 resolved 03-10-26: workers self-merge within owned files, but any CLAUDE.md or AGENTS.md diff stops at `review` for the user; Open Question 12 decided: keep as is (envelope ban plus report check). G5-K8 (public repo, non-redistributable data): left as is, known risk. Registry: MASTER-PLAN.md.
+1. Done: eight worker tasks (T20, T16, T18, T19, PERF, T29, T30, T31) merged, independently verified and archived (docs); sessions archived except T31 (archive pending). Measured cost 6.9042678 USD of 40.
+2. User: accept or amend the HANDOVER; delete the three held branches (`kind-tesla-tat3vo`, `inspiring-pasteur-awqxk3`, `split-all-context`); approve cap values for the big-task subagent lane (master-planner.md section 6) if wanted.
+3. The planner pauses until the user says go. No product work is started; queued product SPECs: personal-tracker-realignment, narrative-baskets, LSE equities. Registry: MASTER-PLAN.md.

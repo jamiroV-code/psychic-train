@@ -75,12 +75,13 @@ User's words: "it spawns workers for tasks you already marked approved, without 
 7. **Post-merge check:** after each self-merge the Master Planner checks CI on the merge SHA on `main`; on red it proposes `git revert <merge sha>` and halts further self-merges until the user responds.
 8. **Decided 03-10-26 (Open Question 10):** a worker may self-merge anything inside its owned files except a diff touching CLAUDE.md or AGENTS.md (stops at `review`, see (g)); direct worker lane (Open Question 12): keep as is. Still open: RT4 bypass of user acceptance.
 
-Nothing above is platform-enforced (private repo, no branch protection, `allow_auto_merge` false): every control is procedure.
+Nothing above is platform-enforced (repo PUBLIC, verified 03-10-26 with `gh api repos/jamiroV-code/psychic-train --jq .private` = false; `main` unprotected, `branches/main` protected = false; `allow_auto_merge` = true and `delete_branch_on_merge` = true, as returned): every control is procedure.
 
 ## 6. Worker lane and commit policy
 
 - A WORKER is a direct-lane session: it does not orchestrate, spawn sessions or run the multi-agent RIPER chain. Tiny tasks (RT0 or RT1, about 100 lines or less, no schema, auth, API, billing or migration surface) use the QUICK FIX lane; one `vc-quick-fix-agent` spawn is not a subagent chain. Every other worker writes a compact validate-contract in its own task folder (the gate list from the envelope) before editing, then edits and runs its gates.
 - Workers commit on `claude/<task-id>-<slug>` and open a PR. The Master Planner session and direct user work commit on `main`, only when the user asks.
+- **Big-task rule (decided 03-10-26; cap values pending user approval):** a large product feature is planned and validated by the planner, then cut into bounded slices: one worker per slice, with owned files, a test tier and a budget. Default for small tasks stays no subagents. For a large risky slice (RT3 or RT4) the envelope may allow a CAPPED subagent lane: a subagent count, a dollar cap, one level deep, and every subagent listed in the worker report. The planner runs its own independent check after every worker. The cap values are not decided: the planner proposes them and the user must approve before any envelope uses the lane. (Follow-up to Open Question 12.)
 - Retry budget: see "Bounded retry" in operating-instructions.md (single home: 2 fix cycles per failing gate, same failure twice stops, 10-cycle outer ceiling).
 
 ## 7. Isolation
