@@ -1181,6 +1181,313 @@ Next phase: EXECUTE Gate 2 via vc-execute-agent (opus), scoped to F1-F8 + F11 + 
 Validate contract: inline in plan (## Validate Contract)
 Execute start: wc -l all-context <=300 | validate-context-discovery (failures == baseline) | validate-all-context | discover-context --check-routing | validate-protocol-wiring | validate-protocol-discovery | validate-kit-portability | validate-agent-parity non-strict | validate-plan-inventory (0 failures) | C11 registry IDs | C13 whitespace (tracked, staged, untracked) | C14 deliverables | retired-wording grep (C8) | e2e spec: none | probe: none until Gate 3 | high-risk pack: no (Gate 5 R12 only)
 
+## Validate Contract — Gate 3
+
+Status: CONDITIONAL (pending the single V5 user decision on the live probes; see Open gaps G3-K1)
+Date: 03-10-26
+date: 2026-10-03
+generated-by: outer-pvl
+Relation to the Gate 2 contract: the Gate 2 contract above is retained as history and is NOT overwritten; it gated the START of Gate 2 only. This section gates the START of Gate 3 EXECUTE only (F9, F10, the master-planner.md additions below, two sample probe inputs, commands C1-C4 and C10 in the corrected forms below). Gates 4-6 re-enter VALIDATE.
+Scope: CLAUDE.md and AGENTS.md role-neutral rewrite with one byte-identical ENTRY-SET block; no `@`-imports; AGENTS.md `.agents/skills` correction; additions to master-planner.md so no orchestrator rule vanishes; byte baselines for both entry sets; user review before any commit. Everything is a text file; no product code; the only write targets are CLAUDE.md, AGENTS.md and files under `process/`.
+
+Parallel strategy: sequential (single validate session; Layer 1 and Layer 2 checks ran inline as read-only commands; no sub-agent spawn tool was available here, and nothing was run that changes repo state; scratch files lived in the session scratchpad only)
+Rationale: signal score 2/7 (S7: 8 files in the Gate 3 blast radius; S6 weak: governance and approval-gate text that every session loads). Dominant signal is S7, but the two main files must carry a byte-identical block, so one writer is safer than a fan-out. Evidence below was measured live at HEAD 3faeff4 (== origin/claude/pensive-albattani-ou0cgv, clean tree, 2026-10-03T00:44Z).
+
+Live baseline today (read-only runs; every Gate 3 command below was executed on the live tree and its "red today" result recorded):
+
+| Item | Measured today |
+|---|---|
+| CLAUDE.md | 28,903 B, 440 lines; 9 literal `process/context/all-context.md` |
+| AGENTS.md | 37,885 B, 704 lines; 12 literal `process/context/all-context.md` |
+| C1 (pinned form) | 3 lines (CLAUDE.md 20, 36, 48), as the plan says |
+| C2 | 8 lines (CLAUDE.md 46, 50, 52, 59; AGENTS.md 50, 56, 58, 65), as the plan says |
+| C10 | exit 1 at the first test (0 markers in both files), as the plan says |
+| C9 Gate 3 form | no output (clean tree) |
+| C3 | the Gate 2 files now exist; with TASK = this 200,822-byte plan it prints total=263785 and rc=1, so C3 is only meaningful with a small pinned brief (G3-C3 below) |
+| C4 | with a missing envelope: MISSING line, rc=1 |
+| Planner files that exist now | router section 5,831 + north-star 5,225 + current-state 6,316 + MASTER-PLAN 16,688 = 34,060 B (the Gate 2 report said 31,397; current-state.md and MASTER-PLAN.md grew by about 2.7 KB in the closeout) |
+| Validators (JSON counted) | context-discovery 1 failure (`.agents/skills`), skills 1, guide-sync 1 (README), agent-parity non-strict 0 failures / 18 warnings, plan-inventory 0 / 6, skill-dependencies 0 / 4, all-context, protocol-wiring, protocol-discovery, kit-portability, skill-invocation-wiring, agent-frontmatter, skill-keywords, skill-routing, skill-cross-refs, confusable-skills 0 / 0; `--check-routing` in sync; `git diff --check` clean; validate-plan-artifact on this plan 0 / 0 |
+
+Everything above equals the Gate 2 closeout baseline: no new validator failure appeared when Gate 2 closed.
+
+### Layer 1 and Layer 2 findings
+
+| Question asked | Result | Evidence |
+|---|---|---|
+| (1) Are C1-C4 and C10 non-vacuous today? | C2, C3, C4, C10 yes; C1 has a FALSE NEGATIVE | C1's regex needs a space or `(` before the `@`: a scratch file with `@process/x.md` at the start of a line printed nothing, while the corrected `(^|[[:space:](])` form printed it. A role-neutral CLAUDE.md could therefore still import a file and pass C1. C10 passes vacuously when both files carry an EMPTY block (BEGIN directly followed by END): scratch test rc=0 with no content, so a non-triviality check is added (G3-5). C3 and C4 need pinned sample inputs (G3-C3, G3-C4) |
+| (2) Can CLAUDE.md reach <= 20,000 B and keep every hard rule or a pointer? | YES, with margin | Budget (estimate, execute measures): title, bootstrap guard and session-start pointers 900; ENTRY-SET block 3,800 (cap 5,000); Core Protocol with the RIPER-5 Phase Table 2,400; Phase Transition Rules with the PVL/EVL gates 3,400; QUICK FIX trigger and scope guard 700; model policy 450; Key Principles 650; pointer table for relocated sections 1,500; communication, hooks, resources one-liners 600; total about 14,400 B. Target <= 16,000, hard cap 20,000. AGENTS.md (37,885 now) reaches <= 20,000 the same way (Codex bootstrap, the same block, Phase Table and rules, a compressed agent map, pointers; about 15,000 B). Margin matters: with CLAUDE.md at 20,000 B and an 8,000 B brief the planner set is 62,060 B against the 64,000 cap (1,940 B spare); at 16,000 B it is 58,060 |
+| (2b) Which parts are validator-required or relied on? | listed in the next table | read from the validator and hook sources; no hook or agent text depends on the "You are the orchestrator" wording |
+| (2c) Rules that live ONLY in CLAUDE.md/AGENTS.md today and would vanish | 5 found | see "Rules at risk" below; G3-7 prints 3 MISSING lines today (the master-planner.md items) and the rest are kept-in-place anchors |
+| (3) Role-neutral rewrite and master-planner.md | feasible, with additions | master-planner.md section 2 already has the posture rules (detect/route/monitor, no inline execution, strategy, model, session tools) but not the delegation list ("never research, brainstorm, plan, implement or update rules yourself; delegate; trivial conceptual questions are the one exception") nor the execute-agent preflight ("never let vc-execute-agent infer the plan from ambient state; if several plans exist, ask the user"). Both must be added (about 1.2 KB; the file is 12,705 B now). Frontmatter is untouched, so validate-protocol-discovery and validate-protocol-wiring are unaffected by body additions; the additions must avoid backticked `process/context/<file>` paths other than all-context.md and tests/all-tests.md (kit-portability) |
+| (3b) How does a Planner session still get the orchestrator rules, and how does a worker envelope override? | Role Selection inside the ENTRY-SET block; two defects to fix | (i) Role Selection (2) says "read master-planner.md" but the entry-set tables list master-planner.md as on-demand: a planner that obeys it loads 12.7 KB (about 14 KB after additions) outside the measured set. With CLAUDE.md 16,000 B, the planner files 34,060 and a 5,000 B brief the total is 55,060 + 14,000 = 69,060 B, over 64,000. Fix: the block says to read master-planner.md only when dispatching, accepting, merging, spawning workers or updating the registry, and C3 reports a second informational total that includes it; a cap is never raised silently. (ii) CLAUDE.md today says "Never start EXECUTE without explicit approval" (line 390), "ENTER EXECUTE MODE ... ALWAYS spawns vc-execute-agent" (line 374) and "Explicit ENTER EXECUTE MODE" (lines 184, 361). A WORKER told to work in a direct lane would stall waiting for ENTER EXECUTE MODE or spawn a subagent chain. Fix: the worker paragraph states "the envelope is your EXECUTE approval" and every kept planner-only rule is scoped with "In planner posture"; check G3-9 |
+| (3c) Check against the user's diagram | consistent | the planner loads north-star, current-state, the registry, the router and a brief; workers load the envelope, the brief and CLAUDE.md; architecture.md and operating-instructions.md stay on demand. The only gap is the master-planner.md accounting in (3b) |
+| (4) ENTRY-SET block design and the AGENTS.md falsehood | design sound; falsehood is in 4 places, the plan names one | `.agents/skills` is 339 regular tracked files (mode 100644), not a symlink. AGENTS.md claims a symlink at lines 11, 19-20, 420-421 and 673-674 (and "exposed to Codex through" at 687). F10 says "the false statement"; all must be corrected or removed; check G3-8 prints 4 hits today. Both files can carry the block verbatim only if it avoids Claude-only or Codex-only terms (no "Agent tool", "TeamCreate", "spawn_agent"); say "subagent" generically |
+| (5) Fresh-session probe feasibility | cannot be done by a vc-* subagent; see "Probe design" | evidence: this validate subagent was handed the OLD 1,223-line all-context.md (Last updated 2026-09-28) in its loaded context while the file on disk is 193 lines, so a subagent inherits its parent's start-of-session load and is not a fresh load; a subagent that reads files is not a fresh session |
+| (6) User-review hard stop | PASS with the procedure below | EXECUTE leaves CLAUDE.md and AGENTS.md uncommitted; a review package is written; the commit waits for the user's explicit OK |
+| Mechanical gate caveat | CONCERN (closed here as an orchestrator instruction) | the literal PASS line grep (`grep -c` for the Gate PASS string) is already >= 1 because of the Gate 2 contract, and `wc -l < results.tsv` is already >= 3 (Gate 1/2 cycles, last row HALTED_SUCCESS), so BOTH mechanical VALIDATE-to-EXECUTE checks are satisfied for Gate 3 without any Gate 3 evidence. For Gate 3 the only legal tests are: the Gate line inside this Gate 3 contract (`sed -n '/^## Validate Contract — Gate 3/,/^## Autonomous Goal Block — Gate 3/p' <plan>`), or the user's quoted acceptance. A Gate 3 cycle log needs its own baseline row in results.tsv |
+
+Validator-required or relied-on CLAUDE.md/AGENTS.md content (what the rewrite must keep):
+
+| Item | Who relies on it | Requirement after Gate 3 |
+|---|---|---|
+| literal `process/context/all-context.md` in BOTH files | validate-context-discovery (`assertContains`) | count >= 1 each (today 9 and 12); G3-6 |
+| no backticked concrete `process/context/<file>` outside all-context.md and tests/all-tests.md | validate-kit-portability (scans CLAUDE.md, AGENTS.md, protocols) | north-star.md, current-state.md, decisions.md, architecture.md, operating-instructions.md, context-changelog.md by bare name or markdown link only |
+| no brand strings, no stale-workflow strings (`vc:plan`, `process/context/<group>`, `./docs`, `docs-manager`) | kit-portability check (a), context-discovery stale scan (both scan these two files) | do not reintroduce; validators run |
+| CLAUDE.md and AGENTS.md are canonical skill-routing surfaces | validate-skill-routing (every skill must appear in AGENTS.md, CLAUDE.md or the generated skills catalog; the catalog covers all 33 today, so slimming does not fail it) | run validate-skill-routing (added to the Gate 3 set; 0 failures today) |
+| `## Routing` heading and the "RIPER-5 Phase Table" | orchestration.md lines 887 and 986 cite them by name; orchestration.md is unchanged this program | keep both names in CLAUDE.md |
+| stop-validator-sweep, hooks, settings | the sweep's harness group fires on `.claude/` and `process/development-protocols/` paths, not on CLAUDE.md alone; no hook reads CLAUDE.md content | master-planner.md edits will trigger the harness group; read its advisory output |
+| agents that cite CLAUDE.md | vc-update-process-agent line 195 ("Current features list in CLAUDE.md and AGENTS.md"): that list does not exist in either file today (pre-existing ghost reference) | cosmetic, see Open gaps |
+
+Rules at risk (live ONLY in CLAUDE.md/AGENTS.md; verified by grepping `.claude/`, `.codex/` and `process/development-protocols/`): (1) "Every response MUST begin with [MODE: ...]" and "Only ONE mode per response" (no other file states them; agents carry their own marker); (2) "Never skip directly to implementation" and "Never start EXECUTE without explicit approval"; (3) the orchestrator delegation list and the trivial-question exception; (4) the execute-agent preflight (one plan file, ask when several, never infer from ambient state; only "pass exactly one plan file path" survives in 08-validate.md); (5) the Bootstrap Guard line. Everything else relocated has its rule at the pointer target (verified by grep: orchestration.md carries the agent-team machinery, the autonomy-removes-approval-pauses-only rule, the QUICK FIX scope guard, skill discovery and the context routing discipline; 08-validate.md carries the /goal block fields; autopilot.md carries the prepend; plan-lifecycle.md the task-folder rules; implementation-standards.md the commit policy; vc-agent-strategy-compare the pre-spawn rule and model policy; vc-context-discovery the 10-field envelope).
+
+Deliberate removal that must be recorded, not silent: CLAUDE.md "Before Any Substantial Task" orders two full `find` listings and a "mandatory gate" before loading any context. That ritual contradicts the minimal entry sets and costs a large listing per session. The skill vc-context-discovery already performs the discovery. The rewrite replaces it with the ENTRY-SET pointers; Gate 3 adds one decisions.md entry (D-9) saying so, with the old text recoverable from git.
+
+### Probe design (the live behavioral proof of AC-R1)
+
+A fresh session can be launched here only three ways; a vc-* subagent reading files is NOT one of them.
+
+| Route | How | Cost and risk | Approval |
+|---|---|---|---|
+| A. headless fresh process (recommended) | from a scratch copy of the Gate 3 tree, `claude -p "<probe prompt>" --model sonnet --max-budget-usd 1 --output-format stream-json --verbose --no-session-persistence` (the `claude` CLI 2.1.288 is installed here; `--max-budget-usd` hard-caps spend). The transcript lists every Read and tool call, so the assertions are scripted; the JSON result also carries real `usage` and cost, which would give the first MEASURED token baseline (also run once on the pre-Gate-3 tree for a before/after pair) | unmeasured; estimate cents to about 1 USD per probe on sonnet at a 10-20k-token entry load, hard-capped by the flag; 2 probes plus 2 baseline runs about 0.5-4 USD. Unverified: nested `claude -p` inside this container (auth, proxy, child-session variable) may refuse; a one-line feasibility call (`say ok`, cap 0.05) tells first. Hooks in the copied project run (session-init output adds a small unmeasured amount) | needed: it spends the user's money and makes network calls; not covered by the standing authorization (that covers workers for `approved` registry tasks only) |
+| B. cloud session | the orchestrator's `create_session(prompt, branch)` (exists only in the orchestrator session) | outward action: the Gate 3 branch must be PUSHED first (PR #13 is open, so a push updates it), no budget flag, runaway risk (needs `interrupt_session`), then `archive_session` needs its own approval; cost unmeasured, probably more than A. The Gate 2 session was reported at about 51 USD, but that was a long opus execute run, not a probe | needed (push plus spend) |
+| C. user-run | the user opens a fresh session on the branch and pastes the probe prompt (P1) or the sample envelope (P2) | no agent cost | the user's own action |
+
+Probe prompts (written into the sample files by EXECUTE): P1 PLANNER = "Read the task brief at <path to gate3-probe-brief_REF> and tell me, in one line, the task and which files you loaded to get there. Change nothing." Assertions on the transcript: Read set is a subset of {CLAUDE.md, north-star.md, current-state.md, process/MASTER-PLAN.md, the top of all-context.md up to the Context Group Lifecycle heading, the brief}; no Read of orchestration.md, context-changelog.md, architecture.md, operating-instructions.md, master-planner.md; no Agent or session tool call. P2 WORKER = the contents of gate3-probe-envelope_REF as the first message (first line `ROLE: WORKER`; task: read the brief and write the 11-heading report text in the reply; edit and run nothing that changes state). Assertions: the reply states it is a WORKER; zero Agent, Task or session-tool calls; Read set subset of {CLAUDE.md, envelope, brief}; it does not ask for or wait for ENTER EXECUTE MODE; it produces the 11 headings. One sample per probe is single-run evidence, not proof (a model may behave differently next time).
+
+Cheaper proxy that always runs (no model, no spend): the static gates G3-1 to G3-9 prove bytes, structure, block identity, role-neutral wording, rule survival and the scoped planner rules. They do NOT prove that a model obeys the Role Selection text.
+
+If no probe route is approved: P1 and P2 stay a named residual (gap-resolution C, deferred to the Gate 6 pilot, whose first worker is a real fresh WORKER and whose report field 11 records what it loaded; and D, a backlog stub `process/general-plans/backlog/gate3-live-probes_NOTE_03-10-26.md` created by Gate 3 EXECUTE). Known-Gap is never recorded as a proving strategy.
+
+### Gate 3 command set (all run from the repo root in bash; red-today results were observed live)
+
+```
+# G3-1  AC-R1: no @-imports, including at the start of a line (replaces C1 for Gate 3)
+grep -nE '(^|[[:space:](])@[A-Za-z0-9./_-]+\.md' CLAUDE.md AGENTS.md
+# red today: 3 lines (CLAUDE.md 20, 36, 48). After Gate 3: no output. Verified: the pinned C1 form misses a line-start import, this form catches it.
+
+# G3-2  AC-R1: role-neutral = pinned C2 unchanged
+grep -nE 'You are the orchestrator|You do NOT|Your responsibilities|Orchestrator Role' CLAUDE.md AGENTS.md
+# red today: 8 lines. After Gate 3: no output.
+
+# G3-3  AC-R1: per-file caps (the sums in C3/C4 would let one oversized file hide behind small others)
+for f in CLAUDE.md AGENTS.md; do n=$(wc -c < "$f"); echo "$f $n"; test "$n" -le 20000 || echo "OVER-CAP $f"; done
+# red today: OVER-CAP for both (28,903 and 37,885). After Gate 3: no OVER-CAP line. Target for CLAUDE.md is <= 16,000 (advisory).
+
+# G3-C3  AC-R1: planner bytes = pinned C3 with TASK pinned to the sample brief (not this plan)
+TASK=process/general-plans/active/master-planner-recovery_02-10-26/gate3-probe-brief_REF_03-10-26.md
+# then run the pinned C3 block unchanged; must print rc=0. Also print the informational total with master-planner.md added
+# (cat ... process/development-protocols/master-planner.md | wc -c): reported, never used to raise the cap.
+# red today: the brief does not exist, so C3 prints MISSING and rc=1.
+
+# G3-C4  AC-R1: worker bytes = pinned C4 with the two sample files
+ENVELOPE=process/general-plans/active/master-planner-recovery_02-10-26/gate3-probe-envelope_REF_03-10-26.md
+TASK=process/general-plans/active/master-planner-recovery_02-10-26/gate3-probe-brief_REF_03-10-26.md
+# then run the pinned C4 block unchanged (OPS empty, then once with OPS=process/context/operating-instructions.md); both must print rc=0.
+# also: head -1 "$ENVELOPE" must equal exactly: ROLE: WORKER
+# red today: MISSING lines, rc=1.
+
+# G3-5  AC-R4: pinned C10 (exactly one marker per file, identical blocks) PLUS non-triviality of the block
+for f in CLAUDE.md AGENTS.md; do b=$(sed -n '/ENTRY-SET:BEGIN/,/ENTRY-SET:END/p' "$f"); s=$(printf '%s' "$b" | wc -c)
+  for t in 'ROLE: WORKER' 'PLANNER' 'WORKER' 'north-star.md' 'current-state.md' 'MASTER-PLAN.md' 'all-context.md' 'master-planner.md' 'operating-instructions.md' 'architecture.md' 'EXECUTE approval'; do
+    printf '%s' "$b" | grep -qF -- "$t" || echo "MISSING-TOKEN $f: $t"; done
+  test "$s" -le 5000 || echo "BLOCK-TOO-BIG $f $s"; done
+# red today: every token MISSING for both files. Verified on scratch files: an empty BEGIN/END pair passes C10 (rc=0) but prints MISSING-TOKEN here;
+# a one-word drift makes C10 exit 1. After Gate 3: C10 exit 0 and no line from this loop.
+
+# G3-6  literal path present in both files (validate-context-discovery needs it)
+for f in CLAUDE.md AGENTS.md; do test "$(grep -c 'process/context/all-context.md' "$f")" -ge 1 || echo "MISSING-LITERAL $f"; done
+# today: no output (9 and 12). After Gate 3: still no output.
+
+# G3-7  AC-R1/AC-R4: rule survival (rules that exist only in CLAUDE.md today stay in place or move with a pointer)
+ck(){ grep -qE -- "$2" "$1" 2>/dev/null || echo "MISSING-RULE [$3] /$2/ not in $1"; }
+ck CLAUDE.md 'Every response MUST begin with' "mode prefix"
+ck CLAUDE.md 'Only ONE mode per response' "one mode per response"
+ck CLAUDE.md 'Never skip directly to implementation' "no skipping to implementation"
+ck CLAUDE.md 'Never start EXECUTE without explicit approval' "explicit EXECUTE approval (planner posture)"
+ck CLAUDE.md 'directly on .?main' "commit policy"
+ck CLAUDE.md '^## Routing' "orchestration.md cites ## Routing"
+ck CLAUDE.md 'RIPER-5 Phase Table' "orchestration.md cites the Phase Table"
+ck CLAUDE.md 'Bootstrap Guard|vc-setup' "bootstrap guard"
+ck CLAUDE.md 'MUST NOT be emitted' "PVL: no PHASE_COMPLETE after first-pass CONDITIONAL"
+ck CLAUDE.md 'wc -l < results\.tsv' "PVL gate (b)"
+ck CLAUDE.md 'vc-tester' "EVL independent confirmation"
+ck CLAUDE.md 'No inline execution' "no inline execution (planner posture)"
+ck CLAUDE.md 'QUICK_FIX_ABORT|Scope guard' "quick-fix scope guard"
+ck CLAUDE.md 'EXECUTE = opus' "model policy"
+ck CLAUDE.md 'orchestration\.md' "pointer orchestration.md"
+ck CLAUDE.md 'autopilot\.md' "pointer autopilot.md"
+ck CLAUDE.md 'plan-lifecycle\.md' "pointer plan-lifecycle.md"
+ck CLAUDE.md 'communication-standards\.md' "pointer communication-standards.md"
+ck CLAUDE.md 'discover-skills\.mjs' "skill discovery Step 0"
+ck process/development-protocols/orchestration.md 'full machinery' "agent-team machinery (target)"
+ck process/development-protocols/orchestration.md 'approval pauses ONLY' "autonomy removes pauses only (target)"
+ck process/development-protocols/orchestration.md 'Scope guard' "quick-fix scope guard (target)"
+ck process/development-protocols/orchestration.md 'routers, not the full knowledge' "context routing discipline (target)"
+ck process/development-protocols/orchestration.md 'Skill Discovery' "skill discovery (target)"
+ck process/development-protocols/vc-system-behavior/08-validate.md 'Execute start:' "/goal block format (target)"
+ck process/development-protocols/vc-system-behavior/08-validate.md 'Pass exactly one plan file path' "execute preflight (target)"
+ck process/development-protocols/autopilot.md 'AUTOPILOT CONTEXT' "autopilot prepend (target)"
+ck process/development-protocols/plan-lifecycle.md 'Task-Folder' "task-folder framework (target)"
+ck process/development-protocols/implementation-standards.md 'Commit on .main. by default' "commit hygiene (target)"
+ck .claude/skills/vc-agent-strategy-compare/SKILL.md 'Orchestrator Pre-Spawn Rule' "pre-spawn recommendation (target)"
+ck .claude/skills/vc-context-discovery/SKILL.md 'Context Envelope' "10-field envelope (target)"
+ck process/development-protocols/master-planner.md 'never (research|brainstorm)|do(es)? not (research|brainstorm)|delegate' "delegation list moved here"
+ck process/development-protocols/master-planner.md 'trivial question' "trivial-question exception moved here"
+ck process/development-protocols/master-planner.md 'infer the plan|ambient state' "execute-agent preflight moved here"
+# red today: exactly 3 MISSING-RULE lines (the three master-planner.md items; they must be ADDED). Verified on a scratch tree: with the three
+# additions it prints nothing, and deleting one rule line from the scratch CLAUDE.md prints exactly that rule. After Gate 3: no output.
+# (Rules marked "(planner posture)" may be reworded, but the quoted anchor phrase must remain so the check stays mechanical.)
+
+# G3-8  AC-R4: AGENTS.md makes no false claim that .agents/skills is a symlink (it is 339 tracked regular files until H1)
+grep -nEi 'is (already )?a symlink|symlink to|resolves to the same folder|both places automatically|through the .?\.agents/skills.?/? *
+**Update 03-10-26 (Gate 2 closeout): Gate 2 complete; Gate 3 requires VALIDATE then explicit ENTER EXECUTE MODE.** Gate 2 report: `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_GATE2-REPORT_03-10-26.md`. Execute HEAD `b84e580` (10 commits, pushed); closeout commits local. Next step: re-enter VALIDATE for Gate 3 (F9, F10, C1-C4, C10), user reviews CLAUDE.md/AGENTS.md before commit. The numbered list below is the pre-Gate-2 handoff, kept as history.
+
+1. Selected plan: `/home/user/psychic-train/process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md`
+2. Last completed step: PVL cycle 5 validate (03-10-26, re-run from V1 after the cycle-4 supplement of Gaps 31-32 and cosmetic c1-c9): both gaps verified closed live, c1-c9 landed, C1-C14 re-run and match; Gate: PASS. No implementation. Working tree: plan file edits only.
+3. Validate-contract: written 03-10-26 (cycle 5), Gate: PASS, 0 FAIL, 0 unresolved CONCERN (two cosmetic residuals r1, r2 recorded as known gaps). Scope: START of Gate 2 only.
+4. Context loaded: CLAUDE.md, all-context.md, orchestration.md, MASTER-PLAN.md (full), realignment SPEC (AC grep), repo branch list.
+5. Next step: orchestrator emits the /goal block and the EXECUTE strategy recommendation; on the user's explicit ENTER EXECUTE MODE, spawn vc-execute-agent (opus) for Gate 2 scoped to F1-F8, F11, F15-F17, R13 and R14 in the section 2 order; start MASTER-PLAN work from `pensive-dijkstra` rev 6 (pinned 18ffd4f014f4e5ea0f5d654688875a9300b30ab4); re-verify every remaining UNVERIFIED registry item first; R4 step (vii) is run by the orchestrator session itself. After Gate 2: UPDATE PROCESS closeout, then VALIDATE again before Gate 3.
+
+## Phase Completion Rules
+
+- A gate is complete only when its Verification Evidence rows are green and recorded with command, timestamp, and commit SHA.
+- Status words: `PROPOSED` (this plan), `CODE DONE` (files written, not independently verified), `VERIFIED` (independent re-run, e.g. spawned vc-tester or user). Known-gap alone never yields VERIFIED.
+- No gate starts before VALIDATE writes a contract for it and the user approves; archive/delete/session-termination steps need separate explicit approval.
+ AGENTS.md
+# red today: 4 lines (11, 19, 20, 420). After Gate 3: no output (any retained statement says: tracked copy until H1 lands).
+
+# G3-9  AC-R1: planner-only rules are scoped so a WORKER is not told to stall or to spawn
+grep -nE 'ALWAYS spawns|No inline execution' CLAUDE.md AGENTS.md | grep -vE 'posture'
+# red today: 1 line (CLAUDE.md 374). After Gate 3: no output (each such line says "In planner posture" or "orchestrator posture").
+
+# G3-10 validator set: failures and warnings equal the baseline in the table above (compare messages, not only counts)
+node .claude/skills/vc-audit-context/scripts/validate-context-discovery.mjs
+node .claude/skills/vc-generate-context/scripts/validate-all-context.mjs
+node .claude/skills/vc-context-discovery/scripts/discover-context.mjs --check-routing
+node .claude/skills/vc-audit-vc/scripts/validate-protocol-wiring.mjs
+node .claude/skills/vc-audit-context/scripts/validate-protocol-discovery.mjs
+node .claude/skills/vc-audit-vc/scripts/validate-kit-portability.mjs
+node .claude/skills/vc-audit-vc/scripts/validate-agent-parity.mjs
+node .claude/skills/vc-audit-vc/scripts/validate-guide-sync.mjs
+node .claude/skills/vc-audit-vc/scripts/validate-skill-invocation-wiring.mjs
+node .claude/skills/vc-audit-context/scripts/validate-skill-routing.mjs
+node .claude/skills/vc-audit-plans/scripts/validate-plan-inventory.mjs
+node .claude/skills/vc-generate-plan/scripts/validate-plan-artifact.mjs process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md
+
+# G3-11 scope and whitespace: pinned C9 Gate 3 form and pinned C13, unchanged (no output)
+```
+
+### Test gates (5-column table; Gate 3 scope; strategies are the three proving strategies only)
+
+| criterion id | behavior | strategy | proving test | gap-resolution |
+|---|---|---|---|---|
+| AC-R1 | no `@`-import survives, including a line-start one | Fully-Automated | G3-1 (red today, 3 lines) | B (corrected from pinned C1) |
+| AC-R1 | CLAUDE.md and AGENTS.md are role-neutral | Fully-Automated | G3-2 (red today, 8 lines) | A |
+| AC-R1 | each file <= 20,000 B (target CLAUDE.md <= 16,000) | Fully-Automated | G3-3 (OVER-CAP today) | B |
+| AC-R1 | planner entry set <= 64,000 B on a pinned brief | Fully-Automated | G3-C3 | B (sample brief added) |
+| AC-R1 | worker entry set <= 36,000 B (43,000 with operating-instructions.md); envelope <= 8,000; first line `ROLE: WORKER` | Fully-Automated | G3-C4 | B (sample envelope added) |
+| AC-R4 | one identical, non-empty ENTRY-SET block in both files | Fully-Automated | pinned C10 + G3-5 | B (non-triviality added) |
+| AC-R4 | literal `process/context/all-context.md` in both files | Fully-Automated | G3-6 | A |
+| AC-R1, AC-R4 | no orchestrator or governance rule lost in the slimming | Fully-Automated | G3-7 (3 MISSING today; scratch-verified both ways) | B |
+| AC-R4 | AGENTS.md carries no false symlink claim | Fully-Automated | G3-8 (4 hits today) | B |
+| AC-R1 | planner-only rules scoped, worker not told to stall or spawn | Fully-Automated | G3-9 (1 line today) | B |
+| AC-R4 | no new validator failure or warning versus baseline | Fully-Automated | G3-10 | A |
+| AC-R8 | only CLAUDE.md, AGENTS.md and `process/` changed; no whitespace or conflict-marker errors | Fully-Automated | pinned C9 Gate 3 form; pinned C13 | A |
+| AC-R1 | a fresh PLANNER session reaches a task brief on the planner set only | Agent-Probe | P1 by route A, B or C (needs the user's approval) | C (Gate 6 pilot and the user's next fresh session) plus D (backlog stub) if not run |
+| AC-R1 | a fresh WORKER session states ROLE: WORKER, spawns nothing, does not wait for ENTER EXECUTE MODE, reads only its set | Agent-Probe | P2 by route A, B or C (needs the user's approval) | C and D as above |
+| AC-R9 | token figures labelled measured or unmeasured; real before/after tokens only if route A runs | Hybrid | review of the Gate 3 report (+ probe `usage` if run) | D (`token-usage-telemetry_NOTE_02-10-26.md` already exists) |
+| user review | the user has seen the rewritten files before any commit | Hybrid | review package + the user's explicit OK, see below | A |
+
+Failing stub:
+test("should have no @-import in CLAUDE.md or AGENTS.md including line-start", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G3-1 red today, 3 lines") })
+Failing stub:
+test("should be role-neutral in both entry files", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G3-2 red today, 8 lines") })
+Failing stub:
+test("should keep each entry file at or under 20,000 bytes", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G3-3 OVER-CAP today") })
+Failing stub:
+test("should keep the planner entry set at or under 64,000 bytes on the sample brief", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G3-C3 MISSING today") })
+Failing stub:
+test("should keep the worker entry set at or under its cap on the sample envelope", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G3-C4 MISSING today") })
+Failing stub:
+test("should carry one identical non-empty ENTRY-SET block in both files", () => { throw new Error("NOT IMPLEMENTED - TDD stub: C10 exit 1 and G3-5 MISSING-TOKEN today") })
+Failing stub:
+test("should lose no orchestrator or governance rule", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G3-7 prints 3 MISSING-RULE today") })
+Failing stub:
+test("should make no false symlink claim in AGENTS.md", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G3-8 4 hits today") })
+Failing stub:
+test("should scope planner-only rules so a worker is not blocked", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G3-9 1 line today") })
+
+Legacy line form (retained so existing contract consumers still parse):
+- entry-file structure: [fully-automated: G3-1, G3-2, G3-3, G3-5, G3-6, G3-8, G3-9] | entry-set bytes: [fully-automated: G3-C3, G3-C4 on sample files] | rule survival: [fully-automated: G3-7] | validators: [fully-automated: G3-10] | scope: [fully-automated: C9 Gate 3 form, C13] | fresh-session behavior: [agent-probe: P1, P2, needs user approval] | tokens: [hybrid: Gate 3 report review] | user review: [hybrid: review package]
+
+Execute-agent instructions (concerns that the plan text cannot hold; EXECUTE must follow all):
+
+| # | Instruction |
+|---|---|
+| E1 | Order of writes: master-planner.md additions first, then the two sample REF files, then decisions.md entry D-9, then CLAUDE.md, then AGENTS.md (the block copied byte for byte), then run the gates. The rewritten CLAUDE.md is read by every subagent spawned after it is written (vc-tester included), so write it LAST. Keep the old text recoverable: do not commit; `git checkout -- CLAUDE.md AGENTS.md` restores it before the user's OK |
+| E2 | master-planner.md additions (about 1.2 KB): the delegation list ("a session in orchestrator posture never researches, brainstorms, plans, implements or updates rules itself; it delegates to vc-research-agent, vc-innovate-agent, vc-plan-agent, vc-execute-agent and vc-update-process-agent; trivial conceptual questions are the one exception") and the preflight ("before spawning vc-execute-agent confirm exactly one plan file; pass its path in the prompt; if several plans exist ask the user; never let it infer the plan from ambient state"). Keep frontmatter untouched; no backticked `process/context/<file>` path except all-context.md and tests/all-tests.md |
+| E3 | Sample probe inputs, both under the plan's task folder, each <= 8,000 B: `gate3-probe-brief_REF_03-10-26.md` (a small realistic task brief, about 3 KB, harmless: asks for a report only) and `gate3-probe-envelope_REF_03-10-26.md` (built from the master-planner.md section 8 template; first line exactly `ROLE: WORKER`; names that brief; operating-instructions.md not named). They are needed by G3-C3 and G3-C4; run validate-plan-inventory afterwards (no new warning) |
+| E4 | ENTRY-SET block content: both entry-set lists by bare name; a Role Selection paragraph (worker: "the envelope is your EXECUTE approval, do not wait for ENTER EXECUTE MODE, do not orchestrate, load only the files it names"; planner: read the PLANNER set, and read master-planner.md only when dispatching, accepting, merging, spawning workers or updating the registry); the hard rules that apply to every role (commit policy with the worker-branch exception `claude/<task-id>-<slug>`, phase locking, approval gates, no secrets, "the envelope overrides orchestrator wording but never these hard rules"). Role is decided by the FIRST message only. No Claude-only or Codex-only tool names. Block <= 5,000 B |
+| E5 | Every kept planner-only rule (no inline execution, ENTER EXECUTE MODE gates, orchestrator preflight, /goal block duty) is introduced with "In planner posture" so G3-9 passes and a worker reads them as not its own |
+| E6 | Keep the headings `## Routing` and the name "RIPER-5 Phase Table" (orchestration.md cites them). Replace "Before Any Substantial Task" with the ENTRY-SET pointers and add decisions.md D-9 (the removed `find` ritual; reason: contradicts the minimal entry sets, vc-context-discovery covers it; old text in git at HEAD 3faeff4). Correct or remove all four AGENTS.md symlink claims (G3-8) |
+| E7 | Do not touch orchestration.md, `.claude/`, `.codex/`, validators or hooks. Avoid the scout-block shell strings in every command. No installs, no network, no push, no commit |
+| E8 | Measure and report in the Gate 3 report: bytes of CLAUDE.md, AGENTS.md and the block; the planner total (G3-C3) and the informational total including master-planner.md; the worker total with and without operating-instructions.md; all token figures labelled approximate (bytes/4) and the SessionStart hook output, the platform system prompt and the skill list marked as NOT counted. If any cap is missed, report it; never raise a cap without the user |
+| E9 | The review package (next block) is written to the task folder as `master-planner-recovery_GATE3-REVIEW_REF_03-10-26.md` before EXECUTE ends |
+
+User-review hard stop (CLAUDE.md and AGENTS.md are high-visibility and govern every future session):
+1. EXECUTE edits the working tree only. No commit, no push. The tree stays dirty through the independent EVL run (vc-tester reads the working tree).
+2. The review package contains: an old-section to new-location table with bytes (every old CLAUDE.md and AGENTS.md section: kept, scoped, pointer target, or removed with the reason), the full new ENTRY-SET block, the G3-7 and G3-9 outputs (empty), before/after bytes, and the list of rules moved into master-planner.md. The orchestrator also prints `git diff --stat`; the user can read the full diff with `git diff -- CLAUDE.md AGENTS.md`.
+3. The orchestrator asks one question: "Commit Gate 3? (Accept / Revise / Revert)". Only an explicit accept leads to a commit, on the same session branch as Gate 2; a push is a separate ask because PR #13 is open and a push updates it. Revise loops back to EXECUTE; Revert is `git checkout -- CLAUDE.md AGENTS.md` (or `git revert <sha>` after a commit).
+4. Recommendation to the user: merging PR #13 puts the role-neutral entry files in force for every future session. Prefer to merge only after the probes have run (route A or C) or after the user accepts the residual below.
+
+Dimension findings:
+- Infra fit: PASS — every target file exists; no validator, hook or agent depends on the orchestrator wording; the `claude` CLI exists for route A; validators accept the planned structure (portability and wiring rules read from source).
+- Test coverage: CONCERN — behavior of a fresh session cannot be proven by any gate runnable without approval; the pinned C1 false negative, the C10 empty-block pass and C3/C4 without pinned inputs are closed here by G3-1, G3-5, G3-C3, G3-C4 (non-vacuity shown on scratch files); live probes are the one open item (G3-K1).
+- Breaking changes: CONCERN — five rules live only in the two entry files and the planner-posture rules contradict the worker lane if left unscoped; closed here by E2, E4, E5, G3-7, G3-9 (G3-7 prints 3 MISSING today and is scratch-verified both ways); orchestration.md citations kept by E6.
+- Security surface: PASS — text only; role is read from the first message only; the envelope may not override approval gates, commit policy or the no-secrets rule (E4); no secret, deploy or auth surface touched.
+- Gate 3 feasibility, F9 (CLAUDE.md): PASS — about 14.4 KB estimated for the 20,000 cap (target 16,000); highest-risk edit: dropping a rule that only lives here (G3-7) or leaving a planner-only rule unscoped (G3-9); write it last (E1).
+- Gate 3 feasibility, F10 (AGENTS.md): CONCERN (closed by G3-8, E6) — the symlink falsehood occurs in 4 places, not one; about 15 KB estimated for the 20,000 cap; highest-risk edit: block drift from CLAUDE.md (C10 plus G3-5).
+- Gate 3 feasibility, master-planner.md additions: PASS — frontmatter unchanged; wiring and discovery validators unaffected; about 1.2 KB.
+- Gate 3 feasibility, probes and token baseline (R7): CONCERN — see G3-K1 (user decision); without telemetry a real token baseline exists only if route A runs.
+
+Open gaps:
+- G3-K1 (the single open decision, needs the user at V5): the live probes P1 and P2. Choose: (A) approve the headless route with a hard cap of 1 USD per probe (and a one-line feasibility call first); (C) the user runs the probes by hand; or (K) accept the residual: no live probe now, deferred to the Gate 6 pilot plus a backlog stub. Until one is chosen the AC-R1 behavioral proof is a named residual and the net gate cannot be a terminal PASS.
+- G3-K2 (carried, known): real per-session token usage is unmeasured unless route A runs (`token-usage-telemetry_NOTE_02-10-26.md`).
+- G3-K3 (carried, known): AC-R5 and AC-R6 from Gate 2 still await the user's review; they do not block Gate 3.
+- Closed inside this contract (no plan supplement needed to proceed): G3-C1 line-start `@` false negative (G3-1); G3-C2 C10 empty-block pass (G3-5); G3-C3 C3 and C4 unpinned inputs (E3, G3-C3, G3-C4); G3-C4 missing per-file caps (G3-3); G3-C5 rules at risk (E2, G3-7); G3-C6 unscoped planner rules (E4, E5, G3-9); G3-C7 master-planner.md accounting (E4, E8); G3-C8 four symlink claims (G3-8); G3-C9 both mechanical VALIDATE-to-EXECUTE greps already satisfied by Gate 2 history (instruction above).
+- Cosmetic (may be accepted as known gaps): (1) vc-update-process-agent line 195 and AGENTS.md lines 249-252 refer to a "Current features list" that exists in neither entry file (pre-existing); (2) implementation-standards.md Commit Hygiene says "commit on main by default" without the worker-branch exception (only subagents that read it are affected; a one-line cross-reference is optional); (3) current-state.md (6,316 B) and north-star.md (5,225 B) are over their ~4 KB targets, which is what shrinks the planner margin; (4) MASTER-PLAN row R6 lists C1, C2, C9, C10 and R7 lists C3, C4 (fine, two rows for one gate); (5) validate-skill-dependencies prints 4 baseline warnings.
+- Known gaps carried (named residuals): the three F15 backlog stubs; the Windows symlink behavior of `.agents/skills`; platform system prompt, SessionStart hook output and skill listing are outside the byte measure.
+
+What this coverage does NOT prove:
+- G3-1, G3-2, G3-9: that the words are absent or scoped, not that a model behaves as a worker; wording can pass these and still be misread.
+- G3-3, G3-C3, G3-C4: bytes of files, not tokens; the platform system prompt, the SessionStart hook output, the skill list and anything the model chooses to read beyond the entry set are not counted; the sample brief is small by design, a real brief may be up to 8,000 B.
+- G3-5, C10: that the two blocks are identical and non-empty, not that the content is right; the user's review covers that.
+- G3-7: that anchor phrases exist at their places, not that the rule reads well or is applied; it cannot see a rule that was never listed.
+- G3-8: absence of the false claim, not that every `.agents/skills` mention is correct.
+- G3-10: no new validator failure; the baseline failures (context-discovery, skills, guide-sync) stay until Gate 5.
+- P1, P2 (if run): one sample each on one model at one time; they do not prove stable compliance, do not cover a planner that is mid-task, and route A runs without the MCP session tools.
+- Nothing here proves the Master Planner lifecycle works end to end; that is the Gate 6 pilot.
+
+Plan updates applied by this validate session: none to the plan body (history left as written); the corrections above live in this contract and the orchestrator carries them into EXECUTE through the instructions E1-E9. If the orchestrator prefers the strict path, the SUPPLEMENT REQUEST in the V7 hand-off lists the same items as plan-text additions.
+
+Gate: CONDITIONAL (0 FAILs; one open decision G3-K1; nine in-contract corrections; Gate 3 EXECUTE may start only after the user accepts G3-K1 with route A, C or K, or after one PVL supplement cycle, because first-pass CONDITIONAL is not terminal; scope: START of Gate 3 only)
+Accepted by: pending; not accepted by this session. The user decides G3-K1 at V5. Cosmetic items (1)-(5) are recorded as known gaps, not accepted concerns.
+
+## Autonomous Goal Block — Gate 3
+
+SESSION GOAL: Master Planner recovery program, Gate 3 (CLAUDE.md and AGENTS.md role-neutral rewrite with one identical ENTRY-SET block, no @-imports, master-planner.md additions, two sample probe inputs, byte baselines for the planner and worker entry sets).
+Charter + umbrella plan: N/A - single plan (process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md)
+Autonomy: autonomy removes approval pauses only (feedback_autonomous_phase_execution.md); this block is valid only after the Gate 3 contract above is accepted (G3-K1 decided). The standing authorization of plan section 4 does not cover probes or pushes.
+Hard stops / safety constraints:
+- No commit and no push before the user's explicit OK on the review package; PR #13 is open, a push updates it
+- Writes only to CLAUDE.md, AGENTS.md and files under process/; no api/, web/, .claude/, .codex/, orchestration.md, validator or hook edits
+- No probe (headless claude -p, create_session, or any spend or network call) without the user's approval and a cap of 1 USD per probe
+- Never raise an entry-set cap without the user; report misses
+- No NEW validator failure versus the Gate 3 baseline; avoid the scout-block shell strings
+Next phase: EXECUTE Gate 3 via one vc-execute-agent (opus), sequential; then an independent vc-tester (sonnet) re-runs G3-1 to G3-11; then the orchestrator presents the review package; requires the explicit ENTER EXECUTE MODE command
+Validate contract: inline in plan (## Validate Contract — Gate 3)
+Execute start: G3-1 no @-imports | G3-2 role-neutral | G3-3 per-file caps | G3-C3 planner bytes | G3-C4 worker bytes | C10 + G3-5 identical non-empty block | G3-6 literal path | G3-7 rule survival | G3-8 symlink claims | G3-9 scoped planner rules | G3-10 validators == baseline | C9 Gate 3 form + C13 | e2e spec: none | probe: P1 and P2 only if G3-K1 = A or C | high-risk pack: no
+
 ## Resume and Execution Handoff
 
 **Update 03-10-26 (Gate 2 closeout): Gate 2 complete; Gate 3 requires VALIDATE then explicit ENTER EXECUTE MODE.** Gate 2 report: `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_GATE2-REPORT_03-10-26.md`. Execute HEAD `b84e580` (10 commits, pushed); closeout commits local. Next step: re-enter VALIDATE for Gate 3 (F9, F10, C1-C4, C10), user reviews CLAUDE.md/AGENTS.md before commit. The numbered list below is the pre-Gate-2 handoff, kept as history.
