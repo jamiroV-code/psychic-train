@@ -45,6 +45,8 @@ Outside the baseline: `validate-backlog-notes` reports 45 failing notes (older n
 
 Gates 2, 3 and 4 are complete. Reports are in `process/general-plans/active/master-planner-recovery_02-10-26/`: `..._GATE2-REPORT_03-10-26.md`, `..._GATE3-REPORT_03-10-26.md` (probe token figures), `..._GATE4-REPORT_03-10-26.md` (test tiers, bounded retry with a same-failure stop, no-re-run rule, planner budget). The Gate 4 independent EVL (vc-tester, iteration 002) was green at cycle 0. Gates 5 and 6 remain, so the plan stays in `active/`.
 
+**Gate 5 prep (03-10-26, local commits after `125d39b`, not pushed):** worker briefs and envelopes for T20 and T16 written (`process/general-plans/active/t20-untrack-tsbuildinfo_03-10-26/`, `.../t16-root-readme_03-10-26/`); G5-1 and G5-2 silent; registry T16, T20 `approved`, T17 `cancelled`; user decisions in the Approvals Log. No worker spawned. Workers start from `main` only after the user merges PR #13 (G5-K1 = B).
+
 Planner budget, MEASURED by the PLANNER-BUDGET block in master-planner.md section 12 (bytes only), re-run after the closeout edits: fixed part 48,346 B of 56,000 (headroom 7,654 B); with an 8,000 B brief 56,346 B of 64,000; with master-planner.md 64,670 B (informational, not a cap). At the Gate 4 execute commit the fixed part was 47,699 B (headroom 8,301 B); the closeout added 647 B. Tokens as bytes/4 are ESTIMATED.
 
 ## Not run or unverified at the stamp
@@ -66,6 +68,6 @@ Planner budget, MEASURED by the PLANNER-BUDGET block in master-planner.md sectio
 
 ## Next actions
 
-1. Confirm CI on the newest pushed head; the user reviews AC-R5, AC-R6 and AC-R9 (not yet accepted).
-2. Gate 5 (cleanup and performance): re-enter VALIDATE, then the user's explicit ENTER EXECUTE MODE. Several steps need approvals: `.agents/skills` symlink (H1), `web/tsconfig.tsbuildinfo` untrack, root README, the deploy fixes R12, housekeeping candidates.
+1. The planner pushes the Gate 5 prep commits to the session branch (G5-K3); the user merges PR #13; then the planner spawns the T20 and T16 workers from `main` (spend ceiling 40 USD).
+2. After the merges: independent vc-tester per task, registry `accepted` then `archived`, Approvals Log rows, Gate 5 report. Home-PC step before the first pull that carries T20: if `git status --short web/tsconfig.tsbuildinfo` shows `M`, run `git checkout -- web/tsconfig.tsbuildinfo` first.
 3. Open Questions 10 and 12 stay open and non-blocking. Registry: MASTER-PLAN.md.

@@ -10,7 +10,7 @@ metadata:
 
 # my_site — Master Plan (board and task registry)
 
-**Last verified:** 2026-10-03 05:18 UTC at commit `0004d5b` (Gate 4 closeout; R8 row updated, R6 and R7 rows from Gate 3, other rows unchanged since `b84e580`) · **base:** `origin/main` `5878b16` · **built from:** revision 6 (`18ffd4f`, branch `claude/pensive-dijkstra-ko69oi`) on branch `claude/pensive-albattani-ou0cgv`. Gate reports live in `process/general-plans/active/master-planner-recovery_02-10-26/`.
+**Last verified:** 2026-10-03 UTC at commit `ebf36ac` (Gate 5 prep: T16, T17, T20, T25, R9, R12 rows and lanes; others unchanged since `0004d5b`) · **base:** `origin/main` `5878b16` · **built from:** revision 6 (`18ffd4f`, branch `claude/pensive-dijkstra-ko69oi`) on branch `claude/pensive-albattani-ou0cgv`. Gate reports live in `process/general-plans/active/master-planner-recovery_02-10-26/`.
 
 **This file is the one board.** Each task has one row here; details live in its task folder. Revisions 1 to 6 (narrative history, lane reports, worktree plans, dependency graph) are preserved whole in `process/archive/master-plan-revisions_02-10-26.md`. Protocol (lifecycle, acceptance rule, envelope, report, archive operations): `process/development-protocols/master-planner.md`. Product direction: north-star.md. Observed state: current-state.md.
 
@@ -26,9 +26,10 @@ metadata:
 
 | Lane | Task | Branch / worktree | Owns | Must not touch |
 |---|---|---|---|---|
-| (none) | P1, P2, P3 lanes merged 2026-10-01 (PRs #11, #10, #9) | — | — | — |
+| A (queued, not spawned) | T20 | `claude/t20-untrack-tsbuildinfo` from `main` | `.gitignore` (sole owner), index entry `web/tsconfig.tsbuildinfo`, its task folder | see T20 envelope |
+| B (queued, not spawned) | T16 | `claude/t16-root-readme` from `main` | `README.md`, its task folder | see T16 envelope |
 
-Merge token: free.
+Merge token: free (serial: the second worker re-checks `behind_by` after the first merge). Lanes start only after the user merges PR #13 (G5-K1 = B).
 
 ## Registry
 
@@ -52,16 +53,16 @@ Columns: ID · Objective · Prio · Status · Parent · Deps · Worker/session �
 | T13 | CI | M | accepted | — | — | — | merged | pytest, vitest, `tsc`, island build on PRs and main pushes | — | `.github/workflows/ci.yml` (jobs `api — pytest`, `web — vitest, tsc, island build`) | no e2e, no linter/formatter | on main |
 | T14 | UI shell | M | review | P3 | — | — | merged | Direction D shell | user visual acceptance | PR #9 | no human visual acceptance recorded | `process/general-plans/active/ui-shell_28-09-26/` |
 | T15 | adapter provider-term flags | L | proposed | — | — | — | — | demoted 02-10-26: provider terms no longer shape design (personal use) | — | RECOVERY Q7 | — | — |
-| T16 | root README | M | proposed | — | — | — | — | runbook README | RT0 | no root README (re-checked 03-10-26) | guide-sync baseline failure until done | F13 (Gate 5) |
-| T17 | `.agents/skills` duplicate | L | proposed | — | user approval | — | — | replace 339 tracked files with a symlink (H1) | validators before/after | — | Windows symlink behaviour unverified | H1 (Gate 5) |
+| T16 | root README | M | approved | — | PR #13 merged | worker (pilot B) | `claude/t16-root-readme` | owns `README.md` + task folder; guide-sync 0, links operating-instructions.md | RT0, budget 0 | brief and envelope `process/general-plans/active/t16-root-readme_03-10-26/`; report `t16-root-readme_REPORT_03-10-26.md` there | user 03-10-26 (Gate 5 pilot) | — |
+| T17 | `.agents/skills` duplicate | L | cancelled | — | — | — | — | H1 symlink | — | — | user 03-10-26: leave as is (accepted gap; reopen on request) | backlog `agents-skills-symlink-windows_NOTE_02-10-26.md` |
 | T18 | dead `write/read_confirmed_boundaries` | L | proposed | — | — | — | — | delete after evidence | full pytest | grep 03-10-26: defined in `cache.py` 370/376, no non-test caller | static search misses dynamic use | H6 |
 | T19 | archive stale plans from `active/` | L | proposed | — | — | — | — | e.g. momentum-screener_17-09-26 | RT0 | — | moves history (reversible) | archive index, Gate 5 |
-| T20 | `web/tsconfig.tsbuildinfo` tracked | L | proposed | — | user approval | — | — | untrack and ignore (F14) | RT0 | still tracked (re-checked 03-10-26) | — | F14 (Gate 5) |
+| T20 | untrack `web/tsconfig.tsbuildinfo` | L | approved | — | PR #13 merged | worker (pilot A) | `claude/t20-untrack-tsbuildinfo` | owns `.gitignore` (sole), index entry, task folder; untracked + ignore line | RT0, budget 0 | brief and envelope `process/general-plans/active/t20-untrack-tsbuildinfo_03-10-26/`; report `t20-untrack-tsbuildinfo_REPORT_03-10-26.md` there | user 03-10-26; home-PC pull step (E9) | — |
 | T21 | `cache.py` refactor | L | proposed | — | everything merged | — | solo | six near-identical path/read/write triplets | RT3 | — | low value vs personal-use goal | — |
 | T22 | cache-isolation trap in tests | L | proposed | — | — | — | — | not a live bug | — | rev 6 | — | — |
 | T23 | reconcile branches | M | in_progress | — | — | Master Planner | — | ref-only fetch done 02-10-26; per-file review before any deletion | — | RECOVERY section 7 | 12 pre-existing branches need per-branch approval | — |
 | T24 | one status board | M | superseded by R2/R6 | — | — | — | — | MASTER-PLAN is the one board; exciting-meitner board dropped in R13 | — | decisions.md D-5 | — | this file |
-| T25 | delete stale branches | L | proposed | — | T23 | — | — | per-branch user approval; `compassionate-goldberg` is the only safe candidate (0 files differ) | — | — | standing consent does not cover these | — |
+| T25 | delete stale branches | L | proposed | — | T23 | — | — | per-branch user approval; user 03-10-26 allowed PROPOSING six (`compassionate-goldberg` + five merged-PR branches; Gate 5 contract table) | — | — | nothing deleted before the user's final OK (G5-K6) and the probe (G5-K5) | — |
 | T26 | pytrends 0.0 questions: `layer 2 crypto`/`l2s` reads 0.0 nightly; `pytrends-blended/rwa` wrote 0.0 as `fresh` on a night `pytrends/RWA crypto` read 74.0 (same shape as the T1 bug); confirm RFC-1 sufficiency gating surfaces these as `insufficient` | M | needs_input | — | T3 | — | — | open finding, not fixed | — | rev 6 ("T26 revised") | data quality | — |
 | T27 | snapshot cron timing: all five crons at 11:17-13:17 UTC plus a midnight-crossing warning | M | review | P1 | — | — | merged | crons fire before UTC midnight | `gh run list` over 2-3 nights | PR #11; snapshot commits on main 2026-10-02 17:53Z, 18:04Z, 18:26Z | run start times not checked this revision | — |
 | T28 | non-atomic parquet writes | H | review | P1 | — | — | merged | `cache.py` temp-then-rename | full pytest (P1 EVL) | PR #11 (`ba82986`) | `etf_flows_adapter.merge_into_cache` still non-atomic (backlog note) | — |
@@ -92,16 +93,16 @@ Columns: ID · Objective · Prio · Status · Parent · Deps · Worker/session �
 | R6 | CLAUDE.md / AGENTS.md role-neutral rewrite, ENTRY-SET drift check | H | accepted | — | Gate 2 | Gate 3 execute | `claude/pensive-albattani-ou0cgv` | F9, F10 | RT0, C1, C2, C9, C10 (G3-1..G3-11) | `eee7709`, `0b3c9bf`; vc-tester green after one fix cycle; user accepted 03-10-26 (D-10); report `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_GATE3-REPORT_03-10-26.md` | none open; planner budget pinned in master-planner.md section 12 (D-12) | CLAUDE.md 13,443 B, AGENTS.md 12,572 B; decisions D-9, D-10 |
 | R7 | token baseline measurement | M | review | — | R6 | Gate 3 execute + independent vc-tester | same | C3, C4, live probes B1, B2, P2 (route A, D-11) | cap 1 USD per run; 0.617 USD spent | Gate 3 report; MEASURED first request: old planner 78,664 tokens, new planner 37,450, worker 37,921 (about 32k of each is the headless system prompt) | single-run samples; AC-R9 review of the Gate 3 report pending; no per-session telemetry | Gate 3 report |
 | R8 | test policy into all-tests.md | M | review | — | R6 | Gate 4 execute + independent vc-tester | same | F12, planner budget pin | RT0, G4-1..G4-11; three suites once | `753db23`: pytest 873 passed, vitest 223 (30 files), tsc exit 0; vc-tester EVL 002 green at cycle 0 (`d09d92e`); CI green at `cc0c7f6`; report `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_GATE4-REPORT_03-10-26.md` | stays `review`: rule (b) needs CI on the newest head (api job pending) and the user's Gate 4 acceptance; Playwright and island build not re-measured locally | `process/context/operating-instructions.md`, `process/context/tests/all-tests.md` |
-| R9 | housekeeping (approved items only) | L | proposed | — | — | — | — | H1-H10 per approval | validators | — | — | Gate 5 |
+| R9 | housekeeping (approved items only) | L | proposed | — | — | — | — | H1-H10 per approval | validators | — | user 03-10-26: H2 = T20, H8 = T16, H1 declined (T17), rest deferred | backlog `gate5-deferred-candidates_NOTE_03-10-26.md` |
 | R10 | deploy path doc + stale-build guard proposal | M | proposed | — | — | — | — | RECOVERY section 8 | RT0 | — | — | Gate 5 |
 | R11 | archive index + session triage | L | proposed | — | — | — | — | grow `process/archive/index.md` | RT0 | — | — | Gate 5 |
-| R12 | deploy fixes: kill-by-port before build, stale-build guard in `start-web`, post-start smoke check | M | proposed (decision to build recorded; becomes `approved` on confirmation of its task brief) | P2 | — | — | — | high-risk deploy class | RT4 | — | Windows runtime unverifiable from cloud: worker stops at `review` | Gate 5 |
+| R12 | deploy fixes: kill-by-port before build, stale-build guard in `start-web`, post-start smoke check | M | proposed (decision to build recorded) | P2 | — | — | — | high-risk deploy class | RT4 | — | deferred past Gate 5; becomes approved only on confirmation of its brief (G5-K8); Windows runtime unverifiable from cloud | backlog `gate5-deferred-candidates_NOTE_03-10-26.md` |
 | R13 | salvage `claude/exciting-meitner-hy50kn` selectively | H | review | — | — | Gate 2 execute | same | TAKE: LSE folder `active/` -> `completed/` as-is, status-strip fixes, data-sources LSE hunks; DROP: duplicate status board in all-context.md | RT0, C14 | `448b10c`; Approvals Log row (operation A); vc-tester C14 green; AC-R6 user review pending | not taken: other all-context.md changelog hunks, yfinance note edit; branch not deleted | `process/general-plans/completed/lse-data-verification_17-09-26/` |
 | R14 | adopt `pensive-dijkstra` MASTER-PLAN rev 6 as registry base | H | accepted | — | — | Gate 2 execute | same | rev 6 pinned `18ffd4f`, tip unchanged at Gate 2 start | C14 rev 6 preservation | `c33fa96`; vc-tester C14 rev 6 preservation green | branch not deleted | `process/archive/master-plan-revisions_02-10-26.md` |
 
 ## Carried notes
 
-- Backlog notes still open: `screener-weekly-bars-flake_NOTE_28-09-26.md`, `mapping-tripwire-gap_NOTE_28-09-26.md`, `pipeline-etf-flows-atomic-write_NOTE_29-09-26.md`, `pipeline-cron-firing-confirmation_NOTE_01-10-26.md`, plus the three Gate 2 stubs (`token-usage-telemetry`, `agents-skills-symlink-windows`, `deploy-runtime-user-pc-verification`, all `_NOTE_02-10-26.md`), in `process/general-plans/backlog/`.
+- Backlog notes still open: `screener-weekly-bars-flake_NOTE_28-09-26.md`, `mapping-tripwire-gap_NOTE_28-09-26.md`, `pipeline-etf-flows-atomic-write_NOTE_29-09-26.md`, `pipeline-cron-firing-confirmation_NOTE_01-10-26.md`, the three Gate 2 stubs (`token-usage-telemetry`, `agents-skills-symlink-windows`, `deploy-runtime-user-pc-verification`, all `_NOTE_02-10-26.md`) and `gate5-deferred-candidates_NOTE_03-10-26.md`, in `process/general-plans/backlog/`.
 - Known repo-wide condition (not a task, not in the validator baseline): `validate-backlog-notes` fails 45 notes on HEAD and on the Gate 2 tree alike (a different BLOCKED/done-with-gap note schema), including our three Gate 2 stubs.
 - Accepted known gaps (not tasks): listed in the revisions archive, section "Known Gaps Carried Forward".
 - Linter/formatter: none configured; the half of T13 left undone, not yet a task.
