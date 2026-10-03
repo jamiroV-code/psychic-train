@@ -65,7 +65,7 @@ CYCLE_WINDOWS: dict[str, tuple[str, str]] = {
     "2020-21": ("2020-01-01", "2021-12-31"),
 }
 
-REPORT_DIR = Path(__file__).resolve().parents[2] / "process" / "general-plans" / "active" / "momentum-screener_17-09-26"
+REPORT_DIR = Path(__file__).resolve().parents[2] / "process" / "general-plans" / "completed" / "momentum-screener_17-09-26"
 
 
 def _fetch_btc_history_csv() -> pd.DataFrame | None:
