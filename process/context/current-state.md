@@ -7,18 +7,18 @@ date: 03-10-26
 
 # Current State
 
-**Stamp: commit `34e3bb3` (`origin/main`, T31 PR #30), observed 2026-10-03 (UTC, after the 20:00Z session archives) from branch `claude/pensive-albattani-ou0cgv`, which equals `origin/main` plus uncommitted process/ text.** "Observed" rows were read or run at that stamp; "Historical" rows are copied and labelled with their source commit.
+**Stamp: commit `af7888f` (`origin/main`, PR #31; latest code change T31 `34e3bb3`), observed 2026-10-03 (UTC, after the 20:00Z session archives) from branch `claude/pensive-albattani-ou0cgv`, which equals `origin/main` plus uncommitted process/ text.** "Observed" rows were read or run at that stamp; "Historical" rows are copied and labelled with their source commit.
 
-Staleness rule (master-planner.md): stale when the stamp is not an ancestor of HEAD (`git merge-base --is-ancestor 34e3bb3 HEAD` fails) or when more than 10 non-cache commits landed since it (`git log 34e3bb3..HEAD --oneline -- . ':(exclude)api/data/cache' | wc -l`). Nightly bot snapshot commits do not make it stale.
+Staleness rule (master-planner.md): stale when the stamp is not an ancestor of HEAD (`git merge-base --is-ancestor af7888f HEAD` fails) or when more than 10 non-cache commits landed since it (`git log af7888f..HEAD --oneline -- . ':(exclude)api/data/cache' | wc -l`). Nightly bot snapshot commits do not make it stale.
 
-## Observed (commit 34e3bb3)
+## Observed (commit af7888f)
 
 | Fact | Value | Command |
 |---|---|---|
-| Working tree | `origin/main` plus uncommitted process/ text only: T30 and T31 task folders moved to `completed/`, MASTER-PLAN.md, archive/index.md, master-planner.md section 6 paragraph, the recovery HANDOVER file, this file | `git status --short` |
+| Working tree | `origin/main` `af7888f` plus uncommitted process/ text only: recovery plan folder moved to `completed/`, MASTER-PLAN.md, archive/index.md, master-planner.md section 6, operating-instructions.md, the HANDOVER stamp, a P3 backlog note, this file | `git status --short` |
 | Entry files | `CLAUDE.md` 13,443 B, `AGENTS.md` 12,572 B, `north-star.md` 5,225 B | `wc -c` |
 | `process/context/all-context.md` | 193 lines, 11,380 B; router part 5,831 B | `wc -lc`, PLANNER-BUDGET block |
-| Planner budget | planner_fixed 48,751 B, cap 56,000, headroom 7,249, rc=0 | PLANNER-BUDGET block |
+| Planner budget | planner_fixed 48,995 B, cap 56,000, headroom 7,005, rc=0 | PLANNER-BUDGET block |
 | Root context docs | `operating-instructions.md` 6,509 B, `architecture.md` 6,572 B | `wc -c` |
 | Remote heads | 5: `main`, `claude/pensive-albattani-ou0cgv`, `claude/inspiring-pasteur-awqxk3`, `claude/kind-tesla-tat3vo`, `claude/split-all-context`. The last three are deletable by the user (content rescued by T31); the planner cannot delete branches. PR #5 closed | `git ls-remote --heads origin` |
 | Workflows | 6: `ci.yml` plus five snapshot jobs | `ls .github/workflows` |
@@ -28,7 +28,7 @@ Staleness rule (master-planner.md): stale when the stamp is not an ancestor of H
 | Tests, HISTORICAL, measured at `753db23`, NOT re-run now | pytest 873 passed, 1 skipped, 5 deselected, 1 xfailed; vitest 223 passed (30 files); `tsc --noEmit --incremental false` exit 0. Later: api 870/1/5/1 after T18 (PERF tester, `42d8ca8`) | all-tests.md, PERF report |
 | CI | T30 and T31 PRs: api pytest and web vitest/tsc/island build both success (worker and tester checks) | MASTER-PLAN.md T30, T31 |
 
-### Validator results (run now at 34e3bb3 plus the uncommitted edits)
+### Validator results (run now at af7888f plus the uncommitted edits)
 
 | Validator | Failures | Warnings | Note |
 |---|---|---|---|
@@ -43,7 +43,7 @@ Staleness rule (master-planner.md): stale when the stamp is not an ancestor of H
 
 ## Gate status
 
-Gates 2 to 6 are complete; reports are in `process/general-plans/active/master-planner-recovery_02-10-26/`, ending with `..._HANDOVER_03-10-26.md` (final handover and acceptance record, awaiting the user's acceptance). The recovery plan stays in `active/` until the user accepts the handover.
+Gates 2 to 6 are complete; reports are in `process/general-plans/completed/master-planner-recovery_02-10-26/`, ending with `..._HANDOVER_03-10-26.md` (final handover and acceptance record, ACCEPTED by the user 03-10-26). The recovery plan folder was archived to `completed/` the same day.
 
 Planner budget: run the PLANNER-BUDGET block in master-planner.md section 12 (bytes only); figures are in the closeout reply, not stored here.
 
@@ -67,5 +67,5 @@ Planner budget: run the PLANNER-BUDGET block in master-planner.md section 12 (by
 ## Next actions
 
 1. Done: eight worker tasks (T20, T16, T18, T19, PERF, T29, T30, T31) merged, independently verified and archived (docs); sessions archived except T31 (archive pending). Measured cost 6.9042678 USD of 40.
-2. User: accept or amend the HANDOVER; delete the three held branches (`kind-tesla-tat3vo`, `inspiring-pasteur-awqxk3`, `split-all-context`); approve cap values for the big-task subagent lane (master-planner.md section 6) if wanted.
-3. The planner pauses until the user says go. No product work is started; queued product SPECs: personal-tracker-realignment, narrative-baskets, LSE equities. Registry: MASTER-PLAN.md.
+2. User: delete the three held branches (`kind-tesla-tat3vo`, `inspiring-pasteur-awqxk3`, `split-all-context`). Decided 03-10-26: HANDOVER accepted; big-task subagent caps 3 subagents, 15 USD, 1 level (master-planner.md section 6).
+3. Next phase (user chose 'Plan the screener realignment'): the planner started RESEARCH (read-only) on the personal-tracker-realignment SPEC at ~20:25Z; no implementation, no worker; RESEARCH -> INNOVATE -> PLAN -> VALIDATE need the user's go at each transition. Other queued SPECs: narrative-baskets, LSE equities. Registry: MASTER-PLAN.md.

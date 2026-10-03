@@ -10,7 +10,7 @@ metadata:
 
 # my_site — Master Plan (board and task registry)
 
-**Last verified:** 2026-10-03 UTC at `origin/main` `34e3bb3` (T29, T30, T31 archived; R12 blocked) · **built from:** revision 6 (`18ffd4f`). Gate reports: `process/general-plans/active/master-planner-recovery_02-10-26/`.
+**Last verified:** 2026-10-03 UTC at `origin/main` `34e3bb3` (T29, T30, T31 archived; R12 blocked) · **built from:** revision 6 (`18ffd4f`). Gate reports: `process/general-plans/completed/master-planner-recovery_02-10-26/`.
 
 **This file is the one board.** Each task has one row here; details live in its task folder. Revisions 1-6 are preserved whole in `process/archive/master-plan-revisions_02-10-26.md`. Protocol (lifecycle, acceptance rule, envelope, report, archive operations): `process/development-protocols/master-planner.md`. Direction: north-star.md. State: current-state.md.
 
@@ -101,7 +101,7 @@ Columns: ID · Objective · Prio · Status · Parent · Deps · Worker/session �
 
 ## Carried notes
 
-- Open backlog notes (`process/general-plans/backlog/<name>_NOTE_<dd-mm-yy>.md`): `screener-weekly-bars-flake`, `mapping-tripwire-gap`, `pipeline-etf-flows-atomic-write`, `pipeline-cron-firing-confirmation`, `token-usage-telemetry`, `agents-skills-symlink-windows`, `deploy-runtime-user-pc-verification`, `gate5-deferred-candidates`, `old-branches-review`.
+- Open backlog notes (`process/general-plans/backlog/<name>_NOTE_<dd-mm-yy>.md`): `screener-weekly-bars-flake`, `mapping-tripwire-gap`, `pipeline-etf-flows-atomic-write`, `pipeline-cron-firing-confirmation`, `token-usage-telemetry`, `agents-skills-symlink-windows`, `deploy-runtime-user-pc-verification`, `gate5-deferred-candidates`, `old-branches-review`, `p3-ui-open-decisions`.
 - Known condition: `validate-backlog-notes` fails 45 notes (older schema).
 - Linter/formatter: none configured (undone half of T13, not a task).
 

@@ -9,7 +9,7 @@ date: 03-10-26
 
 One entry per durable decision. Each entry carries: **Decision**, **Date**, **Reason**, **Alternatives** (considered and rejected), **Consequences**, **Status** (`active` or `superseded by D-n`). Full detail lives in the linked source; this file is the index. Add new entries at the bottom; never edit an old one except to mark it superseded.
 
-Abbreviations for sources: **RECOVERY** = `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md`; **REALIGN** = the personal-tracker-realignment SPEC; **BASKETS** = the narrative-baskets SPEC (both in `process/general-plans/active/`).
+Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md`; **REALIGN** = the personal-tracker-realignment SPEC; **BASKETS** = the narrative-baskets SPEC (both in `process/general-plans/active/`).
 
 ## Index
 
