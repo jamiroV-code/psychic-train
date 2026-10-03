@@ -1,0 +1,5 @@
+# domain: tests
+iteration	timestamp	gaps_found	fail_count	concern_count	applied	saturation_status	loop_status	notes
+0	2026-10-03T04:50:00Z	1	1	0	0	ACTIVE	baseline	Gate 3 EVL: independent tester ALL static gates green except validate-skill-keywords (stale catalog); live probes B1/B2/P2 pass, $0.617 spent
+1	2026-10-03T05:10:00Z	0	0	0	1	SATURATED	HALTED_SUCCESS	Fix: catalog regenerated (routedFrom-only, proven); independent static re-check ALL GATES GREEN; user accepted diff
+2	2026-10-03T05:40:00Z	0	0	0	0	SATURATED	HALTED_SUCCESS	Gate 4 EVL: independent tester ALL gates green first pass (planner_fixed 47699/56000 recomputed; no-rerun evidence SHA 753db23 verified; validators == baseline); CI on the newest head pending at check time

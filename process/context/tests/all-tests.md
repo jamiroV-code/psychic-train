@@ -25,7 +25,25 @@ Do not load the whole `process/context/tests/` folder by default. Start here, th
 
 ---
 
+Which tests to run per change, the full commands, the test budget, bounded retry and the no-re-run rule: the RT0-RT4 table in operating-instructions.md (single home; this file holds detail and history).
+
+## Current evidence (Gate 4)
+
+Measured once per suite by the Gate 4 execute agent at commit `753db23` (api/ and web/ identical to `96d2d18` and `ee72237`), 2026-10-03 UTC, after `uv sync --project api --frozen` and `cd web && pnpm install --frozen-lockfile`, with `UV_FROZEN=1`:
+
+| Suite | Command | Result | UTC |
+|---|---|---|---|
+| pytest | `uv run --project api pytest api/ -q` | 873 passed, 1 skipped, 5 deselected, 1 xfailed (163.75 s) | 05:09-05:11Z |
+| vitest | `pnpm --filter web test` | 223 passed in 30 files | 05:11-05:12Z |
+| tsc | `pnpm --filter web exec tsc --noEmit --incremental false` | exit 0 | 05:12Z |
+| island build | `cd web && pnpm build:islands` | not re-measured locally; CI step green | - |
+| Playwright | `cd web && pnpm test:e2e` (set `PLAYWRIGHT_CHROMIUM_PATH` first) | not re-measured (6 specs exist; last local 35/35 on 4 specs, 28-09-26) | - |
+
+CI: run 37098862216 at `ee72237`, completed, success (jobs `api — pytest` and `web — vitest, tsc, island build`; pass or fail only, no counts). Files in git: 73 pytest files, 30 vitest files, 6 Playwright specs. Single source: one execute run; the independent tester confirms the SHA instead of re-running.
+
 ## Status: three runners, all green (backend + frontend + E2E) as of the narrative-mindshare EVL
+
+Historical, superseded by the block above.
 
 **This file previously said "no test surface exists" and was stale from 18-09-26 to 19-09-26.**
 Its own Update Trigger ("a test runner is added to either `web/` or `api/`") fired when RFC-001
