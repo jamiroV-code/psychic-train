@@ -179,6 +179,317 @@ P1 and P3 are disjoint (`api/` + workflows vs `web/`), so they fit the 3-worktre
 left for housekeeping.
 
 
+---
+
+## 🟢 T1/T1b confirmed on live data (2026-09-29) — plus a new cron finding
+
+The first nightly run carrying both guards (run #5, `2026-09-28T23:18:44Z`, conclusion `success`,
+commit `f13c0bd`) wrote:
+
+| Series | 09-27 (pre-fix) | 09-28 (post-fix) |
+|---|---|---|
+| `pytrends/AI crypto` | 0.0 | **27.0** ✅ |
+| `pytrends/memecoin` | 0.0 | **51.0** ✅ |
+| `pytrends-blended/ai` | — (namespace did not exist) | **13.5** ✅ |
+| `pytrends-blended/memecoins` | — | **8.0** ✅ |
+| `pytrends/RWA crypto` | 0.0 | 0.0 |
+| `pytrends/layer 2 crypto` | 0.0 | 0.0 |
+| `pytrends-blended/rwa` | — | 0.0 |
+| `pytrends-blended/l2s` | — | 0.0 |
+
+**Both paths are confirmed working on live data**, not just by unit test — T1's single-keyword path
+and T1b's batched path each produced real values where they previously wrote zeros.
+
+**The remaining zeros are a different question, and probably not a bug.** After the fix a `0.0`
+written with `source_status: fresh` comes from a *complete* hour — Google genuinely reported zero
+interest — which is honest, unlike the pre-fix zeros taken from an incomplete hour. Not provable
+from the archive alone; it needs the raw frame. But the likely reading is that **"RWA crypto" and
+"layer 2 crypto" are too low-volume for Google Trends' 0–100 scale over a 7-day window**, so those
+two narratives have honest data and no usable signal. That is a product problem, not a correctness
+one. RFC-1's sufficiency gating should render them `insufficient` rather than a fake `0.50` —
+worth confirming during the AC-14 walkthrough. **New task: T26.**
+
+### 🔴 New: the GitHub scheduler delay is far worse than documented
+
+| Run | Cron | Started | Delay |
+|---|---|---|---|
+| #3 (09-26) | `0 23` | 01:03:21Z | 2h03m |
+| #4 (09-27) | `17 18` | 21:23:31Z | 3h06m |
+| **#5 (09-28)** | `17 18` | **23:18:44Z** | **5h01m** |
+
+Run #5 committed at **23:19:22Z — 41 minutes before UTC midnight.** Narrative points are dated by
+the UTC day the run executes, so it came within 41 minutes of skipping a day. That is precisely the
+failure the 2026-09-27 cron-timing fix existed to prevent, and its own claim — "even a ~2h20m delay
+now lands every run before ~21:10 UTC" — is now contradicted three times over.
+
+`api/tests/scripts/test_snapshot_workflow_schedules.py` pins each cron ≥3h before midnight, but it
+can only test the *scheduled* time, never the *observed* delay — so the guard passed while reality
+nearly failed. **New task: T27.** This belongs to P1 (`claude/p1-pipeline`), which owns the
+workflows and is active right now.
+
+
+---
+
+## Lane status (2026-09-29 18:40 UTC)
+
+All three lanes stalled overnight on the account's 5-hour rate limit, not on the work. Limits have
+since reset. P3 alone cost **$70.57**; three concurrent Opus cloud sessions saturate the budget in
+well under an hour, which is worth pacing around.
+
+| Lane | Branch | Ahead of main | State |
+|---|---|---|---|
+| P1 — pipeline | `claude/p1-pipeline` | 6 commits | SPEC + PLAN + PVL (gate CONDITIONAL) + 2 new workflows + atomic-writes plan |
+| P2 — deploy | `claude/p2-deploy` | 4 commits | **SPEC complete, decisions recorded.** Successor session `P2b` started for PLAN → VALIDATE → EXECUTE |
+| P3 — UI | `claude/ui-shell` | 11 commits | Audit + "Direction D" + a built foundation (tokens, dark shell, `AppNav`, `OwlMark`, styled screener) |
+
+### P2's decision, now locked
+
+| Question | Answer |
+|---|---|
+| Hosting | **A home box the user already owns** — the *same PC* that holds the gitignored caches. ~$0/month. |
+| Access gate | **Tailscale**, free tier |
+| Always-on? | **No — intermittent.** Phase 1 is explicitly designed for downtime. |
+
+This is a better answer than any cloud target: no public endpoint ever exists, which is the
+*strongest* position against the non-redistributable-adapter constraint rather than merely an
+adequate one; volume sizing becomes moot; and the cache split-brain evaporates because there is no
+cache to move. T8's split-brain concern is therefore **descoped for Phase 1** (it returns in Phase 2
+if a true always-on box ever replaces the PC).
+
+### 🔴 T28 — **NEW** — parquet writes are not atomic
+
+Found by P2, being planned by P1 (`df2c3c9`). `api/data/cache.py`'s parquet writers call
+`to_parquet(path)` directly at ~9 sites; only the two JSON writers use temp-then-rename. Several are
+read-modify-write. On a PC that can lose power mid-write this can **truncate a file and destroy
+existing history**, not merely lose the new row — and the gitignored caches (`ohlcv`, `liquidity`,
+`pairs`, `legs`) have no git copy to restore from. OHLCV is the most expensive to rebuild (18
+sequential deep fetches).
+
+This became a live risk the moment the deploy target became an intermittently-powered home box.
+The fix is small and already proven twice in that same file. **Owner: P1** (it claimed the file);
+P2's auto-resume design is gated on it.
+
+### T27 sharpened — it now covers five workflows
+
+P1's two new crons (`pairs-refresh` 19:17, `liquidity-backfill` 19:47) inherited the stale "~2h
+late" figure in their comments. At the measured 5h01m delay they start 00:18Z and 00:48Z — **past
+UTC midnight.** Harmless for those two specifically (OHLCV/FRED/pairs are catch-up-safe, as P1
+correctly reasoned), but the comments assert otherwise and will mislead. The real exposure remains
+`narrative-snapshot.yml`. Relayed to P1 on 29-09 with the measured numbers.
+
+**Credit where due:** P1 honored P2's hard rule — no-history jobs (narrative, liqtide, chain-growth)
+stay pinned to GitHub Actions and were *not* consolidated onto the PC — and was explicit that its
+new commit steps are inert while those caches stay gitignored. That cross-lane constraint held
+without either lane being able to talk to the other directly.
+
+
+---
+
+## Revision 4 — 2026-10-01: all three lanes finished, nothing merged
+
+**main is `936bd3c`** and contains only nightly snapshot commits. Every lane's work is still on its
+branch. The app is running on the user's PC (P2's walkthrough succeeded) but the UI is not
+integrated, because `claude/ui-shell` has not been merged.
+
+### All three lanes merge cleanly — nothing technical blocks merging
+
+Verified with `git merge-tree` on all three pairs: **no conflicts.** The only file two lanes both
+touch is `.gitignore` (P1 adds `api/data/cache/**/*.tmp`, P3 adds `web/public/islands/`) and the
+edits are additive. **Merge order does not matter.**
+
+| Lane | Branch | Ahead | Verified state |
+|---|---|---|---|
+| P1 | `claude/p1-pipeline` | +16 | 3 plans, UPDATE PROCESS closeout (WITH_GAPS). T27 and T28 both fixed. |
+| P2 | `claude/p2-deploy` | +9 | SPEC → PLAN → validate (CONDITIONAL, user-accepted) → EXECUTE. Tailscale launchers, CORS tightening, different-PC migration runbook. |
+| P3 | `claude/ui-shell` | +12 | **223 vitest passed / 30 files, `tsc` exit 0, island build succeeds.** Green. |
+
+### 🔴 Decide before merging P3: the charting stack was replaced
+
+P3 went well beyond a UI shell. `web/package.json` on that branch:
+
+- **removed**: `lightweight-charts`
+- **added**: `svelte` 5, `layerchart` 2.5, `@skeletonlabs/skeleton` + `-react` 5, `tailwindcss` 4,
+  `d3-scale`, `vite` + `@sveltejs/vite-plugin-svelte`
+- **new build step**: `build:islands` (a separate vite build) now runs before `next build`, emitting
+  `web/public/islands/` — a 787 kB entry chunk, 185 kB gzipped
+
+Every chart on all five routes was converted to a Svelte island (`/pairs`, `/regime`, `/narrative`,
+`/onchain`, `/screener`), and the `lightweight-charts` code was deleted. P3 recorded the decision
+itself in an ADR-1 ("islands, not SvelteKit").
+
+**This contradicts `process/context/all-context.md`**, which lists `lightweight-charts` as a settled
+stack choice and cites it as one of the two reasons the web/api split exists at all ("Charting is
+the reverse: `lightweight-charts` is the best free financial charting library and it is a browser
+library"). If the user directed this — likely, given they were steering P3 interactively — it is a
+legitimate decision that now needs promoting out of a branch-local ADR into the context docs, and
+the bundle size is worth comparing against what it replaced. If it was not directed, it is the
+single largest unreviewed architectural change in the project.
+
+### ✅ T27 — fixed by P1, and it corrected me
+
+All five crons moved to **11:17–13:17 UTC**, giving ~11h of margin before UTC midnight; even the
+worst observed delay lands comfortably. P1 also added a guard that warns when a run crosses UTC
+midnight — which is exactly the thing the schedule test structurally cannot catch.
+
+P1's commit `60fd926` corrects my framing: *"the scheduler delay varies by hours, it is not steadily
+growing."* It is right. Full series: 2h03m, 3h06m, 5h01m, 4h01m, 4h01m — variance, not a trend. My
+"worsening" read was wrong.
+
+### ✅ T28 — fixed by P1
+
+`ba82986 fix(cache): make every parquet write in cache.py atomic`.
+
+### ✅ T1/T1b — holding across three live nights
+
+| Series | 09-28 | 09-29 | 09-30 |
+|---|---|---|---|
+| `pytrends/AI crypto` | 27 | 72 | 50 |
+| `pytrends/memecoin` | 51 | 84 | 85 |
+| `pytrends-blended/ai` | 13.5 | 38.5 | 25.0 |
+| `pytrends-blended/memecoins` | 8.0 | 28.5 | 29.0 |
+| `pytrends/RWA crypto` | 0 | **74** | 0 |
+| `pytrends/layer 2 crypto` | 0 | 0 | 0 |
+| `pytrends-blended/rwa` | 0 | **0** | 0 |
+| `pytrends-blended/l2s` | 0 | 0 | 0 |
+
+### T26 revised, and a new discrepancy inside it
+
+**The "RWA is too low-volume" hypothesis is refuted** — `RWA crypto` returned **74.0** on 09-29. The
+persistent zero is `layer 2 crypto` / `l2s`, across both paths, every night.
+
+**New, and more interesting:** on 09-29 `pytrends/RWA crypto` = 74.0 while `pytrends-blended/rwa` =
+0.0, *the same night from the same job*. The blended value is a mean of anchor-chained keywords, so
+a term at 74 in its own unbatched request can legitimately rescale to ~0 against a larger anchor.
+That may be correct arithmetic — but it writes **`0.0` with `source_status: fresh`**, which is the
+same *shape* as the bug T1 just fixed: a number that reads as a measurement but actually means
+"below the anchor's resolution". Worth confirming RFC-1's sufficiency gating surfaces these as
+`insufficient` rather than as a real zero. Owner: whoever next touches the narrative lane.
+
+### Correction I owe three sessions
+
+I told P1, P2 and P3 the pytest baseline was **717 / 5**. Measured on main today: **714 / 5**. I
+double-counted T1b's three new tests — the 714 I measured on 09-28 already included them. P2 caught
+it independently and recorded `baseline 714/5` in its own commit, which is what verifying rather
+than trusting is for.
+
+
+---
+
+## Revision 5 — 2026-10-01: all three lanes MERGED
+
+`main` is now `94f3981`. PR #11 (pipeline), #10 (deploy), #9 (Direction D) all squash-merged, zero
+conflicts. **Post-merge gates run together**, which no individual lane had done:
+
+| Gate | Result |
+|---|---|
+| `uv run --project api pytest api/ -q` | **866 passed, 1 skipped, 5 deselected, 1 xfailed** (was 714/5) |
+| `pnpm --filter web test` | **223 passed, 30 files** (was 181/22) |
+| `pnpm --filter web exec tsc --noEmit` | exit 0 |
+| `pnpm build:islands` | succeeds |
+
+### Closed by the merges
+
+| Task | How |
+|---|---|
+| **T5** `/pairs` no automation | `pairs-refresh-snapshot.yml` — OHLCV refresh then compute in one job, so compute always sees that run's bars |
+| **T27** cron timing | All five crons → 11:17–13:17 UTC (~11h margin) + a midnight-crossing warning |
+| **T28** non-atomic parquet writes | `cache.py` now temp-then-rename throughout |
+| **T12** equity provider | LSE verdict: ADOPT-WITH-LIMITS, private use only, no redistribution without a licence |
+| **Deployment** (open since setup) | Home PC + Tailscale, ~$0/mo, `deploy/` launchers + runbook |
+| **T14 / T24** UI shell, one status board | Direction D shipped a real shell; context docs now carry the stack decision |
+| **T8** context refresh | `all-context.md` reconciled 01-10 — stack, runtimes, deployment, changelog |
+
+### Still open
+
+| # | Task | Note |
+|---|---|---|
+| **T26** | `layer 2 crypto` / `l2s` reads 0.0 every night, both paths. And `pytrends-blended/rwa` wrote **0.0 as `fresh`** on a night when `pytrends/RWA crypto` read 74.0 — same *shape* as the bug T1 fixed. Confirm sufficiency gating catches it. | data quality |
+| **T4** | Reddit still archives nothing (`credentials-not-configured` every night). The mindshare view lists it as a permanently empty source. | user action |
+| **T7** | narrative-dashboard v1 — two `review-decision.json` still `PENDING` | user PC |
+| **T9** | charting-indicators still has zero code — now cheaper, since the island/LayerChart surface it would build on exists | needs SPEC |
+| **T10** | No cross-signal confidence view — the stated north star | needs SPEC |
+| **T13** | Still no CI, no linter, no formatter. Three lanes merged without a single automated check on the PRs. | ops |
+| **T16** | No root README (`deploy/README.md` covers deployment only) | docs |
+| **T15, T17, T18, T19, T21, T22, T25** | Housekeeping, unchanged. T17 (`.agents/skills` 17 MB duplicate) still fails the context validator. | |
+
+### Bundle cost of Direction D, measured
+
+`lightweight-charts` shipped **172 kB raw / 54 kB gzipped**. The island entry chunk is **787 kB raw /
+185 kB gzipped** (1.1 MB on disk across chunks) — roughly **3.4× more gzipped chart runtime**. Not
+apples-to-apples: the island chunk also carries the Svelte runtime, LayerChart and `d3-scale`, while
+the old 54 kB was charting alone with the React wrappers as separate app code. Accepted deliberately
+as the price of the design system; recorded in `all-context.md` so it is not rediscovered as a
+surprise.
+
+### Getting the update onto the running PC
+
+Merging changed nothing on the user's machine. `start-api.ps1` does a stage-A `git pull` on start, but
+the web app is **built** (`next start`, never the dev server), so per `deploy/README.md`: *"If a
+`git pull` changes anything under `web\`, rebuild before the change appears."* Direction D also adds
+dependencies, so an install is needed before the rebuild. Closing and reopening the app does **not**
+pick it up.
+
+
+---
+
+## Revision 6 — 2026-10-01: CI exists, and a user-PC fix was nearly lost
+
+### ✅ T13 — CI is wired
+
+`.github/workflows/ci.yml`: pytest, vitest, `tsc --noEmit`, and the island build, on every
+`pull_request` and on pushes to `main`. Read-only (`contents: read`), no secrets, cancels superseded
+runs — the **opposite** safety profile to the five snapshot workflows, which need write access and
+must never cancel mid-archive. Skips pushes touching only `api/data/cache/**` so the nightly bots
+don't trigger it. Pinned by `api/tests/scripts/test_ci_workflow.py` (6 tests), including that a
+`pull_request`-triggered workflow never holds write access.
+
+**Deliberately excluded, with the reasons written into the file:**
+- **Playwright** — needs a seeded cache plus the `PLAYWRIGHT_CHROMIUM_PATH` pin, and carries a known
+  intermittent flake. A gate that fails randomly on day one teaches people to ignore the gate. Add
+  it once that flake is root-caused.
+- **A linter/formatter** — none is configured in this repo. Choosing a rule set and fixing what it
+  finds is its own change with its own opinions, not CI wiring. **Still open.**
+- **`integration`-marked tests** — real network, opt-in by design.
+
+### 🔴 The uvicorn fix existed only on the user's PC
+
+`deploy/start-api.ps1` launched the bare `uvicorn` console script. On Windows that fails with
+`uv trampoline failed to canonicalize script path` — uv installs console scripts as trampoline
+`.exe` shims, and launching one through `uv run` could not resolve its own path. The user found and
+fixed it themselves (`uv run --project api python -m uvicorn ...`, which skips the shim) and verified
+it end to end: API up, web up, phone over Tailscale with Wi-Fi off, HTTP 200.
+
+**That fix was never committed.** It would have been lost on the next clone, and nothing would have
+caught it — this is a failure CI *structurally cannot* reach: no Windows, no PowerShell, no Tailscale
+on a runner. Now committed, with a regression test pinning the module form.
+
+**The general lesson, worth more than the fix:** P2's own SPEC said the PowerShell scripts "were
+written in a container that has no PowerShell" and that automated tests "only check their text". That
+was an honest disclosure, and this is exactly the class of bug it predicted. Treat every `deploy/*.ps1`
+behaviour as unverified until it has run on the real machine, and when the user fixes something
+there, **get it committed the same day**.
+
+### Ground truth
+
+| Gate | Result |
+|---|---|
+| pytest | **873 passed**, 1 skipped, 5 deselected, 1 xfailed |
+| vitest | 223 passed, 30 files |
+| `tsc --noEmit` | exit 0 |
+| `build:islands` | succeeds |
+
+### Still open
+
+T26 (`l2s` always zero; `pytrends-blended/rwa` writing `0.0` as `fresh` on a night the unbatched path
+read 74) · T4 (Reddit archives nothing) · T7 (two `PENDING` review decisions) · T9 (charting-indicators
+has no code) · T10 (no cross-signal confidence view — the stated north star) · **linter/formatter**
+(the half of T13 left undone) · T16 (no root README) · T15, T17, T18, T19, T21, T22, T25 housekeeping.
+
+**Also unverified:** P1's new cron times (11:17–13:17 UTC) have not yet had a real firing observed on
+`main`, and P1's own closeout flags that `etf_flows_adapter.py::merge_into_cache` still writes
+non-atomically, so T28's atomicity prerequisite is not fully met.
+
+
 ## Verified Ground Truth
 
 Measured at 13:40 UTC on main `e3a94bf` merged into this branch.
@@ -304,6 +615,8 @@ good idea independent of the rest of that branch.
 |---|---|---|---|---|
 | T24 | **NEW — one status board, not two.** `exciting-meitner` adds `## Where We Are` to `all-context.md`; this file already does that job. Pick one home and make the other point at it. | C | T23 | split-brain risk |
 | T12 | **Equity provider** — ✅ **answered on `exciting-meitner`**: LSE verdict is **ADOPT-WITH-LIMITS, private use only**. Terms §6 forbid redistribution; §7 forbids derivative works without consent. **Public launch: NO without a separate LSE licence.** Needs merging, then a decision on whether to adopt under those limits or pursue `yfinance`. | — decision | T23 | `completed/lse-data-verification_17-09-26/VERDICT.md` |
+| T27 | **Move the snapshot crons much earlier.** Observed GitHub delays are 2h03m → 3h06m → **5h01m** and worsening; the 09-28 narrative run landed 41 min before UTC midnight. An 18:17 cron is not safe. Also worth adding: a guard that detects a run which executed on a different UTC day than intended, since the schedule test cannot see real delays. | **P1** | — | 🔴 raise to URGENT if another run lands after 23:30Z |
+| T26 | **"RWA crypto" and "layer 2 crypto" may be too low-volume for Google Trends.** Both wrote an honest 0.0 on the first post-fix night while AI crypto and memecoin returned real values. Needs the raw frame to confirm, then either different keywords or an accepted "no signal" state for those two narratives. | C | T3 | data-quality, not correctness |
 | T9 | **charting-indicators has zero code** — the 4th product area, its guide calls it "the visual core." No `api/routers/indicators.py`, no `web/app/charts/`. | after A | T14 | needs RESEARCH → SPEC |
 | T10 | **No cross-signal confidence view** — the stated north star. Five siloed dashboards; only `confidence/badge.py` (142 lines, screener-only) combines anything, and it is deliberately locked against numeric accumulation, so this must be a new module. | after A | T3 | needs SPEC |
 | T11 | **Lying plan status strips** — `exciting-meitner` fixes `liqtide-snapshot-tooling` and `momentum-screener`; PR #5 fixes `chain-growth`. Merging both closes this. | C | T23 | mostly done, unmerged |
