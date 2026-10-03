@@ -8,7 +8,7 @@ feature: general-plans
 # Screener Batch 1: Freshness, Chips, Equities Adapter and Refresh Worker (S1, S2, S3, S8)
 
 Date: 03-10-26
-Status: PLANNED. Supplement cycle 1 applied (amendments folded into the slice sections, S8 added); awaiting re-VALIDATE. No worker envelopes written, no EXECUTE approval.
+Status: VALIDATED (PASS after 2 supplement cycles and 1 verdict pass, 03-10-26). Awaiting the user's explicit ENTER EXECUTE MODE; no worker envelopes written yet.
 Complexity: COMPLEX (S1 first; then S2 and S8 in parallel; S3 parallel throughout; RT3 shared cache, models, adapters, app startup)
 
 **TL;DR:** Charts and chips show stale or wrong numbers: the forming candle counts as fresh until it closes, and a cache over 500 bars behind never catches up. S1 fixes the data layer and adds freshness fields. S2 adds correct chips and UTC labels. S8 (pulled forward by the user) adds a background refresh worker so a page load only reads the cache and the web client's 10 s timeout never bites. S3 builds the LSE equities adapter, probe-first. Estimate 9-19 USD [estimate]. A worker reads its slice section, "Decisions locked", "Gate conventions" and its Validate Contract rows (line ranges via `grep -n '^## \|^### '` at spawn time).
@@ -76,7 +76,7 @@ User decision 03-10-26: 45 USD ceiling for the whole screener program, checked p
 1. `freshness.py`: constants (timeframe seconds, `FORMING_TTL`, `RETAIN_BARS`, `TAIL_LIMIT`, 900 s allowance) and pure `current_bar_open`, `cache_is_fresh`, `is_stale`, `is_partial`. No ccxt import; S2, S3, S8 import it.
 2. `cache.py`: `write_ohlcv(symbol, timeframe, df, *, retain_bars=None, fetched_at=None)` keeps the newest N rows after the existing sort/dedupe, writes the parquet through the unchanged `_atomic_to_parquet`, then the sidecar (B1; default now). New `read_fetched_at` = sidecar, else parquet mtime, else None.
 3. `ccxt_adapter.py`: `_now()`; `_cache_is_fresh(cached, timeframe, fetched_at=None, now=None)` delegates to `freshness`; the tail path (B3) replaces 371-374; trim sub-daily on every write; `OhlcvResult` gains `fetched_at` and `note` APPENDED after `status`, both defaulted (`test_relative_performance.py:39` builds it with 5 positional args; D4); `1w` passes the daily `fetched_at`; `last_clock_skew()` plus the opportunistic measurement (B6) reusing the already-built exchange. `fetch_ohlcv(exchange=)` stays the injection point.
-4. `models/screener.py` (additive, defaulted): `ChartSeries` gains `last_bar_ts`, `fetched_at`, `is_partial`, `server_time`, `stale` (timestamps in the `Z` form, convention 3); `ScreenerBoardResponse` gains `server_time`, `clock_skew_seconds`, `clock_skew_warning`. An unavailable chart has nulls and `stale=False`. `screener_board._chart_series` fills them from the `OhlcvResult` (1w: `stale` from the daily result).
+4. `models/screener.py` (additive, defaulted): `ChartSeries` gains `last_bar_ts`, `fetched_at`, `is_partial`, `server_time`, `stale` (timestamps in the `Z` form, convention 3); `ScreenerBoardResponse` gains `server_time`, `clock_skew_seconds`, `clock_skew_warning`. An unavailable chart has nulls and `stale=False`. `screener_board._chart_series` fills them from the `OhlcvResult`; `stale` comes from the last bar's age (`freshness.is_stale`, B5), not from `OhlcvResult.status`, so an aged cache served while the exchange is down still carries the marker (A1; add that case to `test_chart_series_carries_freshness_fields`; 1w uses the daily bar).
 5. `screener.ts` mirrors exactly (hand-synced); the two web fixtures get the new fields.
 
 **Tests (names):**
@@ -171,9 +171,9 @@ Starts only after the S1 merge SHA exists (branch from `main` at it). A needed c
 2. Failure isolation: every pair runs inside `try/except`; an exception is counted and logged without values or secrets and never leaves the thread; the loop itself is wrapped so it cannot die. Rate-limit-aware backoff: if a tick has no `ok`/`stale` pair and at least one `unavailable`, the next delay doubles (cap 3600 s) and resets after a tick with any success. Market-load recovery (N1): `fetch_ohlcv` keeps its per-fetch latch (`_markets_unavailable`, so `test_ccxt_symbol_resolution.py:164` stays green), and at the start of each tick the worker calls a new `ccxt_adapter.retry_markets_if_latched()` that clears the latch once so the next fetch retries `load_markets()` (never per fetch); without it one offline start or one 10 s timeout would stop refreshing until the API restarts.
 3. Cache-only reads (`ccxt_adapter`): a `ContextVar` flag with a context manager `cached_reads_only()`. Inside it `fetch_ohlcv` returns the cached frame (status per B5, `note="refresh-queued"` when it asked for a refresh) with ZERO exchange work, and calls the registered hook `request_refresh(symbol, timeframe)` for a stale or missing pair (non-blocking, deduplicated). A missing cache returns an empty frame with status `unavailable`, as today. `routers/screener.py` wraps `board`, `scalp` and `relative-performance` in that context only while the worker is running; with the worker off, behaviour is S1's fetch-through. This is the load-triggered refresh (D3): the page renders from cache immediately and a reload shows fresher data.
 4. `routers/refresh.py`: `GET /api/refresh/status` returns `running`, `interval_seconds`, `last_tick_started`, `last_tick_finished`, `last_tick_ok`, `last_tick_failed`, `next_tick_at`, `queue_depth`, `backoff_seconds` (timestamps in the `Z` form); `POST /api/refresh/now` returns 202 and wakes one run (never fetches inside the request; at most one pending run) and returns 503 `worker-not-running` when the worker is off (no false 202; status then shows `running: false` and `disabled_reason`). The API is Tailscale-only; CORS already allows POST.
-5. `main.py`: a `lifespan` context starts the worker and stops it (join with timeout, idempotent). The worker is not started when `SCREENER_REFRESH_WORKER=0` (B9); the conftest default keeps the suite from background-refreshing and the real cache untouched (`test_zz_real_data_guard.py` stays green). Run the seeded E2E with `SCREENER_REFRESH_WORKER=0`.
+5. `main.py`: a `lifespan` context starts the worker and stops it (join with timeout, idempotent). The worker is not started when `SCREENER_REFRESH_WORKER=0` (B9); the conftest default keeps the suite from background-refreshing and the real cache untouched (`test_zz_real_data_guard.py` stays green). Run the seeded E2E with `SCREENER_REFRESH_WORKER=0` (A3: `web/playwright.config.ts` is unowned, so the planner documents this prefix in all-tests.md at UPDATE PROCESS).
 
-**Tests (names):** `test_refresh_worker.py` (14; fake clock, fake exchange, no network): `test_tick_refreshes_watchlist_plus_benchmarks_all_timeframes`, `test_tick_skips_fresh_pairs`, `test_one_week_is_derived_not_fetched`, `test_per_pair_lock_never_two_refreshers_on_one_file` (two threads, barrier), `test_request_refresh_dedupes_and_never_blocks`, `test_stale_on_load_queues_refresh_and_board_reads_cache`, `test_cache_only_mode_makes_zero_exchange_calls`, `test_one_pair_failure_does_not_stop_the_tick`, `test_unavailable_streak_backs_off_and_resets_on_success`, `test_loop_ticks_every_interval_with_fake_clock`, `test_stop_joins_threads_and_is_idempotent`, `test_worker_exception_never_escapes_the_loop`, `test_markets_latch_retried_once_per_tick_and_backoff_resets` (N1), `test_now_and_load_requests_wake_the_loop_without_sleeping` (N4). `test_refresh_router.py` (3): `test_status_endpoint_shape_and_counts`, `test_refresh_now_returns_202_queues_one_pending_run_without_fetching`, `test_refresh_now_returns_503_worker_not_running_when_off`. `test_refresh_startup.py` (3): `test_lifespan_starts_and_stops_worker`, `test_worker_off_when_env_is_zero`, `test_env_one_forces_worker_on_even_with_cache_root_override`.
+**Tests (names):** `test_refresh_worker.py` (14; fake clock, fake exchange, no network): `test_tick_refreshes_watchlist_plus_benchmarks_all_timeframes`, `test_tick_skips_fresh_pairs`, `test_one_week_is_derived_not_fetched`, `test_per_pair_lock_never_two_refreshers_on_one_file` (two threads, barrier), `test_request_refresh_dedupes_and_never_blocks`, `test_stale_on_load_queues_refresh_and_board_reads_cache`, `test_cache_only_mode_makes_zero_exchange_calls`, `test_one_pair_failure_does_not_stop_the_tick`, `test_unavailable_streak_backs_off_and_resets_on_success`, `test_loop_ticks_every_interval_with_fake_clock`, `test_stop_joins_threads_and_is_idempotent`, `test_worker_exception_never_escapes_the_loop`, `test_markets_latch_retried_once_per_tick_and_backoff_resets` (N1), `test_now_and_load_requests_wake_the_loop_without_sleeping` (N4). `test_refresh_router.py` (3): `test_status_endpoint_shape_and_counts`, `test_refresh_now_returns_202_queues_one_pending_run_without_fetching`, `test_refresh_now_returns_503_worker_not_running_when_off`. `test_refresh_startup.py` (3): `test_lifespan_starts_and_stops_worker`, `test_worker_off_when_env_is_zero`, `test_env_one_forces_worker_on_even_with_cache_root_override`. A2: `test_lifespan_starts_and_stops_worker` runs with `monkeypatch.delenv("SCREENER_REFRESH_WORKER", raising=False)` so the unset-means-on default is tested (conftest forces `0`). A4: the two conftest lines go after `from __future__ import annotations`.
 
 **Gates and probe:** "S8 exact gates" (G-S8-1..9, P-S8-1). Red today: `refresh_worker.py`, `routers/refresh.py` and `cached_reads_only` do not exist; the board fetches inline. P-S8-1 (user PC, after S1 and S8 are merged and pulled): (1) overnight: API up 8 h or more, then `curl http://127.0.0.1:8000/api/refresh/status` shows ticks about every 15 minutes, few failures, no `stale` marker on the board; (2) with 30 coins read one tick's duration and failures from the status endpoint, no sustained backoff; (3) restart the API: the board answers from cache at once, the worker resumes after about 20 s; (4) re-run S1 probe item (d): warm board wall-clock against the 10 s web timeout.
 
@@ -238,17 +238,17 @@ A-ALL-1..6 are Gate conventions 1-6. A-S1-1..9 and D1-D6, D18 are in S1 Owned, F
 
 ## Validate Contract
 
-Status: CONDITIONAL (cycle-2 re-VALIDATE: 0 FAIL, 4 CONCERN, 3 advisories; supplement cycle 2 applied, awaiting re-VALIDATE)
+Status: verdict pass, cycle 3 (the last allowed): 0 FAIL, 0 CONCERN, 4 advisories; remaining conditions are exactly the user-accepted live-probe items (U-1, U-2, U-4)
 Date: 03-10-26
 date: 2026-10-03
 generated-by: outer-pvl
-Gate: CONDITIONAL
+supersedes: 2026-10-03 (outer-pvl, cycle-2 CONDITIONAL) - cycle-3 verdict has current evidence
+Gate: PASS
 
-**TL;DR:** all four slices are executable; the first-pass concerns (cycle 1) and cycle-2 findings N1-N7 are folded into the slice sections, nothing is overlaid. The gate stays CONDITIONAL until the validator re-runs; S1/S2/S8 probe-pending residuals and S3's live-probe condition are user-accepted (U-1, U-2, U-4). Evidence: code = origin/main af7888f; baselines in Gate conventions 2; every cited anchor and gate and scope command was checked; offline probes covered ccxt request shapes, `fetchTime`, the `df.attrs` footer, the federal-calendar trap and the weekly Monday-bar hiding; `.gitignore:18` covers `equities/`, `_probe/`, `*.meta.json`. One agent ran V1-V3 (confidence MEDIUM-HIGH).
+**TL;DR:** cycle-3 verdict pass (one agent ran V1-V3; confidence HIGH on S1/S3/S8 mechanics, MEDIUM-HIGH on live behaviour): all four slices are executable and the cycle-2 fixes N1-N7 are verified against real code (code = origin/main af7888f); the only remaining conditions are the user-accepted probe items; four advisories are execute-agent instructions, not plan defects. Evidence: scratch reproduction of N1 (below), a scratch S1-semantics build that broke exactly the two tests the plan owns, scope-regex dry run, baselines re-run.
 
 ### Verdict per slice
-
-S1 CONDITIONAL (AC-S1-2r/6r probe-pending). S2 CONDITIONAL (AC-S2-3r/5, E2E hybrid; after the S1 merge SHA). S3 CONDITIONAL until the live probe passes. S8 CONDITIONAL (AC-S8-5 probe-pending). Strategy: independent worker sessions (S1, S3 first; S2, S8 after the S1 merge); capped lane of at most 3 sonnet subagents; workers opus.
+S1 PASS with residual AC-S1-2r/6r (P-S1-1, user-accepted U-1). S2 PASS with residual AC-S2-3r/5 and the hybrid E2E (U-1, U-4), after the S1 merge SHA. S3 PASS to execute; slice stays CONDITIONAL until the live probe passes AC-S3-5 (U-2). S8 PASS with residual AC-S8-5 (P-S8-1, U-1). Strategy: independent worker sessions (S1, S3 first; S2, S8 after the S1 merge); capped lane of at most 3 sonnet subagents; workers opus.
 
 ### Test gates
 
@@ -420,14 +420,29 @@ AC-S1-1: a 1h cache with a forming newest bar causes 0 exchange calls. AC-S1-2: 
 | N6 | S3 | verification files are on main; range 219-252; 2007-01-02 | S3 Fixture-absent paragraph and Design 3 |
 | N7 | S2 | G-S2-9 grep printed `.pyc` matches | S2-dangling command (`--include='*.py'`) |
 
-### Envelope line ranges (re-derive with `grep -n '^## \|^### '` at spawn time; CLAUDE.md is 13,443 B, so envelope room = 36,000 - 13,443 - plan bytes, cap 8,000 B)
+### Cycle-3 verdict (re-VALIDATE 03-10-26, V1-V3 by one agent; 0 FAIL, 0 CONCERN, 4 advisories)
 
-| Slice | Plan ranges (lines) | Plan bytes | Envelope room |
+Verified against real code (origin/main af7888f): N1 scratch script (offline start, per-fetch latch kept, one `load_markets()` per tick, recovery on the next tick; without the hook the process stays `unavailable`) and `test_ccxt_symbol_resolution.py:164` stays green because `_exchange()` is unchanged; N2/N3 a scratch S1-semantics build (sidecar, TTL, `stale` on `since=None` only, tail limit, trim) broke exactly two existing tests, `test_weekly_recursion_does_not_deadlock` and `test_a_cold_cache_still_reaches_the_exchange`, both owned by S1, and both pass with the plan's two assertion edits; `backfill_pairs_universe` tests stay green; N4 wake `Event`, trigger `not cache_is_fresh` (a missing file is empty, so not fresh), 503 `worker-not-running` (repo style is `HTTPException(status_code, detail)`); N5 tri-state env, `deploy/start-api.ps1:24` sets the cache root, conftest has no `import os` today, Playwright merges `process.env` into the webServer env so the G-S2-8 prefix reaches the API; N6 the verification files are on main, `all-data-sources.md` 219-252 holds the LSE row at 221; N7 the grep prints only `.py` hits. Counts: S1 5+12+6+5+4 = 32, G-S1-2 at least 903, S8 14+3+3 = 20, S2 11+2 (13 new, 1 removed), S3 16 adapter tests. Owned lists: S1/S2 share five files and S1/S8 share `ccxt_adapter.py` (sequential by design); S2/S8, S3/anything disjoint; no owned file under `api/scripts/**` or `api/tests/scripts/**`; each scope regex accepts its own files and rejects the others'. Baselines re-run: vitest 223 passed in 30 files, tsc and islands exit 0, `git diff --check` clean, plan validator 0 failures; pytest 870 passed confirmed by the scratch build (868 + the 2 expected breaks).
+
+Advisories (execute-agent instructions; not plan defects, no fix cycle):
+- A1 S1: derive `ChartSeries.stale` from the last bar's age (`freshness.is_stale`, B5) rather than from `OhlcvResult.status`, so an aged cache served while the exchange is down (status `unavailable`) still carries the marker; add that case to `test_chart_series_carries_freshness_fields`.
+- A2 S8: conftest forces `0`, so the unset-means-on default is otherwise untested: `test_lifespan_starts_and_stops_worker` runs with `monkeypatch.delenv("SCREENER_REFRESH_WORKER", raising=False)`.
+- A3 S8/S2: after S8 merges, any E2E run without `SCREENER_REFRESH_WORKER=0` lets the worker refresh the seeded temp cache on a networked machine; `web/playwright.config.ts` (`apiEnv`) is unowned, so document the prefix at UPDATE PROCESS (all-tests.md) or give one line to S2 later.
+- A4 S3 and S8: conftest's two lines go after `from __future__ import annotations`; the S3 special-closure list may also name 2004-06-11 and 2001-09-11..14 (covered by the `special-closures-not-modelled` caveat). Header, Resume and goal block were refreshed to "validated PASS" at hand-off.
+
+
+### Envelope line ranges (re-derive with `grep -n '^## \|^### '` at spawn time; worker cap 36,000 B = CLAUDE.md 13,443 counted once + envelope (cap 8,000) + plan bytes)
+
+Coarse whole-block ranges leave S1 1,740 B and S3 1,795 B of envelope room; a filled envelope is about 2.2-2.8 KB (template alone 864 B), so those two do NOT fit. Fine sub-ranges below keep the cap as is (shared blocks cut to what each slice needs). Line numbers refer to lines 1-396, which this verdict did not move.
+
+| Slice | Plan ranges (lines) | Plan bytes | Envelope room (cap 36,000) |
 |---|---|---|---|
-| S1 | 36-47, 48-56, 65-96, 259-269, 290-307, 353-392, 393-396 | 20,817 | 1,740 |
-| S2 | 36-47, 48-56, 97-128, 270-276, 308-323, 353-392, 393-396 | 19,213 | 3,344 |
-| S3 | 36-47, 48-56, 129-158, 277-286, 324-337, 353-392, 393-396 | 20,762 | 1,795 |
-| S8 | 36-47, 48-56, 159-185, 281-285, 338-352, 353-392, 393-396 | 19,634 | 2,923 |
+| S1 | 36-45, 48-56, 65-96, 259-269, 290-307, 353-364, 391-396 | 17,620 | 4,937 |
+| S2 | 36-45, 48-56, 97-128, 270-276, 308-323, 353-362, 366-371, 391-396 | 16,366 | 6,191 |
+| S3 | 36-45, 48-56, 73, 129-158, 277-286, 324-337, 353-362, 375-390, 391-396 | 18,000 | 4,557 |
+| S8 | 36-47, 48-56, 73, 159-185, 281-285, 338-352, 353-362, 372-374, 391-396 | 16,997 | 5,560 |
+
+Shared blocks counted: 36-56 is 4,921 B and 353-396 is 4,213 B (9,134 B in the coarse form); the fine form keeps 5,938 B (S1) at most. Naming operating-instructions.md (6,678 B) moves the cap to 43,000 and leaves the room within 300 B of the figures above.
 
 ### Not verifiable offline
 
@@ -444,24 +459,24 @@ Live Hyperliquid and LSE; LayerChart label rendering; chip vs exchange chart; Gi
 
 U1/U2 pending P-S1-1; U3 and AC-S2-5 pending P-S2-1; AC-S3-5 pending the LSE probe; AC-S8-5 pending P-S8-1. known-gap: live LSE end-to-end: documented as NEW PLAN REQUIRED - see backlog/lse-live-shape-verification_NOTE_03-10-26.md. known-gap: island axis label render: documented - see backlog/island-axis-labels-render-check_NOTE_<dd-mm-yy>.md (only if the S2 spike reaches fallback 3).
 
-Accepted by: the user (decisions 03-10-26, relayed by the coordinator): U-1 S1/S2 may merge after the offline gates and stay at `review` until the PC probes; U-2 S3 CONDITIONAL until the live probe passes (RT2 plus secret gates); U-3 amendments folded; U-4 hybrid E2E, NOT-RUN with a reason allowed; U-5 S8 in batch 1, client timeout unchanged. Cycle-2 N1-N7 are folded (supplement cycle 2, the last allowed); the gate stays CONDITIONAL until the validator re-runs. If that re-VALIDATE finds a CONCERN, the planner stops and asks the user.
+Accepted by: the user (decisions 03-10-26, relayed by the coordinator): U-1 S1/S2 may merge after the offline gates and stay at `review` until the PC probes; U-2 S3 CONDITIONAL until the live probe passes (RT2 plus secret gates); U-3 amendments folded; U-4 hybrid E2E, NOT-RUN with a reason allowed; U-5 S8 in batch 1, client timeout unchanged. Cycle-2 N1-N7 are folded and verified in the cycle-3 pass (0 CONCERN); the four advisories A1-A4 are execute-agent instructions the planner copies into the envelopes. The cap mechanism for the envelopes (fine sub-ranges above, no protocol change) is for the user to confirm before envelopes are written.
 
-Mechanics: `results.tsv` rows 0-3; reports `screener-batch1-pvl-iteration-001_REPORT_03-10-26.md`, `-002_`.
+Mechanics: `results.tsv` rows 0-4; reports `screener-batch1-pvl-iteration-001_REPORT_03-10-26.md`, `-002_`; the `-003_` report is written by the orchestrator (the validate agent writes no report files).
 
 ## Autonomous Goal Block
 
-SESSION GOAL (supplement cycle 2 applied): screener batch 1 - S1 freshness core, S2 chips and UTC labels, S3 LSE equities adapter (live shape pending probe), S8 background refresh worker
+SESSION GOAL: screener batch 1 - S1 freshness core, S2 chips and UTC labels, S3 LSE equities adapter (live shape pending probe), S8 background refresh worker
 Charter + umbrella plan: N/A - single plan
-Autonomy: after re-VALIDATE and the user's EXECUTE approval the planner writes four envelopes (master-planner.md section 8, at most 8,000 bytes, citing line ranges) and spawns S1 and S3 (opus; subagents sonnet, capped lane for S1, S2, S8); S2 and S8 only after the S1 merge SHA; workers run gates once after the last edit and stop on the same failure twice.
+Autonomy: validated PASS after 2 supplement cycles + 1 verdict pass. EXECUTE needs the user's explicit "ENTER EXECUTE MODE". The planner then writes four worker envelopes (master-planner.md section 8, at most 8,000 bytes each, pointer lists citing the fine sub-range table; the plan stays one file under the 36,000 B worker cap; the user confirms the envelope mechanism) and spawns S1 and S3 (opus; subagents sonnet, capped lane for S1, S2, S8); S2 and S8 only after the S1 merge SHA; workers run gates once after the last edit and stop on the same failure twice.
 Hard stop conditions / safety constraints:
-- No envelope or worker before the re-VALIDATE verdict and the user's approval; a CONCERN in that re-VALIDATE stops the planner and asks the user (no further fix cycle).
+- No envelope or worker before the user's "ENTER EXECUTE MODE".
 - S2 and S8 never before the S1 merge SHA; S1 is not deployed to the PC before S8 merged; S3 never touches `cache.py`, `ccxt_adapter.py`, `pyproject.toml`, `uv.lock`; no slice touches `deploy/**` or `api/scripts/**`.
 - A diff touching CLAUDE.md, AGENTS.md, README.md, `.claude/`, `.github/`, `deploy/` stops at `review`.
 - The LSE_API_KEY value is never printed, logged, committed or written; no real LSE price is committed.
 - Push, merge, deploy, branch deletion or spend above 15 USD per slice or 45 USD in total needs the user's approval.
-Next phase: re-VALIDATE (vc-validate-agent from V1), then EXECUTE - plan path process/general-plans/active/screener-batch1_03-10-26/screener-batch1_PLAN_03-10-26.md
-Validate contract: the section above, inline (CONDITIONAL, supplement cycle 2 applied)
-Execute start: S1: `UV_FROZEN=1 uv run --project api pytest <G-S1-1 files> -q` red run on the untouched base, then implement; S3: commit `s3-probe/` first; probes P-S1-1, P-S2-1, P-S8-1, `lse_probe.py` | high-risk pack: no (U-2)
+Next phase: EXECUTE: process/general-plans/active/screener-batch1_03-10-26/screener-batch1_PLAN_03-10-26.md
+Validate contract: process/general-plans/active/screener-batch1_03-10-26/screener-batch1_PLAN_03-10-26.md (inline, validated PASS)
+Execute start: S1: `UV_FROZEN=1 uv run --project api pytest <G-S1-1 files> -q` red run on the untouched base, then implement; S3: commit `s3-probe/` first | probe: P-S1-1, P-S2-1, P-S8-1, `lse_probe.py` on the user PC | high-risk pack: no (U-2)
 
 ## Resolved questions (user, 03-10-26)
 
@@ -472,7 +487,7 @@ Execute start: S1: `UV_FROZEN=1 uv run --project api pytest <G-S1-1 files> -q` r
 
 ## Worker envelopes
 
-Written AFTER re-VALIDATE and the user's approval (not now): one per slice, at most 8,000 bytes, saved as `screener-batch1-s{1,2,3,8}_REF_<dd-mm-yy>.md` in this task folder, using the master-planner.md section 8 template (branches `claude/<task-id>-<slug>`, ids assigned at registration). S2's and S8's envelopes are issued only after the S1 merge SHA exists.
+Written by the planner AFTER the user's explicit ENTER EXECUTE MODE (not now): one per slice, at most 8,000 bytes, a pointer list citing the fine sub-range table, saved as `screener-batch1-s{1,2,3,8}_REF_<dd-mm-yy>.md` in this task folder, using the master-planner.md section 8 template (branches `claude/<task-id>-<slug>`, ids assigned at registration). S2's and S8's envelopes are issued only after the S1 merge SHA exists.
 
 ## Test Infra Improvement Notes
 
@@ -481,7 +496,7 @@ Written AFTER re-VALIDATE and the user's approval (not now): one per slice, at m
 ## Resume and Execution Handoff
 
 1. Selected plan file: `process/general-plans/active/screener-batch1_03-10-26/screener-batch1_PLAN_03-10-26.md`
-2. Last completed step: PVL supplement cycle 2 (N1-N7 folded; S8 now 14+3+3 = 20 tests), 03-10-26.
-3. Validate-contract status: written, CONDITIONAL; supplement cycle 2 applied, awaiting re-VALIDATE (the last allowed cycle).
-4. Context loaded: SPEC, INNOVATE, findings note, operating-instructions.md, master-planner.md, decisions.md, all-tests.md, `api/main.py`, `ccxt_adapter.py`, `refresh_cache.py`, deploy tests, cycle-2 findings.
-5. Next step for a fresh agent: run vc-validate-agent from V1 on this plan; after the verdict and the user's explicit approval write the four envelopes and spawn S1 and S3 (S2 and S8 after the S1 merge). Next instruction (RIPER-5): say **ENTER VALIDATE MODE**.
+2. Last completed step: re-VALIDATE cycle 3 verdict (0 FAIL, 0 CONCERN, advisories A1-A4 folded into S1, S8), 03-10-26.
+3. Validate-contract status: written and validated PASS after 2 supplement cycles and 1 verdict pass; remaining conditions are the user-accepted probes (U-1, U-2, U-4).
+4. Context loaded: SPEC, INNOVATE, findings note, operating-instructions.md, master-planner.md, decisions.md, all-tests.md, `api/main.py`, `ccxt_adapter.py`, `refresh_cache.py`, deploy tests, cycle-3 verdict.
+5. Next step for a fresh agent: wait for the user's explicit "ENTER EXECUTE MODE"; then the planner writes the four envelopes (user confirms the pointer-list mechanism) and spawns S1 and S3 (S2 and S8 after the S1 merge SHA). Next instruction (RIPER-5): say **ENTER EXECUTE MODE**.
