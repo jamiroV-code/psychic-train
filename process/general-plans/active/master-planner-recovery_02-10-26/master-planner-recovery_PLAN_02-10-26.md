@@ -1477,6 +1477,265 @@ Next phase: EXECUTE Gate 3 via one vc-execute-agent (opus), sequential; then an 
 Validate contract: inline in plan (## Validate Contract — Gate 3)
 Execute start: G3-1 no @-imports | G3-2 role-neutral | G3-3 per-file caps | G3-C3 planner bytes | G3-C4 worker bytes | C10 + G3-5 identical non-empty block | G3-6 literal path | G3-7 rule survival | G3-8 symlink claims | G3-9 scoped planner rules | G3-10 validators == baseline | C9 Gate 3 form + C13 | e2e spec: none | probe: P1 and P2 only if G3-K1 = A or C | high-risk pack: no
 
+## Validate Contract — Gate 4
+
+Status: CONDITIONAL (0 FAILs; one user decision G4-K1 on installs; six in-contract corrections E1-E10 below)
+Date: 03-10-26
+date: 2026-10-03
+generated-by: outer-pvl
+Relation to earlier contracts: the Gate 2 and Gate 3 contracts above are retained as history and NOT overwritten (the Gate 3 contract is marked CONSUMED). This section gates the START of Gate 4 EXECUTE only (R8, F12 plus the planner-budget pin). Gates 5 and 6 each re-enter VALIDATE. Because both earlier contracts already satisfy the two mechanical greps (`Gate: PASS` count >= 1; `results.tsv` has 9 lines, so `wc -l` >= 3), those greps prove nothing for Gate 4. The only legal VALIDATE-to-EXECUTE tests for Gate 4 are the Gate line inside this section (`sed -n '/^## Validate Contract — Gate 4/,/^## Autonomous Goal Block — Gate 4/p' <plan>`) or the user's quoted acceptance of G4-K1.
+Scope: operating-instructions.md (RT table with full commands, bounded-retry and re-run evidence rules), all-tests.md (link to the RT table, current-evidence block, stale counts labelled), master-planner.md (one executable PLANNER-BUDGET block, brief cap, envelope retry line), current-state.md and MASTER-PLAN.md (trim to their ceilings, R8 row, reconciled totals), decisions.md (D-12), the plan's Status text and section 5 status column, the Gate 4 report. Everything is a text file under `process/`. CLAUDE.md and AGENTS.md are NOT touched by Gate 4 (decision below), so no user-review hard stop applies to a Gate 4 commit; commits still happen only when the user asks.
+
+Parallel strategy: sequential (single validate session; Layer 1 and Layer 2 checks ran inline as read-only commands; no spawn tool was available; scratch files lived in the session scratchpad only)
+Rationale: signal score 1/7 (S7: about 9 files in the Gate 4 blast radius). Dominant signal S7, but the numbers in current-state.md, MASTER-PLAN.md, master-planner.md and all-tests.md must reconcile with one another, so one writer is safer than a fan-out. Evidence below was measured live at HEAD 24f3db6 (== origin/claude/pensive-albattani-ou0cgv, clean tree, 2026-10-03T04:57Z).
+
+Live baseline today (read-only; every Gate 4 command below was executed on the live tree and its red-today result recorded):
+
+| Item | Measured today |
+|---|---|
+| Planner fixed part (router cut 5,831 + CLAUDE.md 13,443 + north-star 5,225 + current-state 8,879 + MASTER-PLAN 18,577) | 51,955 B |
+| Pinned C3 with the sample brief (2,979 B) | total=54,934, rc=0 (the earlier 54,592 was arithmetic taken before the final current-state.md refresh grew it by 342 B) |
+| With master-planner.md (13,588 B) added | 65,543 B without a brief; 68,522 B with the sample brief; 73,543 B with an 8,000 B brief |
+| Worker set, sample envelope 1,132 B + brief 2,979 B | 17,554 B; 22,662 B with operating-instructions.md (5,108 B, 58 lines) |
+| Test files in git | 73 pytest files, 30 vitest files, 6 Playwright specs (all-tests.md still describes 4 specs and 35 tests) |
+| Test dependencies in this container | NOT installed: no api virtualenv, no web dependency folder; uv 0.8.17, pnpm 10.28.0, node 22.22.0 and chromium under /opt/pw-browsers exist |
+| CI on PR #13, run 37098105301 at HEAD 24f3db6 | completed, success; jobs `api — pytest` and `web — vitest, tsc, island build`, steps pytest, vitest, tsc, build islands all success (job logs are not readable from this session, so CI gives pass or fail, not counts) |
+| Validators | context-discovery 1 failure; all-context, protocol-wiring, protocol-discovery, kit-portability, skill-keywords 0/0; agent-parity non-strict 0/18; plan-inventory 0/6; `--check-routing` in sync; plan validator 0 failures; `git diff --check` clean. All equal the baseline |
+
+### Layer 1 and Layer 2 findings
+
+| Question asked | Result | Evidence |
+|---|---|---|
+| (1) What must Gate 4 deliver, and is each part measurable by a non-vacuous command? | Yes for all but two parts | Section 9 row 4 and F12: test policy in all-tests.md, re-measured counts, three suites once, installs need approval. Section 6 policy already lives in operating-instructions.md (Gate 2). Measurable now and red today: RT rows lack full commands (6 MISSING, G4-3), no `same failure` rule, no skip-check snippet and no envelope line (3 MISSING, G4-5), all-tests.md has no link to the RT table and no current-evidence block (5 MISSING, G4-6), no budget block in master-planner.md (G4-2), current-state.md over its ceiling (G4-1), stale totals (4 lines, G4-7). NOT measurable without a user decision: the re-measured counts (G4-10, needs installs) |
+| (2) Reconcile the planner totals (63,931 vs 58,100 vs 68,180 vs 54,592) | Reconciled exactly; no testing disagreement remains | 63,931 = 50,343 (C3 with the sample brief, at the gate) + 13,588 (master-planner.md). 58,100 = 63,931 minus the 5,831 B router cut: that tester left the router out of the sum. 68,180 = 54,592 + 13,588, and 54,592 = 50,343 plus the closeout growth of MASTER-PLAN.md (+1,889), current-state.md (+2,221) and CLAUDE.md (+139, the [MODE:] follow-up). Today: 54,934 and 68,522 (current-state.md +342 since). One formula resolves it (below) |
+| (2b) Is the 9,408 B headroom real? | No: the real margin is 4,045 B | The 64,000 cap assumed a brief of up to 8,000 B, but the formula measured a 2,979 B sample brief. With an 8,000 B brief the gated total is 59,955 B (headroom 4,045 B). The per-file ceilings below sum to exactly 56,000. A task brief is unbounded in practice (this very plan is 245,318 B), so a brief cap must be written down |
+| (2c) Growth trend | Needs a trim rule, not just a cap | Closeouts added about 1.9 KB to MASTER-PLAN.md and about 2.6 KB to current-state.md in Gate 3 alone. current-state.md is 8,879 B against the plan's ~4 KB target and is the only file over a sensible ceiling. MASTER-PLAN.md is at 18,577 B, 423 B under a 19,000 ceiling, so the Gate 4 closeout (R8 row, stamps) would breach it without a trim |
+| (3) Do the RT0-RT4 commands exist? | Yes, every one | web/package.json scripts `test`, `test:e2e`, `build:islands`, `build`, `dev` exist; api/pyproject.toml has pytest and the `integration` deselect in `addopts`; ci.yml has jobs `api — pytest` and `web — vitest, tsc, island build` with exactly the steps the table names; ci.yml says it has no e2e and no lint job (true). The same commands appear in both operating-instructions.md and all-tests.md (G4-4 prints nothing today). `pnpm --filter web test` runs from the repo root in CI, so the filter form is CI-proven; `pnpm build:islands` is CI-proven only as `cd web && pnpm build:islands` (cosmetic: write that form in RT3). The plan's section 6 text writes `pnpm build:islands` without a directory, valid only inside web/ (cosmetic; operating-instructions.md is now the single home) |
+| (3b) Bounded retries stated and testable? | Stated, but three numbers disagree and one clause is missing | Section 5: "2 per task, 3 per gate". Section 6, operating-instructions.md and the worker envelope: 2. CLAUDE.md: 10-cycle EVL ceiling (cannot change at Gate 4). No rule says that the same failure twice in a row stops the loop. Fix: pin 2 fix cycles for a worker, keep the 10-cycle planner ceiling as the outer bound, add "same failure twice stops at once" (E3). Testable by grep (presence) now; compliance is observable only in a real worker's report, so it is a Gate 6 residual |
+| (3c) Test budget per tier and the "no re-run of unchanged tests" mechanism | Budget defined; mechanism half-defined | Budget: RT0 0 full runs, RT1 and RT2 1, RT3 2, RT4 2 plus one vc-tester confirmation (operating-instructions.md). Evidence: report heading 6 already requires command, result, UTC time and commit SHA. Missing: the check a worker runs before re-running. Fix: one skip-check line using `git diff --quiet <sha-of-last-run> HEAD -- <touched paths>` plus a clean `git status --porcelain` for those paths (E4); post-hoc audit at Gate 6: no (command, SHA) pair appears twice in heading 6 |
+| (4) Token measurement | Gate 4 needs no probe | See the table below. No new headless run is required; the 0.617 of about 4 USD spent stays as is (about 3.38 USD unspent, never needed here) |
+| (5) Ordering and contradictions | Gate 4 first, then 5, then 6; two caveats, six stale statements | See the ordering table below |
+| (6) Does Gate 4 touch CLAUDE.md or AGENTS.md? | No | The ENTRY-SET block already states the 64,000 cap and the sets; every Gate 4 rule has a home in operating-instructions.md or master-planner.md. Any edit to either file would fail C9 (Gate 4 form) and G4-8. If EXECUTE believes a cap line in the block must change, it stops and asks the user |
+
+### Pinned planner-budget formula (ONE formula; replaces the informational total of the Gate 3 report)
+
+Planner fixed part = router section of all-context.md (top through the line before `## Context Group Lifecycle`) + CLAUDE.md + north-star.md + current-state.md + MASTER-PLAN.md. Gate: fixed part <= 56,000 B, which guarantees the 64,000 B planner cap for any task brief <= 8,000 B (BRIEF_CAP). Hard ceilings per file (they sum to 56,000): CLAUDE.md 16,000; north-star.md 6,000; current-state.md 8,000 (target <= 7,000); MASTER-PLAN.md 19,000 (target <= 17,500); router 7,000. Reported, never gated and never used to raise the cap: fixed part + master-planner.md (read by every Master Planner session when dispatching) and the same with an 8,000 B brief. Trim rule: whenever headroom under 56,000 is below 3,000 B at a planner session end, trim before closing: (1) current-state.md is rewritten in place, one status block per gate at most, older gate narrative replaced by a link to its report; (2) MASTER-PLAN.md: R-row evidence cells at most 300 B with the report path, rows of finished NEW tasks (status `archived`) move to the archive index, historical T-rows and every C11 ID stay; (3) router: Task Routing Table rows one line each; (4) CLAUDE.md only with the user. The existing C3/G3-C3 form stays valid (a real brief instead of the sample).
+
+### Gate 4 command set (all run from the repo root in bash; red-today results were observed live)
+
+```
+# G4-1  AC-R1: budget ceilings and fixed part (the standalone form of the block that EXECUTE writes into master-planner.md)
+BRIEF_CAP=8000; FIXED_CAP=$((64000 - BRIEF_CAP)); MISS=0
+for f in CLAUDE.md process/context/north-star.md process/context/current-state.md process/MASTER-PLAN.md process/context/all-context.md process/development-protocols/master-planner.md; do test -s "$f" || { echo "MISSING $f"; MISS=1; }; done
+over() { n=$(wc -c < "$1"); [ "$n" -le "$2" ] || { echo "OVER-CAP $1 $n > $2"; MISS=1; }; }
+ROUTER=$(sed '/^## Context Group Lifecycle/,$d' process/context/all-context.md | wc -c)
+over CLAUDE.md 16000; over process/context/north-star.md 6000; over process/context/current-state.md 8000; over process/MASTER-PLAN.md 19000
+[ "$ROUTER" -le 7000 ] || { echo "OVER-CAP router $ROUTER > 7000"; MISS=1; }
+FIXED=$((ROUTER + $(cat CLAUDE.md process/context/north-star.md process/context/current-state.md process/MASTER-PLAN.md | wc -c)))
+MP=$(wc -c < process/development-protocols/master-planner.md)
+echo "planner_fixed=$FIXED cap=$FIXED_CAP headroom=$((FIXED_CAP-FIXED))"
+echo "info_with_master_planner=$((FIXED+MP)) info_worst_case_brief=$((FIXED+MP+BRIEF_CAP)) gated_worst_case_brief=$((FIXED+BRIEF_CAP)) of 64000"
+test "$MISS" -eq 0 && test "$FIXED" -le "$FIXED_CAP"; echo rc=$?
+# red today: one line OVER-CAP process/context/current-state.md 8879 > 8000, planner_fixed=51955 headroom=4045, rc=1.
+# After Gate 4: no OVER-CAP line, rc=0.
+
+# G4-2  AC-R1: the formula is ONE executable block inside master-planner.md and two runs print the same text
+B=process/development-protocols/master-planner.md; S=${TMPDIR:-/tmp}
+test "$(grep -c 'PLANNER-BUDGET:BEGIN' $B)" -eq 1 && test "$(grep -c 'PLANNER-BUDGET:END' $B)" -eq 1 || echo "MISSING budget block markers"
+sed -n '/PLANNER-BUDGET:BEGIN/,/PLANNER-BUDGET:END/p' $B | grep -v 'PLANNER-BUDGET' > $S/budget.sh
+test -s $S/budget.sh || echo "MISSING budget block body"
+grep -q 'BRIEF_CAP=8000' $S/budget.sh || echo "MISSING brief cap"
+bash $S/budget.sh > $S/r1.txt; bash $S/budget.sh > $S/r2.txt; cmp $S/r1.txt $S/r2.txt && cat $S/r1.txt
+# red today: MISSING budget block markers, MISSING budget block body, MISSING brief cap. Scratch-verified: a fixture copy of master-planner.md with the
+# block appended prints the G4-1 numbers and rc line; the unmodified file prints the two MISSING lines. After Gate 4: no MISSING line, rc=0 in the output.
+# The block sits inside a fenced code block with the marker lines written as shell comments, so the fence lines are not extracted.
+
+# G4-3  AC-R11/F12: every RT row carries its full runnable command
+O=process/context/operating-instructions.md
+row() { grep -E "^\| $1 " "$O"; }
+chk() { row "$1" | grep -qF -- "$2" || echo "MISSING $1: $2"; }
+chk RT1 'pnpm --filter web test'; chk RT1 'pnpm --filter web exec tsc --noEmit'
+chk RT2 'uv run --project api pytest'
+chk RT3 'uv run --project api pytest api/ -q'; chk RT3 'pnpm --filter web test'; chk RT3 'pnpm --filter web exec tsc --noEmit'; chk RT3 'build:islands'
+chk RT4 'pnpm test:e2e'; chk RT4 'vc-risk-evidence-pack'
+test "$(grep -cE '^\| RT[0-4] ' $O)" -eq 5 || echo "FAIL RT row count"
+# red today: 6 lines (RT1 tsc, RT2 pytest, RT3 pytest, RT3 vitest, RT3 tsc, RT4 e2e). After Gate 4: no output.
+
+# G4-4  AC-R11: the commands the RT table names are real, and operating-instructions.md and all-tests.md agree (must stay green: no output today)
+node -e 'const p=require("./web/package.json").scripts; for (const s of ["test","test:e2e","build:islands","build","dev"]) if(!p[s]) console.log("MISSING script "+s)'
+for t in 'name: api — pytest' 'name: web — vitest, tsc, island build' 'run: uv run --project api pytest api/ -q' 'run: pnpm --filter web test' 'run: pnpm --filter web exec tsc --noEmit' 'run: pnpm build:islands'; do grep -qF -- "$t" .github/workflows/ci.yml || echo "MISSING ci: $t"; done
+grep -qF "addopts = \"-m 'not integration'\"" api/pyproject.toml || echo "MISSING addopts"
+T=process/context/tests/all-tests.md
+for t in 'uv run --project api pytest api/ -q' 'pnpm --filter web test' 'pnpm --filter web exec tsc --noEmit' 'pnpm test:e2e' 'PLAYWRIGHT_CHROMIUM_PATH'; do for f in $O $T; do grep -qF -- "$t" $f || echo "MISSING in $f: $t"; done; done
+
+# G4-5  AC-R9/F12: bounded retry, test budget and the no-re-run evidence mechanism are stated
+for t in 'same failure' 'git diff --quiet' 'fix cycles' 'flake' 'SHA' 'vc-tester confirmation'; do grep -qiF -- "$t" $O || echo "MISSING rule token: $t"; done
+grep -qF 'same failure' process/development-protocols/master-planner.md || echo "MISSING same-failure line in the envelope template"
+# red today: 3 lines (same failure, git diff --quiet, envelope template). After Gate 4: no output.
+
+# G4-6  F12: all-tests.md links to the RT table and carries a dated evidence block
+grep -q 'operating-instructions' $T || echo "MISSING all-tests link to RT table"
+sed -n '/^## Current evidence (Gate 4)/,/^## [^C]/p' $T > $S/ev.txt
+test -s $S/ev.txt || echo "MISSING Current evidence heading"
+grep -qE '[0-9a-f]{7,40}' $S/ev.txt || echo "MISSING commit SHA in evidence"; grep -q 'UTC' $S/ev.txt || echo "MISSING UTC stamp in evidence"
+grep -qiE 'not re-measured|[0-9]+ passed' $S/ev.txt || echo "MISSING counts or the literal: not re-measured"
+# red today: 5 lines (link, heading, SHA, UTC, counts). Scratch-verified: a fixture with the block and no link prints only the link line. After Gate 4: no output.
+
+# G4-7  stale claims gone (the reconciliation sentence must not use these literals)
+grep -nE 'unreconciled|54,592|two testers' process/context/current-state.md process/MASTER-PLAN.md
+# red today: 4 lines (current-state.md 48, 69, 86; MASTER-PLAN.md R6 row). After Gate 4: no output.
+
+# G4-8  AC-R8: scope (Gate 4 form of C9) and entry files untouched
+git status --porcelain | cut -c4- | grep -vE '^process/'
+git diff --quiet HEAD -- CLAUDE.md AGENTS.md || echo "FAIL entry files changed"
+# today: no output. After Gate 4: no output (including after any test run: web/tsconfig.tsbuildinfo and uv.lock are the two tracked files a run could dirty, see E7).
+
+# G4-9  regression set (must stay green, equal to the baseline)
+# C10 exit 0; G3-1, G3-2, G3-6, G3-8, G3-9 print nothing; C11 prints nothing; C12 prints 11; C13 prints nothing; validator set equals the baseline
+# (context-discovery 1, agent-parity 0/18, plan-inventory 0/6, others 0/0, check-routing in sync); operating-instructions.md <= 150 lines and <= 7,000 B (C14 caps);
+# validate-kit-portability 0 failures after the master-planner.md and operating-instructions.md edits.
+
+# G4-10  AC-R8/F12, branch A only (user approved installs; see G4-K1). Run each suite ONCE, record SHA and UTC.
+export UV_FROZEN=1; SHA=$(git rev-parse --short HEAD); date -u +%FT%TZ
+uv sync --project api --frozen
+(cd web && pnpm install --frozen-lockfile)
+uv run --project api pytest api/ -q
+pnpm --filter web test
+pnpm --filter web exec tsc --noEmit --incremental false; echo tsc rc=$?
+(cd web && pnpm build:islands); echo islands rc=$?
+export PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome; (cd web && pnpm test:e2e)
+git status --porcelain | cut -c4- | grep -vE '^process/'
+# not runnable here without the install approval, so no red-today value exists beyond "dependencies not installed". Last state in git: 820 passed pytest (01-10-26),
+# 223 vitest tests in 30 files and 873 pytest passed (rev 6, 10-01), e2e 35 of 35 (28-09-26, 4 specs; 6 specs exist now).
+
+# G4-11  hybrid: CI at the head SHA (read-only GET; job logs are forbidden here, so pass or fail only, no counts)
+gh run list --branch claude/pensive-albattani-ou0cgv --limit 3 --json headSha,status,conclusion
+gh run view <run-id> --json jobs --jq '.jobs[]|[.name,.conclusion]|@tsv'
+# today: run 37098105301 at 24f3db6, completed, success, both jobs success.
+```
+
+### Test gates (5-column table; Gate 4 scope; strategies are the three proving strategies only)
+
+| criterion id | behavior | strategy | proving test | gap-resolution |
+|---|---|---|---|---|
+| AC-R1 | planner fixed part <= 56,000 B and every file at or below its ceiling | Fully-Automated | G4-1 (red today, one OVER-CAP line) | B |
+| AC-R1 | the budget formula is one executable block; two runs print the same text; brief cap written | Fully-Automated | G4-2 (red today, 3 MISSING lines; scratch-verified both ways) | B |
+| AC-R11 | each RT row carries a full runnable command | Fully-Automated | G4-3 (red today, 6 lines) | B |
+| AC-R11 | the table's commands exist (scripts, CI jobs and steps, pytest config) and both docs agree | Fully-Automated | G4-4 (green today, must stay green) | A |
+| AC-R9 | bounded retry with the same-failure clause, budget per tier and the re-run skip check are stated | Fully-Automated | G4-5 (red today, 3 lines) | B |
+| AC-R9 | all-tests.md links to the RT table and carries a dated, SHA-stamped evidence block | Fully-Automated | G4-6 (red today, 5 lines) | B |
+| AC-R5, AC-R9 | stale totals gone; R8 row at `review` with evidence | Fully-Automated | G4-7 (red today, 4 lines) | B |
+| AC-R8 | only `process/` changed; CLAUDE.md and AGENTS.md byte-identical to HEAD | Fully-Automated | G4-8 (C9 Gate 4 form plus `git diff --quiet`) | A |
+| AC-R1, AC-R4, AC-R5, AC-R10 | no regression: C10, G3 stay-green set, C11, C12 = 11, C13, validators equal baseline, ops caps | Fully-Automated | G4-9 | A |
+| F12 | counts re-measured once, SHA and UTC stamped (pytest, vitest, tsc, islands, Playwright) | Hybrid | G4-10 (precondition: installs approved, G4-K1 = A) | A if approved; otherwise C (user PC or Gate 6 session) plus D (stub `test-counts-remeasure_NOTE_03-10-26.md`) |
+| AC-R9 | RT1-RT3 commands pass on CI at the head SHA | Hybrid | G4-11 (green today at 24f3db6) | A |
+| AC-R7 | a real worker obeys the retry cap, the same-failure stop and the no-re-run rule | Agent-Probe | Gate 6 pilot: report headings 6, 9, 11; no (command, SHA) pair repeated in heading 6 | C (Gate 6 pilot) |
+| AC-R9 | every token figure labelled measured, estimated or unmeasured | Hybrid | review of the Gate 4 report against the table below | D (token-usage-telemetry_NOTE_02-10-26.md, update it with the probe results) |
+
+Failing stub:
+test("should keep the planner fixed part and each file under its ceiling", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G4-1 OVER-CAP current-state.md today") })
+Failing stub:
+test("should carry one executable PLANNER-BUDGET block that prints the same text twice", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G4-2 MISSING markers today") })
+Failing stub:
+test("should name a full command in every RT row", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G4-3 6 MISSING today") })
+Failing stub:
+test("should state the same-failure stop, the budget and the skip check", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G4-5 3 MISSING today") })
+Failing stub:
+test("should link all-tests.md to the RT table and carry a dated evidence block", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G4-6 5 MISSING today") })
+Failing stub:
+test("should hold no stale unreconciled planner totals", () => { throw new Error("NOT IMPLEMENTED - TDD stub: G4-7 4 lines today") })
+
+Legacy line form (retained so existing contract consumers still parse):
+- budget: [fully-automated: G4-1, G4-2] | RT commands: [fully-automated: G4-3, G4-4] | retry and re-run rules: [fully-automated: G4-5] | all-tests: [fully-automated: G4-6] | stale claims: [fully-automated: G4-7] | scope: [fully-automated: G4-8] | regression: [fully-automated: G4-9] | re-measured counts: [hybrid: G4-10, needs installs] | CI at head: [hybrid: G4-11] | worker compliance: [agent-probe: Gate 6 pilot] | tokens: [hybrid: report review]
+
+### Token measurement (AC-R9 labels)
+
+| Quantity | Value | Label |
+|---|---|---|
+| Entry-set bytes (planner fixed 51,955; with sample brief 54,934; with master-planner.md 65,543; worker 17,554 or 22,662) | exact file sizes | MEASURED (bytes) |
+| First-request context, old planner / new planner / new worker | 78,664 / 37,450 / 37,921 tokens | MEASURED, single-run samples (Gate 3, route A); about 32k of each is the fixed headless system prompt (stated by the tester) |
+| What those probes cover | the first request only, which carries CLAUDE.md; north-star.md, current-state.md, the registry and the router are read later by tool calls, so the -52% is NOT the entry-set saving | inference from the probe design, not a separate measurement |
+| Entry-set saving in bytes (about 200 KB baseline to 52-60 KB) | about 70-74 percent | MEASURED bytes against a Gate 0 baseline; the baseline's ~50k tokens agrees with the probe's attributable ~46k (inference) |
+| Tokens implied by bytes (bytes / 4) | planner fixed about 13.0k, with master-planner.md and an 8 KB brief about 18.4k | ESTIMATED |
+| Whole-session usage, retry waste, repeated-test cost, subagent tokens, hook output, skill listing, effect of the Gate 4 policy | none | UNMEASURED (no telemetry; the policy's effect is observable only in the Gate 6 pilot, report heading 11) |
+
+Gate 4 needs NO new probe: it changes no file that enters the first-request context (CLAUDE.md is untouched). About 3.38 USD of the approved budget stays unspent. A second B2 sample would only reduce single-run uncertainty and is not recommended.
+
+### Ordering against Gates 5 and 6, and new contradictions
+
+| Item | Finding | Action |
+|---|---|---|
+| Gate 5 `web/tsconfig.tsbuildinfo` untrack | `tsconfig.json` sets `incremental: true`, so a local `tsc --noEmit` rewrites the tracked file and would break C9 | G4-10 uses `--incremental false`; if the default form is ever run, restore with `git checkout -- web/tsconfig.tsbuildinfo` (documented habit) |
+| uv.lock | `uv run` without a frozen flag may rewrite the tracked lock | `UV_FROZEN=1` in G4-10 |
+| Gate 5 README (F13) | the README must link to operating-instructions.md for commands, not copy them (single source) | note for Gate 5 |
+| Gate 6 pilot | the pilot is the only evidence that the retry cap, the same-failure stop and the no-re-run rule are obeyed (AC-R7); its envelope carries the retry line | Gate 4 puts the same-failure clause in the envelope template (E3) so the pilot worker receives it |
+| Shared files | MASTER-PLAN.md, current-state.md and all-context.md have one owner at a time; Gate 4 does not touch all-context.md (its router is in the planner set) | none |
+| Stale statements | (a) current-state.md lines 48, 69, 86 and MASTER-PLAN.md R6: "unreconciled" and 54,592; (b) plan section 5: lever "Status" cells say "designed; measure after Gate 3" and the method text says `list_events` sampling "in Gate 3" (Gate 3 used headless probes instead); (c) plan section 5 bounded retry "3 per gate"; (d) plan section 6 `pnpm build:islands` without a directory; (e) all-tests.md "Latest count" 820 and 35/35 e2e (6 specs now); (f) the token-usage-telemetry stub still says sampling was planned in Gate 3 | (a) E5, G4-7; (b), (c), (d) cosmetic, refreshed at the Gate 4 closeout; (e) E6; (f) closeout update of the stub |
+
+### Execute-agent instructions (concerns the plan text cannot hold; EXECUTE must follow all)
+
+| # | Instruction |
+|---|---|
+| E1 | Order of writes: operating-instructions.md first (RT commands, rules), then master-planner.md (budget block, envelope line, brief cap), then run G4-3, G4-5, G4-2 and read the measured numbers, then branch A runs (G4-10) if approved, then all-tests.md, then trims of current-state.md and MASTER-PLAN.md (write their numbers LAST, from the G4-2 output, because every edit moves the totals), then decisions.md D-12 (budget pin, ceilings, same-failure stop; reason: the Gate 3 totals could not be reproduced), then plan status text, then the report. Do not commit, do not push |
+| E2 | master-planner.md: add `## 12. Planner entry-set budget` holding the G4-1 block between two comment lines `# PLANNER-BUDGET:BEGIN` and `# PLANNER-BUDGET:END` inside one fenced block, the trim rule above and the brief cap ("a task brief is at most 8,000 B; for a larger PLAN read only its status, TL;DR and acceptance sections"). Add one planner-end line in section 11 pointing at the block. Keep the 11 report headings used nowhere else (C12 stays 11), keep frontmatter untouched, write other context docs by bare name (kit-portability). About +1.4 KB |
+| E3 | Rules: pin "2 fix cycles for a worker; the 10-cycle EVL ceiling in CLAUDE.md is the outer bound only; the same failure (same test or gate id and same first error line) in two consecutive runs stops the loop at once as `blocked` or `needs_input` and is reported in heading 9". Put it in operating-instructions.md and change the envelope template line to `Retry budget: 2 fix cycles; same failure twice stops`. Do not edit CLAUDE.md |
+| E4 | Re-run rule: add the skip check ("before re-running a command, run `git diff --quiet <sha-of-the-last-run> HEAD -- <paths the task touched>`; exit 0 and a clean `git status --porcelain` for those paths means skip and cite the recorded run"), and one line that a tester confirms from heading 6 and CI instead of re-running unchanged suites. Write the RT rows with the full commands of G4-3; RT3 uses `cd web && pnpm build:islands`. operating-instructions.md stays <= 150 lines and <= 7,000 B (about +0.9 KB; today 5,108) |
+| E5 | current-state.md: rewrite in place to <= 8,000 B (target <= 7,000): keep the stamp, Observed table, validator table, one Gate status block and Next actions; replace the Gate 3 narrative by a link to its report; write the reconciliation as "C3 total plus master-planner.md; two earlier figures differed because one omitted the router cut" without the G4-7 literals. MASTER-PLAN.md: R8 to `review` (never `accepted`: acceptance needs the independent EVL and the user), R6, R7 and R13 evidence cells shortened to <= 300 B with the report path, "unreconciled" removed, total <= 19,000 B (target <= 17,500). Keep every C11 ID row and every `T` and `P` row byte-intact (the rev 6 preservation check filters them) |
+| E6 | all-tests.md: add a link line to the RT table in operating-instructions.md and a `## Current evidence (Gate 4)` block of at most 2,000 B (SHA, UTC time, CI run id, either the G4-10 counts or the literal `not re-measured`, plus the file counts 73, 30 and 6, which need no install). Mark the old state tables with one line "historical, superseded by the block above". Do not rewrite the 31,619 B file. If branch K: write backlog stub `test-counts-remeasure_NOTE_03-10-26.md` (what is unproven, why, how to close) |
+| E7 | Branch A only: run each suite ONCE per the G4-10 block, record SHA and UTC, never re-run unchanged suites, and finish with C9 clean. If either install fails (the proxy may block a registry), stop the installs, fall back to branch K, and record the failure. No other network use. Playwright needs `PLAYWRIGHT_CHROMIUM_PATH` as written |
+| E8 | The independent tester (vc-tester, sonnet) applies the rule it checks: it runs G4-1 to G4-9 and G4-11, and confirms the recorded SHA still matches (`git diff --quiet <sha> HEAD -- api web`) instead of re-running the suites; the counts keep a single-agent source, which the report states |
+| E9 | Do not touch CLAUDE.md, AGENTS.md, all-context.md, orchestration.md, `.claude/`, `.codex/`, api/, web/ sources, .gitignore, validators or hooks. Avoid the scout-block shell strings in every command. No probe, no spend |
+| E10 | Report: measured bytes before and after for each edited file, the G4-1 output, every token figure labelled per the table above, the install decision taken, and a Forward Preview for Gate 5 (the tsbuildinfo and uv.lock caveats, README links to operating-instructions.md) |
+
+Dimension findings:
+- Infra fit: PASS — every command in the RT table exists (scripts, pytest config, CI jobs and steps); CI is green at HEAD 24f3db6; test dependencies are not installed here, which only affects G4-10.
+- Test coverage: CONCERN — re-measured counts and local Playwright need installs (G4-K1); compliance with the retry and no-re-run rules is observable only at the Gate 6 pilot; CI gives pass or fail without counts. Closed here: G4-1 to G4-9 are non-vacuous (red today, scratch-verified for G4-2).
+- Breaking changes: PASS — text only; CLAUDE.md and AGENTS.md untouched (G4-8); C11 rows, C12 headings, C14 caps and kit-portability constraints are kept by E2, E4, E5 and G4-9.
+- Security surface: PASS — no secret, auth or deploy surface; the only network use is the optional frozen installs of branch A (lockfile-pinned: `--frozen`, `--frozen-lockfile`).
+- Section feasibility, planner budget (E2, E5): CONCERN (closed by the pin) — real margin 4,045 B not 9,408 B; current-state.md over its ceiling by 879 B; MASTER-PLAN.md 423 B under its ceiling; highest-risk edit: trimming MASTER-PLAN.md rows (keep C11 IDs and T/P rows intact).
+- Section feasibility, RT table and retry rules (E3, E4): CONCERN (closed) — six RT cells lack commands; three retry numbers disagree; the same-failure clause and the skip check are missing; highest-risk edit: growing operating-instructions.md past its 7,000 B worker-cap arithmetic.
+- Section feasibility, all-tests.md (E6): CONCERN (closed) — no link, counts stale (820 pytest, 4 specs); highest-risk edit: touching the 31 KB history; keep the edit to a block plus labels.
+- Section feasibility, token measurement: PASS — labelled table above; no probe needed.
+- Section feasibility, ordering against Gates 5 and 6: PASS — two caveats recorded (tsbuildinfo, uv.lock).
+
+Open gaps:
+- G4-K1 (the single open decision, needs the user): may EXECUTE install dependencies in this container to re-measure the three suites once? Choose: (A) approve `uv sync --project api --frozen` and `cd web && pnpm install --frozen-lockfile` (lockfile-pinned, no other network use, one run per suite, `UV_FROZEN=1`, `--incremental false`; if an install fails the run falls back to K), recommended; (K) accept the residual: no install, all-tests.md keeps the historical counts labelled `not re-measured` with CI pass at the head SHA as the current evidence, plus a backlog stub and the user-PC or Gate 6 follow-up. Until one is chosen the "three suites once, measured" deliverable is a named residual and the net gate cannot be a terminal PASS.
+- G4-K2 (carried, known): real per-session token usage is unmeasured; Gate 4 adds no probe (`token-usage-telemetry_NOTE_02-10-26.md`).
+- G4-K3 (carried, known): AC-R5, AC-R6 and AC-R9 (Gate 3 report) await the user's review; they do not block Gate 4.
+- G4-K4 (named residual): `all-tests.md` is 31,619 B (about 7.9k tokens by bytes/4, estimated) and is passed to every tester and executor, mostly history; slimming it is a candidate backlog stub `all-tests-history-trim_NOTE_03-10-26.md` (gap-resolution D), not Gate 4 scope.
+- Closed inside this contract (no plan supplement needed to proceed): G4-C1 planner margin (G4-1, G4-2, E2, E5); G4-C2 RT commands (G4-3, E4); G4-C3 retry numbers and the same-failure clause (G4-5, E3); G4-C4 re-run evidence (G4-5, E4); G4-C5 all-tests link and stale counts (G4-6, E6); G4-C6 stale totals (G4-7, E5).
+- Cosmetic - may be accepted as known gaps: (1) plan section 5 status cells and method text, section 5 "3 per gate", section 6 `pnpm build:islands` directory (refreshed at the closeout, not gate-relevant); (2) the token-usage-telemetry stub wording; (3) the validate-backlog-notes failures (45 notes, repo-wide, outside the baseline); (4) vc-update-process-agent "Current features list" reference (carried from Gate 3).
+- Known gaps carried (named residuals): Windows `.agents/skills` behaviour; hook output and skill listing outside every byte or token measure; the Gate 3 report's AC-R9 review.
+
+What this coverage does NOT prove:
+- G4-1, G4-2: bytes of files and that one formula prints the same text twice, not tokens, not that a real brief stays under 8,000 B (the brief cap is a written rule); the platform prompt, hook output and skill list are not counted.
+- G4-3, G4-4, G4-5: that the commands and rule words exist and agree, not that a worker obeys them; the same-failure rule and the skip check are text until the Gate 6 pilot.
+- G4-6, G4-7: presence and absence of text and a SHA stamp, not that the counts are right (they have one source, the execute run) or that old history in all-tests.md is accurate.
+- G4-8, G4-9: scope and no-regression against static gates and validators, not behaviour of any role.
+- G4-10 (if run): one run per suite on one container at one SHA; no flake classification, no repeat for variance; Playwright on this container's chromium only.
+- G4-11: CI pass or fail of the head SHA, not counts and not the e2e suite (CI has none).
+- Nothing here proves the Master Planner lifecycle works end to end; that is the Gate 6 pilot.
+
+Plan updates applied by this validate session: none to the plan body (history left as written); the corrections above live in this contract and the orchestrator carries them into EXECUTE through E1-E10. If the orchestrator prefers the strict path, the SUPPLEMENT REQUEST in the V7 hand-off lists the same items as plan-text additions.
+
+Gate: CONDITIONAL (0 FAILs; one open decision G4-K1; six in-contract corrections; Gate 4 EXECUTE may start only after the user accepts G4-K1 with A or K, or after one PVL supplement cycle, because first-pass CONDITIONAL is not terminal; scope: START of Gate 4 only)
+Accepted by: pending; not accepted by this session. The user decides G4-K1 at V5. Cosmetic items (1)-(4) are recorded as known gaps, not accepted concerns.
+
+## Autonomous Goal Block — Gate 4
+
+SESSION GOAL: Master Planner recovery program, Gate 4 (token and test efficiency, docs only): RT0-RT4 table with full real commands, bounded retry with a same-failure stop, test budget and the no-re-run evidence rule in operating-instructions.md; all-tests.md linked to it with a dated evidence block; ONE pinned planner-budget block in master-planner.md (fixed part <= 56,000 B, per-file ceilings, brief cap 8,000 B); current-state.md and MASTER-PLAN.md trimmed to their ceilings; R8 to review; decisions D-12.
+Charter + umbrella plan: N/A - single plan (process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md)
+Autonomy: autonomy removes approval pauses only (feedback_autonomous_phase_execution.md); valid only after the Gate 4 contract above is accepted (G4-K1 decided). Installs happen only if G4-K1 = A and only the two frozen installs named there.
+Hard stops / safety constraints:
+- Any write outside process/; any edit to CLAUDE.md or AGENTS.md (Gate 4 does not need them; ask the user instead)
+- Raising any cap or ceiling without the user; report misses
+- Installs or network use beyond what G4-K1 chose; any probe or spend; commit, push, or merging PR #13 (commit only when the user asks)
+- Deleting any file, branch or session
+- Any NEW validator failure versus the baseline; leaving web/tsconfig.tsbuildinfo or uv.lock dirty; avoid the scout-block shell strings
+Next phase: EXECUTE Gate 4 via one vc-execute-agent (opus), sequential, order E1; then an independent vc-tester (sonnet) runs G4-1 to G4-9 and G4-11 and does not re-run unchanged suites; then UPDATE PROCESS closeout; requires the explicit ENTER EXECUTE MODE (already given for Gate 4, executes once the contract is accepted)
+Validate contract: inline in plan (## Validate Contract — Gate 4)
+Execute start: G4-1 budget | G4-2 one block | G4-3 RT commands | G4-4 commands real | G4-5 retry and re-run rules | G4-6 all-tests | G4-7 stale claims | G4-8 scope and entry files | G4-9 regression + validators == baseline | G4-10 counts (A only) | G4-11 CI at head | e2e spec: none new | probe: none | high-risk pack: no
+
 ## Resume and Execution Handoff
 
 **Update 03-10-26 (Gate 3 closeout): Gate 3 complete; Gate 4 requires VALIDATE then explicit ENTER EXECUTE MODE.** Gate 3 report: `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_GATE3-REPORT_03-10-26.md`. Execute commits `eee7709` and `0b3c9bf` (pushed, PR #13 open). Next step: re-enter VALIDATE for Gate 4 (token and test efficiency: scoped context loading, risk-based verification RT0-RT4 in operating-instructions.md, bounded retries; task R8 and the Gate 4 rows of section 9), then the user's explicit ENTER EXECUTE MODE. Open Questions 10 and 12 stay open and non-blocking. The Gate 2 update and the numbered list below are history.
