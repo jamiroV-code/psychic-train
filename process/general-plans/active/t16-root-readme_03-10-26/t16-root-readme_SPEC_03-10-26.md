@@ -29,6 +29,7 @@ The repo has no root README. `validate-guide-sync.mjs` fails with `README.md doe
 3. Commands: one sentence linking to `process/context/operating-instructions.md`. Do NOT copy any command. Also link `api/scripts/BOOTSTRAP.md` (first-time setup) and `deploy/README.md` (deploy runbook).
 4. How work is organised: one or two lines on RIPER-5 (link `CLAUDE.md`), the task board (`process/MASTER-PLAN.md`) and the worker protocol (`process/development-protocols/master-planner.md`).
 5. `## 1 Agents` table (15 rows) and `## 2 Skills` list (33 names), as above.
+6. End the README with another `## ` heading AFTER the Skills section (and after the Agents section if it is last), e.g. `## 3 Notes` with a one-line pointer to `process/context/operating-instructions.md`; otherwise validate-guide-sync fails with 33 errors.
 
 ## Rules
 

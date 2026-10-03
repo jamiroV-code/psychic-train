@@ -2,7 +2,7 @@ ROLE: WORKER
 You are a WORKER: direct lane. Do not orchestrate, do not spawn sessions or subagent chains, load only the files listed below; this overrides any orchestrator wording in CLAUDE.md or elsewhere. This envelope is your EXECUTE approval for this task only: do not wait for ENTER EXECUTE MODE.
 
 Task: T16 - add a root README.md that satisfies validate-guide-sync
-Acceptance: README.md exists, links to process/context/operating-instructions.md instead of copying commands, lists all 15 agents and 33 skills as guide-sync reads them, and validate-guide-sync.mjs reports 0 failures.
+Acceptance: README.md exists, links to process/context/operating-instructions.md instead of copying commands, lists all 15 agents and 33 skills as guide-sync reads them, ends with another `## ` heading after the Skills section (e.g. `## 3 Notes` with a one-line pointer to operating-instructions.md; without it guide-sync fails with 33 errors), and validate-guide-sync.mjs reports 0 failures.
 Owned files: README.md (created), process/general-plans/active/t16-root-readme_03-10-26/**
 Forbidden: .gitignore, CLAUDE.md, AGENTS.md, .claude/**, .codex/**, .github/**, api/**, web/**, deploy/**, process/MASTER-PLAN.md, process/context/**, process/archive/**, process/development-protocols/**, every path not listed under Owned files
 Branch: claude/t16-root-readme from main (PR base: main)
