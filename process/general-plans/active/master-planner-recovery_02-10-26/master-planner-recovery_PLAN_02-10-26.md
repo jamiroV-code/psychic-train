@@ -8,13 +8,13 @@ feature: general-plans
 # Project Recovery, Architecture Cleanup, AI Efficiency and Master Planner Orchestration — GATE 1 Proposal
 
 Date: 02-10-26
-**Gate 2 complete (03-10-26, UPDATE PROCESS closeout; report: `master-planner-recovery_GATE2-REPORT_03-10-26.md`). Gate 3 requires VALIDATE then explicit ENTER EXECUTE MODE.** Historical status line follows.
+**Gate 3 complete (03-10-26, UPDATE PROCESS closeout; report: `master-planner-recovery_GATE3-REPORT_03-10-26.md`). Gate 4 requires VALIDATE then explicit ENTER EXECUTE MODE.** Gate 2 report: `master-planner-recovery_GATE2-REPORT_03-10-26.md`. Historical status line follows.
 Status: PROPOSED, Gate 1 approved (all user answers 02-10-26 recorded below; Q1-Q8 resolved). Nothing here is executed. PVL cycle 4 validate (02-10-26) found Gaps 24-30 closed and the user diagram revision sound apart from two plan-text concerns (Gaps 31-32, see the Validate Contract); the PVL supplement cycle 4 applies them and vc-validate-agent re-runs from V1 (cycle 5) and must write a passing contract (or the user must accept the remaining gaps) before any Gate 2 write. Working tree: plan file edits only (this file); no other file touched.
 Complexity: COMPLEX (single plan, gated roadmap Gate 2..6; each gate re-enters VALIDATE).
 
 ## Status of this plan
 
-**Current (03-10-26): Gate 2 complete; Gate 3 requires VALIDATE then explicit ENTER EXECUTE MODE.** Gate 2 independent EVL (vc-tester) all green; validators equal baseline; AC-R5 and AC-R6 await the user's hybrid review (not accepted). Gates 3-6 remain, so the plan stays in `active/`. Paragraph below is the pre-Gate-2 history.
+**Current (03-10-26): Gate 3 complete; Gate 4 requires VALIDATE then explicit ENTER EXECUTE MODE.** Gate 3 (role-neutral CLAUDE.md and AGENTS.md, shared ENTRY-SET block) was executed, independently confirmed (one fix cycle) and accepted by the user (03-10-26); commits `eee7709`, `0b3c9bf`; report `master-planner-recovery_GATE3-REPORT_03-10-26.md`. Gates 4-6 remain, so the plan stays in `active/`. The Gate 3 contract below is CONSUMED (it gated the start of Gate 3 only). Superseded status follows: **Gate 2 complete; Gate 3 requires VALIDATE then explicit ENTER EXECUTE MODE.** Gate 2 independent EVL (vc-tester) all green; validators equal baseline; AC-R5 and AC-R6 await the user's hybrid review (not accepted). Gates 3-6 remain, so the plan stays in `active/`. Paragraph below is the pre-Gate-2 history.
 
 Gate 1: approved (02-10-26). Q1-Q8 are all resolved (user answers, section 13); Q4 and Q8 are now Resolved. PVL cycle 5 validate is done (03-10-26): Gate: PASS, 0 FAIL, 0 unresolved CONCERN (Gaps 1-32 all closed; only cosmetic leftovers remain, listed in the Validate Contract). The contract gates the START of Gate 2 only; Gates 3-6 each re-enter VALIDATE. User decisions Open Question 10 and Open Question 12 are non-blocking for Gate 2 start. The user diagram revision (02-10-26: four user answers on the target-workflow diagram) was verified in cycles 4 and 5; see the verification tables in the Validate Contract section. Working tree: only this plan file was edited by validation.
 
@@ -1184,6 +1184,7 @@ Execute start: wc -l all-context <=300 | validate-context-discovery (failures ==
 ## Validate Contract — Gate 3
 
 Status: CONDITIONAL (pending the single V5 user decision on the live probes; see Open gaps G3-K1)
+**CONSUMED 03-10-26:** G3-K1 was decided by the user (route A, headless `claude -p`, cap 1 USD per run); Gate 3 EXECUTE ran, independent EVL was green after one fix cycle, the user accepted the diff. This contract is history; do not reuse it for Gate 4. Closeout: `master-planner-recovery_GATE3-REPORT_03-10-26.md`.
 Date: 03-10-26
 date: 2026-10-03
 generated-by: outer-pvl
@@ -1339,22 +1340,10 @@ ck process/development-protocols/master-planner.md 'infer the plan|ambient state
 # (Rules marked "(planner posture)" may be reworded, but the quoted anchor phrase must remain so the check stays mechanical.)
 
 # G3-8  AC-R4: AGENTS.md makes no false claim that .agents/skills is a symlink (it is 339 tracked regular files until H1)
-grep -nEi 'is (already )?a symlink|symlink to|resolves to the same folder|both places automatically|through the .?\.agents/skills.?/? *
-**Update 03-10-26 (Gate 2 closeout): Gate 2 complete; Gate 3 requires VALIDATE then explicit ENTER EXECUTE MODE.** Gate 2 report: `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_GATE2-REPORT_03-10-26.md`. Execute HEAD `b84e580` (10 commits, pushed); closeout commits local. Next step: re-enter VALIDATE for Gate 3 (F9, F10, C1-C4, C10), user reviews CLAUDE.md/AGENTS.md before commit. The numbered list below is the pre-Gate-2 handoff, kept as history.
-
-1. Selected plan: `/home/user/psychic-train/process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md`
-2. Last completed step: PVL cycle 5 validate (03-10-26, re-run from V1 after the cycle-4 supplement of Gaps 31-32 and cosmetic c1-c9): both gaps verified closed live, c1-c9 landed, C1-C14 re-run and match; Gate: PASS. No implementation. Working tree: plan file edits only.
-3. Validate-contract: written 03-10-26 (cycle 5), Gate: PASS, 0 FAIL, 0 unresolved CONCERN (two cosmetic residuals r1, r2 recorded as known gaps). Scope: START of Gate 2 only.
-4. Context loaded: CLAUDE.md, all-context.md, orchestration.md, MASTER-PLAN.md (full), realignment SPEC (AC grep), repo branch list.
-5. Next step: orchestrator emits the /goal block and the EXECUTE strategy recommendation; on the user's explicit ENTER EXECUTE MODE, spawn vc-execute-agent (opus) for Gate 2 scoped to F1-F8, F11, F15-F17, R13 and R14 in the section 2 order; start MASTER-PLAN work from `pensive-dijkstra` rev 6 (pinned 18ffd4f014f4e5ea0f5d654688875a9300b30ab4); re-verify every remaining UNVERIFIED registry item first; R4 step (vii) is run by the orchestrator session itself. After Gate 2: UPDATE PROCESS closeout, then VALIDATE again before Gate 3.
-
-## Phase Completion Rules
-
-- A gate is complete only when its Verification Evidence rows are green and recorded with command, timestamp, and commit SHA.
-- Status words: `PROPOSED` (this plan), `CODE DONE` (files written, not independently verified), `VERIFIED` (independent re-run, e.g. spawned vc-tester or user). Known-gap alone never yields VERIFIED.
-- No gate starts before VALIDATE writes a contract for it and the user approves; archive/delete/session-termination steps need separate explicit approval.
- AGENTS.md
-# red today: 4 lines (11, 19, 20, 420). After Gate 3: no output (any retained statement says: tracked copy until H1 lands).
+grep -nEi 'is (already )?a symlink|symlink to|resolves to the same folder|both places automatically|through the .?\.agents/skills' AGENTS.md
+# Repaired 03-10-26 (UPDATE PROCESS, Gate 3 closeout): the plan text of this command was truncated here and a duplicate of the Resume and Phase Completion Rules
+# text was spliced into the middle of it; the command is reconstructed (verified: 5 matching lines on the pre-Gate-3 AGENTS.md, no output on HEAD 0b3c9bf) and the splice removed.
+# red today: 4 claim sites, 5 matching lines on the pre-Gate-3 file (lines 11, 19, 20, 420 and one more; the exact line count is not the gate). After Gate 3: no output (any retained statement says: tracked copy until H1 lands).
 
 # G3-9  AC-R1: planner-only rules are scoped so a WORKER is not told to stall or to spawn
 grep -nE 'ALWAYS spawns|No inline execution' CLAUDE.md AGENTS.md | grep -vE 'posture'
@@ -1489,6 +1478,8 @@ Validate contract: inline in plan (## Validate Contract — Gate 3)
 Execute start: G3-1 no @-imports | G3-2 role-neutral | G3-3 per-file caps | G3-C3 planner bytes | G3-C4 worker bytes | C10 + G3-5 identical non-empty block | G3-6 literal path | G3-7 rule survival | G3-8 symlink claims | G3-9 scoped planner rules | G3-10 validators == baseline | C9 Gate 3 form + C13 | e2e spec: none | probe: P1 and P2 only if G3-K1 = A or C | high-risk pack: no
 
 ## Resume and Execution Handoff
+
+**Update 03-10-26 (Gate 3 closeout): Gate 3 complete; Gate 4 requires VALIDATE then explicit ENTER EXECUTE MODE.** Gate 3 report: `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_GATE3-REPORT_03-10-26.md`. Execute commits `eee7709` and `0b3c9bf` (pushed, PR #13 open). Next step: re-enter VALIDATE for Gate 4 (token and test efficiency: scoped context loading, risk-based verification RT0-RT4 in operating-instructions.md, bounded retries; task R8 and the Gate 4 rows of section 9), then the user's explicit ENTER EXECUTE MODE. Open Questions 10 and 12 stay open and non-blocking. The Gate 2 update and the numbered list below are history.
 
 **Update 03-10-26 (Gate 2 closeout): Gate 2 complete; Gate 3 requires VALIDATE then explicit ENTER EXECUTE MODE.** Gate 2 report: `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_GATE2-REPORT_03-10-26.md`. Execute HEAD `b84e580` (10 commits, pushed); closeout commits local. Next step: re-enter VALIDATE for Gate 3 (F9, F10, C1-C4, C10), user reviews CLAUDE.md/AGENTS.md before commit. The numbered list below is the pre-Gate-2 handoff, kept as history.
 

@@ -24,6 +24,8 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/active/master-p
 | D-7 | Standing consent to delete merged worker task branches | 02-10-26 | active |
 | D-8 | Two role-based session entry sets | 02-10-26 | active |
 | D-9 | Drop the "Before Any Substantial Task" `find` ritual from CLAUDE.md | 03-10-26 | active |
+| D-10 | Worker sessions need no `[MODE:]` response prefix; no `[MODE: ORCHESTRATOR]` note restored | 03-10-26 | active |
+| D-11 | Gate 3 live token probes by headless `claude -p` (route A), cap 1 USD per run | 03-10-26 | active |
 | D-0 | Original goal: one confidence level that sizes positions | 17-09-26 | superseded by D-1, D-2 |
 
 ## Entries
@@ -95,4 +97,18 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/active/master-p
 - **Date:** 03-10-26 (RECOVERY Gate 3, validate-contract instruction E6). **Reason:** the ritual contradicts the minimal entry sets of D-8 and adds a large listing to every session; the `vc-context-discovery` skill already performs discovery when a task needs it.
 - **Alternatives:** keep the ritual (rejected: costs every session, including workers); keep it for planners only (rejected: planners already read the router section of all-context.md, which routes to every group).
 - **Consequences:** sessions load only their entry set and open deeper docs on demand. The removed text stays recoverable from git (CLAUDE.md at commit 3faeff4, section "Before Any Substantial Task"). AGENTS.md had no such section; its "consult before substantial work" list is replaced by the same ENTRY-SET block.
+- **Status:** active.
+
+### D-10 Worker sessions need no `[MODE:]` response prefix
+- **Decision:** the "every response MUST begin with `[MODE: MODE_NAME]`" rule in CLAUDE.md and AGENTS.md applies to PLANNER sessions only; a WORKER (first line `ROLE: WORKER`) does not use it. The `[MODE: ORCHESTRATOR]` informational note from the old files is not restored (accepted omission). The worker report format is master-planner.md section 9; the worker lane is section 6.
+- **Date:** 03-10-26 (user decision while reviewing the Gate 3 diff; applied in commit `0b3c9bf`). **Reason:** a worker executes its own task directly under its envelope; a mode banner adds output and implies a RIPER mode a worker is not in.
+- **Alternatives:** keep the prefix for every role (rejected by the user: noise for workers); restore the `[MODE: ORCHESTRATOR]` note (rejected: informational only, no rule depended on it).
+- **Consequences:** the planner prefix rule stays in CLAUDE.md and AGENTS.md `### Core Protocol` and is scoped by the ENTRY-SET role selection. Open Question 12 (worker lane confirmation) is still open and non-blocking.
+- **Status:** active.
+
+### D-11 Gate 3 live token probes by headless `claude -p` (route A)
+- **Decision:** the Gate 3 before/after context measurement and the planner/worker role-behaviour checks use headless `claude -p` runs on scratch copies, capped at 1 USD per run (about 0.5 to 4 USD total expected; actual 0.617 USD including a 0.037 USD smoke call).
+- **Date:** 03-10-26 (user answered the single V5 question G3-K1 with route A). **Reason:** it is the only way to measure real first-request context without telemetry; sessions and merge tools were not needed.
+- **Alternatives:** routes B and C (alternatives named in the Gate 3 contract probe design, section "Probe design"; not chosen); static byte estimates only (kept as the pinned gate, but not real tokens).
+- **Consequences:** results are single-run samples, and about 32k tokens of each run is the fixed headless system prompt, not CLAUDE.md. Hook output and the skill listing are unmeasured. Real per-session usage stays a backlog item (`token-usage-telemetry_NOTE_02-10-26.md`). Standing authorization does not cover probes: any new probe needs fresh approval.
 - **Status:** active.
