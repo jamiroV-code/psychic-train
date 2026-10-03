@@ -72,7 +72,7 @@ All at commit `753db23` (api/ and web/ unchanged since `96d2d18`). After the run
 
 1. The contract's E1 says "do not commit". The orchestrator told me to commit locally after each step, so I did. Nothing was pushed by me.
 2. `ee72237` was committed and pushed by something other than this agent, with message "checkpoint", between my edit and my own commit attempt. It holds exactly my operating-instructions.md edit. I did not push.
-3. MASTER-PLAN.md was 17,693 B at execute (193 B over the 17,500 target) and 17,834 B after the closeout: under the 19,000 ceiling, 334 B over the target.
+3. MASTER-PLAN.md was 17,693 B at execute (193 B over the 17,500 target) and 17,819 B after the closeout: under the 19,000 ceiling, 319 B over the target.
 
 ## Test Infra Gaps Found
 
@@ -95,7 +95,7 @@ Accuracy review of this report against the EVL: byte figures, test counts, scope
 ## UPDATE PROCESS closeout
 
 - Drift score: MEDIUM (3 signals: more than 1 file touched; `process/development-protocols/master-planner.md` changed; 3 or more memory-worthy decisions D-12, D-13 and the retry single home). Recommend UPDATE PROCESS -- significant changes detected.
-- Closeout edits: current-state.md refreshed to `0004d5b` (6,028 B, ceiling 8,000); MASTER-PLAN.md R8 row and stamp (17,834 B, under the 19,000 ceiling, 334 B over the 17,500 target); decisions.md D-12 indexed and D-13 added (G4-K1 = A approved by the user, 03-10-26); master-planner.md section 6 retry line now points to operating-instructions.md "Bounded retry", the single home (2 fix cycles per failing gate, same failure twice stops, 10-cycle outer ceiling); token-usage-telemetry note wording; plan Status, Resume and contract CONSUMED marker. Planner fixed part after closeout: 48,346 B of 56,000 (headroom 7,654 B; the closeout added 647 B).
+- Closeout edits: current-state.md refreshed to `0004d5b` (6,028 B, ceiling 8,000); MASTER-PLAN.md R8 row and stamp (17,819 B, under the 19,000 ceiling, 319 B over the 17,500 target); decisions.md D-12 indexed and D-13 added (G4-K1 = A approved by the user, 03-10-26); master-planner.md section 6 retry line now points to operating-instructions.md "Bounded retry", the single home (2 fix cycles per failing gate, same failure twice stops, 10-cycle outer ceiling); token-usage-telemetry note wording; plan Status, Resume and contract CONSUMED marker. Planner fixed part after closeout: 48,346 B of 56,000 (headroom 7,654 B; the closeout added 647 B).
 - R8 acceptance check (acceptance rule (a)-(d)): (b) independent re-run done by vc-tester, but CI on the head SHA of the newest pushed commit is not confirmed; (d) no user-visible behavior, but the plan's G4-7 contract pins the R8 row at `review`. Result: R8 stays `review`; AC-R9 not marked accepted.
 - Validators after closeout: equal to the baseline (context-discovery 1, skills 1, guide-sync 1, parity 0 failures and 18 warnings, plan-inventory 0 and 6, the rest 0); no new failure; routing block in sync.
 - Next: confirm CI on the newest head; the user reviews AC-R5, AC-R6, AC-R9; Gate 5 re-enters VALIDATE, then the user's explicit ENTER EXECUTE MODE (several approvals needed: H1 symlink, tsbuildinfo untrack, R12 deploy fixes). Commit checkpoint: process commits only; nothing pushed.
