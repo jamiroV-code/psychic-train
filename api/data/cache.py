@@ -360,26 +360,6 @@ def liquidity_series_age_seconds(series_id: str) -> float | None:
     return time.time() - path.stat().st_mtime
 
 
-# --- RFC-002: confirmed leg boundaries (item 41/42 support) ----------------
-
-
-def confirmed_boundaries_path() -> Path:
-    return CACHE_ROOT / "legs" / "confirmed_boundaries.parquet"
-
-
-def write_confirmed_boundaries(df: pd.DataFrame) -> None:
-    path = confirmed_boundaries_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_to_parquet(df, path)
-
-
-def read_confirmed_boundaries() -> pd.DataFrame:
-    path = confirmed_boundaries_path()
-    if not path.exists():
-        return pd.DataFrame()
-    return _connect().sql(f"SELECT * FROM read_parquet('{path.as_posix()}')").df()
-
-
 # --- RFC-003: narrative proxy series (pytrends/reddit/coingecko) ----------
 #
 # One file per (source, category_id) pair, full overwrite-per-refresh (like
