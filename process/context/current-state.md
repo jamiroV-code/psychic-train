@@ -15,10 +15,10 @@ Staleness rule (master-planner.md): stale when the stamp is not an ancestor of H
 
 | Fact | Value | Command |
 |---|---|---|
-| Working tree | HEAD = `origin/main` `0f3dfa3`; uncommitted: T16/T20 task folders moved to `completed/`, MASTER-PLAN.md, archive/index.md, this file (process/ text only) | `git status --short` |
+| Working tree | `origin/main` `487fa65` (PR #24 PERF merged) plus uncommitted process/ text only: T18/T19 T18/T19/PERF task folders moved to `completed/`, T29 and T30 task folders, MASTER-PLAN.md, archive/index.md, two protocol lines, this file | `git status --short` |
 | Entry files | `CLAUDE.md` 13,443 B, `AGENTS.md` 12,572 B, `north-star.md` 5,225 B | `wc -c` |
 | `process/context/all-context.md` | 193 lines, 11,380 B | `wc -lc` |
-| Remote heads | 15 at ~10:3xZ 03-10-26, incl. `main`. User said 'you can delete them' for six approved branches (`claude/compassionate-goldberg-o2iq49`, `claude/p1-pipeline`, `claude/p2-deploy`, `claude/ui-shell`, `claude/vigilant-hamilton-grr18c`, `fix/narrative-sufficiency-gating-rfc1`) plus probe `claude/zz-probe-delete-065549`; deletion NOT performed: the retry `git push origin :refs/heads/claude/zz-probe-delete-065549` failed ('unexpected disconnect while reading sideband packet'; earlier REST 403), planner will not work around it. The user deletes these seven; nothing lost. `delete_branch_on_merge` unverified | `git ls-remote --heads origin` |
+| Remote heads | 15 at ~10:3xZ 03-10-26, incl. `main`. User said 'you can delete them' for six approved branches (`claude/compassionate-goldberg-o2iq49`, `claude/p1-pipeline`, `claude/p2-deploy`, `claude/ui-shell`, `claude/vigilant-hamilton-grr18c`, `fix/narrative-sufficiency-gating-rfc1`) plus probe `claude/zz-probe-delete-065549`; deletion NOT performed (user deletes in GitHub's UI; planner re-checks with ls-remote afterwards): the retry `git push origin :refs/heads/claude/zz-probe-delete-065549` failed ('unexpected disconnect while reading sideband packet'; earlier REST 403), planner will not work around it. The user deletes these seven; nothing lost. `delete_branch_on_merge` unverified | `git ls-remote --heads origin` |
 | Workflows | 6: `ci.yml` plus five snapshot jobs | `ls .github/workflows` |
 | `.agents/skills` | 339 tracked regular files, not a symlink | `git ls-files .agents/skills \| wc -l` |
 | `web/tsconfig.tsbuildinfo` | not tracked (empty `git ls-files`; T20, `54157e2`) | `git ls-files web/tsconfig.tsbuildinfo` |
@@ -68,6 +68,6 @@ Planner budget: run the PLANNER-BUDGET block in master-planner.md section 12 (by
 
 ## Next actions
 
-1. Done: PR #13 merged; T20 and T16 merged (cost 1.64 of the 40 USD ceiling); task folders archived.
+1. Done: T20, T16, T18 (PR #23 `42d8ca8`), T19 (PR #22 `5ace8b9`) merged and archived (docs); vc-tester PASS on `42d8ca8`. Pending: archive_session for the T18 and T19 worker sessions. PERF (PR #24 `487fa65`) accepted, outcome partial, folder in `completed/`; its session archive also pending. Approved, not spawned: T29 (one-line path fix in `api/scripts/backtest_leg_boundaries.py`). Proposed, not approved: T30 (re-measure web perf rows).
 2. Home-PC step before the first pull that carries T20: if `git status --short web/tsconfig.tsbuildinfo` shows `M`, run `git checkout -- web/tsconfig.tsbuildinfo` first.
-3. User deletes the six approved branches and `claude/zz-probe-delete-065549` (this session cannot). Then housekeeping candidates from the Gate 5 backlog note, then product work. Open Question 10 decided "Yes, same rules" (tension: CLAUDE.md/AGENTS.md changes still need the user's diff review per the Gate 3 rule unless the user says otherwise); Open Question 12 decided: keep as is (envelope ban plus report check). G5-K8 (public repo, non-redistributable data): left as is, known risk. Registry: MASTER-PLAN.md.
+3. User deletes the six approved branches and `claude/zz-probe-delete-065549` (this session cannot). Then housekeeping candidates from the Gate 5 backlog note, then product work. Open Question 10 resolved 03-10-26: workers self-merge within owned files, but any CLAUDE.md or AGENTS.md diff stops at `review` for the user; Open Question 12 decided: keep as is (envelope ban plus report check). G5-K8 (public repo, non-redistributable data): left as is, known risk. Registry: MASTER-PLAN.md.
