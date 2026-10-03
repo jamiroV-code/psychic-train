@@ -30,17 +30,25 @@ date: 03-10-26
 
 ## Risk-tier test rules (RT0-RT4)
 
-RT = risk tier; T# is always a registry task. Run once, after the last edit.
+RT = risk tier; T# is always a registry task. Run once, after the last edit, from the repo root.
 
 | Tier | Change type | Required | Not required |
 |---|---|---|---|
 | RT0 Docs / low | markdown, process files, comments | `validate-plan-artifact.mjs <plan>` for plans; `validate-context-discovery.mjs` for context edits; `git diff --check` | pytest, vitest, Playwright |
-| RT1 Localized UI | one component or page in `web/` | `pnpm --filter web test` (affected file, then suite); `tsc --noEmit` | pytest; Playwright unless a route or flow changed |
-| RT2 Localized backend | one module or router in `api/` | pytest on the touched file, then `pytest api/ -q` once | vitest, Playwright |
-| RT3 Shared logic | `cache.py`, response models, adapters used by 2+ routes | full pytest, full vitest, `tsc`, `build:islands`; contract snapshots unmodified | Playwright unless a route changed |
-| RT4 High risk | auth, secrets, schema, public API, deploy/runtime, destructive data ops | all of RT3 + Playwright + evidence pack (`vc-risk-evidence-pack`) + user acceptance or a recorded agent-probe | none |
+| RT1 Localized UI | one component or page in `web/` | `pnpm --filter web test` (affected file, then suite); `pnpm --filter web exec tsc --noEmit` | pytest; Playwright unless a route or flow changed |
+| RT2 Localized backend | one module or router in `api/` | `uv run --project api pytest <touched test file>`, then `uv run --project api pytest api/ -q` once | vitest, Playwright |
+| RT3 Shared logic | `cache.py`, response models, adapters used by 2+ routes | `uv run --project api pytest api/ -q`; `pnpm --filter web test`; `pnpm --filter web exec tsc --noEmit`; `cd web && pnpm build:islands`; contract snapshots unmodified | Playwright unless a route changed |
+| RT4 High risk | auth, secrets, schema, public API, deploy/runtime, destructive data ops | all of RT3 + `cd web && pnpm test:e2e` + evidence pack (`vc-risk-evidence-pack`) + user acceptance or a recorded agent-probe | none |
 
-Validator scripts live under `.claude/skills/*/scripts/`. Budget: full-suite runs RT0 0, RT1/RT2 1, RT3 2, RT4 2 plus one vc-tester confirmation. Re-run only if files changed since the recorded SHA. A failing gate gets at most 2 fix cycles, then `blocked` or `needs_input`. One isolated re-run may classify a flake; log it as a backlog note. Live-provider checks are user-PC steps (container egress is blocked). CI (`ci.yml`) runs pytest, vitest, `tsc` and the island build; it has no e2e or lint job.
+Validator scripts live under `.claude/skills/*/scripts/`. Local `tsc` rewrites the tracked `web/tsconfig.tsbuildinfo`: add `--incremental false`, or restore it with `git checkout -- web/tsconfig.tsbuildinfo`. Set `UV_FROZEN=1` so `uv run` never rewrites `uv.lock`.
+
+**Test budget:** full-suite runs RT0 0, RT1/RT2 1, RT3 2, RT4 2 plus one vc-tester confirmation.
+
+**Bounded retry:** a worker gets at most 2 fix cycles per failing gate, then `blocked` or `needs_input`; the 10-cycle EVL ceiling in CLAUDE.md is the outer bound only. The same failure (same test or gate id and same first error line) in two consecutive runs stops the loop at once as `blocked` or `needs_input`, reported in heading 9. One isolated re-run may classify a flake; log it as a backlog note, never retry it again.
+
+**No re-run of unchanged tests:** record each run in report heading 6 with command, result, UTC time and commit SHA. Before re-running a command, run `git diff --quiet <sha-of-the-last-run> HEAD -- <paths the task touched>`; exit 0 and a clean `git status --porcelain` for those paths means skip and cite the recorded run. A tester confirms from heading 6 and CI instead of re-running unchanged suites.
+
+Live-provider checks are user-PC steps (container egress is blocked). CI (`ci.yml`) runs pytest, vitest, `tsc` and the island build; it has no e2e or lint job.
 
 ## Branch, worktree and merge rules
 
