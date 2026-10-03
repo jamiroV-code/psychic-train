@@ -292,3 +292,21 @@ Names only, derived from reads. "Audit" = file likely carries verdict wording an
 | 2 | Hard cap of 30 coins (US-14, outcome 18, AC-26); cap applies to crypto only. |
 | 3 and 4 | Narrative decisions: moved in full to the narrative-baskets SPEC. |
 | Split (02-10-26) | Narrative requirements moved out; documentation requirements moved to the housekeeping plan; AC-18 split; IDs kept stable. |
+
+## Decisions 03-10-26 (after RESEARCH)
+
+User answers (AskUserQuestion, all recommended options). Research facts: backlog note `screener-research-findings_NOTE_03-10-26.md`.
+
+1. **D1 benchmark:** REMOVE the automatic BTC/HYPE benchmark switch and label (`select_active_benchmark`, the 'Benchmark:' label, `BenchmarkSelection`/`active_benchmark`). BTC and HYPE are always fixed reference lines on the spaghetti chart.
+2. **D2 saved layout** (groups, coin order, per-coin chart toggles): a SERVER FILE next to `watchlist.json` (survives browser clearing, shared across devices).
+3. **D3 page load:** show cached data immediately and refresh behind it when data is older than 15 minutes (not blocking).
+4. **D4 leg strip:** confirmed legs only (confirmed boundary to next confirmed boundary), over ALL available BTC daily history, boundary dates marked.
+5. **D5 history kept:** about 200 bars per timeframe (15m about 2 days). RSI(14, Wilder) is computed per selected timeframe from that timeframe's own bars. Weekly bars stay DERIVED from daily (about 200 daily bars, about 28 weekly bars, enough for weekly RSI(14)).
+6. **D6 spaghetti span:** same bars as the board per timeframe (15m ~2 days, 1h ~8 days, 4h ~33 days, 1d ~200 days). TENSION flagged: 1w derived from ~200 daily bars gives ~28 weeks, not 200. PLAN must resolve this.
+7. **D7 drill-down:** keeps its own timeframe toggle, price chart and RSI; the scalp view is dropped; an SMA(60) line is optional.
+8. **D8 over 30 coins:** keep all existing coins, BLOCK new adds with a clear message until under 30 (API-enforced); nothing is removed automatically.
+9. **D9 equities:** daily and weekly only (1d/1w), same coin box (price, % change, RSI); no intraday until verified from the user's PC. LSE = London Strategic Edge (not the London Stock Exchange; see `VERDICT.md`).
+10. **D10 LSE key:** an environment variable on the user's PC, never in the repo or any file; a missing key shows the equities section as unavailable.
+11. **D11 equities cache:** local parquet on the user's PC, git-ignored, tagged `redistributable=false`.
+
+**Open after RESEARCH:** none of the 11 research questions remains open except the D6 tension and the P4/P6 split into slices; both are handled in INNOVATE.
