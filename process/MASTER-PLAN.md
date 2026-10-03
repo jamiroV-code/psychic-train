@@ -75,9 +75,9 @@ Columns: ID · Objective · Prio · Status · Parent · Deps · Worker/session �
 | P2 | deployability (home PC + Tailscale) | M | review | — | — | — | merged | `deploy/` launchers, CORS, runbook | user PC | PR #10 | runtime only verifiable on the user's PC | `active/deployability_28-09-26/` |
 | P2b | stale-build guard | M | superseded by R12 | P2 | — | — | — | gap from the 2026-10-01 live incident | — | — | — | R12 |
 | P3 | UI Direction D | M | review | — | — | — | merged | same as T14 | user visual acceptance | PR #9 | — | `active/ui-shell_28-09-26/` |
-| P4 | realignment: delete verdict code; screener RSI, groups, 30-coin cap, spaghetti chart, BTC leg strip, 15-min refresh, lean storage | H | proposed | — | — | — | — | 19 active ACs | per SPEC | `process/general-plans/active/personal-tracker-realignment_02-10-26/` | RESEARCH done 03-10-26 + round 2 (defects F1-F5 in the SPEC; scheduled PC refresh = deploy RT4, overlaps R12); D1-D11 in the SPEC; next INNOVATE (user go pending) | — |
+| P4 | realignment: delete verdict code; screener RSI, groups, 30-coin cap, spaghetti chart, BTC leg strip, 15-min refresh, lean storage | H | proposed | — | — | — | — | 19 active ACs | per SPEC | `active/personal-tracker-realignment_02-10-26/` (SPEC, INNOVATE) | INNOVATE done 03-10-26: slices S1-S10 [estimate] 20-45 USD; budget decision and PLAN go pending; S10 (`deploy/**`) waits on R12 | — |
 | P5 | narrative baskets: user-defined baskets, equal-weight view, mindshare share-of-total, raw-only /narrative | H | proposed | — | P4 | — | — | 12 active ACs | per SPEC | `process/general-plans/active/narrative-baskets_02-10-26/` | live probe per signal on user PC | — |
-| P6 | LSE equities page with Add button, private-use note | M | proposed | — | P4 | — | — | realignment SPEC | per SPEC | REALIGN SPEC | RESEARCH done 03-10-26; decisions D1-D11 in the SPEC; next INNOVATE (user go pending) | — |
+| P6 | LSE equities page with Add button, private-use note | M | proposed | — | P4 | — | — | realignment SPEC | per SPEC | REALIGN SPEC | slices S3 (adapter) and S9 (page) in the INNOVATE doc; S9 needs S5 | — |
 | P7 | protect pytrends partial-hour fix and nightly archive (guard tests) | M | proposed | P4 | — | — | — | BASKETS Decision 16, AC-25 | RT2 | BASKETS SPEC | — | — |
 
 ### Recovery program (master-planner-recovery)
