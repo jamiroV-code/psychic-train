@@ -18,7 +18,7 @@ Staleness rule (master-planner.md): stale when the stamp is not an ancestor of H
 | Working tree | HEAD = `origin/main` `0f3dfa3`; uncommitted: T16/T20 task folders moved to `completed/`, MASTER-PLAN.md, archive/index.md, this file (process/ text only) | `git status --short` |
 | Entry files | `CLAUDE.md` 13,443 B, `AGENTS.md` 12,572 B, `north-star.md` 5,225 B | `wc -c` |
 | `process/context/all-context.md` | 193 lines, 11,380 B | `wc -lc` |
-| Remote heads | 13: `main` plus 12 older branches (MASTER-PLAN.md T23/T25); `claude/t16-*` and `claude/t20-*` absent at 06:39Z; plus probe branch `claude/zz-probe-delete-065549` (leftover, user deletes); this session cannot delete branches (probe 03-10-26); `delete_branch_on_merge` unverified | `git ls-remote --heads origin` |
+| Remote heads | 15 at ~10:3xZ 03-10-26, incl. `main`. User said 'you can delete them' for six approved branches (`claude/compassionate-goldberg-o2iq49`, `claude/p1-pipeline`, `claude/p2-deploy`, `claude/ui-shell`, `claude/vigilant-hamilton-grr18c`, `fix/narrative-sufficiency-gating-rfc1`) plus probe `claude/zz-probe-delete-065549`; deletion NOT performed: the retry `git push origin :refs/heads/claude/zz-probe-delete-065549` failed ('unexpected disconnect while reading sideband packet'; earlier REST 403), planner will not work around it. The user deletes these seven; nothing lost. `delete_branch_on_merge` unverified | `git ls-remote --heads origin` |
 | Workflows | 6: `ci.yml` plus five snapshot jobs | `ls .github/workflows` |
 | `.agents/skills` | 339 tracked regular files, not a symlink | `git ls-files .agents/skills \| wc -l` |
 | `web/tsconfig.tsbuildinfo` | not tracked (empty `git ls-files`; T20, `54157e2`) | `git ls-files web/tsconfig.tsbuildinfo` |
