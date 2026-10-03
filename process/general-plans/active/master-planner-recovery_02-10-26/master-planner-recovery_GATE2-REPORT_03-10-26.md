@@ -84,13 +84,29 @@ Not run: pytest, vitest, `tsc --noEmit`, `pnpm build:islands`, Playwright. Gate 
 
 ## Plan Deviations
 
-The execute agent reported 11 judgement calls. Their full list was not supplied to this session, so only deviations visible in the commit messages are recorded here; the other calls should be read from the execute agent's own report.
+The execute agent reported 11 judgement calls; the full list is under "Execute-agent judgement calls (11), as reported" below. The bullets directly under this line are deviations seen in the commit messages.
 
 - R13 data-sources: one `Last updated` conflict resolved by keeping main's line plus a salvage note.
 - F5: the slimmed router keeps short summaries under validator-required headings (Repository Structure, Technology Stack, Key Patterns, Environment) rather than dropping them; retired product wording dropped or reworded; stale Equity and Deployment rows restated.
 - F6: row-level re-checks changed some rev 6 `UNVERIFIED` marks (T1b guard confirmed on main, T7 decisions still PENDING, T16 no README, T18 no non-test caller, T20 still tracked).
 - F7: master-planner.md frontmatter is block-style with `read_order: 10`, `required: false`.
 - R13: the remaining exciting-meitner all-context.md hunks were not taken and are recorded as unreviewed rather than silently dropped.
+
+### Execute-agent judgement calls (11), as reported
+
+Marked **USER REVIEW** where the user may want to confirm or overrule; the rest are informational.
+
+1. R13 EVL reports: the DROP list names "EVL logs", but the plan's named R13 destinations list both EVL iteration reports landing in `completed/`; they were kept as evidence for the verdict.
+2. R13 items neither taken nor dropped: the other exciting-meitner `all-context.md` changelog hunks and the yfinance backlog edit were not taken; recorded as "unreviewed" in the R13 registry row, as the plan requires. **USER REVIEW** (decide take or drop).
+3. Data-sources conflict: one conflict on the `Last updated` line of `all-data-sources.md`; main's line kept and a salvage note added; all other hunks went in as-is.
+4. Registry status words: T8, T24, T12 and P2b use the plan's own wording ("superseded by ...", "proposed -> superseded in part"), which is not in the status vocabulary. **USER REVIEW** (accept the wording or normalise it).
+5. T11 moved from approved to review because R13 applied the fixes.
+6. Gate 2 tasks were set `in_progress` until independent confirmation (now updated by UPDATE PROCESS).
+7. `context-changelog.md` holds more than the minimum: also the old header and the retired "What This Project Is / Key Patterns / Open Decisions" text verbatim (a superset of what C6 requires).
+8. The archive file is the full rev 6, unedited (simplest way to meet the preservation rule).
+9. Approvals Log R13 quote: the plan lacks the user's verbatim Q4 answer, so the row quotes the Q4 resolution as the plan records it and says so. **USER REVIEW** (confirm the Q4 resolution is what you said).
+10. No phase report file was written by the execute agent, per run notes; UPDATE PROCESS writes it (this file).
+11. Size targets missed: `north-star.md` (5,225 B) and `current-state.md` (4,801 B) are over the ~4 KB targets; `architecture.md` is 80 lines vs ~120; the planner set without CLAUDE.md and the task brief is 31,397 B, which leaves room under 64,000 only if CLAUDE.md gets to 20 KB or less at Gate 3. **USER REVIEW** (accept the overruns, or tighten the two files).
 
 UPDATE PROCESS judgement call (new this session): registry statuses set to `accepted` only for R1, R2, R3, R14. R4 stays `review` (part of step (vii) unverified), R5 stays `review` (AC-R5 and AC-R6 need the user), R13 stays `review` (it carries an Approvals Log row, AC-R6). No new decision belongs in decisions.md, so none was appended.
 
