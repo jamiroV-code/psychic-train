@@ -1,13 +1,13 @@
 ---
 name: spec:t30-perf-web-remeasure
-description: "Brief T30 (proposed, NOT approved): re-measure the four web performance rows PERF left unmeasured (web test, tsc, build:islands time, island chunk size)"
+description: "Brief T30 (approved by the user 03-10-26; envelope _REF_ exists): re-measure the four web performance rows PERF left unmeasured (web test, tsc, build:islands time, island chunk size)"
 date: 03-10-26
 feature: general
 ---
 
-# T30 - PERF-web re-measure (brief only, proposed)
+# T30 - PERF-web re-measure (approved)
 
-**TL;DR:** PERF (PR #24, `487fa65`) recorded four web rows as unmeasured because `node_modules` was missing. The T18 worker ran `pnpm install --frozen-lockfile` in `web/` the same day, so they were likely measurable. Re-measure them. Status `proposed`: no worker may start until the user approves; no envelope exists yet.
+**TL;DR:** PERF (PR #24, `487fa65`) recorded four web rows as unmeasured because `node_modules` was missing. The T18 worker ran `pnpm install --frozen-lockfile` in `web/` the same day, so they were likely measurable. Re-measure them. Status `approved` by the user 03-10-26; the envelope `t30-perf-web-remeasure_REF_03-10-26.md` exists.
 
 Registry row: T30 in `process/MASTER-PLAN.md`.
 
