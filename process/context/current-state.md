@@ -18,14 +18,14 @@ Staleness rule (master-planner.md): stale when the stamp is not an ancestor of H
 | Working tree | HEAD = `origin/main` `0f3dfa3`; uncommitted: T16/T20 task folders moved to `completed/`, MASTER-PLAN.md, archive/index.md, this file (process/ text only) | `git status --short` |
 | Entry files | `CLAUDE.md` 13,443 B, `AGENTS.md` 12,572 B, `north-star.md` 5,225 B | `wc -c` |
 | `process/context/all-context.md` | 193 lines, 11,380 B | `wc -lc` |
-| Remote heads | 13: `main` plus 12 older branches (MASTER-PLAN.md T23/T25); `claude/t16-*` and `claude/t20-*` absent (empty `git ls-remote`); `delete_branch_on_merge` itself unverified | `git ls-remote --heads origin` |
+| Remote heads | 13: `main` plus 12 older branches (MASTER-PLAN.md T23/T25); `claude/t16-*` and `claude/t20-*` absent at 06:39Z; plus probe branch `claude/zz-probe-delete-065549` (leftover, user deletes); this session cannot delete branches (probe 03-10-26); `delete_branch_on_merge` unverified | `git ls-remote --heads origin` |
 | Workflows | 6: `ci.yml` plus five snapshot jobs | `ls .github/workflows` |
 | `.agents/skills` | 339 tracked regular files, not a symlink | `git ls-files .agents/skills \| wc -l` |
 | `web/tsconfig.tsbuildinfo` | not tracked (empty `git ls-files`; T20, `54157e2`) | `git ls-files web/tsconfig.tsbuildinfo` |
 | `README.md` | present at repo root (T16, `351f946`) | `ls README.md` |
 | api/web diff vs `753db23` | only the `web/tsconfig.tsbuildinfo` deletion (1 line) | `git diff --stat 753db23 HEAD -- api web` |
 | Tests, HISTORICAL, measured at `753db23`, NOT re-run now | pytest 873 passed, 1 skipped, 5 deselected, 1 xfailed; vitest 223 passed (30 files); `tsc --noEmit --incremental false` exit 0 | all-tests.md, Current evidence (Gate 4) |
-| CI | PR #14 and #15 CI green; independent vc-tester PASS on `54157e2` (06:33Z); not re-queried now | MASTER-PLAN.md T16, T20 |
+| CI | PR #14 and #15 CI green; vc-tester PASS on `54157e2` (06:33Z); main tip `c063290` CI green (api pytest, web vitest/tsc/island build, checked ~06:50Z) | MASTER-PLAN.md T16, T20 |
 
 ### Validator results (re-run 2026-10-03T06:42Z at 0f3dfa3 plus archival edits; only validate-guide-sync changed)
 
@@ -45,7 +45,7 @@ Outside the baseline: `validate-backlog-notes` 45 failing notes (older schema), 
 
 Gates 2, 3 and 4 are complete. Reports are in `process/general-plans/active/master-planner-recovery_02-10-26/`: `..._GATE2-REPORT_03-10-26.md`, `..._GATE3-REPORT_03-10-26.md` (probe token figures), `..._GATE4-REPORT_03-10-26.md` (test tiers, bounded retry with a same-failure stop, no-re-run rule, planner budget). The Gate 4 independent EVL (vc-tester, iteration 002) was green at cycle 0. Gates 5 and 6 remain, so the plan stays in `active/`.
 
-**Gate 5 pilot (03-10-26):** T16 merged as PR #14 (`351f946`), T20 as PR #15 (`54157e2`); CI green; vc-tester PASS on `54157e2`; registry `archived`, task folders under `process/general-plans/completed/`; archive_session by the planner and the Gate 5 report remain.
+**Gate 5 pilot (03-10-26):** T16 merged as PR #14 (`351f946`), T20 as PR #15 (`54157e2`); CI green; vc-tester PASS on `54157e2`; registry `archived`, task folders under `process/general-plans/completed/`; archive_session done; Gate 5 report written; user decisions recorded 03-10-26.
 
 Planner budget: run the PLANNER-BUDGET block in master-planner.md section 12 (bytes only); figures are in the closeout reply, not stored here.
 
@@ -56,7 +56,7 @@ Planner budget: run the PLANNER-BUDGET block in master-planner.md section 12 (by
 - Compliance with the retry, same-failure and no-re-run rules (observable only at the Gate 6 pilot).
 - Snapshot crons firing at their new times; the two canary jobs.
 - Anything on the user's PC (deployed app, Task Scheduler, Tailscale, Windows deploy scripts, `.agents/skills` there) and live provider reachability.
-- Branch-delete mechanism (worker branches are absent on origin, setting unread) and archive_session.
+- Branch-delete mechanism as a setting (worker branches were absent at 06:39Z, setting unread). Session branch deletion is known to fail (git and REST, probe).
 
 ## Historical (copied, not re-run)
 
@@ -69,5 +69,5 @@ Planner budget: run the PLANNER-BUDGET block in master-planner.md section 12 (by
 ## Next actions
 
 1. Done: PR #13 merged; T20 and T16 merged (cost 1.64 of the 40 USD ceiling); task folders archived.
-2. Next: planner runs archive_session, then the Gate 5 report. Home-PC step before the first pull that carries T20: if `git status --short web/tsconfig.tsbuildinfo` shows `M`, run `git checkout -- web/tsconfig.tsbuildinfo` first.
-3. Open Questions 10 and 12 stay open and non-blocking. Registry: MASTER-PLAN.md.
+2. Home-PC step before the first pull that carries T20: if `git status --short web/tsconfig.tsbuildinfo` shows `M`, run `git checkout -- web/tsconfig.tsbuildinfo` first.
+3. User deletes the six approved branches and `claude/zz-probe-delete-065549` (this session cannot). Then housekeeping candidates from the Gate 5 backlog note, then product work. Open Question 10 decided "Yes, same rules" (tension: CLAUDE.md/AGENTS.md changes still need the user's diff review per the Gate 3 rule unless the user says otherwise); Open Question 12 decided: keep as is (envelope ban plus report check). G5-K8 (public repo, non-redistributable data): left as is, known risk. Registry: MASTER-PLAN.md.
