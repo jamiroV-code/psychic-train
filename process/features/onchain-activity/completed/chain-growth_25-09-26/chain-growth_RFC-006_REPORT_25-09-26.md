@@ -3,7 +3,7 @@ phase: rfc-006-tests-e2e-handoff
 date: 2026-09-27
 status: COMPLETE
 feature: onchain-activity
-plan: process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
+plan: process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
 ---
 
 # RFC-6 — seeded E2E proof + AC-14 handoff: report
@@ -125,7 +125,7 @@ None beyond the Stage 0 renames (conflict table below). No product code was chan
 - None new. Canvas visuals (log axis look, shading colour, marker placement) remain an Agent-Probe matter, covered by AC-14.
 
 ## Closeout Packet
-- Plan: `process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md`
+- Plan: `process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md`
 - Finished: RFC-6 (the last RFC).
 - Verified: all automated gates above, e2e twice.
 - Unverified: AC-14 (real archive, on your PC), and the RFC-3/RFC-4 review decisions.

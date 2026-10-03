@@ -3,7 +3,7 @@ phase: rfc-002
 date: 2026-09-25
 status: COMPLETE
 feature: onchain-activity
-plan: process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
+plan: process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md
 ---
 
 # chain-growth RFC-2 — Config + adapters (fallback: growthepie + L2BEAT, no Dune)
@@ -55,7 +55,7 @@ All within blast radius (new files in `api/data/` and `api/tests/data/` only).
 - Real endpoints unreachable from this container; integration tests need the user's PC.
 
 ## Closeout Packet
-- Plan: `process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md`
+- Plan: `process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md`
 - Finished: RFC-2 fallback scope. Verified: fixture tests + full suite. Unverified: live endpoints (integration run).
 - Remaining: UPDATE PROCESS plan amendments listed in the Stage 0 report §8, plus deviation 1–2 above.
 - Classification: **Keep in active/testing** (program continues with RFC-3).

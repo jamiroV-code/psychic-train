@@ -326,6 +326,40 @@ Reddit history on later needs **two** manual changes together, not one: adding t
 Actions repo secrets, AND a two-line `env:` mapping edit to the workflow file itself. Secrets alone
 do nothing — this is a deliberate two-step gate, not an oversight.
 
+## On-chain Activity
+
+Added 2026-09-28 (chain-growth plan, `process/features/onchain-activity/completed/chain-growth_25-09-26/`;
+RFC-1 VERDICT `chain-growth-feasibility_FEASIBILITY_25-09-26.md`). Feeds the `/onchain` page.
+Chain list: `api/data/chains.json`. Cache: `api/data/cache/onchain/{source}/{chain}/{metric}.parquet`
+(git-tracked carve-out), written nightly by `chain-growth-snapshot.yml` (22:00 UTC).
+
+### growthepie — primary source (`api/data/growthepie_adapter.py`)
+
+- **Keyless.** Host `https://api.growthepie.xyz`.
+- Endpoints: per-chain `/v1/metrics/chains/{chain}/{metric}.json`; bulk `/v1/export/{metric}.json`;
+  `master.json` for the supported chain/metric list. `/v1/metrics/{metric}.json` returns 403 — don't use it.
+- Chain keys used: `ethereum`, `base`, `arbitrum`, `optimism`, **`polygon_pos`** (Polygon),
+  `robinhood` (Robinhood Chain, launched 2026-07-01). Metric keys `daa` → `active_addresses`,
+  `txcount` → `transactions`. Full history comes back in one call, so there is no backfill script.
+- **Licence: CC BY 4.0 → `redistributable=True`**, on condition of the attribution, verbatim and
+  shown once per page: **"Source: growthepie, https://www.growthepie.com."**
+
+### L2BEAT — cross-check only (`api/data/l2beat_adapter.py`)
+
+- **Keyless.** Activity (transactions) for base, arbitrum, optimism and robinhood; Optimism's slug is
+  **`op-mainnet`**; request full history with **`range=max`**.
+- **Personal use → `redistributable=False`.** Raw values are archived but never served; the API
+  exposes only a divergence % against growthepie (display-only).
+
+### Rejected
+
+- **Dune — NOT-VIABLE** (RFC-1): every API execute returned **HTTP 402** (datapoint limit), the
+  user's free account is **read-only**, and Dune's terms make API output personal/internal only.
+  No `DUNE_API_KEY` exists anywhere in the repo.
+- **Etherscan V2, Artemis** — rejected as paid-gated for the needed volume/chains.
+- **Consequence:** Solana, BNB Chain and Tron have **no free keyless source**; they stay in
+  `chains.json` and render as "source unavailable". New-addresses is not tracked (no free source).
+
 ## Libraries
 
 All free and open-source. Licences checked at setup on 2026-09-17.

@@ -12,9 +12,7 @@ feature: onchain-activity
 **Date**: 25-09-26
 **Complexity**: Complex (standard complex — one authoritative plan, 6 RFCs, RFC-1 is a
 mandatory FEASIBILITY gate that RFC-2+ build on)
-**Status**: 📋 PLANNED — no code exists yet. SPEC locked, INNOVATE decision summary (vc-predict:
-CAUTION) encoded below as ADRs. Nothing may build on Dune, growthepie, or any other candidate
-source until RFC-1's live probe confirms it — this sandbox's egress proxy blocks all of them.
+**Status**: ✅ VERIFIED — all 6 RFCs complete; AC-14 real-archive walkthrough passed on the user's PC and both high-risk review decisions (RFC-3, RFC-4) approved by the user on 2026-09-28. Archived to `completed/`. The text below is the original pre-EXECUTE plan; where it conflicts with what was built, **`## Post-EXECUTE Amendments` wins**.
 **Feature folder**: `process/features/onchain-activity/`
 **Owner**: user · executor: vc harness agents
 
@@ -68,12 +66,12 @@ locked design or an early, cheap pivot — before RFC-2 writes a single adapter.
 
 | RFC | Title | Status |
 |---|---|---|
-| RFC-1 | FEASIBILITY: Dune credit/API probe, growthepie/L2BEAT chain coverage, all source terms | ⏳ NOT STARTED — hard gate, RFC-2+ blocked until this passes |
-| RFC-2 | Config + adapters (growthepie, L2BEAT, Dune) | ⏳ NOT STARTED — depends on RFC-1 |
-| RFC-3 | Storage + nightly archive workflow + backfill | ⏳ NOT STARTED — depends on RFC-2 |
-| RFC-4 | Floor/ramp + comparison analytics (real-data validated) + `GET /api/onchain/growth` | ⏳ NOT STARTED — depends on RFC-3 |
-| RFC-5 | `/onchain-activity` frontend — panels, normalized overlay, drill-down | ⏳ NOT STARTED — depends on RFC-4 contract settling (may start in parallel once RFC-4's response model is locked) |
-| RFC-6 | Tests, seeded E2E, context docs update, AC-14 real-cache walkthrough handoff | ⏳ NOT STARTED — depends on RFC-4 + RFC-5 |
+| RFC-1 | FEASIBILITY: Dune credit/API probe, growthepie/L2BEAT chain coverage, all source terms | ✅ VERIFIED — VERDICT: Dune NOT-VIABLE → locked fallback (growthepie + L2BEAT) |
+| RFC-2 | Config + adapters (growthepie, L2BEAT; no Dune) | ✅ VERIFIED |
+| RFC-3 | Storage + nightly archive workflow (no backfill script) | ✅ VERIFIED — risk pack approved 2026-09-28 |
+| RFC-4 | Floor/ramp + comparison analytics + `GET /api/onchain/growth`, `/chains` | ✅ VERIFIED — risk pack approved 2026-09-28 |
+| RFC-5 | `/onchain` frontend — panels, normalized overlay, hover readout | ✅ VERIFIED |
+| RFC-6 | Tests, seeded E2E, AC-14 handoff | ✅ VERIFIED — AC-14 passed 2026-09-28 |
 
 ---
 
@@ -88,7 +86,7 @@ locked design or an early, cheap pivot — before RFC-2 writes a single adapter.
   (the narrative RFC-6 `None`→`NaN` pandas lesson directly informs RFC-4's dtype discipline)
 - `process/context/planning/all-planning.md` — complex-plan shape calibration
 - `process/features/onchain-activity/_GUIDE.md` — scope, locked user decisions, target file layout
-- `process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_SPEC_25-09-26.md`
+- `process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_SPEC_25-09-26.md`
   — locked SPEC (14 ACs, all read and carried below)
 - `process/features/cycle-regime/completed/regime-dashboard_24-09-26/regime-dashboard_PLAN_24-09-26.md`
   and `process/features/narrative-mindshare/active/narrative-dashboard_24-09-26/narrative-dashboard_PLAN_24-09-26.md`
@@ -1127,11 +1125,83 @@ CONDITIONAL)
 
 ---
 
+## Post-EXECUTE Amendments
+
+Written at UPDATE PROCESS, 2026-09-28. These reconcile the original plan text with what was built
+(source: the RFC-001..006 reports in this folder). Where they conflict with anything above, these win.
+
+**Sources and scope**
+1. **Dune is NOT-VIABLE** (RFC-1 VERDICT): every execute returned HTTP 402 (datapoint limit), the
+   account is read-only, and Dune's API output is personal/internal use only. The plan's locked
+   fallback (E4) applies: growthepie is the only primary source, L2BEAT is a display-only cross-check.
+2. **Polygon is live via growthepie `polygon_pos`**, so the live set is 6 chains (Ethereum, Base,
+   Arbitrum, Optimism, Polygon, Robinhood Chain). Solana, BNB Chain and Tron stay configured but
+   render as `source-unavailable` cards — no free keyless source exists for them.
+3. **`new_addresses` is dropped.** Two metrics only: `active_addresses` and `transactions`
+   (growthepie keys `daa` / `txcount`, mapped inside the adapter). Not `daa`/`tx_count` in the API.
+4. **No `DUNE_API_KEY`**, no env mapping, no secrets in the workflow. The AC-12/AC-14 "revoke the
+   Dune key" proof is replaced by a missing-archive proof (seeded Polygon-without-transactions in
+   E2E; a file rename in the user walkthrough).
+
+**Endpoints**
+5. growthepie: per-chain `https://api.growthepie.xyz/v1/metrics/chains/{chain}/{metric}.json` plus
+   bulk `/v1/export/{metric}.json`; `master.json` for the supported-chain check. The plan's
+   `/v1/metrics/{metric}.json` returns 403.
+6. L2BEAT: Optimism is `op-mainnet`; history requested with `range=max`. Robinhood slug is
+   `robinhood` on both sources.
+
+**Storage and workflow (RFC-3)**
+7. Cache path is `api/data/cache/onchain/{source}/{chain}/{metric}.parquet`, written only via
+   `cache.merge_onchain_series` (not `write_chain_growth_point`), with a **14-day revision window**
+   (recent points may be revised; older points frozen). `.gitignore` carve-out
+   `!api/data/cache/onchain/`.
+8. **No backfill script** — growthepie returns full history, so the first nightly run is the
+   backfill; `snapshot_chain_growth.py --only` refills one chain by hand.
+9. A failed or unavailable chain writes nothing; unavailable/stale is derived from absence or the age
+   of `as_of_utc`. The redistributable flag comes from the adapter constant, not a per-row column.
+10. Workflow `.github/workflows/chain-growth-snapshot.yml`, cron `0 22 * * *`. GitHub scheduled
+    crons run roughly 2 hours late in practice — see the follow-up task "Move nightly snapshot
+    crons earlier in the UTC day".
+
+**Analytics and API (RFC-4 decisions D1–D5)**
+11. D1: floor/ramp on EMA28 with N=180, R=0.25, M=14, S=180; history gate `MIN_HISTORY_DAYS = 194`.
+12. D2: pre-launch points are shaded in the UI and excluded from analytics.
+13. D3: the "near floor" state label uses a separate `FLOOR_STATE_PCT = 0.10`.
+14. D4: Polygon `launch_date` = 2020-05-30.
+15. D5: comparison defaults to index = 100 at the window start (EMA28) on a log axis, with a
+    `% above 180-day low` toggle (`pct_above_low_values` inside each comparison series).
+16. `floor_ramp` is per chain **and per metric** (one metric per request).
+    `normalization_method` is `index-100-at-start-ema28`. New file `api/analytics/onchain/response.py`.
+    Endpoints: `GET /api/onchain/growth?metric=&start=` and `GET /api/onchain/chains`.
+    `max_gap_days` = 1. Robinhood `gate_met_on` = 2027-01-10.
+
+**Frontend (RFC-5 decisions Q1–Q3)**
+17. Q1: route is **`/onchain`** (not `/onchain-activity`); components in `web/components/onchain/`.
+18. Q2: default range 1Y.
+19. Q3: Robinhood Chain is tagged "late start" (rebased late, 2026-07-01) with a limited-history note.
+20. `DrillDown` is folded into the hover readout; rebasing happens server-side via re-fetch with `start`.
+
+**E2E (RFC-6 decisions D1–D5)**
+21. D1: seeded data fixed at 2026-09-26, only `as_of_utc`/`first_seen_utc` on the real clock.
+    D2: pre-launch points on all 6 chains. D3: Polygon seeded without a transactions archive as the
+    per-source failure proof. D4: context-doc edits moved to UPDATE PROCESS (done 2026-09-28).
+    D5: hover-readout scenario kept (stable in both runs). Seeder names: `build_onchain_fixture` /
+    `seed_onchain`; spec `web/e2e/onchain.spec.ts`.
+
+**Terms (user-read, RFC-1)**
+22. growthepie: CC BY 4.0 → `redistributable=True` with the attribution
+    "Source: growthepie, https://www.growthepie.com." shown once, page-level.
+    L2BEAT: `redistributable=False` (values never served; only a divergence %). Dune: `False` (moot).
+
+**Final test counts:** pytest 516 passed / 5 deselected; vitest 138 (19 files); Playwright 42/42, run twice.
+
+---
+
 ## Autonomous Goal Block
 
 ```
 SESSION GOAL: Ship /onchain-activity — chain participant growth dashboard (9 chains, DAA/new-addresses/tx-count, normalized floor/ramp comparison), feasibility-gated on RFC-1.
-Charter + umbrella plan: N/A — single plan (process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md), 6 internal RFCs, not a phase program.
+Charter + umbrella plan: N/A — single plan (process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md), 6 internal RFCs, not a phase program.
 Autonomy: RFC-1 through RFC-6 run research(Stage 0)->execute->EVL per RFC, no user gate between RFCs except each RFC's own Stage-0 present-and-STOP; RFC-1 requires the USER to run its probes on their own machine (this sandbox's egress is blocked) before RFC-2 can begin.
 Hard stop conditions / safety constraints:
 - RFC-1 VERDICT must not be fabricated or assumed — if the user has not run the probes, EXECUTE halts at RFC-1 Stage 0, it does not guess.
@@ -1139,7 +1209,7 @@ Hard stop conditions / safety constraints:
 - RFC-3 (new secret + contents:write workflow) may not be marked CODE DONE without the vc-risk-evidence-pack 5-artifact pack present.
 - No existing route/behavior (/api/regime/*, /api/narrative/*, /api/screener/*) may change — protected by a contract-snapshot test (chain-growth-existing-routes-unchanged).
 - AC-14 (real-machine walkthrough) requires explicit user execution and confirmation — the plan may reach CODE DONE without it but not VERIFIED.
-Next phase: RFC-1 Stage 0 (feasibility probes — user-run) — see Resume and Execution Handoff below for exact steps.
+Next phase: none — program complete and archived (2026-09-28).
 Validate contract: inline in plan, see ## Validate Contract above (Gate: PASS, 25-09-26).
 Execute start: RFC-1 user-PC probe commands (Dune curl sequence, growthepie master.json curl, L2BEAT endpoint discovery, terms reads) | AC-14 real-cache walkthrough deferred to RFC-6 completion | high-risk pack: yes (RFC-3, DUNE_API_KEY + contents:write workflow, per vc-risk-evidence-pack)
 ```
@@ -1148,34 +1218,15 @@ Execute start: RFC-1 user-PC probe commands (Dune curl sequence, growthepie mast
 
 ## Resume and Execution Handoff
 
-1. **Selected plan file path**: `process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md`
-2. **Last completed phase or step**: PLAN written (this document); no RFC started.
-3. **Validate-contract status**: pending — VALIDATE has not run for this plan.
-4. **Supporting context files loaded**: `process/context/all-context.md`,
-   `process/context/data-sources/all-data-sources.md`, `process/context/tests/all-tests.md`,
-   `process/context/planning/all-planning.md`, `process/features/onchain-activity/_GUIDE.md`,
-   the locked SPEC, and the two structural precedent plans (regime, narrative dashboards).
-5. **Next step for a fresh agent picking up mid-execution**: run VALIDATE on this plan, then start
-   RFC-1 Stage 0 — the user must run the RFC-1 probe commands themselves (this container's egress
-   proxy blocks Dune/growthepie/L2BEAT); do not attempt to fabricate or assume RFC-1's findings.
-   **RFC-1 user-PC walkthrough steps** (to be run before or during RFC-1):
-   - Create/confirm a Dune account predating 2026-07-21; generate a free-tier API key.
-   - Run the exact `curl` commands in RFC-1 Stage 0 above against `api.dune.com`, `api.growthepie.xyz`,
-     and L2BEAT's activity endpoint.
-   - Record: Dune credit cost per query, execution time, small-engine 2-min timeout outcome for a
-     Solana-scale query; growthepie's chain-key list (esp. Robinhood Chain) and history depth per
-     chain; L2BEAT's shape and Robinhood Chain coverage; the exact license/terms text for all three.
-   - Return findings to the agent continuing this plan as the RFC-1 VERDICT artifact's source
-     material.
-   **AC-14 walkthrough (deferred to RFC-6 completion)**: once RFC-6 is code-complete, on a machine
-   with real network access: set `DUNE_API_KEY` and confirm `/onchain-activity` renders all nine
-   chains' three metrics; confirm the normalized overlay shows a sensible floor/ramp read on at
-   least one chain with sufficient history; confirm Robinhood Chain shows its limited-history flag;
-   temporarily unset/revoke `DUNE_API_KEY` and confirm the Dune-sourced chains show a visible
-   "unavailable" state (not silently missing) while growthepie/L2BEAT-sourced chains keep rendering
-   normally (this is the concrete AC-12 + AC-14 joint proof); confirm hover/drill-down shows correct
-   raw numbers.
+**Complete — nothing to resume.**
 
----
+1. **Plan file path**: `process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_PLAN_25-09-26.md`
+2. **Last completed step**: UPDATE PROCESS (2026-09-28): AC-14 passed on the user's PC; RFC-3 and
+   RFC-4 review decisions `approved` by the user ("looks good , approve both"); plan archived.
+3. **Validate-contract status**: written, Gate: PASS (25-09-26).
+4. **Current Execution State**: all 6 RFCs ✅ VERIFIED; closeout packet
+   `chain-growth_CLOSEOUT_28-09-26.md` in this folder.
+5. **Follow-ups (not part of this plan)**: move the nightly snapshot crons earlier in the UTC day
+   (GitHub's ~2h scheduled-cron delay); Solana/BNB/Tron need a free source if one ever appears.
 
-Say **ENTER VALIDATE MODE** when ready to proceed to plan validation (required before implementation).
+**Next Step:** none for this plan — complete and archived. The user confirmed AC-14 on 2026-09-28.

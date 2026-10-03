@@ -4,7 +4,7 @@ Pure functions over a daily `pd.Series` (DatetimeIndex, float values). No I/O.
 
 Constants were chosen on the real archive (commit 7143733) by a 36-set sweep,
 not asserted: see
-`process/features/onchain-activity/active/chain-growth_25-09-26/chain-growth_RFC-004-stage0_REPORT_25-09-26.md`
+`process/features/onchain-activity/completed/chain-growth_25-09-26/chain-growth_RFC-004-stage0_REPORT_25-09-26.md`
 §2 and `rfc004_stage0_sweep_output.json` in the same folder. N and R drive the
 result (M and S move the event count by <= 4); N=180/R=25% keeps the lows a
 trader would name (ETH 2022-06-30, Arbitrum tx 2023-09-17, Base 2025-04-23)
