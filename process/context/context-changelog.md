@@ -905,3 +905,5 @@ Carry these into any plan that touches them. Do not resolve them silently.
 project may depend on is licensed for personal use only and may not be served to other users.
 Because the app is intended to open up later, every provider adapter records whether its output
 may be redistributed. See Licensing in `data-sources/all-data-sources.md`.
+
+- 03-10-26: T16 and T20 merged (`351f946`, `54157e2`); operating-instructions.md tsbuildinfo sentence now says untracked and ignored; current-state.md tsbuildinfo row and next steps updated; MASTER-PLAN.md trimmed to headroom, T16/T20 `accepted`.
