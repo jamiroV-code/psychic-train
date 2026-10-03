@@ -10,7 +10,7 @@ metadata:
 
 # my_site — Master Plan (board and task registry)
 
-**Last verified:** 2026-10-03 00:20 UTC · **base:** `origin/main` `5878b16` · **built from:** revision 6 (`18ffd4f`, branch `claude/pensive-dijkstra-ko69oi`) on branch `claude/pensive-albattani-ou0cgv` (Gate 2 of the master-planner-recovery plan).
+**Last verified:** 2026-10-03 00:31 UTC at commit `b84e580` (Gate 2 closeout) · **base:** `origin/main` `5878b16` · **built from:** revision 6 (`18ffd4f`, branch `claude/pensive-dijkstra-ko69oi`) on branch `claude/pensive-albattani-ou0cgv` (Gate 2 of the master-planner-recovery plan; Gate 2 report: `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_GATE2-REPORT_03-10-26.md`).
 
 **This file is the one board.** Each task has one row here; details live in its task folder. Revisions 1 to 6 (narrative history, lane reports, worktree plans, dependency graph) are preserved whole in `process/archive/master-plan-revisions_02-10-26.md`. Protocol (lifecycle, acceptance rule, envelope, report, archive operations): `process/development-protocols/master-planner.md`. Product direction: north-star.md. Observed state: current-state.md.
 
@@ -84,11 +84,11 @@ Columns: ID · Objective · Prio · Status · Parent · Deps · Worker/session �
 
 | ID | Objective | Prio | Status | Parent | Deps | Worker/session | Branch/worktree | Scope + acceptance | Test req/budget | Report + commit refs | Blockers/risks | Outcome / archive location |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| R1 | re-verify ground truth, write current-state.md | H | in_progress | — | — | Gate 2 execute | `claude/pensive-albattani-ou0cgv` | F2 | RT0, C14 | `3562deb` | awaiting independent Gate 2 confirmation | — |
-| R2 | north-star.md + decisions.md | H | in_progress | — | — | Gate 2 execute | same | F1, F3 | RT0, C8, C14 | `3562deb` | same | — |
-| R3 | slim all-context.md, create context-changelog.md | H | in_progress | — | — | Gate 2 execute | same | F4, F5, F16, F17 | RT0, C5, C6, C7 | `0e593cd`, `bcb62e4`, `5a73705` | same | — |
-| R4 | master-planner.md protocol + templates | H | in_progress | — | — | Gate 2 execute | same | F7, F11 | RT0, C7, C12 | `b78e652`; step (vii) tool check run by the orchestrator session | same | — |
-| R5 | registry rewrite in this file | H | in_progress | — | R14 | Gate 2 execute | same | F6, F8 | RT0, C11, C14 | this revision | same | — |
+| R1 | re-verify ground truth, write current-state.md | H | accepted | — | — | Gate 2 execute | `claude/pensive-albattani-ou0cgv` | F2 | RT0, C14 | `3562deb`; independent vc-tester Gate 2 run green (C14 F2 stamps); refreshed at `b84e580` by UPDATE PROCESS (that refresh itself not re-tested) | pytest, vitest, `tsc`, Playwright not run (docs-only) | `process/context/current-state.md` |
+| R2 | north-star.md + decisions.md | H | accepted | — | — | Gate 2 execute | same | F1, F3 | RT0, C8, C14 | `3562deb`; vc-tester green on C8 and C14 | — | `process/context/north-star.md`, `process/context/decisions.md` |
+| R3 | slim all-context.md, create context-changelog.md | H | accepted | — | — | Gate 2 execute | same | F4, F5, F16, F17 | RT0, C5, C6, C7 | `0e593cd`, `bcb62e4`, `5a73705`; vc-tester green on C5, C6, C7; all-context.md 1,223 -> 193 lines (93,730 -> 11,380 bytes) | — | `process/context/{all-context,context-changelog,architecture,operating-instructions}.md` |
+| R4 | master-planner.md protocol + templates | H | review | — | — | Gate 2 execute | same | F7, F11 | RT0, C7, C12 | `b78e652`; C12 = 11 and C7 green (vc-tester); step (vii): tool names present and `list_sessions` run live by the orchestrator session | not verified: branch-delete mechanism, and whether a spawned worker's tool list has merge/archive tools; both deferred to the Gate 6 pilot (fallback: branch stays) | `process/development-protocols/master-planner.md` |
+| R5 | registry rewrite in this file | H | review | — | R14 | Gate 2 execute | same | F6, F8 | RT0, C11, C14 | `dafa781` (F6), `b36a0da` (F8); C11 green (all 21 rev 6 task IDs); this revision | user review pending for AC-R5 (registry against evidence) and AC-R6 (Approvals Log) | this file; `process/archive/index.md` |
 | R6 | CLAUDE.md / AGENTS.md role-neutral rewrite, ENTRY-SET drift check | H | proposed | — | Gate 2 | — | — | F9, F10 | C1, C2, C9, C10 | — | re-enters VALIDATE | Gate 3 |
 | R7 | token baseline measurement | M | proposed | — | R6 | — | — | C3, C4, sampled sessions | — | — | — | Gate 3 |
 | R8 | test policy into all-tests.md | M | proposed | — | — | — | — | F12 | three suites once | — | — | Gate 4 |
@@ -96,8 +96,8 @@ Columns: ID · Objective · Prio · Status · Parent · Deps · Worker/session �
 | R10 | deploy path doc + stale-build guard proposal | M | proposed | — | — | — | — | RECOVERY section 8 | RT0 | — | — | Gate 5 |
 | R11 | archive index + session triage | L | proposed | — | — | — | — | grow `process/archive/index.md` | RT0 | — | — | Gate 5 |
 | R12 | deploy fixes: kill-by-port before build, stale-build guard in `start-web`, post-start smoke check | M | proposed (decision to build recorded; becomes `approved` on confirmation of its task brief) | P2 | — | — | — | high-risk deploy class | RT4 | — | Windows runtime unverifiable from cloud: worker stops at `review` | Gate 5 |
-| R13 | salvage `claude/exciting-meitner-hy50kn` selectively | H | in_progress | — | — | Gate 2 execute | same | TAKE: LSE folder moved `active/` -> `completed/` (verdict, findings, EVL/PVL reports, results.tsv, both Python files as-is), status-strip fixes, data-sources LSE hunks; DROP: duplicate status board in all-context.md | RT0, C14 | `448b10c`; Approvals Log row (operation A) | unreviewed, not taken: the other all-context.md changelog hunks of that branch, the yfinance backlog note edit; branch not deleted | `process/general-plans/completed/lse-data-verification_17-09-26/` |
-| R14 | adopt `pensive-dijkstra` MASTER-PLAN rev 6 as registry base | H | in_progress | — | — | Gate 2 execute | same | rev 6 pinned `18ffd4f014f4e5ea0f5d654688875a9300b30ab4`, tip unchanged at Gate 2 start | C14 rev 6 preservation | `c33fa96` | branch not deleted | `process/archive/master-plan-revisions_02-10-26.md` |
+| R13 | salvage `claude/exciting-meitner-hy50kn` selectively | H | review | — | — | Gate 2 execute | same | TAKE: LSE folder moved `active/` -> `completed/` (verdict, findings, EVL/PVL reports, results.tsv, both Python files as-is), status-strip fixes, data-sources LSE hunks; DROP: duplicate status board in all-context.md | RT0, C14 | `448b10c`; Approvals Log row (operation A); vc-tester C14 green; user review of the Approvals Log (AC-R6) pending | unreviewed, not taken: the other all-context.md changelog hunks of that branch, the yfinance backlog note edit; branch not deleted | `process/general-plans/completed/lse-data-verification_17-09-26/` |
+| R14 | adopt `pensive-dijkstra` MASTER-PLAN rev 6 as registry base | H | accepted | — | — | Gate 2 execute | same | rev 6 pinned `18ffd4f014f4e5ea0f5d654688875a9300b30ab4`, tip unchanged at Gate 2 start | C14 rev 6 preservation | `c33fa96`; vc-tester C14 rev 6 preservation green | branch not deleted | `process/archive/master-plan-revisions_02-10-26.md` |
 
 ## Carried notes
 
