@@ -13,7 +13,7 @@ Complexity: COMPLEX (single plan, gated roadmap Gate 2..6; each gate re-enters V
 
 ## Status of this plan
 
-Gate 1: approved (02-10-26). Q1-Q8 are all resolved (user answers, section 13); Q4 and Q8 are now Resolved. PVL cycle 4 validate is done: Gate: CONDITIONAL, 0 FAIL, 2 CONCERN (Gaps 31-32, plan-text) plus cosmetic items; the supplement cycle 4 is next, then VALIDATE re-runs from V1 (cycle 5). No Gate 2 write happens before VALIDATE writes a passing contract (or the user accepts the remaining gaps). Working tree: only this plan file was edited. The user diagram revision (02-10-26: four user answers on the target-workflow diagram) was verified in cycle 4; see the diagram-revision verification table in the Validate Contract section.
+Gate 1: approved (02-10-26). Q1-Q8 are all resolved (user answers, section 13); Q4 and Q8 are now Resolved. PVL cycle 5 validate is done (03-10-26): Gate: PASS, 0 FAIL, 0 unresolved CONCERN (Gaps 1-32 all closed; only cosmetic leftovers remain, listed in the Validate Contract). The contract gates the START of Gate 2 only; Gates 3-6 each re-enter VALIDATE. User decisions Open Question 10 and Open Question 12 are non-blocking for Gate 2 start. The user diagram revision (02-10-26: four user answers on the target-workflow diagram) was verified in cycles 4 and 5; see the verification tables in the Validate Contract section. Working tree: only this plan file was edited by validation.
 
 ## TL;DR
 
@@ -814,15 +814,15 @@ Docs/process only through Gate 4 (risk class: RT0). Gate 5 adds git-index and ig
 
 ## Validate Contract
 
-Status: CONDITIONAL
-Date: 02-10-26
-date: 2026-10-02
+Status: PASS
+Date: 03-10-26
+date: 2026-10-03
 generated-by: outer-pvl
-supersedes: 2026-10-02 (outer-pvl) - outer PVL cycle 4 has current evidence (re-validation of the cycle-3 supplement, Gaps 24-30, plus the user-driven diagram revision of 02-10-26 (F16, F17, the F5 carve-out, entry-set caps, C4 optional OPS, C8/C14 widening, AC-R11, the branch-deletion consent), against the live repo at HEAD 0405b2d, clean tree)
+supersedes: 2026-10-02 (outer-pvl, PVL cycle 4, Gate CONDITIONAL) - outer PVL cycle 5 has current evidence (re-validation of the cycle-4 supplement: Gaps 31-32 and cosmetic items c1-c9, plus a full live re-run of the pinned commands C1-C14 and the validator baseline, against the live repo at HEAD 2d0e545, clean tree)
 Scope: this contract gates the START of Gate 2 only (F1-F8, F11, F15, F16, F17, R13, R14). Gates 3-6 each re-enter VALIDATE (plan rule); the Gate 3+ findings below are carried forward as requirements, not as approval.
 
 Parallel strategy: sequential (single validate session; Layer 1 and Layer 2 checks ran inline as read-only commands, no sub-agent spawn tool was available to this session)
-Rationale: signal score 2/7 (S6 high-risk class named in plan: deploy/secrets/auth under the self-merge authorization; S7 14+ files in blast radius). MEDIUM band would normally recommend parallel read-only subagents; dominant signal is S7. Findings below are evidence-based: in cycle 4 every pinned command C1-C14 was actually run against the live tree and compared with its stated expected-today output; validator failures and warnings were counted by parsing their JSON output; the validator sources (validate-all-context, validate-context-discovery, validate-kit-portability, discover-context routing generation) were read to confirm what the F5 carve-out must keep; the pinned rev 6 SHA, the exciting-meitner diff, the remote branch list and the cited counts were re-queried read-only; and C4 with its optional OPS parameter was exercised on scratch files in the session scratchpad (no repo state changed).
+Rationale: signal score 2/7 (S6 high-risk class named in plan: deploy/secrets/auth under the self-merge authorization; S7 14+ files in blast radius). MEDIUM band would normally recommend parallel read-only subagents; dominant signal is S7. Findings below are evidence-based: in cycle 4 every pinned command C1-C14 was actually run against the live tree and compared with its stated expected-today output; validator failures and warnings were counted by parsing their JSON output; the validator sources (validate-all-context, validate-context-discovery, validate-kit-portability, discover-context routing generation) were read to confirm what the F5 carve-out must keep; the pinned rev 6 SHA, the exciting-meitner diff, the remote branch list and the cited counts were re-queried read-only; and C4 with its optional OPS parameter was exercised on scratch files in the session scratchpad (no repo state changed). Cycle 5 (closing pass, 03-10-26): every pinned command C1-C14 was run again on the live tree and matches its stated expected-today output; C4 was exercised on seven scratch cases and C14 on a complete scratch fixture (positive and negative); the frontmatter spec for the six new context docs was tested against validate-context-discovery, validate-all-context and the routing check in a scratch clone.
 
 Baseline measured 02-10-26 (read-only runs on branch claude/pensive-albattani-ou0cgv, before any Gate 2 write; RE-CONFIRMED in cycle 4 by JSON parse, unchanged: context-discovery 1 failure, skills 1, guide-sync 1, parity non-strict 0 failures / 18 warnings, plan-inventory 0 failures / 6 warnings, all others 0). Every Gate 2/3 validator gate is "no NEW failure vs this baseline", not "exit 0":
 
@@ -949,6 +949,42 @@ Cycle-4 live run of the pinned commands (section 10, C1-C14), 02-10-26, HEAD 040
 | C13 | no output; plan validator 0 failures | no output; 0 failures, 0 warnings | yes |
 | C14 | 12 MISSING, 16 FAIL, 210 comm lines | 12 MISSING, 16 FAIL, 210 comm lines | yes |
 
+Cycle-4 gap re-verification (Gaps 31-32 and cosmetic items c1-c9, each re-checked live in cycle 5, 03-10-26, HEAD 2d0e545):
+
+| Item | Result | Evidence (cycle 5, executed) |
+|---|---|---|
+| Gap 31 Gate 2 order omits F16/F17 | CLOSED | the Gate 2 execution order now reads R14 -> R13 -> F1, F2, F3 -> F16, F17 -> F4 -> F5 -> F7 + F11 -> F6 -> F8 -> F15 -> R4 (vii); F16/F17 come after F1 (F16 is written for the new North Star) and before F4/F5, so F5's routing rows and pointers name files that already exist; no step reads a file that a later step creates; the risk row 'Slimming loses knowledge' states the carved sections are rewritten into F16/F17 with the base text preserved in git at `<base>` |
+| Gap 32 C4 silent under-count, no cap test | CLOSED | C4 run on seven scratch cases: ok without OPS total=31000 cap=36000 rc=0; ok with OPS total=38000 cap=43000 rc=0; missing TASK prints MISSING, rc=1; missing OPS prints MISSING, cap=43000, rc=1; envelope 9,000 bytes rc=1; over cap 46000/36000 rc=1; over cap with OPS 53000/43000 rc=1; and today (missing envelope in the repo) prints MISSING and rc=1, so it is not vacuous |
+| c1 C3 total varies with plan size | LANDED | C3 today prints MISSING for north-star.md and current-state.md, total=297202 (the plan file grew; the note says the number varies), rc=1 |
+| c2 operating-instructions.md byte cap | LANDED | C14 carries the `wc -c <= 7000` line; on the scratch fixture an 8,000-byte file prints exactly that FAIL line |
+| c3 frontmatter for the six new context docs | LANDED and CORRECT | spec matches the existing docs (all-tests.md, all-planning.md, all-data-sources.md use name: context:<slug>, description, keywords, date). Scratch clone with six docs in that format: before indexing validate-context-discovery fails exactly the six unindexed root docs plus the 1-item baseline; after naming the six by basename in all-context.md: 1 failure (baseline), 0 warnings; a doc without keywords adds exactly one warning (so the spec's statement is accurate); discover-context --check-routing stays in sync; validate-all-context 0 failures |
+| c4 F2/F3 presence checks | LANDED | C14 has the commit-stamp and UTC checks (`[0-9a-f]{7,40}`, `UTC`) and six decisions.md field checks; a current-state.md without a commit-like token prints exactly its FAIL line. Presence only, accuracy stays in the Hybrid user review |
+| c5 branch-delete mechanism in R4 (vii) | LANDED | R4 (vii) names a GitHub branch-delete tool or `git push origin --delete` as UNVERIFIED, not dry-runnable, confirmed by the Gate 6 pilot, fallback branch stays and the row says 'deletion deferred' |
+| c6 Approvals Log row ordering | LANDED | section 4 item 4: write the row (status pending) first, then delete, then update to done / failed / deletion deferred; AC-R6 and Gate 6 row read consistently |
+| c7 TL;DR and section 5 | LANDED | TL;DR names the 43 KB cap and 'eight small things' (north-star, current-state, decisions, architecture, operating-instructions, archive/index, envelope template, report template = 8); section 5 'Selective context' excludes architecture.md; no section 11 reference remains outside this contract's history (Verification Evidence is unnumbered by design); every 'section N' reference outside the contract resolves to an existing numbered section |
+| c8 'worker task branches' defined | LANDED | section 4 item 4 and TL;DR define the pattern `claude/<task-id>-<slug>` as branches the Master Planner created for a registry task and exclude `claude/p1-pipeline` and `claude/p2-deploy` explicitly |
+| c9 validate-all-context warnings after F5 | LANDED | risk row says warnings may appear and the gate is no new failure; the pointer lines can keep the References / Open Questions wording |
+
+Cycle-5 live run of the pinned commands (section 10, C1-C14), 03-10-26, HEAD 2d0e545, clean tree:
+
+| Command | Expected today (plan) | Observed | Match |
+|---|---|---|---|
+| C1 | 3 lines (20, 36, 48) | 3 lines (20, 36, 48) | yes |
+| C2 | 8 lines | 8 lines (CLAUDE.md 46, 50, 52, 59; AGENTS.md 50, 56, 58, 65) | yes |
+| C3 | MISSING x2, a total that varies with plan size, rc=1 | MISSING north-star.md, MISSING current-state.md, total=297202, rc=1 | yes |
+| C4 | not runnable today; MISSING and rc=1 | MISSING and rc=1 on a missing envelope; six pass/fail scratch cases as in the table above | yes |
+| C5 | rc=1 (1,223 lines) | rc=1, 1223 lines | yes |
+| C6 | ranges 33-568 changelog; Open Questions 967, References 1106, Scan Metadata 1167-1223 | `grep -n '^## '` on the base gives exactly those headings; faithful scratch F4 prints 0 lines; one dropped line prints exactly that line | yes |
+| C7 | context-discovery 1 failure, others 0; plan-inventory 0 failures / 6 warnings | context-discovery 1, skills 1, guide-sync 1, parity 0 failures / 18 warnings, plan-inventory 0 / 6, wiring, protocol-discovery, portability, agent-frontmatter, invocation-wiring, all-context 0; routing in sync; literal path count 9 (CLAUDE.md) and 12 (AGENTS.md) | yes |
+| C8 | 11 hits, all in all-context.md | 11 hits at 95, 373, 446, 581, 582, 910, 955, 957, 962, 964, 1020 (+3 stderr lines for the three missing new docs) | yes |
+| C9 | no output | no output | yes |
+| C10 | exit 1 at the first test | rc=1 | yes |
+| C11 | MISSING T1 T1b T3 T4 T5 T7 T8 T23 T26 T27 T28 | exactly that list | yes |
+| C12 | file absent today | grep: No such file or directory, rc=2 | yes |
+| C13 | no output; plan validator 0 failures | no output (tracked, staged, untracked); validate-plan-artifact 0 failures, 0 warnings | yes |
+| C14 | 12 MISSING, 31 FAIL, 210 comm lines, 256 stdout lines | 12 MISSING, 31 FAIL (the 15 cycle-4 additions plus the 16 earlier), 210 comm lines, 256 stdout lines; on a complete scratch fixture it prints no MISSING, no FAIL and no comm line, only the informational byte lines | yes |
+
+
 Failing stub:
 test("should keep all-context.md at or under the line cap", () => { throw new Error("NOT IMPLEMENTED - TDD stub: all-context.md reduced to the line cap") })
 Failing stub:
@@ -988,7 +1024,19 @@ Legacy line form:
 - master planner lifecycle (Gate 6): [agent-probe: pilot task]
 - worker self-merge conditions: [known-gap: platform enforcement unavailable, documented below, gap-resolution D]
 
-Dimension findings (cycle 4):
+Dimension findings (cycle 5, closing pass, 03-10-26):
+- Infra fit: PASS - baseline unchanged by JSON parse (context-discovery 1 failure, skills 1, guide-sync 1, parity 0 failures / 18 warnings, plan-inventory 0 / 6, all others 0); every cited fact still holds at HEAD 2d0e545; the pinned rev 6 SHA 18ffd4f is readable (43,484 bytes). Frontmatter spec for the six new context docs verified against validate-context-discovery, validate-all-context and the routing check in a scratch clone (1 baseline failure, 0 warnings after basename indexing).
+- Test coverage: PASS - C1-C14 behave exactly as stated; C4 now tests every input path and the cap (seven scratch cases); C14 is non-vacuous (31 FAIL / 12 MISSING / 210 comm lines today, nothing on a complete fixture, exactly one FAIL line per injected defect). Residual, cosmetic only: C14's F2 commit-stamp check is a presence regex that a hex-only word could satisfy; the Hybrid user review at Gate 2 close covers accuracy.
+- Breaking changes: PASS - unchanged from cycle 4 (validator-required headings and the literal router path kept by the F5 table; role-neutral CLAUDE.md breaks no validator, hook or agent; root docs never change the GENERATED routing block).
+- Security surface: PASS - branch-deletion consent recorded consistently and scoped to merged worker task branches; row written before deletion; deletion mechanism honestly UNVERIFIED with a safe fallback (the branch stays). Open Question 10 and Open Question 12 remain USER DECISIONS, non-blocking for Gate 2 start.
+- Section 2 / Gate 2 file set and order (F1-F8, F11, F15-F17): PASS - order is dependency-consistent (F1 -> F16/F17 -> F4 -> F5 -> F7 + F11 -> F6 -> F8 -> F15 -> R4 (vii)); arithmetic consistent (198-line F5 table, 94-line router budget = 15+3+10+15+25+26, caps 64,000 / 36,000 / 43,000).
+- Section 3 registry / R14 feasibility: PASS - C11 fails today for exactly the 11 expected IDs; rev 6 rows unchanged.
+- Section 4 lifecycle spec: PASS - acceptance rule, standing authorization, registry-writer rule, worker lane, consent paragraph and approvals-log ordering read consistently.
+- R13 salvage: PASS - unchanged; outcome checked by C14.
+- Section 7 housekeeping H1/H2/H3: PASS - unchanged.
+- Section 10 / AC-R1 to AC-R11 and section 9 gate roadmap: PASS - no stale 288, 87, 90-line, 56-line, T0-T4 or 16-FAIL figure outside this contract's history (grep-checked); section cross-references resolve.
+
+Dimension findings (cycle 4, history, superseded by the block above):
 - Infra fit: PASS - baseline re-confirmed by JSON parse; every cited fact re-queried live (rev 6 SHA 18ffd4f, exciting-meitner 16-file diff with 11 files under lse-data-verification, ci.yml job names with the em dash at lines 41 and 57, 339 tracked `.agents/skills` files, 15 agents, 33 skills, `web/tsconfig.tsbuildinfo` tracked and absent from `.gitignore`, T-row counts 18 on main and 20 on rev 6, 14 remote refs = 12 named branches + main + session branch). Validator behaviour for the carve-out confirmed from source (required headings, basename indexing, routing generation, brand scan is product names only). Cosmetic notes only.
 - Test coverage: CONCERN - C1-C3, C5-C14 behave exactly as stated; C14 and the AC-R11 fragments are non-vacuous (they fail today). Remaining: C4 under-counts silently when an input path is missing and has no pass/fail test, the defect class fixed for C3 in Gap 29a (Gap 32; Gate 3 command, but one line to fix).
 - Breaking changes: PASS - the F5 carve-out keeps every validator-required heading and the literal router path; root docs never change the GENERATED routing block; role-neutral CLAUDE.md breaks no validator, hook or agent (cycle 3 search unchanged); new docs are outside the kit-portability brand scan except master-planner.md under process/development-protocols, which carries no product-brand literal.
@@ -1021,7 +1069,7 @@ Open gaps:
 - USER DECISION, non-blocking for Gate 2 start: Open Question 10 (control-surface self-merge; T4 bypass; Master Planner merging on a worker's behalf); the worker lane as a direct lane with a compact self-written validate-contract (now Open Question 12); standing consent for branch deletion was GRANTED by the user on 02-10-26 for merged worker task branches only (this supersedes the earlier 'NOT granted' wording)
 - orchestrator bookkeeping note (not a plan gap): `results.tsv` has no `# domain: plan` legend line, so validate-autoresearch-log.mjs reports "domain field must be exactly plan or tests"; sibling task folders have the same shape; the orchestrator adds the legend when it appends the cycle 3 row
 - branch-deletion mechanism (GitHub branch-delete tool or `git push origin --delete`) is UNVERIFIED from this session and may be absent or proxy-blocked: known-gap: documented, resolved at R4 step (vii) and the Gate 6 pilot; fallback is that the branch stays and the gap is recorded (no safety consequence)
-- plan-text concerns Gaps 31-32 below (cycle 4 SUPPLEMENT REQUEST); cosmetic items follow it
+- none unresolved (cycle 5): Gaps 31-32 CLOSED and cosmetic items c1-c9 LANDED, all verified live; two cosmetic residuals may be accepted as known gaps: (r1) C14's F2 commit-stamp check is presence-only (a hex-only word of 7+ letters could satisfy it; the Hybrid review at Gate 2 close covers accuracy), (r2) validate-all-context may print warnings after the F5 slimming (not a gate; the gate is no new failure versus baseline)
 
 What this coverage does NOT prove (What This Coverage Does NOT Prove):
 - wc -l / validate-all-context / validate-context-discovery: not that the slimmed all-context.md still contains every current-truth fact needed by agents (only structure, routing and line count), and not that nothing was lost from the kept sections (only the changelog block and the moved sections are covered by the preservation check; the check is set-based, so it does not prove order or duplicate-line counts)
@@ -1036,11 +1084,11 @@ What this coverage does NOT prove (What This Coverage Does NOT Prove):
 - C14 existence and cap checks: not that architecture.md, operating-instructions.md, north-star.md, current-state.md or decisions.md are accurate or complete beyond the named topics and rows; not the byte size of operating-instructions.md (lines only, cosmetic c2)
 - the Approvals Log checks: not that a branch deletion is actually possible (no branch-delete tool or push-delete path has been verified) and not that each later automatic deletion adds its row (convention, AC-R6 Hybrid review)
 
-SUPPLEMENT REQUEST (PVL cycle 4; exact items; section ids are slugs of `##`/`###` headings in this plan; both are plan-text edits, neither needs the user):
+SUPPLEMENT REQUEST (PVL cycle 4, history; both applied and verified closed in cycle 5; exact items; section ids are slugs of `##`/`###` headings in this plan; both are plan-text edits, neither needs the user):
 - Gap 31: 2-exact-file-set (the Gate 2 execution order sentence under 'Gate 2 order, R13 file list, F4/F5 definition, F9/F10 dispositions') | Concern: the sentence lists R14 -> R13 -> F1, F2, F3 -> F4 -> F5 -> F7 + F11 -> F6 -> F8 -> F15 -> R4 (vii) and omits F16 (architecture.md) and F17 (operating-instructions.md), although the diagram-revision log says they were added to the Gate 2 order and the Gate 2 row of section 9 lists F15-F17. An execute agent following the order literally could write them last or skip them; F5 deletes (does not move) the Repository Structure, Technology Stack, Key Patterns and Environment sections they are written from, F5's routing rows and pointers name them by basename, and validate-context-discovery fails any root doc that all-context.md does not name | Severity: CONCERN | Suggested addition: insert 'F16, F17 (written from the base all-context.md sections they carve out, read at <base>, and after F1 because F16 is written for the new North Star; before F4 and F5 so F5's rows and pointers name files that already exist)' between 'F1, F2, F3 (...)' and '-> F4', and add one clause to the 'Slimming loses knowledge' risk row saying the carved sections are rewritten into F16/F17 (not moved whole) with the base text preserved in git at <base>
 - Gap 32: 10-acceptance-criteria-this-program (command C4, AC-R1) | Concern: C4 has the defect Gap 29a fixed in C3: a missing TASK or OPS path only writes a stderr line and the printed total silently under-counts (scratch run: 34,903 versus 38,903), and the command never tests the cap it quotes ('must print a number <= 36000 (or 43000)') | Severity: CONCERN | Suggested addition: replace C4 with the form below (run on six scratch cases: ok without OPS rc=0, ok with OPS rc=0, missing TASK rc=1 plus MISSING line, missing OPS rc=1 plus MISSING line, envelope over 8,000 bytes rc=1, total over cap rc=1): `ENVELOPE=<path>; TASK=<path>; OPS=` then `MISS=0; for f in CLAUDE.md "$ENVELOPE" "$TASK" ${OPS:+"$OPS"}; do test -s "$f" || { echo "MISSING $f"; MISS=1; }; done`, `CAP=36000; test -n "$OPS" && CAP=43000`, `total=$(cat CLAUDE.md "$ENVELOPE" "$TASK" ${OPS:+"$OPS"} 2>/dev/null | wc -c); echo total=$total cap=$CAP`, `test "$MISS" -eq 0 && test "$(wc -c < "$ENVELOPE")" -le 8000 && test "$total" -le "$CAP"; echo rc=$?`; state 'must print rc=0' and that it is not runnable today (no envelope exists)
 
-COSMETIC - may be accepted as known gaps (none blocks Gate 2 start; none changes a verdict; the orchestrator can propose acceptance to the user, or fold them into the same supplement at no cost):
+COSMETIC (cycle 4 list, history; c1-c9 verified landed in cycle 5) - may be accepted as known gaps (none blocks Gate 2 start; none changes a verdict; the orchestrator can propose acceptance to the user, or fold them into the same supplement at no cost):
 - c1: the `total=240454` figure quoted under C3 is true only for the plan size at the time; it was 269,986 in cycle 4 and changes with every plan edit. Say 'a number that depends on the plan file's size'.
 - c2: C14 caps architecture.md and operating-instructions.md by lines (<= 150) while the worker-cap arithmetic assumes operating-instructions.md <= 7,000 bytes (150 lines at ~58 B/line is ~8.7 KB). The informational `wc -c` line shows it and C4 enforces the real total at Gate 3; a `test "$(wc -c < process/context/operating-instructions.md)" -le 7000` line in C14 would close it earlier.
 - c3: frontmatter for the new context docs (F1, F2, F3, F4, F16, F17: `name: context:<slug>`, `description`, `keywords`, `date`) is not specified; without `keywords` validate-context-discovery adds one warning per doc (warnings, not failures; baseline is 0 warnings) and the docs are not reachable by `discover-context.mjs --match`.
@@ -1105,14 +1153,15 @@ Plan updates applied (user diagram revision, 02-10-26; user-driven, not a valida
 - Diagram wording: worktrees apply to local sessions on the user's PC; cloud workers are isolated by container plus branch (section 4, Isolation model).
 - Contract status: cycle 4 re-verified the items above (see the diagram-revision verification table); two plan-text concerns remain (Gaps 31 and 32) plus cosmetic items c1-c9.
 
-Plan updates applied (PVL cycle 4, 02-10-26, vc-plan-agent PVL-supplement; the new C4 and C14 fragments were run read-only on scratch copies, positive and negative cases):
+Plan updates applied (PVL cycle 4, 02-10-26, vc-plan-agent PVL-supplement; the new C4 and C14 fragments were run read-only on scratch copies, positive and negative cases; RE-VERIFIED by vc-validate-agent in cycle 5, see the cycle-4 gap re-verification table above):
 - Gap 31: section 2 Gate 2 execution order now reads ... F1, F2, F3 -> F16, F17 (after F1, before F4 and F5) -> F4 -> F5 ...; the 'Slimming loses knowledge' risk row says the carved sections are rewritten into F16/F17 with the base text preserved in git at `<base>`.
 - Gap 32: command C4 replaced by the `test -s` per input form, CAP 36,000 (43,000 with OPS), ending with an rc line. Scratch results: ok without OPS total=31000 rc=0; with OPS total=38000 rc=0; missing TASK rc=1 plus MISSING; missing OPS rc=1 plus MISSING; envelope 9,000 bytes rc=1; over cap rc=1 (46000/36000, 53000/43000). Not runnable today (no envelope): prints MISSING and rc=1.
 - c1: C3's quoted total now says it varies with plan size; the gate is the rc line. c2: C14 gains an operating-instructions.md byte cap (<= 7000). c3: frontmatter block specified for the six new context docs (section 2) and checked by C14. c4: C14 gains F2 commit and UTC stamp checks and F3 six-field checks (still existence and presence, not accuracy; accuracy stays in the Hybrid user review). c5: R4 (vii) names the branch-delete mechanism as unverified and not dry-runnable, with the fallback. c6: Approvals Log row is written BEFORE deletion (pending), then updated (done, failed or deletion deferred). c7: TL;DR names the 43 KB cap, 'eight small things', section 5 excludes architecture.md; section numbering (no section 11) left as is on purpose to keep cross-references stable. c8: 'worker task branches' defined; p1-pipeline and p2-deploy excluded. c9: post-slimming validate-all-context warnings noted in the risk row; gate is no new failure versus baseline.
 - C14 expected-today line updated to the re-measured counts below the C14 block.
 
-Gate: CONDITIONAL (0 FAILs, 2 CONCERNs (Gaps 31-32, both plan-text, one-line fixes) plus 9 cosmetic items c1-c9 that may be accepted as known gaps; PVL cycle 4; EXECUTE of Gate 2 is not legal yet; PHASE_COMPLETE: VALIDATE is NOT emitted; routes to PVL supplement cycle 4 (or explicit user acceptance of the remaining gaps) then a re-spawn of vc-validate-agent from V1 (cycle 5))
-Accepted by: none yet. No concern has been accepted by the user. Acceptance, if any, is recorded after the next supplement cycle (or by explicit user acceptance), listing each accepted concern by name (Gap 31 Gate 2 order omits F16/F17; Gap 32 C4 silent under-count; cosmetic c1-c9). User decisions pending but non-blocking for Gate 2 start: Open Question 10 (control-surface self-merge; RT4 bypass; Master Planner merging on a worker's behalf) and Open Question 12 (worker lane). The standing consent for branch deletion was GRANTED by the user on 02-10-26 (merged worker task branches only) and is not a pending decision.
+Prior gate (PVL cycle 4, history): conditional, 0 FAILs, 2 CONCERNs (Gaps 31-32) plus 9 cosmetic items; closed by the cycle-4 supplement and verified in cycle 5.
+Gate: PASS (0 FAILs, 0 unresolved CONCERNs; PVL cycle 5, 03-10-26, after 4 recorded fix cycles in results.tsv; scope: START of Gate 2 only, F1-F8, F11, F15, F16, F17, R13, R14; Gates 3-6 each re-enter VALIDATE; PHASE_COMPLETE: VALIDATE is legal; EXECUTE of Gate 2 requires the explicit ENTER EXECUTE MODE command)
+Accepted by: not required (Gate: PASS, no unresolved concern). Cosmetic residuals r1 and r2 above are recorded as known gaps, not accepted concerns; the orchestrator may mention them to the user. User decisions pending but non-blocking for Gate 2 start: Open Question 10 (control-surface self-merge; RT4 bypass; Master Planner merging on a worker's behalf) and Open Question 12 (worker lane). The standing consent for branch deletion was GRANTED by the user on 02-10-26 (merged worker task branches only) and is not a pending decision.
 
 ## Autonomous Goal Block
 
@@ -1125,17 +1174,17 @@ Hard stops / safety constraints:
 - Installs, product code (api/, web/) edits, deploy script changes, network use beyond approved ref-only fetch
 - Starting Gate N+1 before VALIDATE writes a contract for it
 - Any validator showing a NEW failure versus the recorded baseline in the Validate Contract
-Next phase: PVL supplement cycle 4 (Gaps 31-32, plan-text); then re-spawn vc-validate-agent from V1 (cycle 5); after Gate: PASS (or CONDITIONAL with the cosmetic items accepted): EXECUTE Gate 2 via vc-execute-agent (opus), scoped to F1-F8 + F11 + F15-F17 + R13 + R14
+Next phase: EXECUTE Gate 2 via vc-execute-agent (opus), scoped to F1-F8 + F11 + F15-F17 + R13 + R14 (order in section 2: R14, R13, F1-F3, F16-F17, F4, F5, F7+F11, F6, F8, F15, then R4 (vii) by the orchestrator session); requires the explicit ENTER EXECUTE MODE command; Gate: PASS written 03-10-26 (PVL cycle 5)
 Validate contract: inline in plan (## Validate Contract)
 Execute start: wc -l all-context <=300 | validate-context-discovery (failures == baseline) | validate-all-context | discover-context --check-routing | validate-protocol-wiring | validate-protocol-discovery | validate-kit-portability | validate-agent-parity non-strict | validate-plan-inventory (0 failures) | C11 registry IDs | C13 whitespace (tracked, staged, untracked) | C14 deliverables | retired-wording grep (C8) | e2e spec: none | probe: none until Gate 3 | high-risk pack: no (Gate 5 R12 only)
 
 ## Resume and Execution Handoff
 
 1. Selected plan: `/home/user/psychic-train/process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md`
-2. Last completed step: PVL cycle 4 validate (re-run from V1 after the cycle-3 supplement of Gaps 24-30 and the user diagram revision of 02-10-26): Gaps 24-30 verified closed live; the diagram revision verified; 2 new plan-text concerns (Gaps 31-32) plus 9 cosmetic items. No implementation. Working tree: plan file edits only.
-3. Validate-contract: written 02-10-26 (cycle 4), Gate: CONDITIONAL, 0 FAIL, 2 CONCERN (Gaps 31-32, see its SUPPLEMENT REQUEST). Next: PVL supplement cycle 4, then re-spawn vc-validate-agent from V1 (cycle 5).
+2. Last completed step: PVL cycle 5 validate (03-10-26, re-run from V1 after the cycle-4 supplement of Gaps 31-32 and cosmetic c1-c9): both gaps verified closed live, c1-c9 landed, C1-C14 re-run and match; Gate: PASS. No implementation. Working tree: plan file edits only.
+3. Validate-contract: written 03-10-26 (cycle 5), Gate: PASS, 0 FAIL, 0 unresolved CONCERN (two cosmetic residuals r1, r2 recorded as known gaps). Scope: START of Gate 2 only.
 4. Context loaded: CLAUDE.md, all-context.md, orchestration.md, MASTER-PLAN.md (full), realignment SPEC (AC grep), repo branch list.
-5. Next step: PVL supplement cycle 4 (Gaps 31-32), then ENTER VALIDATE MODE again (cycle 5); then Gate 2 via vc-execute-agent (opus) scoped to F1-F8, F11, F15-F17, R13 and R14; start MASTER-PLAN work from `pensive-dijkstra` rev 6; re-verify every remaining UNVERIFIED registry item first. The 02-10-26 diagram revision (F16, F17, the F5 carve-out, the branch-deletion consent) was verified in cycle 4.
+5. Next step: orchestrator emits the /goal block and the EXECUTE strategy recommendation; on the user's explicit ENTER EXECUTE MODE, spawn vc-execute-agent (opus) for Gate 2 scoped to F1-F8, F11, F15-F17, R13 and R14 in the section 2 order; start MASTER-PLAN work from `pensive-dijkstra` rev 6 (pinned 18ffd4f014f4e5ea0f5d654688875a9300b30ab4); re-verify every remaining UNVERIFIED registry item first; R4 step (vii) is run by the orchestrator session itself. After Gate 2: UPDATE PROCESS closeout, then VALIDATE again before Gate 3.
 
 ## Phase Completion Rules
 
