@@ -19,7 +19,7 @@ Use this folder for durable, repo-specific operating instructions that must stay
 ## Read Order
 
 1. `vc-system-behavior/` — complete system behavior reference, 12-file split (start here: `vc-system-behavior/01-overview.md` is the entrypoint). The legacy 186KB monolith is archived at `archive/vc-system-behavior-reference_ARCHIVED_09-06-26.md` (read-only history).
-2. `orchestration.md`
+2. `orchestration.md` (on demand, not default session load: read it in Master Planner or orchestrator posture, or when a routing rule is needed)
 3. `implementation-standards.md`
 4. `plan-lifecycle.md`
 5. `phase-programs.md`
@@ -27,6 +27,7 @@ Use this folder for durable, repo-specific operating instructions that must stay
 7. `communication-standards.md`
 8. `vc-autoresearch-spec.md` (optional deep reference — read only when designing or deeply understanding the autoresearch gap-loop primitive)
 9. `autopilot.md` — Autopilot Mode trigger phrases, consolidated clarification, provisional goal block format, mode markers, per-gate decision policy, hard stops, and deactivation rules. Read when: user says autopilot / autonomous mode / /autopilot trigger phrases, or when understanding orchestrator §Autonomy Mode integration.
+10. `master-planner.md` — Master Planner posture (orchestrator rules), task lifecycle, acceptance rule, standing authorization, worker envelope and 11-heading report templates, archive operations and branch-deletion consent. Read when: Master Planner posture or spawning a worker (optional).
 
 ## File Roles
 
@@ -36,7 +37,7 @@ Use this folder for durable, repo-specific operating instructions that must stay
   infrastructure gaps (D1/H4/G1/I2), and before/after hardening table. Split into numbered files
   01-overview … 12-reference. The legacy single-file monolith is archived (read-only) at
   `archive/vc-system-behavior-reference_ARCHIVED_09-06-26.md`.
-- `orchestration.md`
+- `orchestration.md` (on demand, not default load)
   Delegation rules, subagent status protocol, context isolation, feature-scope routing, intent clarification rules, validate gate and skip conditions, BLOCKED escalation path, two-tier fan-out escalation, and research-first rules for service-shaped work.
 - `implementation-standards.md`
   Durable implementation standards, file-size guidance, error-handling preferences, quality gates, and commit hygiene.
@@ -56,6 +57,11 @@ Use this folder for durable, repo-specific operating instructions that must stay
   marker syntax, [AUTOPILOT CONTEXT] injection schema for subagents, AUTOPILOT_ACTIVATED signal,
   V6/V7 (UPDATE) variant, per-gate autonomous decision policy, hard stops, deactivation rules, and
   phase-program interaction. Complements orchestration.md §Autonomy Mode.
+- `master-planner.md` (`read_order: 10`, `required: false`)
+  Master Planner posture and worker protocol: roles and the PLANNER/WORKER entry sets, orchestrator
+  rules moved out of CLAUDE.md, task lifecycle and acceptance rule, standing authorization for
+  spawn and self-merge, worker envelope (`ROLE: WORKER`) and completion report templates,
+  isolation, the four archive operations with the scoped branch-deletion consent, session start/end.
 
 - `references/program-goal-charter-template.md`
   Blank and filled Program Goal Charter template for phase-program umbrella plans. Read when building
