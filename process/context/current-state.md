@@ -7,25 +7,26 @@ date: 03-10-26
 
 # Current State
 
-**Stamp: commit `b84e580` on branch `claude/pensive-albattani-ou0cgv`, observed 2026-10-03T00:31:00Z (UTC).** Base of this session: `origin/main` at `5878b16` (merge of PR #12, 2026-10-03T00:16:39Z UTC). Everything under "Observed" was read or run by a command at that stamp; everything under "Historical" is copied from older documents and labelled with its source.
+**Stamp: commit `0b3c9bf` on branch `claude/pensive-albattani-ou0cgv`, observed 2026-10-03T04:50:00Z (UTC).** Base of this session: `origin/main` at `5878b16` (merge of PR #12, 2026-10-03T00:16:39Z UTC). Everything under "Observed" was read or run by a command at that stamp; everything under "Historical" is copied from older documents and labelled with its source.
 
-Staleness rule (master-planner.md): this file is stale when the stamp is not an ancestor of HEAD (`git merge-base --is-ancestor b84e580 HEAD` fails) or when more than 10 non-cache commits landed since it (`git log b84e580..HEAD --oneline -- . ':(exclude)api/data/cache' | wc -l`). Nightly bot snapshot commits do not make it stale. If stale, re-verify before trusting.
+Staleness rule (master-planner.md): this file is stale when the stamp is not an ancestor of HEAD (`git merge-base --is-ancestor 0b3c9bf HEAD` fails) or when more than 10 non-cache commits landed since it (`git log 0b3c9bf..HEAD --oneline -- . ':(exclude)api/data/cache' | wc -l`). Nightly bot snapshot commits do not make it stale. If stale, re-verify before trusting. The UPDATE PROCESS commits that record this refresh follow the stamp and do not make it stale.
 
-## Observed (2026-10-03T00:31:00Z UTC, commit b84e580)
+## Observed (2026-10-03T04:50:00Z UTC, commit 0b3c9bf)
 
 | Fact | Value | Command |
 |---|---|---|
-| Branch | `claude/pensive-albattani-ou0cgv` (Gate 2 working branch; equal to `origin/main` 5878b16 at session start) | `git rev-parse --abbrev-ref HEAD` |
-| Last commits | Gate 2: `b84e580` F15, `b36a0da` F8, `dafa781` F6, `b78e652` F7+F11, `5a73705` F5, `bcb62e4` F4, `0e593cd` F16-F17, `3562deb` F1-F3, `448b10c` R13, `c33fa96` R14; base `5878b16` PR #12 merge. Gate 2 closeout commits (`process:` prefix) follow this stamp, local only, not pushed | `git log --oneline -12` |
-| Working tree | Clean at the stamp (all Gate 2 execute work committed; 10 commits, pushed). `git diff --stat 5878b16 HEAD` shows 29 files, 3,547 insertions, 1,869 deletions, of which only `process/` paths are Gate 2 deliverables (R13 moved the LSE folder, including its two Python files, under `process/general-plans/completed/`) | `git status --porcelain` |
-| Remote refs | 14: `main`, this branch, and 12 older branches (see MASTER-PLAN.md T23/T25) | `git branch -r` |
+| Branch | `claude/pensive-albattani-ou0cgv`; all commits pushed; PR #13 open (per the orchestrator handoff, not re-queried here) | `git rev-parse --abbrev-ref HEAD` |
+| Last commits | Gate 3: `0b3c9bf` ([MODE:] prefix planner-only, EVL records), `eee7709` (role-neutral CLAUDE.md and AGENTS.md); earlier `3d2eda5`, `a5a63cf` (Gate 3 validate contract); Gate 2: `b84e580` F15 down to `c33fa96` R14; base `5878b16`. Gate 3 closeout commits (`process:` prefix) follow this stamp, local only | `git log --oneline -12` |
+| Working tree | Clean at the start of the closeout (`git status --short` printed nothing) | `git status --short` |
+| Entry files | `CLAUDE.md` 13,443 B (about 155 lines), `AGENTS.md` 12,572 B; both carry one identical ENTRY-SET block of 2,842 B; no `@`-imports | `wc -c CLAUDE.md AGENTS.md` |
+| `process/context/all-context.md` | 193 lines, 11,380 B (Gate 2) | `wc -lc` |
+| Remote refs | 14: `main`, this branch, and 12 older branches (see MASTER-PLAN.md T23/T25) at the last check, 2026-10-03T00:31Z | `git branch -r` |
 | Workflows | 6 in `.github/workflows/`: `ci.yml` plus five snapshot jobs | `ls .github/workflows` |
-| Nightly snapshots on main, 2026-10-02 | chain-growth commit 17:53:32Z, narrative 18:04:16Z, liqtide 18:26:58Z (UTC) by `github-actions[bot]` | `git log --format='%h %cI %an %s' origin/main -- api/data/cache` |
-| `.agents/skills` | 339 tracked regular files (a copy, not a symlink) | `git ls-files .agents/skills \| wc -l` |
-| `web/tsconfig.tsbuildinfo` | still tracked | `git ls-files web/tsconfig.tsbuildinfo` |
-| LSE verification | moved to `process/general-plans/completed/lse-data-verification_17-09-26/` (R13) | `ls` |
+| Nightly snapshots on main, 2026-10-02 | chain-growth commit 17:53:32Z, narrative 18:04:16Z, liqtide 18:26:58Z (UTC) by `github-actions[bot]` (read at 00:31Z) | `git log --format='%h %cI %an %s' origin/main -- api/data/cache` |
+| `.agents/skills` | 339 tracked regular files (a copy, not a symlink); AGENTS.md now says so (G3-8 prints nothing) | `git ls-files .agents/skills \| wc -l` |
+| `web/tsconfig.tsbuildinfo` | still tracked (read at 00:31Z) | `git ls-files web/tsconfig.tsbuildinfo` |
 
-### Validator results (re-run 2026-10-03T00:31Z at b84e580 by the UPDATE PROCESS session; failures and warnings counted from JSON output; identical to the baseline, no new failure)
+### Validator results (re-run 2026-10-03T04:50Z at 0b3c9bf by the UPDATE PROCESS session; failures and warnings counted from JSON output; identical to the baseline, no new failure)
 
 | Validator | Failures | Warnings | Note |
 |---|---|---|---|
@@ -34,22 +35,38 @@ Staleness rule (master-planner.md): this file is stale when the stamp is not an 
 | validate-guide-sync | 1 | 0 | `README.md does not exist` (baseline) |
 | validate-agent-parity (non-strict) | 0 | 18 | baseline drift between `.claude/agents` and `.codex/agents` |
 | validate-plan-inventory | 0 | 6 | baseline |
-| validate-all-context, protocol-wiring, protocol-discovery, kit-portability, agent-frontmatter, skill-invocation-wiring | 0 | 0 | clean |
+| validate-skill-keywords | 0 | 0 | clean after the catalog regeneration in the Gate 3 fix cycle |
+| validate-all-context, protocol-wiring, protocol-discovery, kit-portability, agent-frontmatter, skill-invocation-wiring, skill-routing, skill-cross-refs | 0 | 0 | clean |
 | `discover-context.mjs --check-routing` | in sync | | |
 
-## Gate 2 status (observed)
+Known condition outside the baseline: `validate-backlog-notes` reports 45 failing notes on HEAD and on the Gate 2 tree alike (a different BLOCKED/done-with-gap note schema), including the three Gate 2 stubs. It predates this program and is not a Gate 3 regression.
 
-Gate 2 is complete: independent vc-tester confirmation was all green (C5, C6, C8, C9, C11, C12 = 11, C13 in all four forms, C14; validator set equals baseline; registry keeps all 21 rev 6 task IDs including T26-T28). Report: `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_GATE2-REPORT_03-10-26.md`. `process/context/all-context.md` is 193 lines, 11,380 bytes (was 1,223 lines, 93,730 bytes at `5878b16`).
+## Gate 3 status (observed)
 
-R4 step (vii), run by the orchestrator session: the session and merge MCP tool names are present in the orchestrator session's tool list and `list_sessions` ran live (02-10-26 and 03-10-26 sessions returned). Not verified: the branch-delete mechanism (no GitHub delete-branch tool; `git push --delete` untested) and whether a spawned worker's own tool list has the merge and archive tools. Both are deferred to the Gate 6 pilot; fallback is that the branch stays.
+Gate 3 is complete and accepted. Independent vc-tester confirmation: all static gates green except `validate-skill-keywords` (stale skills catalog after the entry-file rewrite); fix cycle 1 regenerated the catalog (routedFrom-only change, proven by a node compare); an independent static re-check was then all green. The user reviewed the diff and accepted it on 2026-10-03. Report: `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_GATE3-REPORT_03-10-26.md`.
+
+Entry-set bytes, MEASURED by the pinned gate commands (bytes only; platform system prompt, hook output and skill listing excluded): planner set 50,343 B of 64,000; worker set 17,415 B of 36,000, or 22,523 B of 43,000 with operating-instructions.md. The informational planner total with master-planner.md added was measured as 63,931 B by one tester and 58,100 B by another (unreconciled; it is not a cap).
+
+Live probes (route A, headless `claude -p`, user-approved, cap 1 USD per run, total spend 0.617 USD including a smoke call), MEASURED first-request context, single-run samples:
+
+| Probe | First-request context |
+|---|---|
+| B1 old planner (pre-Gate-3 CLAUDE.md) | 78,664 tokens |
+| B2 new planner | 37,450 tokens (-41.2k, about -52%) |
+| P2 new worker | 37,921 tokens |
+
+About 32k tokens of each figure is the fixed headless system prompt and is unrelated to CLAUDE.md. Planner and worker role-behaviour assertions passed; no Agent, Task or session calls were made; isolation was shown by unique markers in the scratch copies. Estimated (not measured): the bytes-over-4 token figures in the Gate 3 report.
+
+R4 step (vii), run at Gate 2 by the orchestrator session: the session and merge MCP tool names are present in the orchestrator session's tool list and `list_sessions` ran live. Not verified: the branch-delete mechanism and whether a spawned worker's own tool list has the merge and archive tools. Both deferred to the Gate 6 pilot; fallback is that the branch stays.
 
 ## Not run this session (unverified at the stamp)
 
-- pytest, vitest, `tsc --noEmit`, `pnpm build:islands`, Playwright: not run. Gate 2 is docs-only (risk tier RT0). Last recorded results are under Historical.
-- Whether the five snapshot crons fire at their new scheduled times: three snapshot commits landed on 2026-10-02, but the run start times and the two canary jobs (`pairs-refresh-snapshot.yml`, `liquidity-backfill-snapshot.yml`) were not checked (no `gh run list` from this session).
-- Anything on the user's PC: the deployed app, Task Scheduler entries, Tailscale reachability, the Windows deploy scripts at runtime.
+- pytest, vitest, `tsc --noEmit`, `pnpm build:islands`, Playwright: not run. Gates 2 and 3 are docs and entry-file changes (risk tier RT0). Last recorded results are under Historical.
+- Real per-session token usage: the probes are three single-run samples, hook output and the skill listing are unmeasured, and there is no telemetry (backlog `token-usage-telemetry_NOTE_02-10-26.md`).
+- Whether the five snapshot crons fire at their new scheduled times (no `gh run list` from this session); the two canary jobs were not checked.
+- Anything on the user's PC: the deployed app, Task Scheduler entries, Tailscale reachability, the Windows deploy scripts, and `.agents/skills` symlink behaviour there.
 - Live provider reachability (the container blocks provider egress).
-- Real per-session token usage (no telemetry; backlog `token-usage-telemetry_NOTE_02-10-26.md`).
+- The informational planner total with master-planner.md (two testers disagree).
 
 ## Historical (copied, not re-run)
 
@@ -59,10 +76,13 @@ R4 step (vii), run by the orchestrator session: the session and merge MCP tool n
 | vitest | 223 passed, 30 files | MASTER-PLAN rev 6 |
 | `tsc --noEmit`, `build:islands` | exit 0, succeeds | MASTER-PLAN rev 6 |
 | Deploy target | home PC plus Tailscale, user walkthrough succeeded; uvicorn module-form fix committed | MASTER-PLAN rev 6 |
+| CLAUDE.md before Gate 3 | 28,903 B (440 lines); AGENTS.md 37,885 B (704 lines) | Gate 3 report (measured at HEAD 3faeff4) |
 | GitHub scheduler start delay | 2h03m to 5h01m observed 09-26 to 09-30; varies, not a trend | context-changelog.md (2026-10-01 entries) |
 
 ## Next actions
 
-1. User review of AC-R5 (registry against evidence) and AC-R6 (Approvals Log). Not yet accepted.
-2. Gate 3: re-enter VALIDATE, then explicit ENTER EXECUTE MODE: CLAUDE.md and AGENTS.md role-neutral rewrite (F9, F10), byte baselines (C1-C4), ENTRY-SET check (C10).
-3. Registry tasks and priorities: MASTER-PLAN.md.
+1. User review of AC-R5 (registry against evidence), AC-R6 (Approvals Log) and AC-R9 (token claims labelled measured or estimated). Not yet accepted.
+2. Gate 4 (token and test efficiency: scoped context loading, risk-based verification RT0-RT4 in operating-instructions.md, bounded retries): re-enter VALIDATE, then explicit ENTER EXECUTE MODE.
+3. Planner margin: after the Gate 3 closeout edits the planner set (same formula as G3-C3, sample brief) is 54,592 B MEASURED by arithmetic on file sizes at this commit's working tree (headroom 9,408 B under the 64,000 cap; the 50,343 B figure above was taken before MASTER-PLAN.md and current-state.md grew by about 4 KB). With master-planner.md added it is 68,180 B (informational, not a cap). Further growth of MASTER-PLAN.md, current-state.md or master-planner.md erodes the margin; trim before it reaches the cap.
+4. Open Questions 10 (control-surface self-merge) and 12 (worker lane confirmation) stay open and non-blocking.
+5. Registry tasks and priorities: MASTER-PLAN.md.
