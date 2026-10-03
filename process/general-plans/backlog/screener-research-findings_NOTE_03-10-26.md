@@ -48,3 +48,9 @@ feature: general
 - No drag-and-drop library in `web/`.
 - CI has no Playwright; E2E is not in CI.
 - D6 tension: weekly span (see SPEC D6).
+
+## Round 2 (defects)
+
+Full text: SPEC `## Defect findings and decisions 03-10-26`. Root causes: A) forming candle treated as fresh until it closes (`ccxt_adapter.py` ~179-191, ~352); B) since+limit=500 returns the OLDEST 500 candles, so a cache >500 bars behind never catches up; C) no scheduled OHLCV refresh on the PC (`deploy/register-tasks.ps1` has only api and web; nightly cache commit inert, git-ignored); D) no day/time labels, no as_of field, UTC bars vs browser-local axis. Chips use first cached close (`momentum.py:113-133`).
+Open questions: is the API always on? How stale is the data (hours or days)? Which device blurs?
+Unknowns needing the user's PC: actual cache last timestamps, PC clock, scheduling state, canvas DPR sizes.

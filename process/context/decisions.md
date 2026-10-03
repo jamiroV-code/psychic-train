@@ -128,3 +128,6 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 - **Alternatives:** keep estimates labelled as such (branch B, not chosen).
 - **Consequences:** at `753db23`: pytest 873 passed, 1 skipped, 5 deselected, 1 xfailed; vitest 223 in 30 files; tsc exit 0. The island build and Playwright were not in the approval and are not re-measured locally. Standing authorization does not cover installs: any new install needs fresh approval.
 - **Status:** active.
+
+### D-14 Narrow exception: estimated leg label on the BTC chart only
+- **Decision:** 03-10-26 the user allows a computed estimated leg label (with its numbers visible) on the screener BTC leg chart only; no other page or coin box; the no-verdicts principle is unchanged. **Source:** REALIGN SPEC `## Defect findings and decisions 03-10-26`, F5. **Status:** active.

@@ -68,4 +68,4 @@ Planner budget: run the PLANNER-BUDGET block in master-planner.md section 12 (by
 
 1. Done: eight worker tasks (T20, T16, T18, T19, PERF, T29, T30, T31) merged, independently verified and archived (docs); sessions archived except T31 (archive pending). Measured cost 6.9042678 USD of 40.
 2. User: delete the three held branches (`kind-tesla-tat3vo`, `inspiring-pasteur-awqxk3`, `split-all-context`). Decided 03-10-26: HANDOVER accepted; big-task subagent caps 3 subagents, 15 USD, 1 level (master-planner.md section 6).
-3. Next phase (screener realignment): RESEARCH done 03-10-26; user decisions D1-D11 recorded in the SPEC. INNOVATE needs the user's go; no worker. Other queued SPECs: narrative-baskets, LSE equities. Registry: MASTER-PLAN.md.
+3. Next phase (screener realignment): RESEARCH done 03-10-26 (round 2: defects F1-F5 and decisions recorded in the SPEC; scheduled PC refresh touches deploy, RT4). INNOVATE needs the user's go; no worker. Other queued SPECs: narrative-baskets, LSE equities. Registry: MASTER-PLAN.md.
