@@ -8,10 +8,13 @@ feature: general-plans
 # Project Recovery, Architecture Cleanup, AI Efficiency and Master Planner Orchestration — GATE 1 Proposal
 
 Date: 02-10-26
+**Gate 2 complete (03-10-26, UPDATE PROCESS closeout; report: `master-planner-recovery_GATE2-REPORT_03-10-26.md`). Gate 3 requires VALIDATE then explicit ENTER EXECUTE MODE.** Historical status line follows.
 Status: PROPOSED, Gate 1 approved (all user answers 02-10-26 recorded below; Q1-Q8 resolved). Nothing here is executed. PVL cycle 4 validate (02-10-26) found Gaps 24-30 closed and the user diagram revision sound apart from two plan-text concerns (Gaps 31-32, see the Validate Contract); the PVL supplement cycle 4 applies them and vc-validate-agent re-runs from V1 (cycle 5) and must write a passing contract (or the user must accept the remaining gaps) before any Gate 2 write. Working tree: plan file edits only (this file); no other file touched.
 Complexity: COMPLEX (single plan, gated roadmap Gate 2..6; each gate re-enters VALIDATE).
 
 ## Status of this plan
+
+**Current (03-10-26): Gate 2 complete; Gate 3 requires VALIDATE then explicit ENTER EXECUTE MODE.** Gate 2 independent EVL (vc-tester) all green; validators equal baseline; AC-R5 and AC-R6 await the user's hybrid review (not accepted). Gates 3-6 remain, so the plan stays in `active/`. Paragraph below is the pre-Gate-2 history.
 
 Gate 1: approved (02-10-26). Q1-Q8 are all resolved (user answers, section 13); Q4 and Q8 are now Resolved. PVL cycle 5 validate is done (03-10-26): Gate: PASS, 0 FAIL, 0 unresolved CONCERN (Gaps 1-32 all closed; only cosmetic leftovers remain, listed in the Validate Contract). The contract gates the START of Gate 2 only; Gates 3-6 each re-enter VALIDATE. User decisions Open Question 10 and Open Question 12 are non-blocking for Gate 2 start. The user diagram revision (02-10-26: four user answers on the target-workflow diagram) was verified in cycles 4 and 5; see the verification tables in the Validate Contract section. Working tree: only this plan file was edited by validation.
 
@@ -1179,6 +1182,8 @@ Validate contract: inline in plan (## Validate Contract)
 Execute start: wc -l all-context <=300 | validate-context-discovery (failures == baseline) | validate-all-context | discover-context --check-routing | validate-protocol-wiring | validate-protocol-discovery | validate-kit-portability | validate-agent-parity non-strict | validate-plan-inventory (0 failures) | C11 registry IDs | C13 whitespace (tracked, staged, untracked) | C14 deliverables | retired-wording grep (C8) | e2e spec: none | probe: none until Gate 3 | high-risk pack: no (Gate 5 R12 only)
 
 ## Resume and Execution Handoff
+
+**Update 03-10-26 (Gate 2 closeout): Gate 2 complete; Gate 3 requires VALIDATE then explicit ENTER EXECUTE MODE.** Gate 2 report: `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_GATE2-REPORT_03-10-26.md`. Execute HEAD `b84e580` (10 commits, pushed); closeout commits local. Next step: re-enter VALIDATE for Gate 3 (F9, F10, C1-C4, C10), user reviews CLAUDE.md/AGENTS.md before commit. The numbered list below is the pre-Gate-2 handoff, kept as history.
 
 1. Selected plan: `/home/user/psychic-train/process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md`
 2. Last completed step: PVL cycle 5 validate (03-10-26, re-run from V1 after the cycle-4 supplement of Gaps 31-32 and cosmetic c1-c9): both gaps verified closed live, c1-c9 landed, C1-C14 re-run and match; Gate: PASS. No implementation. Working tree: plan file edits only.
