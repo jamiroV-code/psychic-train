@@ -55,7 +55,7 @@ Live-provider checks are user-PC steps (container egress is blocked). CI (`ci.ym
 - **Default:** the Master Planner session and direct user work commit on `main`, and only when the user asks.
 - **Workers:** branch `claude/<task-id>-<slug>`, one branch per registry task, open a PR. A worker may self-merge only when every condition in master-planner.md holds (CI green on head, tier tests independently confirmed, diff inside ownership, no conflicts, report committed, registry updated by the Master Planner). Unsure means stop at `review`.
 - **Worktrees:** git worktrees exist only on the user's PC and are user-driven. Cloud sessions are isolated by container plus branch. No session removes a worktree.
-- **Branch deletion:** only merged worker task branches, under the 02-10-26 standing consent, with an Approvals Log row in `process/archive/index.md` first. Every other branch needs per-branch user approval.
+- **Branch deletion:** only merged worker task branches, under the 02-10-26 standing consent, with an Approvals Log row in `process/archive/index.md` first. Every other branch needs per-branch user approval. Measured 03-10-26: a cloud session cannot delete branches (git push --delete fails, REST DELETE returns 403 from the proxy, no MCP tool); the user deletes them.
 - **Shared files** (`.gitignore`, all-context.md, CLAUDE.md): one owning lane at a time.
 - **Commits:** conventional prefix (`feat|fix|docs|spec|process|phase|chore|refactor|test`).
 
