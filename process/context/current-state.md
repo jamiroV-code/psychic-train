@@ -7,47 +7,47 @@ date: 03-10-26
 
 # Current State
 
-**Stamp: commit `0004d5b` on branch `claude/pensive-albattani-ou0cgv`, observed 2026-10-03T05:18:25Z (UTC).** Base: `origin/main` at `5878b16` (merge of PR #12). "Observed" rows were read or run at that stamp; "Historical" rows are copied and labelled with their source.
+**Stamp: commit `0f3dfa3` (`origin/main`, merge of PR #16), observed 2026-10-03T06:42Z (UTC) from branch `claude/pensive-albattani-ou0cgv`, which equals `origin/main` plus uncommitted T16/T20 archival edits.** "Observed" rows were read or run at that stamp; "Historical" rows are copied and labelled with their source commit.
 
-Staleness rule (master-planner.md): stale when the stamp is not an ancestor of HEAD (`git merge-base --is-ancestor 0004d5b HEAD` fails) or when more than 10 non-cache commits landed since it (`git log 0004d5b..HEAD --oneline -- . ':(exclude)api/data/cache' | wc -l`). Nightly bot snapshot commits do not make it stale; neither do the Gate 4 closeout commits that record this refresh.
+Staleness rule (master-planner.md): stale when the stamp is not an ancestor of HEAD (`git merge-base --is-ancestor 0f3dfa3 HEAD` fails) or when more than 10 non-cache commits landed since it (`git log 0f3dfa3..HEAD --oneline -- . ':(exclude)api/data/cache' | wc -l`). Nightly bot snapshot commits do not make it stale.
 
-## Observed (2026-10-03T05:18Z UTC, commit 0004d5b)
+## Observed (2026-10-03T06:42Z UTC, commit 0f3dfa3)
 
 | Fact | Value | Command |
 |---|---|---|
-| Branch | `claude/pensive-albattani-ou0cgv`; PR #13 open, not merged; all commits to `0004d5b` pushed; the Gate 4 closeout commits are local | `git status -sb` |
-| Last commits | `0004d5b` (Gate 4 EVL records), `d09d92e` (Gate 4 report), `a96d7b3` (D-12), `753db23` (budget block); Gate 3: `0b3c9bf`, `eee7709`; base `5878b16` | `git log --oneline -8` |
-| Working tree | clean at `0004d5b` before the closeout edits (the closeout edits are process/ text only) | `git status --short` |
-| Entry files | `CLAUDE.md` 13,443 B, `AGENTS.md` 12,572 B; identical ENTRY-SET block; no `@`-imports | `wc -c CLAUDE.md AGENTS.md` |
+| Working tree | HEAD = `origin/main` `0f3dfa3`; uncommitted: T16/T20 task folders moved to `completed/`, MASTER-PLAN.md, archive/index.md, this file (process/ text only) | `git status --short` |
+| Entry files | `CLAUDE.md` 13,443 B, `AGENTS.md` 12,572 B, `north-star.md` 5,225 B | `wc -c` |
 | `process/context/all-context.md` | 193 lines, 11,380 B | `wc -lc` |
-| Remote refs | 14: `main`, this branch, 12 older branches (MASTER-PLAN.md T23/T25) | `git branch -r` |
+| Remote heads | 13: `main` plus 12 older branches (MASTER-PLAN.md T23/T25); `claude/t16-*` and `claude/t20-*` absent (empty `git ls-remote`); `delete_branch_on_merge` itself unverified | `git ls-remote --heads origin` |
 | Workflows | 6: `ci.yml` plus five snapshot jobs | `ls .github/workflows` |
-| `.agents/skills` | 339 tracked regular files (a copy, not a symlink) | `git ls-files .agents/skills \| wc -l` |
-| `web/tsconfig.tsbuildinfo` | untracked and ignored since T20 (`54157e2`, PR #15) | `git ls-files web/tsconfig.tsbuildinfo` |
-| Tests, MEASURED at `753db23` (`git diff --quiet 753db23 HEAD -- api web` rc=0, so still current) | pytest 873 passed, 1 skipped, 5 deselected, 1 xfailed (163.75 s); vitest 223 passed (30 files); `tsc --noEmit --incremental false` exit 0; 05:09-05:12Z | all-tests.md, Current evidence (Gate 4) |
-| CI | `ee72237` and `cc0c7f6` fully green; `d09d92e` web job green, api job pending when the EVL looked; newest runs at this stamp still in progress, to be confirmed by `gh run list` | `gh run list` |
+| `.agents/skills` | 339 tracked regular files, not a symlink | `git ls-files .agents/skills \| wc -l` |
+| `web/tsconfig.tsbuildinfo` | not tracked (empty `git ls-files`; T20, `54157e2`) | `git ls-files web/tsconfig.tsbuildinfo` |
+| `README.md` | present at repo root (T16, `351f946`) | `ls README.md` |
+| api/web diff vs `753db23` | only the `web/tsconfig.tsbuildinfo` deletion (1 line) | `git diff --stat 753db23 HEAD -- api web` |
+| Tests, HISTORICAL, measured at `753db23`, NOT re-run now | pytest 873 passed, 1 skipped, 5 deselected, 1 xfailed; vitest 223 passed (30 files); `tsc --noEmit --incremental false` exit 0 | all-tests.md, Current evidence (Gate 4) |
+| CI | PR #14 and #15 CI green; independent vc-tester PASS on `54157e2` (06:33Z); not re-queried now | MASTER-PLAN.md T16, T20 |
 
-### Validator results (re-run 2026-10-03 at 0004d5b plus closeout edits; equal to the baseline, no new failure)
+### Validator results (re-run 2026-10-03T06:42Z at 0f3dfa3 plus archival edits; only validate-guide-sync changed)
 
 | Validator | Failures | Warnings | Note |
 |---|---|---|---|
 | validate-context-discovery | 1 | 0 | `.agents/skills does not resolve to .claude/skills` (baseline) |
 | validate-skills | 1 | 0 | same cause (baseline) |
-| validate-guide-sync | 1 | 0 | `README.md does not exist` (baseline) |
+| validate-guide-sync | 0 | 0 | was 1 (README.md missing); fixed by T16 |
 | validate-agent-parity (non-strict) | 0 | 18 | baseline `.claude/agents` vs `.codex/agents` drift |
 | validate-plan-inventory | 0 | 6 | baseline |
-| validate-all-context, protocol-wiring, protocol-discovery, kit-portability, skill-invocation-wiring, skill-routing, skill-keywords | 0 | 0 | clean |
+| validate-all-context (re-run now), protocol-wiring, protocol-discovery, kit-portability, skill-invocation-wiring, skill-routing, skill-keywords | 0 | 0 | clean |
 | `discover-context.mjs --check-routing` | in sync | | |
 
-Outside the baseline: `validate-backlog-notes` reports 45 failing notes (older note schema); predates this program.
+Outside the baseline: `validate-backlog-notes` 45 failing notes (older schema), recorded earlier, not re-run now.
 
 ## Gate status
 
 Gates 2, 3 and 4 are complete. Reports are in `process/general-plans/active/master-planner-recovery_02-10-26/`: `..._GATE2-REPORT_03-10-26.md`, `..._GATE3-REPORT_03-10-26.md` (probe token figures), `..._GATE4-REPORT_03-10-26.md` (test tiers, bounded retry with a same-failure stop, no-re-run rule, planner budget). The Gate 4 independent EVL (vc-tester, iteration 002) was green at cycle 0. Gates 5 and 6 remain, so the plan stays in `active/`.
 
-**Gate 5 prep (03-10-26, local commits after `125d39b`, not pushed):** worker briefs and envelopes for T20 and T16 written (`process/general-plans/active/t20-untrack-tsbuildinfo_03-10-26/`, `.../t16-root-readme_03-10-26/`); G5-1 and G5-2 silent; registry T16, T20 `approved`, T17 `cancelled`; user decisions in the Approvals Log. Update 03-10-26: T16 merged as PR #14 (`351f946`) and T20 as PR #15 (`54157e2`), CI green, independent vc-tester PASS on `54157e2`; registry `accepted`, not yet `archived`.
+**Gate 5 pilot (03-10-26):** T16 merged as PR #14 (`351f946`), T20 as PR #15 (`54157e2`); CI green; vc-tester PASS on `54157e2`; registry `archived`, task folders under `process/general-plans/completed/`; archive_session by the planner and the Gate 5 report remain.
 
-Planner budget, MEASURED by the PLANNER-BUDGET block in master-planner.md section 12 (bytes only), re-run after the closeout edits: fixed part 48,346 B of 56,000 (headroom 7,654 B); with an 8,000 B brief 56,346 B of 64,000; with master-planner.md 64,670 B (informational, not a cap). At the Gate 4 execute commit the fixed part was 47,699 B (headroom 8,301 B); the closeout added 647 B. Tokens as bytes/4 are ESTIMATED.
+Planner budget: run the PLANNER-BUDGET block in master-planner.md section 12 (bytes only); figures are in the closeout reply, not stored here.
 
 ## Not run or unverified at the stamp
 
@@ -56,7 +56,7 @@ Planner budget, MEASURED by the PLANNER-BUDGET block in master-planner.md sectio
 - Compliance with the retry, same-failure and no-re-run rules (observable only at the Gate 6 pilot).
 - Snapshot crons firing at their new times; the two canary jobs.
 - Anything on the user's PC (deployed app, Task Scheduler, Tailscale, Windows deploy scripts, `.agents/skills` there) and live provider reachability.
-- Branch-delete mechanism and worker merge/archive tools (Gate 6 pilot).
+- Branch-delete mechanism (worker branches are absent on origin, setting unread) and archive_session.
 
 ## Historical (copied, not re-run)
 
@@ -68,6 +68,6 @@ Planner budget, MEASURED by the PLANNER-BUDGET block in master-planner.md sectio
 
 ## Next actions
 
-1. Done: PR #13 merged, T20 and T16 workers spawned from `main` and merged (cost 1.64 of the 40 USD ceiling).
-2. Next: archive_session and task-folder archival (registry `archived`), Gate 5 report. Home-PC step before the first pull that carries T20: if `git status --short web/tsconfig.tsbuildinfo` shows `M`, run `git checkout -- web/tsconfig.tsbuildinfo` first.
+1. Done: PR #13 merged; T20 and T16 merged (cost 1.64 of the 40 USD ceiling); task folders archived.
+2. Next: planner runs archive_session, then the Gate 5 report. Home-PC step before the first pull that carries T20: if `git status --short web/tsconfig.tsbuildinfo` shows `M`, run `git checkout -- web/tsconfig.tsbuildinfo` first.
 3. Open Questions 10 and 12 stay open and non-blocking. Registry: MASTER-PLAN.md.
