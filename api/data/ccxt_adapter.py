@@ -513,6 +513,11 @@ def fetch_ohlcv(
         if daily.status == "bad_symbol":
             return _result(symbol, "1w", cache.read_ohlcv(symbol, "1w"), "bad_symbol", daily.fetched_at)
         weekly_df = _derive_weekly_from_daily(daily.df, source=_source_label(exchange, daily.df))
+        if _cached_reads_only.get():
+            # S8: a read never writes; the worker derives and stores `1w`.
+            if weekly_df.empty:
+                weekly_df = cache.read_ohlcv(symbol, "1w")
+            return _result(symbol, "1w", weekly_df, daily.status, daily.fetched_at, daily.note)
         if not weekly_df.empty:
             # `1w` stores its daily leg's fetch time (B1).
             cache.write_ohlcv(symbol, "1w", weekly_df, fetched_at=daily.fetched_at)

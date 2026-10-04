@@ -109,6 +109,10 @@ class RefreshWorker:
         self._pair_locks: dict[tuple[str, str], threading.Lock] = {}
         self._queued: set[tuple[str, str]] = set()
         self._now_requested = False
+        # Pairs whose fetch failed since the last tick: woken drains skip them
+        # until the next (backoff-aware) tick, so repeated page loads cannot
+        # turn a failing pair into a stream of exchange calls.
+        self._failed_since_tick: set[tuple[str, str]] = set()
         # Held for the whole of one run (tick or drain).
         self._run_mutex = threading.Lock()
 
@@ -148,7 +152,8 @@ class RefreshWorker:
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout)
         if pool is not None:
-            pool.shutdown(wait=True, cancel_futures=True)
+            # Never block shutdown on an in-flight ccxt call.
+            pool.shutdown(wait=False, cancel_futures=True)
 
     # ------------------------------------------------------------- requests
     def request_refresh(self, symbol: str, timeframe: str) -> bool:
@@ -180,9 +185,21 @@ class RefreshWorker:
         return self.delay_seconds if self.delay_seconds > self.interval_seconds else 0.0
 
     # ----------------------------------------------------------------- loop
+    def _next_at(self, delay: float) -> pd.Timestamp | None:
+        try:
+            return self._clock() + pd.Timedelta(seconds=delay)
+        except Exception:
+            return None
+
+    def _remaining(self, fallback: float) -> float:
+        try:
+            return (self.next_tick_at - self._clock()).total_seconds()
+        except Exception:
+            return fallback
+
     def _loop(self) -> None:
         delay = self.first_delay_seconds
-        self.next_tick_at = self._clock() + pd.Timedelta(seconds=delay)
+        self.next_tick_at = self._next_at(delay)
         while not self._stopping.is_set():
             try:
                 woken = self._wake.wait(max(delay, 0.0))
@@ -195,14 +212,14 @@ class RefreshWorker:
                         self._now_requested = False
                     if full:
                         self.run_tick()
-                        self.next_tick_at = self._clock() + pd.Timedelta(seconds=self.delay_seconds)
+                        self.next_tick_at = self._next_at(self.delay_seconds)
                     else:
                         self.drain_queue()
-                delay = (self.next_tick_at - self._clock()).total_seconds()
+                delay = self._remaining(self.delay_seconds)
             except Exception as exc:  # the loop itself must never die
                 logger.warning("refresh loop iteration failed: %s", type(exc).__name__)
                 delay = self.interval_seconds
-                self.next_tick_at = self._clock() + pd.Timedelta(seconds=delay)
+                self.next_tick_at = self._next_at(delay)
 
     def _take_queue(self) -> list[tuple[str, str]]:
         with self._state_lock:
@@ -213,6 +230,8 @@ class RefreshWorker:
     def run_tick(self) -> dict[str, int]:
         """One full refresh: the plan plus anything queued."""
         self.last_tick_started = self._clock()
+        with self._state_lock:
+            self._failed_since_tick.clear()
         try:
             self._retry_markets()
         except Exception as exc:
@@ -240,8 +259,12 @@ class RefreshWorker:
         return counts
 
     def drain_queue(self) -> dict[str, int]:
-        """Refresh only the queued pairs (a woken run between ticks)."""
-        return self._run_pairs(self._take_queue())
+        """Refresh only the queued pairs (a woken run between ticks). Pairs
+        that failed since the last tick wait for the next tick."""
+        queued = self._take_queue()
+        with self._state_lock:
+            pairs = [key for key in queued if key not in self._failed_since_tick]
+        return self._run_pairs(pairs)
 
     # ---------------------------------------------------------------- pairs
     def _pair_lock(self, key: tuple[str, str]) -> threading.Lock:
@@ -279,12 +302,16 @@ class RefreshWorker:
             if not force and self._is_fresh(symbol, timeframe, self._clock()):
                 return "fresh"
             result = self._fetch(symbol, timeframe, exchange=self._exchange)
-            return str(getattr(result, "status", "unavailable"))
+            status = str(getattr(result, "status", "unavailable"))
         except Exception as exc:
             logger.warning("refresh %s %s failed: %s", symbol, timeframe, type(exc).__name__)
-            return "error"
+            status = "error"
         finally:
             lock.release()
+        if status not in _SUCCESS:
+            with self._state_lock:
+                self._failed_since_tick.add((symbol, timeframe))
+        return status
 
     def refresh_pair(self, symbol: str, timeframe: str) -> list[str]:
         """Refresh one pair; `1d` is followed by its derived `1w`. Returns the
@@ -331,11 +358,14 @@ def interval_from_env(env=None) -> float:
 
 
 def install_worker(worker: RefreshWorker, start: bool = True) -> RefreshWorker:
-    """Register `worker` as the process worker and hook it into the adapter."""
+    """Register `worker` as the process worker and hook it into the adapter.
+    A previously installed worker is stopped first."""
     global _worker, _disabled_reason
     with _registry_lock:
-        _worker = worker
+        previous, _worker = _worker, worker
         _disabled_reason = None
+    if previous is not None and previous is not worker:
+        previous.stop()
     ccxt_adapter.set_refresh_hook(worker.request_refresh)
     if start:
         worker.start()
@@ -350,7 +380,14 @@ def start_from_env(env=None) -> RefreshWorker | None:
         with _registry_lock:
             _disabled_reason = reason
         return None
-    return install_worker(RefreshWorker(interval_seconds=interval_from_env(env)))
+    try:
+        return install_worker(RefreshWorker(interval_seconds=interval_from_env(env)))
+    except Exception as exc:
+        # A worker that cannot start must not take the API down: reads fall
+        # back to the S1 fetch-through.
+        logger.warning("refresh worker failed to start: %s", type(exc).__name__)
+        stop_worker(reason="start-failed")
+        return None
 
 
 def stop_worker(reason: str = "stopped") -> None:

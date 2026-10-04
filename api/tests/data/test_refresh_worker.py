@@ -299,6 +299,13 @@ def test_unavailable_streak_backs_off_and_resets_on_success(adapter_env):
     for _ in range(3):
         worker.run_tick()
         delays.append((worker.delay_seconds, worker.backoff_seconds))
+    # Page loads cannot bypass the backoff: a pair that failed this tick is
+    # not refetched by a woken drain, only by the next tick.
+    calls = []
+    worker._fetch = lambda *a, **k: calls.append(a) or Result(status[0])
+    worker.request_refresh("BTC", "1h")
+    worker.drain_queue()
+    assert calls == []
     status[0] = "ok"
     worker.run_tick()
     delays.append((worker.delay_seconds, worker.backoff_seconds))
