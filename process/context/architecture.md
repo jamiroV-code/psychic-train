@@ -22,7 +22,7 @@ Carved out of all-context.md on 03-10-26. The earlier long-form layout, stack an
 | `web/e2e/` | Playwright specs (screener, regime, narrative, pairs, onchain, contrast) |
 | `api/routers/` | `screener.py`, `regime.py`, `narrative.py`, `pairs.py`, `onchain_activity.py`, `watchlist.py` |
 | `api/analytics/` | `indicators/`, `confidence/`, `regime/`, `narrative/`, `cointegration/`, `onchain/`, `screener_board.py` |
-| `api/data/` | provider adapters (`*_adapter.py`), `cache.py`, config JSON (watchlist, pairs universe, narratives, chains) |
+| `api/data/` | provider adapters (`*_adapter.py`; `lse_adapter.py` and `equities_store.py` are private-use, non-redistributable), `cache.py`, `freshness.py` (pure staleness rules; `fetched_at` sidecar `<tf>.meta.json`; 200-bar sub-daily retention), `refresh_worker.py` (background refresh, env `SCREENER_REFRESH_WORKER` 0/1/unset = on), config JSON (watchlist, pairs universe, narratives, chains) |
 | `api/models/` | pydantic response models per router |
 | `api/scripts/` | refresh, backfill, snapshot, compute and diagnostic scripts; `BOOTSTRAP.md` runbook |
 | `api/tests/` | pytest: `analytics/`, `data/`, `routers/`, `scripts/`, `deploy/` |

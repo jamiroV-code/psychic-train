@@ -27,6 +27,10 @@ Do not load the whole `process/context/tests/` folder by default. Start here, th
 
 Which tests to run per change, the full commands, the test budget, bounded retry and the no-re-run rule: the RT0-RT4 table in operating-instructions.md (single home; this file holds detail and history).
 
+## Seeded-stack E2E: refresh worker off (A3, 04-10-26)
+
+Run E2E for the seeded stack with `SCREENER_REFRESH_WORKER=0` (the S8 background refresh worker is on when the variable is unset; pytest's conftest already sets `0`). Example: `cd web && SCREENER_REFRESH_WORKER=0 pnpm test:e2e -- screener` (plan batch 1 G-S2-8). Main baseline after batch 1 (`605424d`, CI-style, not run locally by UPDATE PROCESS): pytest 963 passed, 2 skipped, 5 deselected, 0 xfailed; vitest 245 in 33 files; `tsc` 0; `build:islands` 0. The 2 skips include G-S3-6 `test_probe_fixture_parses` (needs the user's LSE probe fixture).
+
 ## Current evidence (Gate 4)
 
 Measured once per suite by the Gate 4 execute agent at commit `753db23` (api/ and web/ identical to `96d2d18` and `ee72237`), 2026-10-03 UTC, after `uv sync --project api --frozen` and `cd web && pnpm install --frozen-lockfile`, with `UV_FROZEN=1`:

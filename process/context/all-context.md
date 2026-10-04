@@ -163,7 +163,7 @@ Carry these into any plan that touches them. Do not resolve them silently.
 | Product direction | Settled 02-10-26: personal-use tracker, data not verdicts (north-star.md) |
 | Crypto data | Settled and implemented: ccxt (Hyperliquid), no key |
 | Macro liquidity / regime input | Implemented both ways: LiqTide endpoint and FRED-based reproduction |
-| Equity data provider | Settled: London Strategic Edge, verdict ADOPT-WITH-LIMITS (2026-09-24), used under its private-use terms; no adapter yet; the equities page is queued as registry task P6 |
+| Equity data provider | Settled: London Strategic Edge, verdict ADOPT-WITH-LIMITS (2026-09-24), used under its private-use terms; adapter `api/data/lse_adapter.py` and `equities_store.py` merged (T33, private use, non-redistributable), live-shape probe pending; the equities page is queued as registry task P6 |
 | Persistence layer | Settled and in use: Parquet + DuckDB |
 | Narrative / mindshare data | Free proxies (CoinGecko, pytrends, Reddit, Hyperliquid volume); redesign to user-defined coin baskets queued as P5; each v1 signal needs a live probe on the user's PC |
 | Testing strategy | Settled: pytest + vitest + Playwright; risk tiers RT0-RT4 in operating-instructions.md |

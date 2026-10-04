@@ -78,6 +78,10 @@ Read this file when:
 **Recommendation:** ccxt against a major exchange for all OHLCV; CoinGecko for cross-sectional
 market data. Both are free and neither requires a key for what my_site needs.
 
+### Crypto OHLCV cache freshness (04-10-26, screener batch 1)
+
+`ccxt_adapter` cache reads go through `api/data/freshness.py` (a forming candle is not fresh; staleness per timeframe; `1w` judged on its daily bar). Each `cache/ohlcv/<SYM>/<tf>.parquet` has a `<tf>.meta.json` sidecar holding `fetched_at`. 15m/1h/4h keep 200 bars, `1d` is never trimmed. An in-process refresh worker (`SCREENER_REFRESH_WORKER`) refreshes the watchlist about every 15 min; live behaviour awaits PC probes P-S1-1 and P-S8-1.
+
 ### Deep-history fetch pattern + Hyperliquid history floor (new, 28-09-26, pair screener v1)
 
 `ccxt_adapter.fetch_ohlcv(symbol, "1d", since=<explicit early UTC date>, limit=5000)` is the
@@ -213,8 +217,9 @@ difference, not a search failure.
 
 **Verdict, 2026-09-24: London Strategic Edge is ADOPT-WITH-LIMITS (private use).** Verified via
 `process/general-plans/completed/lse-data-verification_17-09-26/VERDICT.md` (and
-`findings.md` in the same task folder) — no equity adapter is built yet; equities stay
-out of scope for now ("crypto only for now"). The unverified caveat below is retired.
+`findings.md` in the same task folder). Adapter built 04-10-26 (T33): `api/data/lse_adapter.py` +
+`equities_store.py`, private use, `redistributable=False`; live response shape unverified until the user runs
+`s3-probe/lse_probe.py` (key in env `LSE_API_KEY`). The equities page is not built yet. The unverified caveat below is retired.
 
 | Provider | Free-tier limits | Caveats |
 |---|---|---|
@@ -237,7 +242,7 @@ out of scope for now ("crypto only for now"). The unverified caveat below is ret
   tried on 2026-09-24. Treat as dead until re-checked; do not assume it still works.
 - **IEX Cloud** — sunset in 2025. Do not build on it.
 
-**Adapter rules for a future `api/data/` equity adapter** (not built yet — separate, later plan
+**Adapter rules for the `api/data/` equity adapter** (built as `lse_adapter.py`, T33; page = later plan
 gated on this verdict):
 
 1. Drop bars not on the real exchange calendar (LSE returns holiday/weekend bars).
