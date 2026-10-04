@@ -2,13 +2,14 @@
 phase: final-handover-and-acceptance-record
 date: 2026-10-03
 status: COMPLETE_WITH_GAPS
+accepted: by the user 03-10-26 (table: 10 PASS, 1 PARTIAL AC-R1, 0 OPEN)
 feature: general-plans
-plan: process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md
+plan: process/general-plans/completed/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md
 ---
 
 # Master-planner recovery: final handover and acceptance record (docs only)
 
-**TL;DR:** The recovery program is done: slim role-based entry files, one registry, written protocols, a bounded-retry test policy, and a worker pilot of eight self-merged tasks (all independently verified, 0 fix cycles stated, 6.9042678 USD of 40). Acceptance: 10 PASS, 1 PARTIAL, 0 OPEN. Not achieved: nothing is platform-enforced; the planner cannot delete branches. Recommendation: archive the plan folder after you accept this handover. The planner now pauses until you say go; no product work is started.
+**TL;DR (ACCEPTED by the user 03-10-26; plan folder archived to `completed/`):** The recovery program is done: slim role-based entry files, one registry, written protocols, a bounded-retry test policy, and a worker pilot of eight self-merged tasks (all independently verified, 0 fix cycles stated, 6.9042678 USD of 40). Acceptance: 10 PASS, 1 PARTIAL, 0 OPEN. Not achieved: nothing is platform-enforced; the planner cannot delete branches. Recommendation: archive the plan folder after you accept this handover. The planner now pauses until you say go; no product work is started.
 
 ## What exists now
 
@@ -19,7 +20,7 @@ plan: process/general-plans/active/master-planner-recovery_02-10-26/master-plann
 
 ## How a new session starts
 
-The first message decides the role. `ROLE: WORKER` on line 1 means worker set: CLAUDE.md plus the envelope (at most 8,000 B), the named PLAN/SPEC, and operating-instructions.md only if named (cap 36,000 B; 43,000 with it). Anything else means planner set: CLAUDE.md, north-star.md, current-state.md, MASTER-PLAN.md, the all-context.md router part, and the task brief (cap 64,000 B). Measured now: planner fixed part 48,751 B against the 56,000 B gate (headroom 7,249); CLAUDE.md 13,443 B, north-star.md 5,225 B, current-state.md 5,748 B, MASTER-PLAN.md 18504 B, router part 5,831 B. MASTER-PLAN.md is at 18504 of its 19,000 B ceiling (above its 17,500 target; headroom 496 B): trim before a large registry edit.
+The first message decides the role. `ROLE: WORKER` on line 1 means worker set: CLAUDE.md plus the envelope (at most 8,000 B), the named PLAN/SPEC, and operating-instructions.md only if named (cap 36,000 B; 43,000 with it). Anything else means planner set: CLAUDE.md, north-star.md, current-state.md, MASTER-PLAN.md, the all-context.md router part, and the task brief (cap 64,000 B). Measured now: planner fixed part 48,995 B against the 56,000 B gate (headroom 7,005); CLAUDE.md 13,443 B, north-star.md 5,225 B, current-state.md 5,965 B, MASTER-PLAN.md 18504 B, router part 5,831 B. MASTER-PLAN.md is at 18504 of its 19,000 B ceiling (above its 17,500 target; headroom 469 B): trim before a large registry edit.
 
 ## Acceptance (plan section 10)
 
@@ -59,7 +60,7 @@ Eight worker tasks, all self-merged, 0 fix cycles stated, each independently ver
 - `validate-backlog-notes` fails 45 notes (older schema); `.agents/skills` is a real copy, an accepted baseline failure (H1, T17 cancelled); agent-parity shows 18 baseline warnings.
 - Repo visibility: master-planner.md line 78 said private; the repo is public (G5-K8 known risk, left as is). Measured 03-10-26: `allow_auto_merge` true and `delete_branch_on_merge` true, which explains why worker branches vanished at merge; line 78 now states this.
 - Eight old sessions were archived at the user's request (reversible); two items live only in their transcripts: P3 'app name' and 'owl asset' decisions, and the home-PC Stop-Process workaround.
-- The big-task subagent lane cap values (count, dollar cap) are not decided.
+- Big-task subagent lane caps were approved by the user 03-10-26: 3 subagents, 15 USD per slice, one level deep (RT3/RT4 slices only).
 - Playwright, island build, and the user's PC (deploy, Task Scheduler, Tailscale) are not verified locally; snapshot crons firing is unverified.
 
 ## Open registry rows (not archived)
@@ -68,8 +69,8 @@ Awaiting the user or product: T3 (AC-14 walkthrough), T4 (Reddit secrets), T7 (t
 
 ## Open decisions for the user
 
-Accept or amend this handover; delete the three held branches; approve cap values for the capped subagent lane (or leave it off); say go and choose the first product SPEC (personal-tracker-realignment, narrative-baskets, LSE equities); decide T26 and R12.
+Handover ACCEPTED 03-10-26. Remaining: delete the three held branches; say go and choose the first product SPEC (personal-tracker-realignment, narrative-baskets, LSE equities); decide T26 and R12. (Next-phase choice 03-10-26: 'Plan the screener realignment'; RESEARCH started read-only ~20:25Z, no worker.)
 
 ## Next planner step
 
-Pause until the user says go. No product work is started. Plan archival: the plan says it stays in `active/` until done; recommendation: archive `master-planner-recovery_02-10-26/` to `completed/` after the user accepts this handover (proposal only, not applied).
+Accepted 03-10-26. The plan folder was archived to `completed/` (docs only) after acceptance. The planner is doing read-only RESEARCH on the personal-tracker-realignment SPEC; no implementation, no worker; each phase transition needs the user's go.

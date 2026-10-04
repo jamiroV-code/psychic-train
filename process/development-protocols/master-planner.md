@@ -12,7 +12,7 @@ metadata:
 
 # Master Planner Protocol
 
-**The Master Planner plans, registers, dispatches, monitors and accepts; it never implements. Workers execute one registry task each on their own branch. A task becomes `accepted` only on independent evidence, never on a worker's word.** Registry: `process/MASTER-PLAN.md`. Source plan: `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md` (section 4). Decisions: decisions.md (D-5 to D-8).
+**The Master Planner plans, registers, dispatches, monitors and accepts; it never implements. Workers execute one registry task each on their own branch. A task becomes `accepted` only on independent evidence, never on a worker's word.** Registry: `process/MASTER-PLAN.md`. Source plan: `process/general-plans/completed/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md` (section 4). Decisions: decisions.md (D-5 to D-8).
 
 ## 1. Roles and entry sets
 
@@ -81,7 +81,7 @@ Nothing above is platform-enforced (repo PUBLIC, verified 03-10-26 with `gh api 
 
 - A WORKER is a direct-lane session: it does not orchestrate, spawn sessions or run the multi-agent RIPER chain. Tiny tasks (RT0 or RT1, about 100 lines or less, no schema, auth, API, billing or migration surface) use the QUICK FIX lane; one `vc-quick-fix-agent` spawn is not a subagent chain. Every other worker writes a compact validate-contract in its own task folder (the gate list from the envelope) before editing, then edits and runs its gates.
 - Workers commit on `claude/<task-id>-<slug>` and open a PR. The Master Planner session and direct user work commit on `main`, only when the user asks.
-- **Big-task rule (decided 03-10-26; cap values pending user approval):** a large product feature is planned and validated by the planner, then cut into bounded slices: one worker per slice, with owned files, a test tier and a budget. Default for small tasks stays no subagents. For a large risky slice (RT3 or RT4) the envelope may allow a CAPPED subagent lane: a subagent count, a dollar cap, one level deep, and every subagent listed in the worker report. The planner runs its own independent check after every worker. The cap values are not decided: the planner proposes them and the user must approve before any envelope uses the lane. (Follow-up to Open Question 12.)
+- **Big-task rule (decided 03-10-26: 3 subagents, 15 USD, 1 level):** a large product feature is planned and validated by the planner, then cut into bounded slices: one worker per slice, with owned files, a test tier and a budget. Default for small tasks stays no subagents. For a large risky slice (RT3 or RT4) the envelope may allow a CAPPED subagent lane: at most 3 subagents per slice, a 15 USD cap per slice, one level deep, and every subagent listed in the worker report. The planner runs its own independent check after every worker. The cap values were approved by the user 03-10-26 and apply to RT3/RT4 slices only. (Follow-up to Open Question 12.)
 - Retry budget: see "Bounded retry" in operating-instructions.md (single home: 2 fix cycles per failing gate, same failure twice stops, 10-cycle outer ceiling).
 
 ## 7. Isolation

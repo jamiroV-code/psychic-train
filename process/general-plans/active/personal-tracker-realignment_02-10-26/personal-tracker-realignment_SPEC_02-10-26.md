@@ -292,3 +292,48 @@ Names only, derived from reads. "Audit" = file likely carries verdict wording an
 | 2 | Hard cap of 30 coins (US-14, outcome 18, AC-26); cap applies to crypto only. |
 | 3 and 4 | Narrative decisions: moved in full to the narrative-baskets SPEC. |
 | Split (02-10-26) | Narrative requirements moved out; documentation requirements moved to the housekeeping plan; AC-18 split; IDs kept stable. |
+
+## Decisions 03-10-26 (after RESEARCH)
+
+User answers (AskUserQuestion, all recommended options). Research facts: backlog note `screener-research-findings_NOTE_03-10-26.md`.
+
+1. **D1 benchmark:** REMOVE the automatic BTC/HYPE benchmark switch and label (`select_active_benchmark`, the 'Benchmark:' label, `BenchmarkSelection`/`active_benchmark`). BTC and HYPE are always fixed reference lines on the spaghetti chart.
+2. **D2 saved layout** (groups, coin order, per-coin chart toggles): a SERVER FILE next to `watchlist.json` (survives browser clearing, shared across devices).
+3. **D3 page load:** show cached data immediately and refresh behind it when data is older than 15 minutes (not blocking).
+4. **D4 leg strip:** confirmed legs only (confirmed boundary to next confirmed boundary), over ALL available BTC daily history, boundary dates marked.
+5. **D5 history kept:** about 200 bars per timeframe (15m about 2 days). RSI(14, Wilder) is computed per selected timeframe from that timeframe's own bars. Weekly bars stay DERIVED from daily (about 200 daily bars, about 28 weekly bars, enough for weekly RSI(14)).
+6. **D6 spaghetti span:** same bars as the board per timeframe (15m ~2 days, 1h ~8 days, 4h ~33 days, 1d ~200 days). TENSION flagged: 1w derived from ~200 daily bars gives ~28 weeks, not 200. PLAN must resolve this.
+7. **D7 drill-down:** keeps its own timeframe toggle, price chart and RSI; the scalp view is dropped; an SMA(60) line is optional.
+8. **D8 over 30 coins:** keep all existing coins, BLOCK new adds with a clear message until under 30 (API-enforced); nothing is removed automatically.
+9. **D9 equities:** daily and weekly only (1d/1w), same coin box (price, % change, RSI); no intraday until verified from the user's PC. LSE = London Strategic Edge (not the London Stock Exchange; see `VERDICT.md`).
+10. **D10 LSE key:** an environment variable on the user's PC, never in the repo or any file; a missing key shows the equities section as unavailable.
+11. **D11 equities cache:** local parquet on the user's PC, git-ignored, tagged `redistributable=false`.
+
+**Open after RESEARCH:** none of the 11 research questions remains open except the D6 tension and the P4/P6 split into slices; both are handled in INNOVATE.
+
+## Defect findings and decisions 03-10-26 (RESEARCH round 2)
+
+
+**F1 Charts must show which day (daily) or time (15m etc.) they display, be current, and be checked against the real world.** Causes: (A) `api/data/ccxt_adapter.py` `_cache_is_fresh` (~179-191) and the cache-first return in `fetch_ohlcv` (~352) treat the forming candle as fresh until it closes, so its close is frozen up to one bar (~24h for 1d; 1w derives from 1d). (B) Incremental refresh with since+limit=500 on Hyperliquid returns the OLDEST 500 candles after `since` (ccxt 4.5.78 `filter_by_since_limit`, tail=False); a cache >500 bars behind (15m ~5.2 d, 1h ~20.8 d, 4h ~83 d) never catches up in one refresh. (C) No OHLCV refresh is scheduled on the PC (`deploy/register-tasks.ps1` creates only mysite-api and mysite-web; the nightly `cache/ohlcv` commit is inert, git-ignored). (D) No labels: `simple-lines.svelte` `ticks={4}`, no format or tooltip; no as_of/last_bar/fetched_at in screener models; axis in browser-local zone, bars are UTC opens; forming last bar unmarked.
+Decision: every chart shows its last-bar time and age, with a plain "stale" marker when older than expected for its timeframe (no hidden refetch). Verify against exchange server time (ccxt `fetch_time`, `hyperliquid.py:117/420-431`) and the host clock. Fix A and B. PLAN a scheduled 15-minute refresh task on the user's PC (user said yes): touches `deploy/**` (RT4, needs a home-PC verification path; overlaps R12).
+
+**F2 Zoom and pan lost.** Before PR #9 commit `5adf7bf` the relative-performance chart (lightweight-charts ^5.0.0 defaults) zoomed ; MiniChart had scroll/scale off; `simple-lines.svelte` (LayerChart 2.5.0) has no transform or handlers. LayerChart docs list a Chart `transform` prop (pan, zoom, pinch, scrollActivationKey, domainExtent): NOT verified against the installed package.
+Decision: ALL charts zoom and pan (wheel/pinch, drag, dbl-click reset), INCLUDING small coin-box charts. PLAN handles accidental zoom while scrolling and phones.
+
+**F3 Blurry axis numbers.** Labels are canvas-drawn (`simple-lines.svelte:67-79`) , no font set, no devicePixelRatio handling in `web/`, fractional widths. LayerChart Canvas DPR scaling UNVERIFIED (node_modules blocked by the scout hook).
+Decision: everything sharp. PLAN covers HiDPI rendering and explicit tick font/format; verifying needs a real browser at DPR 2 on the user's PC (Known-Gap).
+
+**F4 Wrong gain percentages.** `api/analytics/indicators/momentum.py:113-133` `compute_percent_change` = (last close - FIRST close of the whole cached DataFrame) / first close, so the "15m" chip is the change since the oldest cached bar; cache is unbounded; forming candle frozen (A); weekly has partial weeks. Tests pin only two-bar goldens (`test_momentum.py:171-184`).
+Decision: each chip = the CURRENT candle of its timeframe, open to latest price (15m = this candle, 1d = since 00:00 UTC, 1w = since Monday 00:00 UTC). Thin or missing data shows N/A, never 0.
+
+**F5 Remove the Composite / Confirmed / Candidate / In Focus / Emerging / trust % text.** Sources: `LegTimelineBanner.tsx` (composite_variant 'full (LiqTide)'; `benchmark.py` reasons such as 'BTC-dominant / early in the current leg' are a rule over boundary dates, not a duration) and `NarrativeStrip.tsx` (trust = REDUCED_SOURCE_TRUST_CAP 0.4, `api/analytics/narrative/trigger.py:38`).
+Decision: BOTH strips leave the screener; narrative stays on its own page (narrative-baskets SPEC). New: a BTC chart at the top with all BTC daily history, confirmed legs shaded, boundary dates marked (D4), and a CURRENT-LEG display: leg start date, days in leg, liquidity composite value and its 14-day change, last boundary z-score and confirmation state, composite variant, PLUS a computed estimated leg label with the numbers behind it visible. This is the user's explicit NARROW exception to the no-conclusions rule (decisions.md D-14): BTC leg chart label only. These fields do not exist (`CurrentLegState` has only boundaries, composite_variant, has_data; `compute_current_leg_state` does not return the composite); PLAN defines derivation and inputs.
+
+## Open for INNOVATE
+
+- Leg-label derivation and inputs.
+- Accidental-zoom policy (phones included).
+- PC scheduled-refresh mechanism (Task Scheduler) and verification.
+- Does D1 "remove benchmark switch" also drop the API fields?
+- Staleness thresholds per timeframe.
+- Slicing: shared files (`ccxt_adapter.py`/`screener_board.py` for F1+F4; `simple-lines.svelte` for F2+F3).

@@ -9,7 +9,7 @@ date: 03-10-26
 
 One entry per durable decision. Each entry carries: **Decision**, **Date**, **Reason**, **Alternatives** (considered and rejected), **Consequences**, **Status** (`active` or `superseded by D-n`). Full detail lives in the linked source; this file is the index. Add new entries at the bottom; never edit an old one except to mark it superseded.
 
-Abbreviations for sources: **RECOVERY** = `process/general-plans/active/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md`; **REALIGN** = the personal-tracker-realignment SPEC; **BASKETS** = the narrative-baskets SPEC (both in `process/general-plans/active/`).
+Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/master-planner-recovery_02-10-26/master-planner-recovery_PLAN_02-10-26.md`; **REALIGN** = the personal-tracker-realignment SPEC; **BASKETS** = the narrative-baskets SPEC (both in `process/general-plans/active/`).
 
 ## Index
 
@@ -128,3 +128,6 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/active/master-p
 - **Alternatives:** keep estimates labelled as such (branch B, not chosen).
 - **Consequences:** at `753db23`: pytest 873 passed, 1 skipped, 5 deselected, 1 xfailed; vitest 223 in 30 files; tsc exit 0. The island build and Playwright were not in the approval and are not re-measured locally. Standing authorization does not cover installs: any new install needs fresh approval.
 - **Status:** active.
+
+### D-14 Narrow exception: estimated leg label on the BTC chart only
+- **Decision:** 03-10-26 the user allows a computed estimated leg label (with its numbers visible) on the screener BTC leg chart only; no other page or coin box; the no-verdicts principle is unchanged. **Source:** REALIGN SPEC `## Defect findings and decisions 03-10-26`, F5. **Status:** active.
