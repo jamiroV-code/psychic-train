@@ -65,7 +65,12 @@ export function ScreenerBoard({
 
       <div className="screener-board__grid" data-testid="screener-board-grid">
         {board?.coins.map((panel) => (
-          <CoinPanel key={panel.symbol} panel={panel} onOpenDrillDown={setDrillDownSymbol} />
+          <CoinPanel
+            key={panel.symbol}
+            panel={panel}
+            onOpenDrillDown={setDrillDownSymbol}
+            timeframe={board.timeframe}
+          />
         ))}
       </div>
 

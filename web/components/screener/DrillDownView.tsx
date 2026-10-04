@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ChartFreshness } from "@/components/chart/ChartFreshness";
 import { MiniChart } from "@/components/chart/MiniChart";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
 import { fetchScalpView } from "@/lib/api/screener";
@@ -72,7 +73,10 @@ export function DrillDownView({ symbol, onClose, fetchScalp = fetchScalpView }: 
       ) : (
         <>
           {view?.chart.available ? (
-            <MiniChart price={view.chart.price} sma={view.chart.sma} height={240} />
+            <>
+              <MiniChart price={view.chart.price} sma={view.chart.sma} height={240} timeframe={view.timeframe} />
+              <ChartFreshness chart={view.chart} />
+            </>
           ) : (
             <DeadDataNotice
               testId="drilldown-chart-unavailable"

@@ -1,4 +1,5 @@
-"""Dual-timeframe RSI momentum + per-timeframe % change (RFC-001).
+"""Dual-timeframe RSI momentum (RFC-001). The per-timeframe gain chips moved
+to `gain.py` (T34 / S2).
 
 `pandas-ta-classic` Stage-0 confirmation (PLAN.md RFC-001 Stage 0): the
 DataFrame accessor pattern is `df.ta.rsi(length=N)` — `length` is the
@@ -26,11 +27,6 @@ MomentumStateLiteral = Literal["PASS", "FAIL", "insufficient"]
 # (AC-2) - the comparison below is a strict ">", not ">=".
 MOMENTUM_MIDLINE = 50.0
 RSI_LENGTH = 14
-
-# Minimum bars required before a % change reading is trusted (AC-20 /
-# AC-12's insufficient-history rule applied per timeframe-slot).
-PCT_CHANGE_MIN_BARS = 2
-
 
 def compute_rsi(df: pd.DataFrame, length: int = RSI_LENGTH, close_col: str = "close") -> pd.Series | None:
     """RSI over `df[close_col]`, via the pandas-ta-classic `.ta` accessor.
@@ -108,26 +104,3 @@ def compute_scalp_momentum(
     if value is None:
         return ScalpMomentumResult("insufficient", None, timeframe)
     return ScalpMomentumResult("PASS" if value > MOMENTUM_MIDLINE else "FAIL", value, timeframe)
-
-
-def compute_percent_change(df: pd.DataFrame, min_bars: int = PCT_CHANGE_MIN_BARS) -> float | None:
-    """Close-to-close % change over the given DataFrame's own available
-    window. Returns None (never 0%) when there isn't enough history.
-    """
-    if df is None or len(df) < min_bars:
-        return None
-    closes = df["close"]
-    first, last = closes.iloc[0], closes.iloc[-1]
-    if pd.isna(first) or pd.isna(last) or first == 0:
-        return None
-    return float((last - first) / first * 100.0)
-
-
-def compute_percent_change_by_timeframe(
-    symbol_dfs_by_timeframe: dict[str, pd.DataFrame]
-) -> dict[str, float | None]:
-    """AC-20: per-coin % gain across all timeframes at once. Each slot is
-    computed independently from that timeframe's own cached bars — a thin
-    slot returns None for that slot only, other slots unaffected.
-    """
-    return {tf: compute_percent_change(df) for tf, df in symbol_dfs_by_timeframe.items()}

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { loadIslands } from "@/lib/island-loader";
 import { SERIES } from "@/lib/chart-palette";
-import type { ChartBar } from "@/lib/types/screener";
+import type { ChartBar, Timeframe } from "@/lib/types/screener";
 
 /**
  * The drill-down sparkline: close price with its SMA over the top.
@@ -17,13 +17,15 @@ export interface MiniChartProps {
   price: ChartBar[];
   sma: ChartBar[];
   height?: number;
+  // T34 / S2: optional; when given the time axis is UTC for that timeframe.
+  timeframe?: Timeframe;
 }
 
 function points(bars: ChartBar[]) {
   return bars.map((bar) => ({ timestamp: bar.timestamp, value: bar.close }));
 }
 
-export function MiniChart({ price, sma, height = 120 }: MiniChartProps) {
+export function MiniChart({ price, sma, height = 120, timeframe }: MiniChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,6 +45,7 @@ export function MiniChart({ price, sma, height = 120 }: MiniChartProps) {
           ],
           height,
           label: "Close price with its moving average",
+          ...(timeframe ? { timeframe } : {}),
         });
       })
       .catch(() => {
@@ -54,7 +57,7 @@ export function MiniChart({ price, sma, height = 120 }: MiniChartProps) {
       disposed = true;
       dispose?.();
     };
-  }, [price, sma, height]);
+  }, [price, sma, height, timeframe]);
 
   return <div ref={containerRef} data-testid="mini-chart" />;
 }
