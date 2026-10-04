@@ -130,13 +130,75 @@ def read_ohlcv(symbol: str, timeframe: Timeframe) -> pd.DataFrame:
     return _as_utc(df)
 
 
-def write_ohlcv(symbol: str, timeframe: Timeframe, df: pd.DataFrame) -> None:
-    """Write (overwrite) the full cached OHLCV series for one (symbol, timeframe)."""
+def ohlcv_meta_path(symbol: str, timeframe: Timeframe) -> Path:
+    """`fetched_at` sidecar for one (symbol, timeframe) (T32 / S1, B1)."""
+    return CACHE_ROOT / "ohlcv" / symbol.upper() / f"{timeframe}.meta.json"
+
+
+def _atomic_write_json(obj: dict, path: Path) -> None:
+    """Same all-or-nothing discipline as `_atomic_to_parquet`, for a small
+    JSON file: unique temp in the same directory, fsync, `os.replace`, temp
+    removed on any exception."""
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(obj, fh, separators=(",", ":"))
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def write_ohlcv(
+    symbol: str,
+    timeframe: Timeframe,
+    df: pd.DataFrame,
+    *,
+    retain_bars: int | None = None,
+    fetched_at: pd.Timestamp | None = None,
+) -> None:
+    """Write (overwrite) the full cached OHLCV series for one (symbol, timeframe).
+
+    `retain_bars` keeps only the newest N bars after sort/dedupe (B2; the
+    adapter passes it for 15m/1h/4h). The parquet is written first, then the
+    `fetched_at` sidecar (default: now), so a crash between the two leaves
+    the sidecar OLDER than the data: an extra refetch, never a missed one.
+    """
     path = ohlcv_path(symbol, timeframe)
     path.parent.mkdir(parents=True, exist_ok=True)
     out = df.sort_values("timestamp").drop_duplicates(subset="timestamp", keep="last")
+    if retain_bars is not None:
+        out = out.tail(retain_bars)
     out = out[OHLCV_COLUMNS]
     _atomic_to_parquet(out, path)
+    stamp = pd.Timestamp.now(tz="UTC") if fetched_at is None else pd.Timestamp(fetched_at)
+    stamp = stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp.tz_convert("UTC")
+    _atomic_write_json(
+        {"fetched_at": stamp.strftime("%Y-%m-%dT%H:%M:%S.%fZ").replace(".000000Z", "Z"), "schema": 1},
+        ohlcv_meta_path(symbol, timeframe),
+    )
+
+
+def read_fetched_at(symbol: str, timeframe: Timeframe) -> pd.Timestamp | None:
+    """When this (symbol, timeframe) was last fetched: the sidecar, else the
+    parquet's mtime (caches written before the sidecar existed; no migration),
+    else None (nothing cached)."""
+    try:
+        meta = json.loads(ohlcv_meta_path(symbol, timeframe).read_text(encoding="utf-8"))
+        return pd.Timestamp(meta["fetched_at"]).tz_convert("UTC")
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    try:
+        mtime = os.stat(ohlcv_path(symbol, timeframe)).st_mtime
+    except OSError:
+        return None
+    return pd.Timestamp(mtime, unit="s", tz="UTC")
 
 
 def ohlcv_bar_count(symbol: str, timeframe: Timeframe) -> int:

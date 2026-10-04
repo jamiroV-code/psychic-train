@@ -208,7 +208,8 @@ def test_weekly_recursion_does_not_deadlock(isolated_cache):
     worker.start()
     assert done.wait(timeout=5.0), "1w recursion deadlocked (>5s) — check lock reentrancy"
     assert "error" not in box, f"1w recursion raised: {box.get('error')!r}"
-    assert box["result"].status in ("ok", "unavailable")
+    # T32 / S1: the 2023 fixture bar is now reported `stale` (B5).
+    assert box["result"].status in ("ok", "stale", "unavailable")
 
 
 def test_weekly_propagates_bad_symbol_from_its_daily_leg(isolated_cache):
@@ -266,8 +267,13 @@ def test_a_fresh_cache_is_served_without_touching_the_exchange(isolated_cache):
     )
 
 
-def test_a_cold_cache_still_reaches_the_exchange(isolated_cache):
+def test_a_cold_cache_still_reaches_the_exchange(isolated_cache, monkeypatch):
     """The other half — the short circuit must not swallow the real path."""
+    # T32 / S1: the fake bar sits at the injected clock's current-bar open,
+    # so the newest bar is current and the status stays `ok` (not `stale`).
+    now = pd.Timestamp("2026-10-03T14:10:00Z")
+    monkeypatch.setattr(ccxt_adapter, "_now", lambda: now)
+    monkeypatch.setitem(globals(), "_BAR", [int(now.floor("D").timestamp() * 1000), 1.0, 2.0, 0.5, 1.5, 100.0])
     exch = _CountingExchange()
     result = ccxt_adapter.fetch_ohlcv("BTC", "1d", exchange=exch)
 

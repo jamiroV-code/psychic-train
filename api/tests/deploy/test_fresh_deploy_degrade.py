@@ -100,18 +100,9 @@ def _seed_aged_cache():
     "check",
     [
         "never_500_and_no_nan",
-        pytest.param(
-            "screener_chart_carries_staleness_marker",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason=(
-                    "FINDING (plan step 5 / R9): an aged OHLCV cache is served on /api/screener/board "
-                    "as chart.available=true with no staleness marker — ChartSeries has no as_of/stale "
-                    "field and `reason` is only set when available=false. Requirement handed to the "
-                    "screener's owning lane; not fixed here (router/model out of lane)."
-                ),
-            ),
-        ),
+        # Formerly xfail(strict=True) (FINDING plan step 5 / R9): fixed by
+        # T32 / S1, ChartSeries now carries stale/last_bar_ts/server_time.
+        "screener_chart_carries_staleness_marker",
     ],
 )
 def test_aged_cache_regime_and_screener_never_500_and_no_nan(client, check):
@@ -142,7 +133,7 @@ def test_aged_cache_regime_and_screener_never_500_and_no_nan(client, check):
     else:
         coin = board.json()["coins"][0]
         chart = coin["chart"]
-        assert chart["available"] is False or chart.get("reason") is not None or "as_of" in chart, (
+        assert chart["stale"] is True and chart["last_bar_ts"] and chart["server_time"], (
             "an aged cache is displayed with no staleness marker"
         )
 

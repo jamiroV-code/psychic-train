@@ -8,6 +8,9 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ScreenerBoard } from "@/components/screener/ScreenerBoard";
 import type { ScreenerBoardResponse, Timeframe } from "@/lib/types/screener";
 
+// T32 / S1 freshness fields (ChartSeries); nulls = no freshness information.
+const NO_FRESHNESS = { last_bar_ts: null, fetched_at: null, is_partial: null, server_time: null, stale: false };
+
 function makeCoin(symbol: string, overrides: Partial<ScreenerBoardResponse["coins"][number]> = {}) {
   return {
     symbol,
@@ -21,6 +24,7 @@ function makeCoin(symbol: string, overrides: Partial<ScreenerBoardResponse["coin
       sma: [{ timestamp: "2024-01-01T00:00:00Z", close: 95 }],
       available: true,
       reason: null,
+      ...NO_FRESHNESS,
     },
     percent_change_by_timeframe: {
       "15m": 1.2,
@@ -38,6 +42,9 @@ function makeBoard(timeframe: Timeframe, coins: ReturnType<typeof makeCoin>[]): 
     timeframe,
     active_benchmark: { active: "BTC", reason: "test" },
     coins,
+    server_time: null,
+    clock_skew_seconds: null,
+    clock_skew_warning: false,
   };
 }
 
@@ -88,7 +95,7 @@ describe("ScreenerBoard", () => {
   });
 
   it("shows a coin's chart as unavailable, not a wrong/truncated chart, when thin history (AC-19)", async () => {
-    const coins = [makeCoin("THIN", { chart: { price: [], sma: [], available: false, reason: null } })];
+    const coins = [makeCoin("THIN", { chart: { price: [], sma: [], available: false, reason: null, ...NO_FRESHNESS } })];
     const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
 
     render(<ScreenerBoard fetchBoard={fetchBoard} />);
@@ -102,7 +109,7 @@ describe("ScreenerBoard", () => {
   // repo, same limitation as the file-level SANDBOX NOTE above.
   it("distinguishes a bad-symbol chart-unavailable reason from the generic history message", async () => {
     const coins = [
-      makeCoin("BADSYM", { chart: { price: [], sma: [], available: false, reason: "bad-symbol" } }),
+      makeCoin("BADSYM", { chart: { price: [], sma: [], available: false, reason: "bad-symbol" as const, ...NO_FRESHNESS } }),
     ];
     const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
 
@@ -120,7 +127,7 @@ describe("ScreenerBoard", () => {
     const fetchScalp = vi.fn(async () => ({
       symbol: "BTC",
       timeframe: "4h" as Timeframe,
-      chart: { price: [], sma: [], available: false, reason: null },
+      chart: { price: [], sma: [], available: false, reason: null, ...NO_FRESHNESS },
       scalp_momentum: { state: "insufficient" as const, value: null, timeframe: "4h" as Timeframe },
     }));
 
