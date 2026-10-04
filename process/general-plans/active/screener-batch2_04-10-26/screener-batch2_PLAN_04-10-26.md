@@ -8,14 +8,14 @@ feature: general-plans
 # Screener Batch 2: Verdict Removal, Chart Interaction, Spaghetti and BTC Leg Chart (S4, S6, S7)
 
 Date: 04-10-26
-Status: VALIDATED CONDITIONAL, supplement folded (PVL cycle 1 F1-F7 and cycle 3 F8-F9 plus advisories e-j folded by supplements 04-10-26; no PASS stamp yet). Q1-Q6 are RESOLVED by the user (04-10-26). Needs VALIDATE re-run, then the user's explicit ENTER EXECUTE MODE. Nothing executed; code read at origin/main 605424d.
+Status: VALIDATED PASS (PVL cycle 5, 04-10-26; cycle 1 F1-F7 and cycle 3 F8-F9 plus advisories e-j folded by supplements and re-verified). Q1-Q6 are RESOLVED by the user (04-10-26). Waiting for the user's explicit ENTER EXECUTE MODE. Nothing executed; code read at origin/main 605424d.
 Complexity: COMPLEX (S4 first, then S6, then S7, strictly sequential; RT3 response models, shared chart island, regime router)
 
 **TL;DR:** S4 deletes every verdict (confidence badge, momentum/trend/scalp, benchmark label, both strips) in one worker with two ordered commits: A = API and web contract plus web consumers, B = dead backend code, CSS and copy; 53 file touches, under the 100 limit, so no split. S6 gives every chart Ctrl/Cmd+wheel zoom, pinch, drag pan, double-click reset, crisp SVG axis text, and replaces the relative-performance chart by the spaghetti chart. S7 adds the BTC leg chart (confirmed legs over all cached BTC history) with the D-14 estimate label and makes the BTC OHLCV read of `/api/regime/legs` cache-only. Estimate 9-19 USD [estimate] against about 27.4 USD left. Questions Q1-Q6 are resolved (see "Questions Q1-Q6"). A worker reads its slice section, "Decisions locked", "Gate conventions", its criteria rows, gates and scope commands (fine line ranges at the end).
 
 Sources: SPEC `personal-tracker-realignment_SPEC_02-10-26.md` (D1-D11, F1-F5, AC-1..23, AC-26), INNOVATE `..._INNOVATE_03-10-26.md`, decisions.md D-14, batch-1 plan, reports and PVL iterations 001-003, `process/context/{current-state,architecture}.md`, `process/context/tests/all-tests.md`, operating-instructions.md. Router: `process/context/all-context.md`. Real code read at origin/main 605424d.
 
-Context Envelope: general-plans | PLAN | batch 2 | claude/pensive-albattani-ou0cgv | /home/user/psychic-train | tests | api/, web/ | this file | pytest then vitest | contract CONDITIONAL (PVL cycle 1).
+Context Envelope: general-plans | PLAN | batch 2 | claude/pensive-albattani-ou0cgv | /home/user/psychic-train | tests | api/, web/ | this file | pytest then vitest | contract PASS (PVL cycle 5).
 
 ## Overview
 
@@ -267,10 +267,10 @@ Decided without asking (reversible): `/scalp` removed with no alias; `active_ben
 
 ## Validate Contract
 
-(PVL cycle 3 verdict: CONDITIONAL; cycle-1 F1-F7 are verified folded; two new concerns F8-F9 are open; the full records are "Validation record (PVL cycle 3)" and "Validation record (PVL cycle 1)" after the Open gaps below; the tables stay as proposed content, amended by F8-F9 until a supplement folds them)
-supersedes: 2026-10-04 (outer-pvl, PVL cycle 1 CONDITIONAL) - the cycle-3 record has current evidence
-Status: CONDITIONAL (re-VALIDATE, PVL cycle 3, 04-10-26; 0 FAIL, 2 CONCERN; supplement cycle required)
-Gate: CONDITIONAL (2 concerns F8-F9 to fold; no PASS stamp yet)
+(PVL cycle 5 verdict: PASS; F1-F7 (cycle 1) and F8-F9 plus advisories e-j (cycle 3) are verified folded; the records are "Validation record (PVL cycle 5)", "(PVL cycle 3)" and "(PVL cycle 1)" after the Open gaps below; the tables below are the contract as validated)
+supersedes: 2026-10-04 (outer-pvl, PVL cycle 3 CONDITIONAL) - the cycle-5 record has current evidence
+Status: PASS (re-VALIDATE, PVL cycle 5, 04-10-26; 0 FAIL, 0 CONCERN)
+Gate: PASS
 generated-by: outer-pvl
 
 ### Test gates
@@ -547,6 +547,57 @@ What This Coverage Does NOT Prove: same as the cycle-1 record above (feel on a p
 
 Accepted by: none yet. A CONDITIONAL with two open plan concerns is not terminal; F8-F9 are folded by the supplement cycle and re-validated. Q1-Q6 stay recorded as resolved by the user (04-10-26).
 
+### Validation record (PVL cycle 5)
+
+Status: PASS
+Date: 04-10-26
+date: 2026-10-04
+generated-by: outer-pvl
+supersedes: 2026-10-04 (outer-pvl, PVL cycle 3 CONDITIONAL) - the cycle-5 record has current evidence
+Code under test: HEAD fede962 = origin/main 605424d plus `process/` files only. Re-VALIDATE from V1 after supplement cycle 4. Validators: `validate-plan-artifact.mjs` 0 failures, 0 warnings. Cheap checks only (no full suite): vitest on the four deleted component test files (20 passed), static test counts, regex and grep dry runs in a scratch tree, byte math from the file. Full report: `screener-batch2-pvl-iteration-005_REPORT_04-10-26.md`.
+Parallel strategy: sequential (one validator agent ran Layer 1 and Layer 2 inline, as in cycles 1 and 3; score 3 of 7: S2 API contract, S6 public API, S7 five or more files; no cross-talk needed, the user asked for economy).
+
+Folded items verified:
+- F8: with `refresh_worker.py` line 4 reading "worker runs, board and chart reads are cache-only" in a scratch tree, `S6-dangling` and `S4-verdict` print nothing; S4 Design B (line 110) names the rewrite; every other `S6-dangling` file is S6-owned.
+- F9: the four deleted component tests hold 20 vitest tests (`ConfidenceBadge` 6 = 2 `it(` + `it.each` over 4 states, `SignalDetailPanel` 4, `LegTimelineBanner` 5, `NarrativeStrip` 5; vitest run: 20 passed); chain 245 -> 226 (30 files) -> 239 (32) -> 251 (34) at lines 220, 312, 321, 327, 338, 344, 397; no stale 229, 242 or 254 in the body or the gate tables; pytest chain 963 -> 964 -> 929 -> 934 -> 951 re-derived.
+- Advisories e-j are present at lines 129, 194, 127, 138, 206, 41, 47; test-name lists count to their numbers.
+- Envelope table recomputed with a script over the range lists: S4 20,612 B (room 1,945), S6 17,405 B (5,152), S7 15,242 B (7,315), CLAUDE.md 13,443 B counted once, cap 36,000 B; every range points at the intended text; the S4 room covers the drafted 1,609 B envelope.
+
+New-defect hunt (gate traps of the F8 kind): none found. `S4-verdict` real-tree hits (42 files) are all S4-owned or allow-listed; `S6-dangling` hits are all S6-owned or cleared by S4; `S4-scope`, `S6-scope`, `S7-scope` print nothing on the owned lists (53, 32, 19 paths) and print stray files; `FORBIDDEN` is silent on all owned files; Python and vitest tests that read `web/` text or `globals.css` are covered by the lockstep edits; nothing outside the owned lists imports a deleted module, type or test id.
+
+Dimension findings:
+- Infra fit: PASS - routes, `reads_cache_only_if_running`, island mounting (BtcLegChart mounts directly, no `MiniChart` edit), seeded manifest and cross-slice file ownership match real code.
+- Test coverage: PASS - counts and gate commands recomputed; every behaviour has a Fully-Automated or Hybrid gate or a named Agent-Probe; Known-Gap appears only as the user-accepted residual AC-S6-6.
+- Breaking changes: PASS - removed and added routes, fields, modules and TS types all have their consumers in the plan tables.
+- Security surface: PASS - read-only GETs on a Tailscale-only API, no auth, key or secret surface; `S-secret-scan` verified in cycle 3 and unchanged.
+- S4 feasibility: PASS - highest-risk edit: the A/B model split in `models/screener.py`; run `python -c "import api.main"` after each commit.
+- S6 feasibility: PASS - highest-risk edit: the LayerChart spike; custom viewport and all-SVG fallbacks are defined.
+- S7 feasibility: PASS - highest-risk edit: `_leg_inputs` must keep `test_leg_boundary.py` green (its fake returns only `.df`).
+- Envelopes: PASS - bytes exact, S4 envelope realistic, S7 bound by the 8,000 B cap.
+
+Advisories (no verdict effect; copy into the envelopes): (k) C7 with a zero standard deviation gives T = 0 and `change = 0` satisfies both `rising` and `falling`: treat T = 0 as N/A with a reason, like the NaN std. (l) S6 comments, test names and docstrings must not name the deleted chain (`relative-performance-lines.ts`, "relative performance"): `S6-dangling` is case-insensitive over `relative.performance`. (m) The S7 word-scan test must use the full word list of the `S7-verdict-words` command (it also lists `outperforming|underperforming`). (n) AC-S6-6 is a named residual (Q4 = A, user-accepted, gap-resolution D); S6's worker writes its backlog stub `process/general-plans/backlog/spaghetti-toggle-persistence_NOTE_<dd-mm-yy>.md`.
+
+Open gaps: AC-S6-6 (toggle persistence) waits for S5 (backlog stub written by S6); P-S4-1, P-S6-1, P-S7-1 and the four hybrid E2E runs are PC probes, never claimed by a worker; U1, U2 spikes with fallbacks; the FRED and DefiLlama inline fetch on `/legs` and `/btc-legs` is an accepted residual. No FAIL and no unresolved CONCERN.
+
+What This Coverage Does NOT Prove: same as the cycle-1 record above (feel on a phone and DPR 2 look, real BTC history depth, band drawing on the real island, FRED and DefiLlama latency, new verdict wording outside the token gates and the S7 word scan), plus: the cheap checks of this cycle did not re-run full pytest, tsc, islands or any new test (none exists yet).
+
+Accepted by: not needed for PASS (0 CONCERN). Residuals recorded and user-accepted earlier: Q1-Q6 (04-10-26) including Q4 A (AC-S6-6 stays a named residual until S5), and the accepted FRED and DefiLlama TTL-expiry residual (C8).
+
+## Autonomous Goal Block
+
+SESSION GOAL: screener batch 2 - S4 verdict removal (one worker, commit A then commit B), S6 chart zoom, pan and crisp axes plus the spaghetti chart, S7 BTC leg chart with the D-14 estimate label plus the /api/regime/legs cache-only fix; strictly sequential S4 then S6 then S7
+Charter + umbrella plan: N/A - single plan (SPEC personal-tracker-realignment_SPEC_02-10-26.md; no umbrella plan with a Stable Program Goal)
+Autonomy: validated PASS after 2 supplement cycles and 3 verdict passes (PVL cycles 1, 3, 5). EXECUTE needs the user's explicit "ENTER EXECUTE MODE". The planner then writes one envelope per slice (master-planner.md section 8, at most 8,000 bytes, a pointer list citing the "Envelope line ranges" table; S4 room 1,945 B, drafted S4 envelope 1,609 B), saved as `screener-batch2-s{4,6,7}_REF_<dd-mm-yy>.md`, and spawns S4 only (opus; subagents sonnet, capped lane). Workers run gates once after the last edit, record red runs, and stop at needs_input when an observed count differs from the plan arithmetic or the same failure occurs twice.
+Hard stop conditions / safety constraints:
+- No envelope or worker before the user's "ENTER EXECUTE MODE".
+- S6 never before the S4 merge SHA exists and S7 never before the S6 merge SHA exists; the slices are never parallel.
+- A diff touching CLAUDE.md, AGENTS.md, README.md, `.claude/`, `.github/`, `deploy/` stops at review; no slice touches `deploy/**` or `api/scripts/**`.
+- Push, merge, deploy, branch deletion, or spend above 15 USD per slice or 45 USD in total (about 27.4 USD left at plan time) needs the user's approval.
+- PC probes P-S4-1, P-S6-1 and P-S7-1 are the user's and are never claimed by a worker; each slice stays at review until its probe.
+Next phase: EXECUTE: process/general-plans/active/screener-batch2_04-10-26/screener-batch2_PLAN_04-10-26.md
+Validate contract: process/general-plans/active/screener-batch2_04-10-26/screener-batch2_PLAN_04-10-26.md (inline, validated PASS, PVL cycle 5)
+Execute start: S4: `UV_FROZEN=1 uv run --project api pytest api/tests/routers/test_screener_no_verdict_contract.py -q` red run on the untouched base (G-S4-1), then commit A with its gates, then commit B with all gates | probes: P-S4-1, P-S6-1, P-S7-1 on the user PC | high-risk pack: no
+
 ## Resolved questions (user, before this plan)
 
 1. Product is personal data tracking: no verdicts, badges, flags or confidence scores. 2. Verdict removal is staged (contract first, deletion second). 3. Interactions on ALL charts; spike LayerChart first, custom fallback. 4. Spaghetti 1w shows about 28 weeks and spans the board's bars. 5. Axis text must be crisp. 6. BTC leg chart over all BTC history plus the D-14 estimate; both strips come off the page. 7. Never trim daily bars. 8. S8 open item (a) is fixed inside S7; (b) and (c) are accepted limits. 9. Budget: 45 USD ceiling, about 27 USD left.
@@ -562,10 +613,10 @@ Written by the planner AFTER the user's explicit ENTER EXECUTE MODE: one per sli
 ## Resume and Execution Handoff
 
 1. Selected plan file: `process/general-plans/active/screener-batch2_04-10-26/screener-batch2_PLAN_04-10-26.md`
-2. Last completed step: PLAN written 04-10-26, PVL cycle 1 CONDITIONAL, supplement folded F1-F7 04-10-26 (iteration 002). Batch 1 is merged (PRs #33-#36); its probes are still pending on the PC.
-3. Validate-contract status: written by PVL cycle 1 (CONDITIONAL, no PASS stamp); VALIDATE re-runs after this supplement and owns Status and Gate.
-4. Context loaded: SPEC, INNOVATE, decisions.md D-14, current-state.md, architecture.md, all-tests.md, operating-instructions.md, batch-1 plan and reports (S1, S2, S3, S8) and PVL iterations 001-003, real code at 605424d (screener, regime, island, e2e, test files).
-5. Next step for a fresh agent: Q1-Q6 are resolved (user, 04-10-26); re-run VALIDATE from V1 (confirm F1-F7 folded, re-run the scope regexes and `S-secret-scan` dry runs and the baselines), then wait for the user's explicit "ENTER EXECUTE MODE"; the planner then writes three envelopes and spawns S4. Next instruction (RIPER-5): say **ENTER VALIDATE MODE**.
+2. Last completed step: PLAN 04-10-26; PVL cycle 1 CONDITIONAL, supplement F1-F7 (iteration 002); cycle 3 CONDITIONAL, supplement F8-F9 and e-j (iteration 004); cycle 5 PASS (iteration 005). Batch 1 is merged (PRs #33-#36); its probes are still pending on the PC.
+3. Validate-contract status: PASS, written by PVL cycle 5 (outer-pvl); the Autonomous Goal Block above is the /goal block for EXECUTE.
+4. Context loaded: SPEC, INNOVATE, decisions.md D-14, current-state.md, architecture.md, all-tests.md, operating-instructions.md, batch-1 plan and reports (S1, S2, S3, S8) and PVL iterations 001-005, real code at 605424d (screener, regime, island, e2e, test files).
+5. Next step for a fresh agent: wait for the user's explicit "ENTER EXECUTE MODE"; the planner then writes three envelopes (S6's after the S4 merge SHA, S7's after the S6 merge SHA) and spawns S4 only. Copy the advisories k-n of the cycle-5 record into the envelopes.
 
 ## Envelope line ranges (re-derive with `grep -n '^## \|^### '` at spawn time; worker cap 36,000 B = CLAUDE.md 13,443 counted once + envelope (cap 8,000) + plan bytes)
 
