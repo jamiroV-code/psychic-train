@@ -267,10 +267,10 @@ Decided without asking (reversible): `/scalp` removed with no alias; `active_ben
 
 ## Validate Contract
 
-(PVL cycle 1 verdict: CONDITIONAL; the full record is "Validation record (PVL cycle 1)" after the Open gaps below; the tables stay as proposed content, amended by findings F1-F7 until a supplement folds them)
-
-Status: CONDITIONAL (first-pass VALIDATE, PVL cycle 1, 04-10-26; 0 FAIL, 7 CONCERN; supplement cycle required)
-Gate: CONDITIONAL (7 concerns F1-F7 to fold; no PASS stamp yet)
+(PVL cycle 3 verdict: CONDITIONAL; cycle-1 F1-F7 are verified folded; two new concerns F8-F9 are open; the full records are "Validation record (PVL cycle 3)" and "Validation record (PVL cycle 1)" after the Open gaps below; the tables stay as proposed content, amended by F8-F9 until a supplement folds them)
+supersedes: 2026-10-04 (outer-pvl, PVL cycle 1 CONDITIONAL) - the cycle-3 record has current evidence
+Status: CONDITIONAL (re-VALIDATE, PVL cycle 3, 04-10-26; 0 FAIL, 2 CONCERN; supplement cycle required)
+Gate: CONDITIONAL (2 concerns F8-F9 to fold; no PASS stamp yet)
 generated-by: outer-pvl
 
 ### Test gates
@@ -497,6 +497,55 @@ Open gaps: AC-S6-6 (toggle persistence) waits for S5, backlog `spaghetti-toggle-
 Same as "What this coverage does NOT prove" above: pure, fake-exchange and jsdom gates do not prove how charts feel on a phone or look at DPR 2 (P-S6-1), the real BTC history depth (P-S7-1), band drawing on the real island (hybrid and probe only), the live FRED and DefiLlama latency of `/legs`, or that no new verdict wording appears outside the listed token gates and the S7 word scan.
 
 Accepted by: none yet. A first-pass CONDITIONAL is not terminal; concerns F1-F7 are to be folded by the supplement cycle and re-validated. User resolutions Q1-Q6 (04-10-26, recommended options) are recorded above.
+
+### Validation record (PVL cycle 3)
+
+Status: CONDITIONAL
+Date: 04-10-26
+date: 2026-10-04
+generated-by: outer-pvl
+supersedes: 2026-10-04 (outer-pvl, PVL cycle 1 CONDITIONAL) - the cycle-3 record has current evidence
+Code under test: origin/main 605424d (`git diff --name-only origin/main HEAD` lists only `process/` files). Re-VALIDATE from V1 after supplement cycle 2. Validators: `validate-plan-artifact.mjs` 0 failures, 0 warnings. No full pytest, tsc or islands run (docs-only since cycle 1). Cheap checks run: vitest in full once (245 passed in 33 files, a few seconds; it exposed F9) and `pytest --collect-only` on every deleted or edited python test file.
+Parallel strategy: sequential (one validator agent ran Layer 1 and Layer 2 inline, as in cycle 1; score 3 of 7: S2 API contract, S6 public API, S7 five or more files; no cross-talk needed, the user asked for economy).
+
+Cycle-1 findings F1-F7 and advisories a-d: verified folded against the plan text and the real code.
+- F1: `S4-verdict` (plan line 372) dry-run in a scratch tree holding the planned names (`test_board_response_has_no_active_benchmark_and_keeps_freshness_fields`, a request to `/api/screener/BTC/scalp`, `fetchScalp`): prints nothing; the same command without the two new `--exclude` flags prints 3 hits; a stray `fetchScalp` in another file is still caught. Real tree: all 42 token files are inside the `S4-scope` regex except the two allow-listed files. The carve-out sentence (line 108) and the skip-list (line 134) agree.
+- F2: `test_momentum.py:59` is the only pure `compute_rsi` test (`:73` calls `compute_dual_timeframe_momentum`); `compute_rsi` returns `None` below `length` (`momentum.py:44`), so the new test name is accurate; collected counts 19 badge, 6 benchmark, 12 momentum, 4 integration, 3 narrative contract, 5 sma, 16 lse, 3 relative performance, 3 regime, 13 leg boundary all match; pytest chain 963 -> 964 -> 929 -> 934 -> 951 holds.
+- F3: cache-only wording is "BTC OHLCV read" with the FRED and DefiLlama residual in C8, S7 Goal, S7 Risks 5, AC-S7-4, AC-S7-4r, P-S7-1; no stale "answers from cache" text; the stubbed names (`build_*_composite`, `select_composite_variant`) and the `.df`-only fake match `test_leg_boundary.py:210-223` and `leg_boundary.py:140-165`.
+- F4: `S-secret-scan` (plan line 366) dry-run in a scratch repo: fires on `API_KEY = "..."`, `Bearer ...`, `OPENAI_API_KEY="sk-..."`; silent on `fetchApiKey = ()`, `API_KEY: string = readConfig()` and a short value; silent on the real branch diff; named in G-S4-8, G-S6-7, G-S7-7 and inside all three envelope range sets.
+- F5: test 9 sits in its own `test.describe` with `test.use` inside (line 168); `screener.spec.ts` has 7 tests today, `playwright.config.ts` uses `devices["Desktop Chrome"]` (DPR 1).
+- F6: `test_regime.py:66-72` after the edit asserts `len(response.confirmed_boundaries) == 1` and `date == "2024-06-01"` (fake state carries one confirmed boundary); line numbers 19, 26-31, 45, 59, 71 are exactly the lines naming `select_active_benchmark` or `active_benchmark_reason`.
+- F7: Q1-Q6 are shown RESOLVED in Status, TL;DR, Context Envelope, the Q1-Q6 table, Open gaps and Resume (grep for open, pending, unanswered, awaiting finds nothing); the envelope table was recomputed from the file: S4 20,313 B, S6 17,405 B, S7 15,023 B, CLAUDE.md 13,443 B, rooms 2,244 / 5,152 / 7,534 B, exactly as stated. A drafted S4 envelope (template filled with the S4 range list, gates and stop rules) measured 1,609 B, so the 864 B template plus about 0.75 KB of values fits the 2,244 B room (naming `operating-instructions.md` would add 322 B of room).
+- Advisories a-d are folded (C1, AC-S7-3, C7 and S7 tests, the 42-file reproduce command).
+
+New findings (supplement wanted; one fixer can fold both):
+
+| # | Sev | Evidence | Exact fix wanted |
+|---|---|---|---|
+| F8 | CONCERN | `api/data/refresh_worker.py:4` reads "worker runs, board, scalp and relative-performance reads are cache-only". It is the only file under `api/` or `web/` outside S6's ownership that matches `S6-dangling` (dry run of plan line 378 minus the S6-scope regex prints `api/data/refresh_worker.py:4`). S4 owns the file ("comment", line 98) but its instruction (line 110) says only "docstrings stop naming deleted symbols"; `relative-performance` is deleted by S6, not S4, so a literal S4 edit removes `scalp` and keeps `relative-performance`. Then G-S6-9 prints that line, and S6 may not fix it: `refresh_worker.py` is in S6's Forbidden list (line 146) and absent from the `S6-scope` regex (G-S6-7 would fail on the edit). S6 stops at `needs_input` for a comment. | S4 Design commit B (line 110): replace "`leg_boundary.py`, `refresh_worker.py` docstrings stop naming deleted symbols" by "`leg_boundary.py` docstrings stop naming deleted symbols; `refresh_worker.py` line 4 reads \"board and chart reads are cache-only\" (no `scalp`, no `relative-performance`: S6's `S6-dangling` scans `api/` and S6 may not edit that file)". This adds 155 B to a line inside the S4 range: S4 plan bytes 20,468, room 2,089 B (2,411 B with `operating-instructions.md` named); re-derive the envelope table last. |
+| F9 | CONCERN | The four deleted component tests hold 20 vitest tests, not 17: `ConfidenceBadge.test.tsx` is 6 (an `it.each` over 4 states plus 2 `it`), `SignalDetailPanel` 4, `LegTimelineBanner` 5, `NarrativeStrip` 5 (vitest run on the four files: 20 passed; full run: 245 in 33 files, DrillDownView 7, ScreenerBoard 8, RelativePerformanceChart 9). The plan counts 3 + 4 + 5 + 5 = 17 (cycle-1 table row "component tests 3+4+5+5 = 17" was a grep of `it(` and missed the `it.each`). Correct chain: S4 245 - 20 - 1 + 2 = 226 in 30 files; S6 226 + 10 + 5 + 6 + 1 - 9 = 239 in 32 files; S7 239 + 12 = 251 in 34 files. Gate convention 2 stops the worker at `needs_input` when the observed delta differs, so G-S4-4 (229) would stop S4 on a correct result and every later vitest count is off by 3. Lines affected: 220, 312, 321, 327, 338, 344. | Replace digits only (same byte length, ranges unchanged): line 220 "vitest 245 to 229 to 242 to 254" -> "245 to 226 to 239 to 251"; line 312 "229 passed in 30 files (245 - 17 - 1 + 2; 33 - 4 + 1)" -> "226 passed in 30 files (245 - 20 - 1 + 2; 33 - 4 + 1)"; line 321 "229 vitest in 30 files" -> "226 vitest in 30 files"; line 327 "242 passed in 32 files (229 + 10 + 5 + 6 + 1 - 9; 30 + 3 - 1)" -> "239 passed in 32 files (226 + 10 + 5 + 6 + 1 - 9; 30 + 3 - 1)"; line 338 "242 vitest in 32 files" -> "239 vitest in 32 files"; line 344 "254 passed in 34 files (242 + 12; 32 + 2)" -> "251 passed in 34 files (239 + 12; 32 + 2)". Put the explanation (`it.each` in `ConfidenceBadge.test.tsx`) in the split-evidence paragraph (line 397, outside every range), not in a range line. pytest numbers (964, 929, 934, 951) are correct. |
+
+Advisories (no verdict effect; copy into the envelopes or fold if cheap): (e) `web/e2e/screener.spec.ts:5` (header comment) names `fetchScalp` and is not in the S4 table; `S4-verdict` will flag it and the worker rewords the comment (owned file). (f) `test_btc_legs_sources_contain_no_verdict_words` must scan exactly the four files of `S7-verdict-words`; `web/lib/api/regime.ts:12` has `signal: AbortSignal.timeout(...)` and would match `signal`. (g) The `ScreenerBoard.test.tsx` "no verdict element" assertion must not write the removed test ids (`momentum-state`, `confidence-badge`) as literals: the S4 symbol gate scans that file; assert on text or counts instead. (h) Line 138 Risks (4) "Q2 decides where it returns" and line 206 "if Q2 = S5" read as open although Q2 is resolved A (S5). (i) C1 says `trend.py` is "unused" after A, but `screener_board` still imports `compute_sma` from it until B (Design A step 2 says so). (j) If the composite has fewer than 2 historical 14-point changes the sample std is NaN: the composite part must be N/A with a reason, never `flat`.
+
+Dimension findings:
+- Infra fit: CONCERN - F8 (cross-slice gate: `S6-dangling` versus `refresh_worker.py:4`, a file S6 may not touch). Routes, `reads_cache_only_if_running`, seeded manifest (BTC 1d = 500, watchlist BTC ETH THIN, THIN 20 bars) and the 7 contrast routes match real code.
+- Test coverage: CONCERN - F9 (vitest chain off by 3 from S4 on). Pytest counts and all test-name lists (6, 2, 2, 8, 10, 5, 6, 12, 5, 6, 6) re-derived and correct.
+- Breaking changes: PASS - every removed field, route, module and TS type has its consumers in the plan tables; grep of tokens, bare `.momentum`/`.trend`/`.confidence` keys, TS type imports and e2e ids finds nothing unlisted except advisory (e).
+- Security surface: PASS - read-only GETs, no auth, key or secret surface; `S-secret-scan` verified.
+- S4 feasibility: CONCERN - F8, F9 (highest-risk edit: the A/B model split in `models/screener.py`; run `python -c "import api.main"` after each commit).
+- S6 feasibility: CONCERN - F8 (S6 cannot clear `S6-dangling`), F9 (counts); the spike and fallbacks stand.
+- S7 feasibility: CONCERN - F9 (count only); `_leg_inputs` and the cache-only tests are feasible against `leg_boundary.py` and `refresh_worker.reads_cache_only_if_running`.
+- Envelopes: PASS - bytes exact, S4 envelope realistic; re-derive last after F8 (S4 20,468 B / room 2,089 B).
+
+SUPPLEMENT REQUEST:
+- Gap 1: Section s4-verdict-removal-staged-rt3-capped-subagent-lane-yes | Concern: F8 `refresh_worker.py:4` keeps `relative-performance` after S4 and S6 cannot edit it | Severity: CONCERN | Suggested addition: S4 Design B names the exact comment rewrite (no `scalp`, no `relative-performance`).
+- Gap 2: Section validate-contract | Concern: F9 vitest counts 229/242/254 should be 226/239/251 (20 deleted component tests, not 17) | Severity: CONCERN | Suggested addition: digits-only edits on lines 220, 312, 321, 327, 338, 344; explanation at line 397.
+
+Open gaps: unchanged from the cycle-1 record (AC-S6-6 waits for S5; P-S4-1, P-S6-1, P-S7-1 and the four hybrid E2E runs are PC probes; U1, U2 spikes; the FRED and DefiLlama residual).
+
+What This Coverage Does NOT Prove: same as the cycle-1 record above (feel on a phone and DPR 2 look, real BTC history depth, band drawing on the real island, FRED and DefiLlama latency, new verdict wording outside the token gates and the S7 word scan).
+
+Accepted by: none yet. A CONDITIONAL with two open plan concerns is not terminal; F8-F9 are folded by the supplement cycle and re-validated. Q1-Q6 stay recorded as resolved by the user (04-10-26).
 
 ## Resolved questions (user, before this plan)
 
