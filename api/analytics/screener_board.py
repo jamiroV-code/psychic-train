@@ -18,6 +18,7 @@ from __future__ import annotations
 import pandas as pd
 
 from api.analytics.confidence import badge
+from api.analytics.indicators import gain as gain_mod
 from api.analytics.indicators import momentum as momentum_mod
 from api.analytics.indicators import trend as trend_mod
 from api.analytics.narrative import mapping as narrative_mapping
@@ -176,7 +177,10 @@ def build_coin_panel(
             dfs_by_tf[tf] = result.df
             statuses_by_tf[tf] = result.status
             fetched_by_tf[tf] = result.fetched_at
-    pct_by_tf = momentum_mod.compute_percent_change_by_timeframe(dfs_by_tf)
+    now = ccxt_adapter._now() if now is None else now
+    # T34 / S2: current-candle chips (open to latest), judged against the
+    # same skew-corrected reference time as the chart's freshness fields.
+    chips_by_tf = gain_mod.compute_gain_chips(dfs_by_tf, statuses_by_tf, ccxt_adapter.reference_now(now))
 
     display_df = dfs_by_tf[timeframe]
     display_available = len(display_df) >= trend_mod.SMA_LENGTH
@@ -208,7 +212,8 @@ def build_coin_panel(
             stale_ref_df=daily.df if timeframe == "1w" else None,
             now=now,
         ),
-        percent_change_by_timeframe=pct_by_tf,
+        percent_change_by_timeframe={tf: chip.pct for tf, chip in chips_by_tf.items()},
+        gain_by_timeframe=chips_by_tf,
     )
 
 

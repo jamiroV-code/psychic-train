@@ -18,6 +18,37 @@ function makeScalpView(timeframe: Timeframe): ScalpView {
 }
 
 describe("DrillDownView", () => {
+  it("captions the drill-down chart's last bar in UTC with its age and a plain stale marker (T34 / S2)", async () => {
+    const fetchScalp = vi.fn(async (_symbol: string, tf: Timeframe) => {
+      const view = makeScalpView(tf);
+      view.chart = {
+        ...view.chart,
+        last_bar_ts: "2026-10-03T14:00:00Z",
+        is_partial: false,
+        server_time: "2026-10-03T14:22:00Z",
+        stale: true,
+      };
+      return view;
+    });
+    render(<DrillDownView symbol="BTC" fetchScalp={fetchScalp} />);
+
+    await waitFor(() => expect(screen.getByTestId("chart-freshness-caption")).toBeInTheDocument());
+    expect(screen.getByTestId("chart-freshness-caption").textContent).toBe("Last bar 2026-10-03 14:00 UTC, 22 min ago");
+    expect(screen.getByTestId("stale-marker").textContent).toBe("stale");
+  });
+
+  it("shows no caption or stale marker when the chart is unavailable (T34 / S2)", async () => {
+    const fetchScalp = vi.fn(async (_symbol: string, tf: Timeframe) => ({
+      ...makeScalpView(tf),
+      chart: { price: [], sma: [], available: false, reason: null, ...NO_FRESHNESS },
+    }));
+    render(<DrillDownView symbol="BTC" fetchScalp={fetchScalp} />);
+
+    await waitFor(() => expect(screen.getByTestId("drilldown-chart-unavailable")).toBeInTheDocument());
+    expect(screen.queryByTestId("chart-freshness")).toBeNull();
+    expect(screen.queryByTestId("stale-marker")).toBeNull();
+  });
+
   it("re-fetches and re-renders at a newly selected timeframe, independent of any board state (AC-18)", async () => {
     const fetchScalp = vi.fn(async (_symbol: string, tf: Timeframe) => makeScalpView(tf));
     render(<DrillDownView symbol="BTC" fetchScalp={fetchScalp} />);

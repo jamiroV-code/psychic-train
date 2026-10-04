@@ -47,10 +47,13 @@ _NO_LEG_DATA = CurrentLegState(candidate_boundaries=[], confirmed_boundaries=[],
 
 def _df(closes: list[float], freq: str = "D") -> pd.DataFrame:
     idx = pd.date_range(start="2024-01-01", periods=len(closes), freq=freq, tz="UTC")
+    # T34 / S2: each bar opens at the previous close, so the current-candle
+    # chips (open to latest) read the fixture's direction instead of a flat 0.
+    opens = closes[:1] + closes[:-1]
     return pd.DataFrame(
         {
             "timestamp": idx,
-            "open": closes,
+            "open": opens,
             "high": closes,
             "low": closes,
             "close": closes,
@@ -98,7 +101,9 @@ def two_coin_fixture(monkeypatch):
     n = 90
     per_symbol = {
         "BTC": {tf: _df(_bullish_closes(n, 100.0), freq=_TF_FREQ[tf]) for tf in ("15m", "1h", "4h", "1d", "1w")},
-        "ETH": {tf: _df(_bearish_closes(n, 50.0), freq=_TF_FREQ[tf]) for tf in ("15m", "1h", "4h", "1d", "1w")},
+        # Base 500 keeps every bearish price positive: a non-positive open is
+        # an N/A chip, not a loss (T34 / S2).
+        "ETH": {tf: _df(_bearish_closes(n, 500.0), freq=_TF_FREQ[tf]) for tf in ("15m", "1h", "4h", "1d", "1w")},
     }
     fake = _FakeAdapter(per_symbol)
     monkeypatch.setattr(screener_board.ccxt_adapter, "fetch_ohlcv", fake.fetch_ohlcv)
@@ -200,6 +205,14 @@ def test_per_coin_multi_timeframe_gain_readout(two_coin_fixture):
     eth = next(p for p in board.coins if p.symbol == "ETH")
     assert btc.percent_change_by_timeframe["1d"] > 0  # bullish fixture
     assert eth.percent_change_by_timeframe["1d"] < 0  # bearish fixture
+    # T34 / S2: the chips carry the same value plus their own candle open.
+    for panel in board.coins:
+        assert set(panel.gain_by_timeframe.keys()) == {"15m", "1h", "4h", "1d", "1w"}
+        for tf, chip in panel.gain_by_timeframe.items():
+            assert panel.percent_change_by_timeframe[tf] == chip.pct
+    assert btc.gain_by_timeframe["1d"].pct > 0
+    assert eth.gain_by_timeframe["1d"].pct < 0
+    assert btc.gain_by_timeframe["1d"].open_ts.endswith("Z")
 
 
 def test_per_coin_gain_readout_thin_slot_is_none_not_zero(monkeypatch):
@@ -220,3 +233,8 @@ def test_per_coin_gain_readout_thin_slot_is_none_not_zero(monkeypatch):
     btc = board.coins[0]
     assert btc.percent_change_by_timeframe["15m"] is None  # never 0%
     assert btc.percent_change_by_timeframe["1d"] is not None  # other slots unaffected
+    # T34 / S2: the thin slot's chip says why (the fake adapter reports an
+    # empty frame as `unavailable`).
+    assert btc.gain_by_timeframe["15m"].pct is None
+    assert btc.gain_by_timeframe["15m"].reason == "source-unavailable"
+    assert btc.gain_by_timeframe["1d"].pct is not None

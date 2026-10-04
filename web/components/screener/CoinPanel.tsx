@@ -1,11 +1,15 @@
+import { ChartFreshness } from "@/components/chart/ChartFreshness";
 import { MiniChart } from "@/components/chart/MiniChart";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
 import { SignalDetailPanel } from "@/components/screener/SignalDetailPanel";
-import { TIMEFRAMES, type CoinPanel as CoinPanelData } from "@/lib/types/screener";
+import { formatUnavailableReason } from "@/lib/format-unavailable-reason";
+import { TIMEFRAMES, type CoinPanel as CoinPanelData, type GainChip, type Timeframe } from "@/lib/types/screener";
 
 export interface CoinPanelProps {
   panel: CoinPanelData;
   onOpenDrillDown?: (symbol: string) => void;
+  // T34 / S2: the board's timeframe, so the chart's time axis is UTC for it.
+  timeframe?: Timeframe;
 }
 
 function formatPercent(value: number | null): string {
@@ -14,7 +18,14 @@ function formatPercent(value: number | null): string {
   return `${sign}${value.toFixed(1)}%`;
 }
 
-export function CoinPanel({ panel, onOpenDrillDown }: CoinPanelProps) {
+function chipTitle(tf: Timeframe, chip: GainChip | undefined): string | undefined {
+  if (!chip) return undefined;
+  if (chip.pct === null) return chip.reason ? formatUnavailableReason(chip.reason, "timeframe") : undefined;
+  // Current candle, open to latest (T34 / S2).
+  return `${tf} candle from ${chip.open_ts ?? "?"}${chip.is_partial ? " (forming)" : ""}`;
+}
+
+export function CoinPanel({ panel, onOpenDrillDown, timeframe }: CoinPanelProps) {
   return (
     <div data-testid={`coin-panel-${panel.symbol}`} className="coin-panel">
       <div className="coin-panel__header">
@@ -43,7 +54,10 @@ export function CoinPanel({ panel, onOpenDrillDown }: CoinPanelProps) {
       </div>
 
       {panel.chart.available ? (
-        <MiniChart price={panel.chart.price} sma={panel.chart.sma} />
+        <>
+          <MiniChart price={panel.chart.price} sma={panel.chart.sma} timeframe={timeframe} />
+          <ChartFreshness chart={panel.chart} />
+        </>
       ) : (
         <DeadDataNotice
           testId="chart-unavailable"
@@ -66,15 +80,24 @@ export function CoinPanel({ panel, onOpenDrillDown }: CoinPanelProps) {
           (not merged into) the momentum PASS/FAIL badge above — a coin can
           read "in momentum" while individual short-timeframe chips are
           negative without looking contradictory. */}
+      {/* T34 / S2: each chip is the timeframe's current candle, open to
+          latest price, read from `gain_by_timeframe`; N/A carries its reason. */}
       <div data-testid="gain-readout-row" className="coin-panel__gain-row">
-        {TIMEFRAMES.map((tf) => (
-          <span key={tf} data-testid={`gain-chip-${tf}`} className="coin-panel__gain-chip">
-            <span className="coin-panel__gain-chip-label">{tf}</span>
-            <span className="coin-panel__gain-chip-value">
-              {formatPercent(panel.percent_change_by_timeframe[tf])}
+        {TIMEFRAMES.map((tf) => {
+          const chip = panel.gain_by_timeframe?.[tf];
+          return (
+            <span
+              key={tf}
+              data-testid={`gain-chip-${tf}`}
+              className="coin-panel__gain-chip"
+              data-reason={chip?.reason ?? undefined}
+              title={chipTitle(tf, chip)}
+            >
+              <span className="coin-panel__gain-chip-label">{tf}</span>
+              <span className="coin-panel__gain-chip-value">{formatPercent(chip?.pct ?? null)}</span>
             </span>
-          </span>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

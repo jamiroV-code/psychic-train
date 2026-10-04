@@ -1,4 +1,5 @@
 import type { SpreadPoint } from "@/lib/types/pairs";
+import type { Timeframe } from "@/lib/types/screener";
 
 /**
  * Loads the Svelte/LayerChart island bundle, once.
@@ -113,6 +114,9 @@ export interface IslandApi {
       height: number;
       format?: (v: number) => string;
       label: string;
+      // T34 / S2: when set, the time axis is UTC with labels from
+      // chart-time-format; when absent it is exactly the old local axis.
+      timeframe?: Timeframe;
     },
   ): () => void;
   mountRegimePanel(

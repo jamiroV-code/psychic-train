@@ -134,7 +134,7 @@ test("weekly bars are Monday 00:00 UTC through the whole stack", async ({ reques
 //    Catches a regression of AC-20, currently proven only against an injected
 //    fixture: a missing gain must read N/A, never 0%.
 // ---------------------------------------------------------------------------
-test("a thin-history symbol shows unavailable, never a zero", async ({ page }) => {
+test("a thin-history symbol shows unavailable, never a zero", async ({ page, request }) => {
   const thin = manifest.thin_symbol;
   expect(manifest.bars_written[thin]["1d"]).toBeLessThan(manifest.min_bars_required);
 
@@ -143,11 +143,26 @@ test("a thin-history symbol shows unavailable, never a zero", async ({ page }) =
   await expect(panel).toBeVisible();
   await expect(panel.getByTestId("chart-unavailable")).toBeVisible();
 
-  const chips = await panel.getByTestId(/^gain-chip-/).allInnerTexts();
-  expect(chips.length).toBeGreaterThan(0);
+  // T34 / S2 (D8): a chip is the current candle, open to latest. A real flat
+  // candle may read 0.0%, so the old "never 0.0%" rule no longer holds; what
+  // must hold is that every chip is N/A or a well-formed percentage, and that
+  // the API backs each N/A with a reason.
+  const chips = await panel.locator(".coin-panel__gain-chip-value").allInnerTexts();
+  expect(chips.length).toBe(5);
   for (const chip of chips) {
-    expect(chip, `a thin-history chip read "${chip}" — 0% must never stand in for missing data`)
-      .not.toMatch(/\b0\.0%/);
+    expect(chip.trim(), `chip read "${chip}"`).toMatch(/^(N\/A|[+-]?\d+\.\d%)$/);
+  }
+
+  type Chip = { pct: number | null; reason: string | null };
+  const data = (await board(request, "1d")) as unknown as {
+    coins: { symbol: string; gain_by_timeframe: Record<string, Chip> }[];
+  };
+  const thinCoin = data.coins.find((c) => c.symbol === thin);
+  expect(thinCoin, `${thin} missing from the board response`).toBeDefined();
+  for (const tf of ["15m", "1h", "4h", "1d", "1w"]) {
+    const chip = thinCoin!.gain_by_timeframe[tf];
+    expect(chip, `gain_by_timeframe.${tf} missing`).toBeDefined();
+    expect(chip.pct !== null || chip.reason !== null, `${tf}: neither pct nor reason`).toBe(true);
   }
 });
 

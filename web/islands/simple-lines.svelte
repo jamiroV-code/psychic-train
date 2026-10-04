@@ -1,6 +1,7 @@
 <script>
   import { Chart, Canvas, Spline, Points, Axis } from "layerchart";
-  import { scaleTime, scaleLinear } from "d3-scale";
+  import { scaleTime, scaleUtc, scaleLinear } from "d3-scale";
+  import { utcAxis } from "../lib/chart-time-format";
 
   /**
    * A plain multi-line time chart.
@@ -15,7 +16,7 @@
    * grid-aligned array, so there is no whitespace to reason about here: a
    * series is drawn through exactly the points it has.
    */
-  let { series = [], height = 120, format = null, label = "chart" } = $props();
+  let { series = [], height = 120, format = null, label = "chart", timeframe = null } = $props();
 
   const lines = $derived(
     series.map((s) => {
@@ -42,6 +43,11 @@
     return [new Date(lo), new Date(hi)];
   });
 
+  // T34 / S2: with a timeframe the x axis is UTC, its ticks and labels taken
+  // from chart-time-format so they never depend on the browser's zone.
+  // Without one it stays the old local axis (RelativePerformanceChart).
+  const xAxis = $derived(timeframe && xDomain ? utcAxis(xDomain[0], xDomain[1], timeframe, 4) : null);
+
   const yDomain = $derived.by(() => {
     if (all.length === 0) return null;
     let min = Infinity;
@@ -60,7 +66,7 @@
   {#if xDomain && yDomain}
     <Chart
       x="date"
-      xScale={scaleTime()}
+      xScale={xAxis ? scaleUtc() : scaleTime()}
       {xDomain}
       y="value"
       yScale={scaleLinear()}
@@ -69,7 +75,11 @@
     >
       <Canvas>
         <Axis placement="left" grid rule ticks={4} format={format ?? undefined} />
-        <Axis placement="bottom" rule ticks={4} />
+        {#if xAxis}
+          <Axis placement="bottom" rule ticks={xAxis.ticks} format={xAxis.format} />
+        {:else}
+          <Axis placement="bottom" rule ticks={4} />
+        {/if}
         {#each lines as line (line.key)}
           {#if line.points.length > 1}
             <Spline data={line.points} stroke={line.color} strokeWidth={line.width} />

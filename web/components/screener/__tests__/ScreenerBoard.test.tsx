@@ -6,10 +6,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ScreenerBoard } from "@/components/screener/ScreenerBoard";
-import type { ScreenerBoardResponse, Timeframe } from "@/lib/types/screener";
+import type { GainChip, ScreenerBoardResponse, Timeframe } from "@/lib/types/screener";
 
 // T32 / S1 freshness fields (ChartSeries); nulls = no freshness information.
 const NO_FRESHNESS = { last_bar_ts: null, fetched_at: null, is_partial: null, server_time: null, stale: false };
+
+// T34 / S2: a current-candle chip; `pct: null` needs a reason.
+function chip(pct: number | null, reason: GainChip["reason"] = null): GainChip {
+  return { pct, open_ts: pct === null ? null : "2026-10-03T00:00:00Z", is_partial: true, stale: false, reason };
+}
 
 function makeCoin(symbol: string, overrides: Partial<ScreenerBoardResponse["coins"][number]> = {}) {
   return {
@@ -32,6 +37,13 @@ function makeCoin(symbol: string, overrides: Partial<ScreenerBoardResponse["coin
       "4h": 3.4,
       "1d": 4.5,
       "1w": 5.6,
+    },
+    gain_by_timeframe: {
+      "15m": chip(1.2),
+      "1h": chip(2.3),
+      "4h": chip(3.4),
+      "1d": chip(4.5),
+      "1w": chip(5.6),
     },
     ...overrides,
   };
@@ -82,6 +94,13 @@ describe("ScreenerBoard", () => {
     const coins = [
       makeCoin("THIN", {
         percent_change_by_timeframe: { "15m": null, "1h": 1, "4h": 2, "1d": 3, "1w": 4 },
+        gain_by_timeframe: {
+          "15m": chip(null, "insufficient-history"),
+          "1h": chip(1),
+          "4h": chip(2),
+          "1d": chip(3),
+          "1w": chip(4),
+        },
       }),
     ];
     const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
@@ -92,6 +111,60 @@ describe("ScreenerBoard", () => {
     expect(screen.getByTestId("gain-chip-15m").textContent).toContain("N/A");
     expect(screen.getByTestId("gain-chip-15m").textContent).not.toContain("0%");
     expect(screen.getByTestId("gain-chip-1d").textContent).toContain("+3.0%");
+    expect(screen.getByTestId("gain-chip-15m").getAttribute("data-reason")).toBe("insufficient-history");
+  });
+
+  it("reads each gain chip from gain_by_timeframe (the current candle), not the legacy map (T34 / S2)", async () => {
+    const coins = [
+      makeCoin("BTC", {
+        // The legacy field disagrees on purpose: the chip must follow the chip.
+        percent_change_by_timeframe: { "15m": 9, "1h": 9, "4h": 9, "1d": 9, "1w": 9 },
+        gain_by_timeframe: {
+          "15m": chip(0),
+          "1h": chip(-0.25),
+          "4h": chip(null, "source-unavailable"),
+          "1d": chip(-1.234),
+          "1w": chip(6),
+        },
+      }),
+    ];
+    const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
+
+    render(<ScreenerBoard fetchBoard={fetchBoard} />);
+    await waitFor(() => expect(screen.getByTestId("gain-chip-1d")).toBeInTheDocument());
+
+    expect(screen.getByTestId("gain-chip-1d").textContent).toContain("-1.2%");
+    expect(screen.getByTestId("gain-chip-1w").textContent).toContain("+6.0%");
+    expect(screen.getByTestId("gain-chip-15m").textContent).toContain("0.0%"); // a real flat candle
+    expect(screen.getByTestId("gain-chip-1h").textContent).toContain("-0.3%");
+    expect(screen.getByTestId("gain-chip-4h").textContent).toContain("N/A");
+    expect(screen.getByTestId("gain-chip-4h").getAttribute("title")).toBe("Data source unavailable");
+  });
+
+  it("captions the coin chart's last bar in UTC aged against server_time, with a plain stale marker (T34 / S2)", async () => {
+    const freshness = {
+      last_bar_ts: "2026-10-03T14:15:00Z",
+      fetched_at: "2026-10-03T14:21:00Z",
+      is_partial: true,
+      server_time: "2026-10-03T14:22:00Z",
+    };
+    const price = [{ timestamp: "2026-10-03T14:15:00Z", close: 100 }];
+    const coins = [
+      makeCoin("BTC", { chart: { price, sma: [], available: true, reason: null, ...freshness, stale: false } }),
+      makeCoin("OLD", { chart: { price, sma: [], available: true, reason: null, ...freshness, stale: true } }),
+    ];
+    const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
+
+    render(<ScreenerBoard fetchBoard={fetchBoard} />);
+    await waitFor(() => expect(screen.getByTestId("coin-panel-BTC")).toBeInTheDocument());
+
+    const btc = screen.getByTestId("coin-panel-BTC");
+    expect(btc.querySelector('[data-testid="chart-freshness-caption"]')?.textContent).toBe(
+      "Last bar 2026-10-03 14:15 UTC, opened 7 min ago (forming)",
+    );
+    expect(btc.querySelector('[data-testid="stale-marker"]')).toBeNull();
+    const old = screen.getByTestId("coin-panel-OLD");
+    expect(old.querySelector('[data-testid="stale-marker"]')?.textContent).toBe("stale");
   });
 
   it("shows a coin's chart as unavailable, not a wrong/truncated chart, when thin history (AC-19)", async () => {

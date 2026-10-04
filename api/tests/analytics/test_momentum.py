@@ -14,7 +14,6 @@ from api.analytics.indicators.momentum import (
     RSI_LENGTH,
     classify_momentum,
     compute_dual_timeframe_momentum,
-    compute_percent_change_by_timeframe,
     compute_rsi,
     compute_scalp_momentum,
 )
@@ -166,19 +165,3 @@ def test_scalp_momentum_insufficient_history():
     result = compute_scalp_momentum(df_4h, timeframe="4h")
     assert result.state == "insufficient"
     assert result.value is None
-
-
-def test_percent_change_by_timeframe_golden_values():
-    dfs = {
-        "15m": _make_daily_df([100.0, 110.0]),  # +10%
-        "1h": _make_daily_df([200.0, 180.0]),  # -10%
-        "4h": _make_daily_df([50.0, 50.0]),  # 0% (flat, but has enough bars)
-        "1d": _make_daily_df([10.0]),  # only 1 bar -> unavailable
-        "1w": _make_daily_df([]),  # empty -> unavailable
-    }
-    result = compute_percent_change_by_timeframe(dfs)
-    assert result["15m"] == pytest.approx(10.0)
-    assert result["1h"] == pytest.approx(-10.0)
-    assert result["4h"] == pytest.approx(0.0)
-    assert result["1d"] is None
-    assert result["1w"] is None

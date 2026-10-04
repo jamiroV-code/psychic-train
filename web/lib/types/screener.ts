@@ -71,6 +71,18 @@ export interface ChartSeries {
   stale: boolean;
 }
 
+// T34 / S2 (mirrors api/models/screener.py::GainChip): the current candle of
+// one timeframe, open to latest price (1w: the newest Monday-anchored week).
+// `pct` is null with a `reason` when there is nothing honest to show, never
+// 0; a flat candle is a real 0. `open_ts` is ISO-8601 UTC with a trailing "Z".
+export interface GainChip {
+  pct: number | null;
+  open_ts: string | null;
+  is_partial: boolean;
+  stale: boolean;
+  reason: UnavailableReason | null;
+}
+
 export interface CoinPanel {
   symbol: string;
   momentum: MomentumState;
@@ -79,7 +91,9 @@ export interface CoinPanel {
   leg_context: LegContextLiteral;
   narrative_state: NarrativeStateLiteral;
   chart: ChartSeries;
+  // Kept for existing consumers; equals gain_by_timeframe[tf].pct.
   percent_change_by_timeframe: Record<Timeframe, number | null>;
+  gain_by_timeframe: Record<Timeframe, GainChip>;
 }
 
 export interface ScreenerBoardResponse {

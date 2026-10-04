@@ -107,6 +107,22 @@ class ChartSeries(BaseModel):
     stale: bool = False
 
 
+class GainChip(BaseModel):
+    """T34 / S2: one current-candle gain chip, open to latest price of the
+    timeframe's newest bar (1w: the newest Monday-anchored week). `pct` is
+    None with a `reason` when there is nothing honest to show, never 0; a
+    flat candle is a real 0.0. `open_ts` is the bar's open, ISO-8601 UTC with
+    a trailing `Z`. `stale` uses the chart's rule (1w: judged on its daily
+    bar).
+    """
+
+    pct: float | None = None
+    open_ts: str | None = None
+    is_partial: bool = False
+    stale: bool = False
+    reason: UnavailableReason | None = None
+
+
 class CoinPanel(BaseModel):
     symbol: str
     momentum: MomentumState
@@ -122,7 +138,10 @@ class CoinPanel(BaseModel):
     leg_context: LegContextLiteral = "unavailable"
     narrative_state: NarrativeStateLiteral = "unavailable"
     chart: ChartSeries
+    # Kept for existing consumers; filled from `gain_by_timeframe[tf].pct`.
     percent_change_by_timeframe: dict[Timeframe, float | None]
+    # T34 / S2 (additive): the current-candle chips themselves.
+    gain_by_timeframe: dict[Timeframe, GainChip] = {}
 
 
 class ScreenerBoardResponse(BaseModel):
