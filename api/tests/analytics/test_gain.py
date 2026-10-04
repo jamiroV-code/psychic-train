@@ -90,6 +90,14 @@ def test_chip_1w_without_monday_bar_is_na():
     chip = compute_gain_chip(None, "1w", pd.Timestamp("2026-10-01T12:00:00Z"), daily_df=daily)
     assert chip.pct is None
     assert chip.reason == "insufficient-history"
+    # A Monday row with a NaN open is no better: the resample's `first`
+    # would silently take Tuesday's open.
+    nan_monday = _bars(
+        ["2026-09-28T00:00:00Z", "2026-09-29T00:00:00Z"], [math.nan, 102.0], [101.0, 104.0]
+    )
+    chip = compute_gain_chip(None, "1w", pd.Timestamp("2026-09-29T12:00:00Z"), daily_df=nan_monday)
+    assert chip.pct is None
+    assert chip.reason == "insufficient-history"
 
 
 def test_empty_frame_is_na_never_zero():
@@ -108,6 +116,12 @@ def test_nan_or_zero_open_is_na():
         assert chip.reason == "insufficient-history"
     nan_close = _bars(["2026-10-03T14:00:00Z"], [10.0], [math.nan])
     assert compute_gain_chip(nan_close, "1h", NOW).pct is None
+    # A non-finite result would not serialize as JSON: N/A, not inf.
+    inf_close = _bars(["2026-10-03T14:00:00Z"], [10.0], [math.inf])
+    assert compute_gain_chip(inf_close, "1h", NOW).pct is None
+    # Unsorted input still reads the newest bar.
+    unsorted = _bars(["2026-10-03T14:00:00Z", "2026-10-03T13:00:00Z"], [100.0, 1.0], [110.0, 2.0])
+    assert compute_gain_chip(unsorted, "1h", NOW).pct == pytest.approx(10.0)
 
 
 def test_flat_candle_is_real_zero():

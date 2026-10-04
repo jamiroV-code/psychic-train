@@ -18,14 +18,26 @@ from api.models.screener import CoinPanel, GainChip
 
 _TS_PATH = Path(__file__).resolve().parents[3] / "web" / "lib" / "types" / "screener.ts"
 
-# Python annotation -> the TS type the mirror must declare.
-_EXPECTED_TS_TYPES = {
-    "pct": "number | null",
-    "open_ts": "string | null",
-    "is_partial": "boolean",
-    "stale": "boolean",
-    "reason": "UnavailableReason | null",
+# Python annotation -> TS type, derived from the pydantic model below so a
+# change on either side fails the test.
+_PY_TO_TS = {
+    "float | None": "number | null",
+    "str | None": "string | null",
+    "bool": "boolean",
+    "UnavailableReason | None": "UnavailableReason | null",
 }
+
+
+def _python_types_as_ts() -> dict[str, str]:
+    out = {}
+    for name, field in GainChip.model_fields.items():
+        annotation = "bool" if field.annotation is bool else str(field.annotation).replace("typing.", "")
+        annotation = annotation.replace("Optional[float]", "float | None").replace("Optional[str]", "str | None")
+        if "Literal['insufficient-history', 'bad-symbol', 'source-unavailable']" in annotation:
+            annotation = "UnavailableReason | None"
+        assert annotation in _PY_TO_TS, f"GainChip.{name}: unmapped annotation {annotation!r}"
+        out[name] = _PY_TO_TS[annotation]
+    return out
 
 
 def _ts_interface_fields(source: str, name: str) -> dict[str, str]:
@@ -33,9 +45,11 @@ def _ts_interface_fields(source: str, name: str) -> dict[str, str]:
     assert match is not None, f"interface {name} not found in screener.ts"
     fields = {}
     for line in match.group(1).splitlines():
-        field = re.match(r"\s*(\w+)\??:\s*([^;]+);", line)
+        field = re.match(r"\s*(\w+)(\??):\s*([^;]+);", line)
         if field:
-            fields[field.group(1)] = field.group(2).strip()
+            # An optional TS field would drift from the always-present
+            # Python field; keep the marker so the comparison catches it.
+            fields[field.group(1) + field.group(2)] = field.group(3).strip()
     return fields
 
 
@@ -43,8 +57,7 @@ def test_gain_chip_fields_match_typescript():
     source = _TS_PATH.read_text()
     ts_fields = _ts_interface_fields(source, "GainChip")
     assert set(ts_fields) == set(GainChip.model_fields)
-    assert ts_fields == _EXPECTED_TS_TYPES
-    assert set(_EXPECTED_TS_TYPES) == set(GainChip.model_fields)
+    assert ts_fields == _python_types_as_ts()
     panel_fields = _ts_interface_fields(source, "CoinPanel")
     assert "gain_by_timeframe" in CoinPanel.model_fields
     assert panel_fields["gain_by_timeframe"] == "Record<Timeframe, GainChip>"

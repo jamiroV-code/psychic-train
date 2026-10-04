@@ -11,6 +11,8 @@ candle (open == close) is a real 0.0.
 """
 from __future__ import annotations
 
+import math
+
 import pandas as pd
 
 from api.data import ccxt_adapter, freshness
@@ -37,14 +39,18 @@ def _newest_weekly_bucket(daily_df: pd.DataFrame) -> pd.Series | None:
     """The newest bucket of `_derive_weekly_from_daily`, or None when that
     bucket's Monday bar is missing: the derivation labels a bucket with its
     Monday even when the Monday bar is absent, so its `open` would be some
-    later day's open (D9)."""
+    later day's open (D9). Likewise a Monday row whose open is NaN: the
+    resample's `first` skips NaN and would take Tuesday's open."""
     weekly = ccxt_adapter._derive_weekly_from_daily(daily_df, source="derived")
     if weekly.empty:
         return None
     bucket = weekly.iloc[-1]
     monday = freshness.as_utc(bucket["timestamp"]).normalize()
-    daily_days = {freshness.as_utc(ts).normalize() for ts in daily_df["timestamp"]}
-    return bucket if monday in daily_days else None
+    days = daily_df["timestamp"].map(lambda ts: freshness.as_utc(ts).normalize())
+    monday_rows = daily_df[days == monday]
+    if monday_rows.empty or monday_rows["open"].isna().any():
+        return None
+    return bucket
 
 
 def compute_gain_chip(
@@ -76,8 +82,11 @@ def compute_gain_chip(
     open_, close = bar["open"], bar["close"]
     if pd.isna(open_) or pd.isna(close) or open_ <= 0:
         return _na("insufficient-history")
+    pct = float((close - open_) / open_ * 100.0)
+    if not math.isfinite(pct):
+        return _na("insufficient-history")
     return GainChip(
-        pct=float((close - open_) / open_ * 100.0),
+        pct=pct,
         open_ts=freshness.iso_z(bar["timestamp"]),
         is_partial=bool(freshness.is_partial(bar["timestamp"], timeframe, now)),
         stale=freshness.is_stale(stale_ref, timeframe, now),
