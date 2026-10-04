@@ -1,0 +1,1001 @@
+[
+ {
+  "symbol": "SYNTH",
+  "open": 50.0,
+  "high": 50.4577,
+  "low": 49.5915,
+  "close": 50.1407,
+  "volume": 155380,
+  "timestamp": "2026-05-01T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.1407,
+  "high": 50.582,
+  "low": 49.8316,
+  "close": 50.0985,
+  "volume": 286488,
+  "timestamp": "2026-05-02T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.0985,
+  "high": 50.425,
+  "low": 49.165,
+  "close": 49.4703,
+  "volume": 273923,
+  "timestamp": "2026-05-04T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.4703,
+  "high": 49.8101,
+  "low": 48.8798,
+  "close": 49.116,
+  "volume": 157956,
+  "timestamp": "2026-05-05T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.116,
+  "high": 50.3052,
+  "low": 48.9681,
+  "close": 49.9875,
+  "volume": 172141,
+  "timestamp": "2026-05-06T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.9875,
+  "high": 50.4736,
+  "low": 49.616,
+  "close": 50.024,
+  "volume": 460804,
+  "timestamp": "2026-05-07T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.024,
+  "high": 50.7111,
+  "low": 49.6005,
+  "close": 50.4959,
+  "volume": 496531,
+  "timestamp": "2026-05-08T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.4959,
+  "high": 50.8821,
+  "low": 50.0081,
+  "close": 50.1312,
+  "volume": 463283,
+  "timestamp": "2026-05-09T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.1312,
+  "high": 50.6225,
+  "low": 49.1009,
+  "close": 49.2409,
+  "volume": 121863,
+  "timestamp": "2026-05-11T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.2409,
+  "high": 50.2403,
+  "low": 49.0608,
+  "close": 50.2071,
+  "volume": 352628,
+  "timestamp": "2026-05-12T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.2071,
+  "high": 50.3289,
+  "low": 49.713,
+  "close": 49.8489,
+  "volume": 13341,
+  "timestamp": "2026-05-13T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.8489,
+  "high": 50.1772,
+  "low": 49.2825,
+  "close": 49.5576,
+  "volume": 213970,
+  "timestamp": "2026-05-14T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.5576,
+  "high": 49.6121,
+  "low": 48.9179,
+  "close": 48.934,
+  "volume": 467575,
+  "timestamp": "2026-05-15T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 48.934,
+  "high": 49.5193,
+  "low": 48.5171,
+  "close": 49.1834,
+  "volume": 43199,
+  "timestamp": "2026-05-18T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.1834,
+  "high": 49.2422,
+  "low": 48.3393,
+  "close": 48.4928,
+  "volume": 40197,
+  "timestamp": "2026-05-19T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 48.4928,
+  "high": 48.6616,
+  "low": 47.8992,
+  "close": 48.3182,
+  "volume": 364831,
+  "timestamp": "2026-05-20T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 48.3182,
+  "high": 48.8378,
+  "low": 48.0894,
+  "close": 48.6153,
+  "volume": 197727,
+  "timestamp": "2026-05-21T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 48.6153,
+  "high": 49.0112,
+  "low": 48.1967,
+  "close": 48.7896,
+  "volume": 264859,
+  "timestamp": "2026-05-22T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 48.7896,
+  "high": 49.0243,
+  "low": 47.769,
+  "close": 47.9508,
+  "volume": 419209,
+  "timestamp": "2026-05-25T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 47.9508,
+  "high": 48.271,
+  "low": 47.569,
+  "close": 47.6853,
+  "volume": 294288,
+  "timestamp": "2026-05-26T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 47.6853,
+  "high": 48.2888,
+  "low": 47.2692,
+  "close": 47.9422,
+  "volume": 452353,
+  "timestamp": "2026-05-27T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 47.9422,
+  "high": 48.4086,
+  "low": 47.7049,
+  "close": 48.3298,
+  "volume": 331001,
+  "timestamp": "2026-05-28T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 48.3298,
+  "high": 48.6636,
+  "low": 47.87,
+  "close": 48.2977,
+  "volume": 497719,
+  "timestamp": "2026-05-29T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 48.2977,
+  "high": 48.9666,
+  "low": 48.0938,
+  "close": 48.741,
+  "volume": 275785,
+  "timestamp": "2026-06-01T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 48.741,
+  "high": 48.9714,
+  "low": 48.2564,
+  "close": 48.5585,
+  "volume": 407176,
+  "timestamp": "2026-06-02T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 48.5585,
+  "high": 48.5685,
+  "low": 48.3307,
+  "close": 48.5234,
+  "volume": 431029,
+  "timestamp": "2026-06-03T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 48.5234,
+  "high": 49.4933,
+  "low": 48.0585,
+  "close": 49.4104,
+  "volume": 489715,
+  "timestamp": "2026-06-04T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.4104,
+  "high": 50.1387,
+  "low": 49.2691,
+  "close": 49.8288,
+  "volume": 336932,
+  "timestamp": "2026-06-05T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.8288,
+  "high": 50.1896,
+  "low": 49.0021,
+  "close": 49.176,
+  "volume": 234436,
+  "timestamp": "2026-06-08T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.176,
+  "high": 49.5741,
+  "low": 48.5923,
+  "close": 49.0461,
+  "volume": 465578,
+  "timestamp": "2026-06-09T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.0461,
+  "high": 49.4688,
+  "low": 48.4672,
+  "close": 48.7877,
+  "volume": 28264,
+  "timestamp": "2026-06-10T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 48.7877,
+  "high": 49.7805,
+  "low": 48.4358,
+  "close": 49.4713,
+  "volume": 129493,
+  "timestamp": "2026-06-11T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.4713,
+  "high": 49.8655,
+  "low": 49.0138,
+  "close": 49.4329,
+  "volume": 50991,
+  "timestamp": "2026-06-12T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.4329,
+  "high": 49.6757,
+  "low": 49.3397,
+  "close": 49.5773,
+  "volume": 329268,
+  "timestamp": "2026-06-15T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.5773,
+  "high": 50.0365,
+  "low": 48.3513,
+  "close": 48.7275,
+  "volume": 310764,
+  "timestamp": "2026-06-16T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 48.7275,
+  "high": 48.9848,
+  "low": 48.4199,
+  "close": 48.6004,
+  "volume": 460136,
+  "timestamp": "2026-06-17T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 48.6004,
+  "high": 49.6585,
+  "low": 48.1549,
+  "close": 49.454,
+  "volume": 436680,
+  "timestamp": "2026-06-18T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.454,
+  "high": 50.3853,
+  "low": 49.0681,
+  "close": 50.1561,
+  "volume": 318351,
+  "timestamp": "2026-06-19T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.1561,
+  "high": 51.1206,
+  "low": 50.0418,
+  "close": 50.7191,
+  "volume": 69107,
+  "timestamp": "2026-06-22T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.7191,
+  "high": 50.7641,
+  "low": 49.9338,
+  "close": 50.3835,
+  "volume": 271714,
+  "timestamp": "2026-06-23T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.3835,
+  "high": 51.6182,
+  "low": 50.0033,
+  "close": 51.1233,
+  "volume": 448097,
+  "timestamp": "2026-06-24T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.1233,
+  "high": 52.3528,
+  "low": 50.8689,
+  "close": 51.9346,
+  "volume": 162312,
+  "timestamp": "2026-06-25T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.9346,
+  "high": 52.3517,
+  "low": 51.868,
+  "close": 52.1812,
+  "volume": 184307,
+  "timestamp": "2026-06-26T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 52.1812,
+  "high": 52.383,
+  "low": 50.956,
+  "close": 51.3418,
+  "volume": 152173,
+  "timestamp": "2026-06-29T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.3418,
+  "high": 51.384,
+  "low": 50.6272,
+  "close": 50.7303,
+  "volume": 77233,
+  "timestamp": "2026-06-30T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.7303,
+  "high": 50.8183,
+  "low": 49.9739,
+  "close": 50.2399,
+  "volume": 81970,
+  "timestamp": "2026-07-01T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.2399,
+  "high": 51.1198,
+  "low": 50.0088,
+  "close": 50.8429,
+  "volume": 345112,
+  "timestamp": "2026-07-02T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.8429,
+  "high": 51.3306,
+  "low": 50.8309,
+  "close": 51.3269,
+  "volume": 88204,
+  "timestamp": "2026-07-03T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.3269,
+  "high": 51.5123,
+  "low": 50.8638,
+  "close": 50.9926,
+  "volume": 170664,
+  "timestamp": "2026-07-06T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.9926,
+  "high": 51.6434,
+  "low": 50.7398,
+  "close": 51.2257,
+  "volume": 324144,
+  "timestamp": "2026-07-07T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.2257,
+  "high": 51.3702,
+  "low": 50.6164,
+  "close": 50.9859,
+  "volume": 127679,
+  "timestamp": "2026-07-08T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.9859,
+  "high": 51.6681,
+  "low": 50.7852,
+  "close": 51.5208,
+  "volume": 24134,
+  "timestamp": "2026-07-09T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.5208,
+  "high": 51.5811,
+  "low": 50.7058,
+  "close": 51.2029,
+  "volume": 348169,
+  "timestamp": "2026-07-10T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.2029,
+  "high": 52.319,
+  "low": 51.0798,
+  "close": 52.1192,
+  "volume": 209221,
+  "timestamp": "2026-07-13T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 52.1192,
+  "high": 52.243,
+  "low": 50.7565,
+  "close": 51.1631,
+  "volume": 280523,
+  "timestamp": "2026-07-14T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.1631,
+  "high": 51.6317,
+  "low": 50.1573,
+  "close": 50.4683,
+  "volume": 404213,
+  "timestamp": "2026-07-15T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.4683,
+  "high": 50.783,
+  "low": 49.522,
+  "close": 49.6156,
+  "volume": 114554,
+  "timestamp": "2026-07-16T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.6156,
+  "high": 50.7686,
+  "low": 49.1901,
+  "close": 50.3564,
+  "volume": 381349,
+  "timestamp": "2026-07-17T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.3564,
+  "high": 50.7241,
+  "low": 49.4682,
+  "close": 49.9212,
+  "volume": 338662,
+  "timestamp": "2026-07-20T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.9212,
+  "high": 50.2145,
+  "low": 49.4395,
+  "close": 49.7914,
+  "volume": 208483,
+  "timestamp": "2026-07-21T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.7914,
+  "high": 50.615,
+  "low": 49.5925,
+  "close": 50.3913,
+  "volume": 61691,
+  "timestamp": "2026-07-22T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.3913,
+  "high": 50.6134,
+  "low": 49.9868,
+  "close": 50.1271,
+  "volume": 442629,
+  "timestamp": "2026-07-23T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.1271,
+  "high": 50.2092,
+  "low": 49.0021,
+  "close": 49.1909,
+  "volume": 259895,
+  "timestamp": "2026-07-24T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.1909,
+  "high": 50.4173,
+  "low": 49.1262,
+  "close": 50.0001,
+  "volume": 134013,
+  "timestamp": "2026-07-27T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.0001,
+  "high": 50.0678,
+  "low": 48.937,
+  "close": 49.194,
+  "volume": 483911,
+  "timestamp": "2026-07-28T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.194,
+  "high": 49.6448,
+  "low": 48.2565,
+  "close": 48.4993,
+  "volume": 426592,
+  "timestamp": "2026-07-29T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 48.4993,
+  "high": 49.713,
+  "low": 48.0631,
+  "close": 49.2243,
+  "volume": 288361,
+  "timestamp": "2026-07-30T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.2243,
+  "high": 49.2261,
+  "low": 49.0631,
+  "close": 49.1105,
+  "volume": 241450,
+  "timestamp": "2026-07-31T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.1105,
+  "high": 49.3594,
+  "low": 48.9455,
+  "close": 49.0979,
+  "volume": 293183,
+  "timestamp": "2026-08-03T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 49.0979,
+  "high": 50.2584,
+  "low": 48.8052,
+  "close": 50.0419,
+  "volume": 492120,
+  "timestamp": "2026-08-04T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.0419,
+  "high": 50.9936,
+  "low": 49.9148,
+  "close": 50.8736,
+  "volume": 169698,
+  "timestamp": "2026-08-05T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.8736,
+  "high": 51.1196,
+  "low": 49.7142,
+  "close": 50.2,
+  "volume": 17598,
+  "timestamp": "2026-08-06T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.2,
+  "high": 51.5084,
+  "low": 49.7962,
+  "close": 51.0612,
+  "volume": 112086,
+  "timestamp": "2026-08-07T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.0612,
+  "high": 51.0813,
+  "low": 50.1777,
+  "close": 50.6649,
+  "volume": 142105,
+  "timestamp": "2026-08-10T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.6649,
+  "high": 51.3142,
+  "low": 50.1919,
+  "close": 50.8711,
+  "volume": 193829,
+  "timestamp": "2026-08-11T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.8711,
+  "high": 51.3611,
+  "low": 50.6516,
+  "close": 51.2599,
+  "volume": 137013,
+  "timestamp": "2026-08-12T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.2599,
+  "high": 51.5006,
+  "low": 50.8376,
+  "close": 51.3566,
+  "volume": 350818,
+  "timestamp": "2026-08-13T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.3566,
+  "high": 52.3694,
+  "low": 51.0536,
+  "close": 51.8662,
+  "volume": 441073,
+  "timestamp": "2026-08-14T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.8662,
+  "high": 52.3604,
+  "low": 51.7162,
+  "close": 52.1774,
+  "volume": 70113,
+  "timestamp": "2026-08-17T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 52.1774,
+  "high": 52.446,
+  "low": 51.4099,
+  "close": 51.516,
+  "volume": 455430,
+  "timestamp": "2026-08-18T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.516,
+  "high": 51.9947,
+  "low": 51.3009,
+  "close": 51.9623,
+  "volume": 175974,
+  "timestamp": "2026-08-19T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.9623,
+  "high": 52.0184,
+  "low": 51.1587,
+  "close": 51.5889,
+  "volume": 358585,
+  "timestamp": "2026-08-20T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.5889,
+  "high": 51.7203,
+  "low": 51.1669,
+  "close": 51.2917,
+  "volume": 42661,
+  "timestamp": "2026-08-21T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.2917,
+  "high": 51.7619,
+  "low": 51.0511,
+  "close": 51.4882,
+  "volume": 452282,
+  "timestamp": "2026-08-24T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.4882,
+  "high": 51.9737,
+  "low": 50.9793,
+  "close": 51.8393,
+  "volume": 51312,
+  "timestamp": "2026-08-25T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.8393,
+  "high": 52.155,
+  "low": 51.1057,
+  "close": 51.4771,
+  "volume": 213243,
+  "timestamp": "2026-08-26T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.4771,
+  "high": 52.8013,
+  "low": 51.4094,
+  "close": 52.4264,
+  "volume": 102806,
+  "timestamp": "2026-08-27T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 52.4264,
+  "high": 52.8469,
+  "low": 52.1731,
+  "close": 52.3569,
+  "volume": 403264,
+  "timestamp": "2026-08-28T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 52.3569,
+  "high": 52.5273,
+  "low": 51.6252,
+  "close": 51.931,
+  "volume": 173394,
+  "timestamp": "2026-08-31T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.931,
+  "high": 52.4225,
+  "low": 51.0087,
+  "close": 51.2214,
+  "volume": 393782,
+  "timestamp": "2026-09-01T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.2214,
+  "high": 51.5573,
+  "low": 50.777,
+  "close": 51.3929,
+  "volume": 496646,
+  "timestamp": "2026-09-02T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.3929,
+  "high": 51.4576,
+  "low": 51.2574,
+  "close": 51.3803,
+  "volume": 338003,
+  "timestamp": "2026-09-03T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.3803,
+  "high": 52.4455,
+  "low": 51.1595,
+  "close": 52.1366,
+  "volume": 475521,
+  "timestamp": "2026-09-04T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 52.1366,
+  "high": 52.4699,
+  "low": 51.1199,
+  "close": 51.5113,
+  "volume": 16143,
+  "timestamp": "2026-09-07T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.5113,
+  "high": 52.059,
+  "low": 51.4297,
+  "close": 51.7435,
+  "volume": 297973,
+  "timestamp": "2026-09-08T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.7435,
+  "high": 52.7094,
+  "low": 51.581,
+  "close": 52.2055,
+  "volume": 405584,
+  "timestamp": "2026-09-09T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 52.2055,
+  "high": 52.7619,
+  "low": 52.0617,
+  "close": 52.6714,
+  "volume": 385504,
+  "timestamp": "2026-09-10T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 52.6714,
+  "high": 53.0627,
+  "low": 52.3765,
+  "close": 53.0188,
+  "volume": 399605,
+  "timestamp": "2026-09-11T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 53.0188,
+  "high": 53.1097,
+  "low": 51.9455,
+  "close": 52.0187,
+  "volume": 359812,
+  "timestamp": "2026-09-14T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 52.0187,
+  "high": 52.3464,
+  "low": 51.4749,
+  "close": 51.8108,
+  "volume": 330438,
+  "timestamp": "2026-09-15T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.8108,
+  "high": 51.8204,
+  "low": 50.775,
+  "close": 51.1912,
+  "volume": 484135,
+  "timestamp": "2026-09-16T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.1912,
+  "high": 51.8889,
+  "low": 50.8122,
+  "close": 51.4382,
+  "volume": 209290,
+  "timestamp": "2026-09-17T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.4382,
+  "high": 51.7194,
+  "low": 50.4632,
+  "close": 50.4735,
+  "volume": 245783,
+  "timestamp": "2026-09-18T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.4735,
+  "high": 51.6984,
+  "low": 50.0141,
+  "close": 51.2388,
+  "volume": 373027,
+  "timestamp": "2026-09-21T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.2388,
+  "high": 51.6116,
+  "low": 50.0364,
+  "close": 50.5299,
+  "volume": 177992,
+  "timestamp": "2026-09-22T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.5299,
+  "high": 51.5074,
+  "low": 50.4236,
+  "close": 51.3234,
+  "volume": 406942,
+  "timestamp": "2026-09-23T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.3234,
+  "high": 51.7039,
+  "low": 51.0315,
+  "close": 51.6279,
+  "volume": 116814,
+  "timestamp": "2026-09-24T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.6279,
+  "high": 51.9128,
+  "low": 50.4042,
+  "close": 50.8271,
+  "volume": 139839,
+  "timestamp": "2026-09-25T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 50.8271,
+  "high": 51.8536,
+  "low": 50.7757,
+  "close": 51.7847,
+  "volume": 128377,
+  "timestamp": "2026-09-28T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.7847,
+  "high": 52.2749,
+  "low": 51.529,
+  "close": 51.8816,
+  "volume": 370574,
+  "timestamp": "2026-09-29T00:00:00Z"
+ },
+ {
+  "symbol": "SYNTH",
+  "open": 51.8816,
+  "high": 52.2037,
+  "low": 51.7064,
+  "close": 52.0679,
+  "volume": 275496,
+  "timestamp": "2026-09-30T00:00:00Z"
+ }
+]
