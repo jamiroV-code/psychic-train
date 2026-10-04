@@ -5,11 +5,14 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { DrillDownView } from "@/components/screener/DrillDownView";
 import type { ScalpView, Timeframe } from "@/lib/types/screener";
 
+// T32 / S1 freshness fields (ChartSeries); nulls = no freshness information.
+const NO_FRESHNESS = { last_bar_ts: null, fetched_at: null, is_partial: null, server_time: null, stale: false };
+
 function makeScalpView(timeframe: Timeframe): ScalpView {
   return {
     symbol: "BTC",
     timeframe,
-    chart: { price: [{ timestamp: "2024-01-01T00:00:00Z", close: 100 }], sma: [], available: true, reason: null },
+    chart: { price: [{ timestamp: "2024-01-01T00:00:00Z", close: 100 }], sma: [], available: true, reason: null, ...NO_FRESHNESS },
     scalp_momentum: { state: "PASS", value: 62.3, timeframe: "4h" },
   };
 }
@@ -45,7 +48,7 @@ describe("DrillDownView", () => {
     const fetchScalp = vi.fn(async (_symbol: string, tf: Timeframe) => ({
       symbol: "BTC",
       timeframe: tf,
-      chart: { price: [], sma: [], available: false as const, reason: "source-unavailable" as const },
+      chart: { price: [], sma: [], available: false as const, reason: "source-unavailable" as const, ...NO_FRESHNESS },
       scalp_momentum: { state: "insufficient" as const, value: null, timeframe: "4h" as Timeframe },
     }));
     render(<DrillDownView symbol="BTC" fetchScalp={fetchScalp} />);

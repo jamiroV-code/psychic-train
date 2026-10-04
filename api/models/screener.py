@@ -95,6 +95,16 @@ class ChartSeries(BaseModel):
     # default, so existing consumers that read only `available` are
     # unaffected (additive Public Contract change).
     reason: UnavailableReason | None = None
+    # T32 / S1 (additive, defaulted): how fresh the series is. Timestamps are
+    # ISO-8601 UTC with a trailing `Z`. `stale` is judged on the last bar's
+    # age (1w: on its daily bar), not on the adapter status, so an aged cache
+    # served while the source is down still says so. An unavailable chart
+    # carries nulls and `stale=False`.
+    last_bar_ts: str | None = None
+    fetched_at: str | None = None
+    is_partial: bool | None = None
+    server_time: str | None = None
+    stale: bool = False
 
 
 class CoinPanel(BaseModel):
@@ -119,6 +129,11 @@ class ScreenerBoardResponse(BaseModel):
     timeframe: Timeframe
     active_benchmark: BenchmarkSelection
     coins: list[CoinPanel]
+    # T32 / S1 (additive, defaulted): server clock and its measured skew
+    # against the exchange (seconds, host minus exchange; None = unknown).
+    server_time: str | None = None
+    clock_skew_seconds: float | None = None
+    clock_skew_warning: bool = False
 
 
 class ScalpMomentumState(BaseModel):

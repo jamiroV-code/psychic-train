@@ -62,6 +62,13 @@ export interface ChartSeries {
   sma: ChartBar[];
   available: boolean;
   reason: UnavailableReason | null;
+  // T32 / S1: freshness. ISO-8601 UTC with a trailing "Z"; nulls and
+  // stale=false when the chart is unavailable.
+  last_bar_ts: string | null;
+  fetched_at: string | null;
+  is_partial: boolean | null;
+  server_time: string | null;
+  stale: boolean;
 }
 
 export interface CoinPanel {
@@ -79,6 +86,11 @@ export interface ScreenerBoardResponse {
   timeframe: Timeframe;
   active_benchmark: BenchmarkSelection;
   coins: CoinPanel[];
+  // T32 / S1: server clock and measured skew vs the exchange (seconds,
+  // null = unknown); warning above 120 s.
+  server_time: string | null;
+  clock_skew_seconds: number | null;
+  clock_skew_warning: boolean;
 }
 
 export interface ScalpMomentumState {
