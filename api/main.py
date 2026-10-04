@@ -17,10 +17,16 @@ CORS is scoped to an explicit origin list — default `http://localhost:3000`
 (the web/ dev server), overridable with `SCREENER_CORS_ORIGINS`
 (comma-separated). No credentials, and only the methods and header the API
 actually uses.
+
+T35 / S8: the `lifespan` starts the in-process OHLCV refresh worker
+(`api/data/refresh_worker.py`) and stops it on shutdown, unless
+`SCREENER_REFRESH_WORKER=0`. Lifespan runs under uvicorn and under
+`with TestClient(app)`; the test conftest defaults the variable to `0`.
 """
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,9 +34,20 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 # NOTE (RFC-002/RFC-003 scope): routers/regime.py (item 42) and
 # routers/narrative.py (item 56) are now both wired in.
-from api.routers import narrative, onchain_activity, pairs, regime, screener, watchlist
+from api.data import refresh_worker
+from api.routers import narrative, onchain_activity, pairs, refresh, regime, screener, watchlist
 
-app = FastAPI(title="Momentum Screener API")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    refresh_worker.start_from_env()
+    try:
+        yield
+    finally:
+        refresh_worker.stop_worker()
+
+
+app = FastAPI(title="Momentum Screener API", lifespan=lifespan)
 
 # Origin-exact, and overridable for the E2E only.
 #
@@ -77,6 +94,7 @@ app.include_router(regime.router)
 app.include_router(narrative.router)
 app.include_router(onchain_activity.router)
 app.include_router(pairs.router)
+app.include_router(refresh.router)
 
 
 @app.get("/api/health")

@@ -17,6 +17,8 @@ request it explicitly.
 """
 from __future__ import annotations
 
+import os
+os.environ.setdefault("SCREENER_REFRESH_WORKER", "0")
 import pytest
 
 from api.data import cache
