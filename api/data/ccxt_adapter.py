@@ -47,13 +47,25 @@ T32 / S1 (04-10-26) — freshness core:
   does.
 * Clock skew against the exchange is measured opportunistically on the live
   path, at most once per 15 minutes (B6).
+
+T35 / S8 (04-10-26) — background refresh worker (B9):
+
+* `cached_reads_only()` is a context manager (a `ContextVar` flag). Inside
+  it `fetch_ohlcv` serves the cache with ZERO exchange work and, for a pair
+  that is not fresh (a missing file included), calls the registered refresh
+  hook (`set_refresh_hook`) and marks the result `note="refresh-queued"`.
+  Outside it, behaviour is exactly S1's fetch-through.
+* `retry_markets_if_latched()` clears the market-load latch once, so the
+  worker's next tick retries `load_markets()` (never per fetch).
 """
 from __future__ import annotations
 
 import threading
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Literal
+from typing import Callable, Iterator, Literal
 
 import ccxt
 import pandas as pd
@@ -217,6 +229,66 @@ def reset_exchange_cache() -> None:
     with _exchange_lock:
         _exchange_instance = None
         _markets_unavailable = False
+
+
+def retry_markets_if_latched() -> bool:
+    """Clear the market-load latch so the next fetch retries `load_markets()`.
+
+    Called once per refresh-worker tick (N1). `_exchange()` keeps its
+    per-fetch latch, so within one tick a dead network still costs one
+    `load_markets()` attempt, not one per pair. Returns True when a latch was
+    cleared.
+    """
+    global _markets_unavailable
+    with _exchange_lock:
+        if not _markets_unavailable:
+            return False
+        _markets_unavailable = False
+        return True
+
+
+# --------------------------------------------------------------------------
+# Cache-only reads (T35 / S8, B9)
+#
+# While the background refresh worker runs, page reads must never wait on
+# the exchange: the router wraps them in `cached_reads_only()`, and the
+# worker refreshes whatever those reads report as not fresh. The hook is
+# expected to be non-blocking (the worker only enqueues).
+# --------------------------------------------------------------------------
+_cached_reads_only: ContextVar[bool] = ContextVar("screener_cached_reads_only", default=False)
+_refresh_hook: Callable[[str, str], object] | None = None
+
+
+@contextmanager
+def cached_reads_only() -> Iterator[None]:
+    """Serve `fetch_ohlcv` from the cache only, for the current context."""
+    token = _cached_reads_only.set(True)
+    try:
+        yield
+    finally:
+        _cached_reads_only.reset(token)
+
+
+def set_refresh_hook(hook: Callable[[str, str], object] | None) -> None:
+    """Register (or clear, with None) the `request_refresh(symbol, timeframe)`
+    callback used by cache-only reads."""
+    global _refresh_hook
+    _refresh_hook = hook
+
+
+def _cached_only_result(symbol, timeframe, cached, fetched_at) -> OhlcvResult:
+    note = None
+    hook = _refresh_hook
+    if hook is not None and not _cache_is_fresh(cached, timeframe, fetched_at):
+        try:
+            hook(symbol, timeframe)
+            note = "refresh-queued"
+        except Exception:
+            # A failing hook must never break a page read.
+            note = None
+    if cached.empty:
+        return _result(symbol, timeframe, cached, "unavailable", None, note)
+    return _result(symbol, timeframe, cached, _tail_status(cached, timeframe), fetched_at, note)
 
 
 def resolve_market_symbol(ticker: str, exchange) -> str | None:
@@ -450,6 +522,10 @@ def fetch_ohlcv(
 
     cached = cache.read_ohlcv(symbol, timeframe)
     fetched_at = cache.read_fetched_at(symbol, timeframe) if not cached.empty else None
+
+    if _cached_reads_only.get():
+        # Worker running (S8): never touch the exchange from a read.
+        return _cached_only_result(symbol, timeframe, cached, fetched_at)
 
     # Skip the live call entirely once the cache already covers the current,
     # not-yet-closed bar for this timeframe (Standing Rule 4).

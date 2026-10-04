@@ -5,12 +5,18 @@ Thin FastAPI wrapper — all real logic lives in
 `api/analytics/screener_board.py` (framework-independent, directly testable
 without an HTTP client). No router calls a provider (ccxt_adapter,
 watchlist store) directly — every fetch goes through that module.
+
+T35 / S8: while the background refresh worker runs, each read is wrapped in
+`refresh_worker.reads_cache_only_if_running()`, so it serves the cache and
+queues a refresh for stale or missing pairs instead of fetching inline. With
+the worker off, behaviour is the S1 fetch-through.
 """
 from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
 from api.analytics import screener_board
+from api.data.refresh_worker import reads_cache_only_if_running
 from api.models.screener import (
     RelativePerformanceResponse,
     RelativePerformanceTimeframe,
@@ -28,14 +34,16 @@ def get_board(timeframe: Timeframe = Query(default="1d")) -> ScreenerBoardRespon
     only — `momentum`/`trend` PASS-FAIL fields are always computed from
     real daily+weekly bars regardless of this param (AC-16).
     """
-    return screener_board.build_screener_board(timeframe=timeframe)
+    with reads_cache_only_if_running():
+        return screener_board.build_screener_board(timeframe=timeframe)
 
 
 @router.get("/relative-performance", response_model=RelativePerformanceResponse)
 def get_relative_performance(
     timeframe: RelativePerformanceTimeframe = Query(default="30d"),
 ) -> RelativePerformanceResponse:
-    return screener_board.build_relative_performance(timeframe=timeframe)
+    with reads_cache_only_if_running():
+        return screener_board.build_relative_performance(timeframe=timeframe)
 
 
 @router.get("/{symbol}/scalp", response_model=ScalpView)
@@ -43,4 +51,5 @@ def get_scalp_view(symbol: str, timeframe: Timeframe = Query(default="4h")) -> S
     """`timeframe` (Amendment 2, default 4h) selects the chart's interval;
     the scalp RSI reading stays labeled with its own timeframe (AC-18).
     """
-    return screener_board.build_scalp_view(symbol, timeframe=timeframe)
+    with reads_cache_only_if_running():
+        return screener_board.build_scalp_view(symbol, timeframe=timeframe)
