@@ -1,7 +1,6 @@
 import { ChartFreshness } from "@/components/chart/ChartFreshness";
 import { MiniChart } from "@/components/chart/MiniChart";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
-import { SignalDetailPanel } from "@/components/screener/SignalDetailPanel";
 import { formatUnavailableReason } from "@/lib/format-unavailable-reason";
 import { TIMEFRAMES, type CoinPanel as CoinPanelData, type GainChip, type Timeframe } from "@/lib/types/screener";
 
@@ -41,16 +40,6 @@ export function CoinPanel({ panel, onOpenDrillDown, timeframe }: CoinPanelProps)
             Drill down
           </button>
         )}
-        {/* RFC-004 (items 62/64/66/67): the real confidence badge,
-            tap-to-expand into the per-signal detail panel — replaces
-            RFC-001's plain-text placeholder. */}
-        <SignalDetailPanel
-          confidence={panel.confidence}
-          momentum={panel.momentum}
-          trend={panel.trend}
-          legContext={panel.leg_context}
-          narrativeState={panel.narrative_state}
-        />
       </div>
 
       {panel.chart.available ? (
@@ -67,19 +56,7 @@ export function CoinPanel({ panel, onOpenDrillDown, timeframe }: CoinPanelProps)
         />
       )}
 
-      <div className="coin-panel__signals">
-        <span data-testid="momentum-state" data-state={panel.momentum.state}>
-          Momentum: {panel.momentum.state}
-        </span>
-        <span data-testid="trend-direction" data-state={panel.trend.direction}>
-          Trend: {panel.trend.direction}
-        </span>
-      </div>
-
-      {/* Amendment 2 (AC-20): a compact 5-chip row, visually distinct from
-          (not merged into) the momentum PASS/FAIL badge above — a coin can
-          read "in momentum" while individual short-timeframe chips are
-          negative without looking contradictory. */}
+      {/* Amendment 2 (AC-20): a compact 5-chip row under the chart. */}
       {/* T34 / S2: each chip is the timeframe's current candle, open to
           latest price, read from `gain_by_timeframe`; N/A carries its reason. */}
       <div data-testid="gain-readout-row" className="coin-panel__gain-row">

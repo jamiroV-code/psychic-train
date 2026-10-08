@@ -75,16 +75,6 @@
       "l2s": 2.0,
       "memecoins": 0.0,
       "rwa": 0.0
-    },
-    "screener_narrative_state": {
-      "ARB": "unmapped",
-      "BTC": "unavailable",
-      "DOGE": "unmapped",
-      "ETH": "in-focus",
-      "FET": "unmapped",
-      "HYPE": "in-focus",
-      "ONDO": "unmapped",
-      "SOMEUNMAPPED": "unmapped"
     }
   },
   "with_newly_mapped": {
@@ -163,16 +153,6 @@
       "l2s": 2.0,
       "memecoins": 0.0,
       "rwa": 0.0
-    },
-    "screener_narrative_state": {
-      "ARB": "unmapped",
-      "BTC": "unavailable",
-      "DOGE": "unmapped",
-      "ETH": "in-focus",
-      "FET": "unmapped",
-      "HYPE": "in-focus",
-      "ONDO": "unmapped",
-      "SOMEUNMAPPED": "unmapped"
     }
   }
 }

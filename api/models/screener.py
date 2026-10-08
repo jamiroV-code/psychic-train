@@ -2,12 +2,6 @@
 
 Public Contracts (PLAN.md): these field shapes are authoritative — RFC-002/
 RFC-003/RFC-004 code against them, not invent fields ad hoc later.
-
-`RegimeState` is RFC-001's throwaway STUB input type to
-`select_active_benchmark` (`placeholder: bool = True` only) — explicitly NOT
-a Public Contract; RFC-002 (item 44) replaces it wholesale with the real
-`CurrentLegState`. `BenchmarkSelection` is the STABLE output type every
-RFC-002+ consumer reads; its own shape never changes across that swap.
 """
 from __future__ import annotations
 
@@ -20,61 +14,12 @@ TIMEFRAMES: tuple[Timeframe, ...] = ("15m", "1h", "4h", "1d", "1w")
 
 RelativePerformanceTimeframe = Literal["7d", "30d", "90d", "ytd"]
 
-MomentumStateLiteral = Literal["PASS", "FAIL", "insufficient"]
-
 # RFC-005: why a ChartSeries has no data. Before this existed, `available:
 # False` was documented as meaning "insufficient history" and was in fact
 # produced by three unrelated causes — a misconfigured symbol, a dead data
 # source, and genuinely short history — so a config bug reported itself to
 # the operator as a history problem.
 UnavailableReason = Literal["insufficient-history", "bad-symbol", "source-unavailable"]
-TrendDirectionLiteral = Literal["up", "down", "insufficient"]
-
-# ADR-4's closed confidence enum. RFC-001 only ever produces the
-# `insufficient-data` placeholder (real badge wiring is RFC-004, item 64) —
-# the type stays the full closed union so no later RFC has to widen it.
-ConfidenceState = Literal["aligned", "mixed", "conflicting", "insufficient-data"]
-
-# ADR-4's two derived-input closed enums (RFC-004, item 64a) — exposed on
-# `CoinPanel` (below) alongside the aggregate `confidence` so
-# `SignalDetailPanel` can render each signal from its own typed state
-# rather than re-deriving it from the badge enum (Risk Prediction #4: an
-# `insufficient-data` badge must not imply every individual signal is
-# insufficient, so the detail panel needs the real per-signal readings, not
-# a guess reverse-engineered from the aggregate).
-LegContextLiteral = Literal["confirmed", "candidate-pending", "unavailable"]
-NarrativeStateLiteral = Literal[
-    "in-focus", "confirmed-emerging", "unconfirmed-emerging", "rotated-out", "unmapped", "unavailable"
-]
-
-
-class MomentumState(BaseModel):
-    state: MomentumStateLiteral
-    daily_value: float | None = None
-    weekly_value: float | None = None
-
-
-class TrendState(BaseModel):
-    direction: TrendDirectionLiteral
-    sma_value: float | None = None
-
-
-class BenchmarkSelection(BaseModel):
-    """STABLE output type (Public Contracts) — never replaced, only ever
-    produced by RFC-001's stub logic today and RFC-002's real logic later.
-    """
-
-    active: Literal["BTC", "HYPE"]
-    reason: str
-
-
-class RegimeState(BaseModel):
-    """RFC-001 STUB INPUT type to `select_active_benchmark` — NOT a Public
-    Contract. Replaced wholesale by RFC-002's real `CurrentLegState` input
-    (item 44); never extended in place.
-    """
-
-    placeholder: bool = True
 
 
 class ChartBar(BaseModel):
@@ -125,18 +70,6 @@ class GainChip(BaseModel):
 
 class CoinPanel(BaseModel):
     symbol: str
-    momentum: MomentumState
-    trend: TrendState
-    # RFC-004 wires the real badge here; RFC-001 always returns this literal
-    # placeholder (item 15).
-    confidence: ConfidenceState = "insufficient-data"
-    # RFC-004 (item 64a, Risk Prediction #4): the same two derived inputs
-    # `compute_badge` used to reach `confidence` above, exposed individually
-    # so the frontend's `SignalDetailPanel` never has to reverse-engineer a
-    # per-signal reading from the aggregate badge value. Defaults match
-    # `confidence`'s own pre-RFC-004 placeholder shape.
-    leg_context: LegContextLiteral = "unavailable"
-    narrative_state: NarrativeStateLiteral = "unavailable"
     chart: ChartSeries
     # Kept for existing consumers; filled from `gain_by_timeframe[tf].pct`.
     percent_change_by_timeframe: dict[Timeframe, float | None]
@@ -146,7 +79,6 @@ class CoinPanel(BaseModel):
 
 class ScreenerBoardResponse(BaseModel):
     timeframe: Timeframe
-    active_benchmark: BenchmarkSelection
     coins: list[CoinPanel]
     # T32 / S1 (additive, defaulted): server clock and its measured skew
     # against the exchange (seconds, host minus exchange; None = unknown).
@@ -155,19 +87,12 @@ class ScreenerBoardResponse(BaseModel):
     clock_skew_warning: bool = False
 
 
-class ScalpMomentumState(BaseModel):
-    state: MomentumStateLiteral
-    value: float | None = None
-    timeframe: Timeframe = "4h"
+class ChartView(BaseModel):
+    """T36 / S4: the drill-down's chart at its own interval (default 4h)."""
 
-
-class ScalpView(BaseModel):
     symbol: str
-    timeframe: Timeframe  # the chart's own interval (Amendment 2, default 4h)
+    timeframe: Timeframe
     chart: ChartSeries
-    # Always independently labeled with its own timeframe (default 4h) so
-    # it's never visually mistaken for the chart's current zoom (AC-18).
-    scalp_momentum: ScalpMomentumState
 
 
 class RelativePerformanceSeries(BaseModel):

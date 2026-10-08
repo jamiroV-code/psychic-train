@@ -121,8 +121,8 @@ describe("RelativePerformanceChart", () => {
   });
 
   // dead-data-notice-unification: closes the pre-existing zero-coverage gap on
-  // rp-error — same pattern as the LegTimelineBanner/NarrativeStrip error cases,
-  // adapted to this component's own convention: the toolbar and chart container
+  // rp-error — the shared dead-data error pattern, adapted to this
+  // component's own convention: the toolbar and chart container
   // stay mounted on error (nothing here is a whole-section replace).
   it("renders rp-error when the fetch rejects, while the toolbar and chart container stay mounted", async () => {
     const fetchData = vi.fn(async (): Promise<RelativePerformanceResponse> => {

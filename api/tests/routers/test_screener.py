@@ -7,29 +7,6 @@ handlers call — rather than going through `fastapi.testclient.TestClient`
 as the plan's Verification Evidence command
 (`uv run pytest api/tests/routers/test_screener.py::... -v`) implies. Test
 names match the plan's exactly; only the HTTP-client layer is bypassed.
-
-RFC-002 note (item 44): `build_screener_board` now calls
-`leg_boundary.compute_current_leg_state()`, which — on a real cache miss —
-would hit FRED/LiqTide/DefiLlama over the network. These are screener
-data-binding tests, not regime tests (those live in `test_leg_boundary.py`/
-`test_benchmark.py`/`test_regime.py`), so every fixture here monkeypatches
-`compute_current_leg_state` to a fixed, network-free `has_data=False`
-state (mirroring RFC-001's own `RegimeState()` stub default — this keeps
-these tests' behavior unchanged by RFC-002).
-
-RFC-004 note (items 62/64): `build_screener_board` now additionally calls
-`narrative_trigger.assemble_narrative_categories()` once per board build,
-which would otherwise hit pytrends/Reddit/CoinGecko over the network on a
-cache miss — same cross-RFC coupling shape as the leg-boundary note above.
-Every fixture here also monkeypatches `assemble_narrative_categories` to an
-empty list (no categories fetched -> every coin's `narrative_state`
-resolves to `unavailable` via `badge.derive_narrative_state`, since none of
-this file's fixture coins have curated mappings anyway except BTC, whose
-mapped category is never a seed category regardless — see
-`badge.derive_narrative_state`'s docstring) so these data-binding tests'
-existing assertions (about momentum/trend/chart/gain-readout, not about the
-confidence badge itself — that's `test_confidence_badge.py`'s job) stay
-unaffected by RFC-004.
 """
 from __future__ import annotations
 
@@ -37,12 +14,9 @@ import pandas as pd
 import pytest
 
 from api.analytics import screener_board
-from api.analytics.indicators.trend import SMA_LENGTH
+from api.analytics.indicators.sma import SMA_LENGTH
 from api.data.ccxt_adapter import OhlcvResult
 from api.data import watchlist as watchlist_store
-from api.models.regime import CurrentLegState
-
-_NO_LEG_DATA = CurrentLegState(candidate_boundaries=[], confirmed_boundaries=[], composite_variant="reduced", has_data=False)
 
 
 def _df(closes: list[float], freq: str = "D") -> pd.DataFrame:
@@ -108,8 +82,6 @@ def two_coin_fixture(monkeypatch):
     fake = _FakeAdapter(per_symbol)
     monkeypatch.setattr(screener_board.ccxt_adapter, "fetch_ohlcv", fake.fetch_ohlcv)
     monkeypatch.setattr(watchlist_store, "read_watchlist", lambda *a, **kw: ["BTC", "ETH"])
-    monkeypatch.setattr(screener_board.leg_boundary, "compute_current_leg_state", lambda *a, **k: _NO_LEG_DATA)
-    monkeypatch.setattr(screener_board.narrative_trigger, "assemble_narrative_categories", lambda *a, **k: [])
     return fake
 
 
@@ -118,28 +90,28 @@ def test_screener_board_grid_data_binding(two_coin_fixture):
     assert len(board.coins) == 2
     by_symbol = {p.symbol: p for p in board.coins}
 
-    # AC-5: no cross-contamination — BTC (bullish fixture) passes momentum,
-    # ETH (bearish fixture) does not, and each panel's own values reflect
-    # its own fixture's trend direction.
-    assert by_symbol["BTC"].momentum.state == "PASS"
-    assert by_symbol["ETH"].momentum.state == "FAIL"
-    assert by_symbol["BTC"].trend.direction == "up"
-    assert by_symbol["ETH"].trend.direction == "down"
+    # AC-5: no cross-contamination — BTC (bullish fixture) and ETH (bearish
+    # fixture) each carry their own series.
+    assert by_symbol["BTC"].chart.price[-1].close > by_symbol["BTC"].chart.price[0].close
+    assert by_symbol["ETH"].chart.price[-1].close < by_symbol["ETH"].chart.price[0].close
     assert by_symbol["BTC"].symbol != by_symbol["ETH"].symbol
 
     # AC-6: SMA present on both panels.
-    assert by_symbol["BTC"].trend.sma_value is not None
-    assert by_symbol["ETH"].trend.sma_value is not None
+    assert by_symbol["BTC"].chart.sma
+    assert by_symbol["ETH"].chart.sma
 
-    # AC-7: scalp endpoint reachable (drill-down data assembles cleanly).
-    scalp = screener_board.build_scalp_view("BTC")
-    assert scalp.symbol == "BTC"
-    assert scalp.scalp_momentum.state in ("PASS", "FAIL", "insufficient")
+    # AC-7: the drill-down chart assembles cleanly.
+    view = screener_board.build_chart_view("BTC")
+    assert view.symbol == "BTC"
+    assert view.timeframe == "4h"
+    assert view.chart.available is True
+    assert view.chart.price and view.chart.sma
+    assert view.chart.last_bar_ts is not None and view.chart.server_time is not None
 
 
 def test_board_timeframe_toggle_global_switch(two_coin_fixture):
     """AC-16: same watchlist at two timeframes returns different chart
-    series but identical momentum PASS/FAIL.
+    series.
     """
     board_1d = screener_board.build_screener_board(timeframe="1d")
     board_1h = screener_board.build_screener_board(timeframe="1h")
@@ -147,7 +119,6 @@ def test_board_timeframe_toggle_global_switch(two_coin_fixture):
     btc_1d = next(p for p in board_1d.coins if p.symbol == "BTC")
     btc_1h = next(p for p in board_1h.coins if p.symbol == "BTC")
 
-    assert btc_1d.momentum == btc_1h.momentum  # unaffected by display timeframe
     # Chart series differ because the two fixtures' timestamps differ (daily
     # vs hourly cadence over the same synthetic index) — the toggle actually
     # changed what's drawn.
@@ -170,8 +141,6 @@ def test_board_timeframe_toggle_insufficient_history(monkeypatch):
     fake = _FakeAdapter(per_symbol)
     monkeypatch.setattr(screener_board.ccxt_adapter, "fetch_ohlcv", fake.fetch_ohlcv)
     monkeypatch.setattr(watchlist_store, "read_watchlist", lambda *a, **kw: ["BTC", "THIN"])
-    monkeypatch.setattr(screener_board.leg_boundary, "compute_current_leg_state", lambda *a, **k: _NO_LEG_DATA)
-    monkeypatch.setattr(screener_board.narrative_trigger, "assemble_narrative_categories", lambda *a, **k: [])
 
     board = screener_board.build_screener_board(timeframe="15m")
     by_symbol = {p.symbol: p for p in board.coins}
@@ -183,15 +152,14 @@ def test_board_timeframe_toggle_insufficient_history(monkeypatch):
 
 def test_drilldown_chart_timeframe_range(two_coin_fixture):
     """AC-18: the drill-down chart honors its own `timeframe` param,
-    independent of the board's own toggle; the scalp RSI stays labeled 4h.
+    independent of the board's own toggle.
     """
-    view_1h = screener_board.build_scalp_view("BTC", timeframe="1h")
-    view_1d = screener_board.build_scalp_view("BTC", timeframe="1d")
+    view_1h = screener_board.build_chart_view("BTC", timeframe="1h")
+    view_1d = screener_board.build_chart_view("BTC", timeframe="1d")
 
     assert view_1h.timeframe == "1h"
     assert view_1d.timeframe == "1d"
-    assert view_1h.scalp_momentum.timeframe == "4h"
-    assert view_1d.scalp_momentum.timeframe == "4h"
+    assert view_1h.chart.price[-1].timestamp != view_1d.chart.price[-1].timestamp
 
 
 def test_per_coin_multi_timeframe_gain_readout(two_coin_fixture):
@@ -226,8 +194,6 @@ def test_per_coin_gain_readout_thin_slot_is_none_not_zero(monkeypatch):
     fake = _FakeAdapter(per_symbol)
     monkeypatch.setattr(screener_board.ccxt_adapter, "fetch_ohlcv", fake.fetch_ohlcv)
     monkeypatch.setattr(watchlist_store, "read_watchlist", lambda *a, **kw: ["BTC"])
-    monkeypatch.setattr(screener_board.leg_boundary, "compute_current_leg_state", lambda *a, **k: _NO_LEG_DATA)
-    monkeypatch.setattr(screener_board.narrative_trigger, "assemble_narrative_categories", lambda *a, **k: [])
 
     board = screener_board.build_screener_board(timeframe="1d")
     btc = board.coins[0]

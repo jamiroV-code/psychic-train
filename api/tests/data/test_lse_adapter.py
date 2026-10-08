@@ -12,7 +12,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 import pytest
 
-from api.analytics.indicators.momentum import compute_rsi
+from api.analytics.indicators.rsi import compute_rsi
 from api.data import cache, lse_adapter
 
 FIXTURES = Path(__file__).parent / "fixtures"

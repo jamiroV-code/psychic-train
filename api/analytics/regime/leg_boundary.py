@@ -1,7 +1,6 @@
 """Fork A leg-boundary: statistical candidate detection (ADR-1) +
 price-structure confirmation (items 37-38), plus the `CurrentLegState`
-orchestration that assembles both into the real input
-`benchmark.select_active_benchmark` (item 44) consumes.
+orchestration that assembles both (item 44).
 
 Candidates never silently disappear once detected (ADR-3) — callers always
 receive both `candidate_boundaries` and `confirmed_boundaries`.
@@ -145,9 +144,8 @@ def confirm_boundaries(
 
 def compute_current_leg_state(as_of: pd.Timestamp | None = None) -> CurrentLegState:
     """Orchestrates variant selection + candidate detection + confirmation
-    into the real `CurrentLegState` input `benchmark.select_active_benchmark`
-    (item 44) consumes — replaces RFC-001's `RegimeState` stub wholesale.
-    Also backs `GET /api/regime/legs` (item 42).
+    into the `CurrentLegState` (item 44). Backs `GET /api/regime/legs`
+    (item 42).
     """
     as_of = as_of or pd.Timestamp.now(tz="utc")
     variant = liquidity_composite.select_composite_variant(as_of)

@@ -1,9 +1,7 @@
 import type {
-  LegBoundaryResponse,
-  NarrativeCategory,
+  ChartView,
   RelativePerformanceResponse,
   RelativePerformanceTimeframe,
-  ScalpView,
   ScreenerBoardResponse,
   Timeframe,
 } from "@/lib/types/screener";
@@ -33,20 +31,12 @@ export function fetchScreenerBoard(timeframe: Timeframe = "1d"): Promise<Screene
   return getJson<ScreenerBoardResponse>(`/api/screener/board?timeframe=${timeframe}`);
 }
 
-export function fetchScalpView(symbol: string, timeframe: Timeframe = "4h"): Promise<ScalpView> {
-  return getJson<ScalpView>(`/api/screener/${encodeURIComponent(symbol)}/scalp?timeframe=${timeframe}`);
+export function fetchChartView(symbol: string, timeframe: Timeframe = "4h"): Promise<ChartView> {
+  return getJson<ChartView>(`/api/screener/${encodeURIComponent(symbol)}/chart?timeframe=${timeframe}`);
 }
 
 export function fetchRelativePerformance(
   timeframe: RelativePerformanceTimeframe = "30d"
 ): Promise<RelativePerformanceResponse> {
   return getJson<RelativePerformanceResponse>(`/api/screener/relative-performance?timeframe=${timeframe}`);
-}
-
-export function fetchLegs(): Promise<LegBoundaryResponse> {
-  return getJson<LegBoundaryResponse>("/api/regime/legs");
-}
-
-export function fetchNarrativeCategories(): Promise<NarrativeCategory[]> {
-  return getJson<NarrativeCategory[]>("/api/narrative/categories");
 }

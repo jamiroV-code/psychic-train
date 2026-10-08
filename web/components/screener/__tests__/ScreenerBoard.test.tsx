@@ -19,11 +19,6 @@ function chip(pct: number | null, reason: GainChip["reason"] = null): GainChip {
 function makeCoin(symbol: string, overrides: Partial<ScreenerBoardResponse["coins"][number]> = {}) {
   return {
     symbol,
-    momentum: { state: "PASS" as const, daily_value: 60, weekly_value: 65 },
-    trend: { direction: "up" as const, sma_value: 100 },
-    confidence: "insufficient-data" as const,
-    leg_context: "confirmed" as const,
-    narrative_state: "in-focus" as const,
     chart: {
       price: [{ timestamp: "2024-01-01T00:00:00Z", close: 100 }],
       sma: [{ timestamp: "2024-01-01T00:00:00Z", close: 95 }],
@@ -52,7 +47,6 @@ function makeCoin(symbol: string, overrides: Partial<ScreenerBoardResponse["coin
 function makeBoard(timeframe: Timeframe, coins: ReturnType<typeof makeCoin>[]): ScreenerBoardResponse {
   return {
     timeframe,
-    active_benchmark: { active: "BTC", reason: "test" },
     coins,
     server_time: null,
     clock_skew_seconds: null,
@@ -62,7 +56,12 @@ function makeBoard(timeframe: Timeframe, coins: ReturnType<typeof makeCoin>[]): 
 
 describe("ScreenerBoard", () => {
   it("renders N panels for N mock coins, each panel's values matching its own fixture (AC-5)", async () => {
-    const coins = [makeCoin("BTC"), makeCoin("ETH", { momentum: { state: "FAIL", daily_value: 40, weekly_value: 45 } })];
+    const coins = [
+      makeCoin("BTC"),
+      makeCoin("ETH", {
+        gain_by_timeframe: { "15m": chip(-1), "1h": chip(-2), "4h": chip(-3), "1d": chip(-4), "1w": chip(-5) },
+      }),
+    ];
     const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
 
     render(<ScreenerBoard fetchBoard={fetchBoard} />);
@@ -70,24 +69,28 @@ describe("ScreenerBoard", () => {
     await waitFor(() => expect(screen.getByTestId("coin-panel-BTC")).toBeInTheDocument());
     expect(screen.getByTestId("coin-panel-ETH")).toBeInTheDocument();
 
-    const btcMomentum = screen.getByTestId("coin-panel-BTC").querySelector('[data-testid="momentum-state"]');
-    const ethMomentum = screen.getByTestId("coin-panel-ETH").querySelector('[data-testid="momentum-state"]');
-    expect(btcMomentum?.getAttribute("data-state")).toBe("PASS");
-    expect(ethMomentum?.getAttribute("data-state")).toBe("FAIL");
+    const btcChip = screen.getByTestId("coin-panel-BTC").querySelector('[data-testid="gain-chip-1d"]');
+    const ethChip = screen.getByTestId("coin-panel-ETH").querySelector('[data-testid="gain-chip-1d"]');
+    expect(btcChip?.textContent).toContain("+4.5%");
+    expect(ethChip?.textContent).toContain("-4.0%");
   });
 
-  it("switches every panel's chart together when the global timeframe toggle changes, while momentum badges stay unchanged (AC-16)", async () => {
-    const coins = [makeCoin("BTC")];
+  it("switches every panel's chart together when the global timeframe toggle changes, with no verdict element on the page (AC-16, T36 / S4)", async () => {
+    const coins = [makeCoin("BTC"), makeCoin("ETH")];
     const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
 
-    render(<ScreenerBoard fetchBoard={fetchBoard} />);
+    const { container } = render(<ScreenerBoard fetchBoard={fetchBoard} />);
     await waitFor(() => expect(screen.getByTestId("coin-panel-BTC")).toBeInTheDocument());
 
     fireEvent.click(screen.getByTestId("timeframe-button-1h"));
 
     await waitFor(() => expect(fetchBoard).toHaveBeenCalledWith("1h"));
-    const momentumEl = screen.getByTestId("coin-panel-BTC").querySelector('[data-testid="momentum-state"]');
-    expect(momentumEl?.getAttribute("data-state")).toBe("PASS"); // unchanged by the display toggle
+    expect(screen.getByTestId("timeframe-button-1h").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getAllByTestId("gain-readout-row")).toHaveLength(2);
+    const text = container.textContent ?? "";
+    for (const word of ["Momentum", "Trend", "Benchmark", "Confidence", "Narrative"]) {
+      expect(text).not.toContain(word);
+    }
   });
 
   it("renders 'N/A' (not '0%') for an unavailable gain-readout slot (AC-20)", async () => {
@@ -197,14 +200,13 @@ describe("ScreenerBoard", () => {
   it("opens the drill-down view on demand from a coin panel, not as its own grid tile (AC-7)", async () => {
     const coins = [makeCoin("BTC")];
     const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
-    const fetchScalp = vi.fn(async () => ({
+    const fetchChart = vi.fn(async () => ({
       symbol: "BTC",
       timeframe: "4h" as Timeframe,
       chart: { price: [], sma: [], available: false, reason: null, ...NO_FRESHNESS },
-      scalp_momentum: { state: "insufficient" as const, value: null, timeframe: "4h" as Timeframe },
     }));
 
-    render(<ScreenerBoard fetchBoard={fetchBoard} fetchScalp={fetchScalp} />);
+    render(<ScreenerBoard fetchBoard={fetchBoard} fetchChart={fetchChart} />);
     await waitFor(() => expect(screen.getByTestId("open-drilldown-BTC")).toBeInTheDocument());
 
     expect(screen.queryByTestId("drilldown-view")).not.toBeInTheDocument();

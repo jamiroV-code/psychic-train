@@ -2,7 +2,7 @@
  * End-to-end specs for /screener.
  *
  * What these exist to cover, stated plainly: `ScreenerBoard` takes
- * `fetchBoard`/`fetchScalp` as injectable props and all seven vitest suites
+ * `fetchBoard`/`fetchChart` as injectable props and all seven vitest suites
  * pass fakes, so `lib/api/screener.ts` — the real client, the real URL
  * construction, the real JSON decode — has never been executed by a test.
  * Neither has CORS, the Next.js runtime, nor the FastAPI-to-TypeScript
@@ -37,7 +37,6 @@ interface ChartBar {
 }
 interface BoardResponse {
   timeframe: string;
-  active_benchmark: { active: string; reason: string };
   coins: {
     symbol: string;
     chart: { price: ChartBar[]; sma: ChartBar[]; available: boolean };
@@ -69,7 +68,6 @@ test("the board renders one panel per watchlist symbol, from a real request", as
   // No error path was taken — if the client, CORS or the shape were broken,
   // this is where it would surface instead of an empty grid.
   await expect(page.getByTestId("board-error")).toHaveCount(0);
-  await expect(page.getByTestId("active-benchmark")).not.toHaveText(/…/);
 });
 
 // ---------------------------------------------------------------------------
@@ -183,25 +181,22 @@ test("a failing API surfaces an error, not a blank page", async ({ page }) => {
 });
 
 // ---------------------------------------------------------------------------
-// 6. Drill-down is on demand (AC-7), against a real scalp request.
+// 6. Drill-down is on demand (AC-7), against a real chart request.
 // ---------------------------------------------------------------------------
-test("drill-down opens on demand and fetches the scalp view", async ({ page }) => {
+test("drill-down opens on demand and fetches the chart view", async ({ page }) => {
   await page.goto("/screener");
   await expect(page.getByTestId("coin-panel-BTC")).toBeVisible();
 
   // AC-7: not rendered as part of the grid until asked for.
   await expect(page.getByTestId("drilldown-view")).toHaveCount(0);
 
-  const scalpRequest = page.waitForRequest((r) => r.url().includes("/scalp"));
+  const chartRequest = page.waitForRequest((r) => r.url().includes("/api/screener/BTC/chart"));
   await page.getByTestId("open-drilldown-BTC").click();
-  const req = await scalpRequest;
+  await chartRequest;
 
-  expect(req.url()).toContain("/api/screener/BTC/scalp");
   const view = page.getByTestId("drilldown-view");
   await expect(view).toBeVisible();
   await expect(view).toHaveAttribute("aria-label", "BTC drill-down");
-  // The scalp reading came from the real endpoint, not a placeholder.
-  await expect(view.getByTestId("scalp-rsi-reading")).toBeVisible();
 
   await view.getByTestId("drilldown-close").click();
   await expect(page.getByTestId("drilldown-view")).toHaveCount(0);

@@ -1,6 +1,6 @@
-"""Golden-value + boundary tests for api/analytics/indicators/trend.py.
+"""Golden-value + boundary tests for api/analytics/indicators/sma.py.
 
-Covers AC-6 (60-period SMA trend line) and AC-17 (Amendment 2: the SMA
+Covers AC-6 (60-period SMA line) and AC-17 (Amendment 2: the SMA
 re-scales to whichever timeframe is active, not a fixed 60-calendar-day
 window).
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from api.analytics.indicators.trend import SMA_LENGTH, compute_sma, compute_trend
+from api.analytics.indicators.sma import SMA_LENGTH, compute_sma
 
 
 def _make_df(closes: list[float], freq: str = "D") -> pd.DataFrame:
@@ -38,24 +38,7 @@ def test_sma_golden_value():
 
 def test_sma_insufficient_history_is_explicit_not_zero_or_nan_rendered_as_valid():
     df = _make_df([100.0] * 10)  # fewer than 60 bars
-    result = compute_trend(df, length=SMA_LENGTH)
-    assert result.direction == "insufficient"
-    assert result.sma_value is None
-
-
-def test_trend_direction_up_when_price_above_sma():
-    closes = [50.0] * 59 + [200.0]  # last close far above the 60-bar mean
-    df = _make_df(closes)
-    result = compute_trend(df, length=SMA_LENGTH)
-    assert result.direction == "up"
-    assert result.sma_value is not None
-
-
-def test_trend_direction_down_when_price_below_sma():
-    closes = [200.0] * 59 + [10.0]  # last close far below the 60-bar mean
-    df = _make_df(closes)
-    result = compute_trend(df, length=SMA_LENGTH)
-    assert result.direction == "down"
+    assert compute_sma(df, length=SMA_LENGTH) is None
 
 
 def test_sma_period_rescales_with_timeframe():

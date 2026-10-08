@@ -13,10 +13,6 @@
  * can only return the 4 fixed seed categories (unknown ids are a 422), so the
  * cap cannot be reached end to end. It is unit-tested in vitest
  * (NarrativeDashboard.test.tsx, narrative-view-model.test.ts).
- *
- * Ordering: the `/screener` AC-1 check is LAST. `/screener`'s NarrativeStrip
- * calls `/categories`, which may write live pytrends/coingecko rows into the
- * same cache when the network is reachable.
  */
 import { expect, test, type Page } from "@playwright/test";
 import fs from "node:fs";
@@ -344,13 +340,4 @@ test("home page links to the narrative dashboard", async ({ page }) => {
   await page.getByTestId("home-link-narrative").click();
   await expect(page).toHaveURL(/\/narrative$/);
   await expect(page.getByTestId("narrative-dashboard")).toBeVisible();
-});
-
-// LAST on purpose — see the file header.
-test("AC-1: /screener's NarrativeStrip still renders", async ({ page }) => {
-  test.setTimeout(120_000);
-  await page.goto("/screener");
-  const strip = page.getByTestId("narrative-strip");
-  await expect(strip).toBeVisible();
-  await expect(strip.getByTestId("narrative-loading")).toHaveCount(0, { timeout: 90_000 });
 });

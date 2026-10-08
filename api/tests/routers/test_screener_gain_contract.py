@@ -13,7 +13,6 @@ import pandas as pd
 from api.analytics import screener_board
 from api.data import watchlist as watchlist_store
 from api.data.ccxt_adapter import OhlcvResult
-from api.models.regime import CurrentLegState
 from api.models.screener import CoinPanel, GainChip
 
 _TS_PATH = Path(__file__).resolve().parents[3] / "web" / "lib" / "types" / "screener.ts"
@@ -87,11 +86,8 @@ def test_percent_change_by_timeframe_equals_chip_pct(monkeypatch):
         df = frames[timeframe]
         return OhlcvResult(symbol, timeframe, df, len(df) < 60, "ok" if not df.empty else "unavailable")
 
-    no_leg = CurrentLegState(candidate_boundaries=[], confirmed_boundaries=[], composite_variant="reduced", has_data=False)
     monkeypatch.setattr(screener_board.ccxt_adapter, "fetch_ohlcv", fetch)
     monkeypatch.setattr(watchlist_store, "read_watchlist", lambda *a, **kw: ["BTC"])
-    monkeypatch.setattr(screener_board.leg_boundary, "compute_current_leg_state", lambda *a, **k: no_leg)
-    monkeypatch.setattr(screener_board.narrative_trigger, "assemble_narrative_categories", lambda *a, **k: [])
 
     panel = screener_board.build_screener_board(timeframe="1d").coins[0]
     assert set(panel.gain_by_timeframe) == {"15m", "1h", "4h", "1d", "1w"}
