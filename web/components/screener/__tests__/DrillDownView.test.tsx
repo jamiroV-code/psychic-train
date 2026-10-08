@@ -3,24 +3,23 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { DrillDownView } from "@/components/screener/DrillDownView";
-import type { ScalpView, Timeframe } from "@/lib/types/screener";
+import type { ChartView, Timeframe } from "@/lib/types/screener";
 
 // T32 / S1 freshness fields (ChartSeries); nulls = no freshness information.
 const NO_FRESHNESS = { last_bar_ts: null, fetched_at: null, is_partial: null, server_time: null, stale: false };
 
-function makeScalpView(timeframe: Timeframe): ScalpView {
+function makeChartView(timeframe: Timeframe): ChartView {
   return {
     symbol: "BTC",
     timeframe,
     chart: { price: [{ timestamp: "2024-01-01T00:00:00Z", close: 100 }], sma: [], available: true, reason: null, ...NO_FRESHNESS },
-    scalp_momentum: { state: "PASS", value: 62.3, timeframe: "4h" },
   };
 }
 
 describe("DrillDownView", () => {
   it("captions the drill-down chart's last bar in UTC with its age and a plain stale marker (T34 / S2)", async () => {
-    const fetchScalp = vi.fn(async (_symbol: string, tf: Timeframe) => {
-      const view = makeScalpView(tf);
+    const fetchChart = vi.fn(async (_symbol: string, tf: Timeframe) => {
+      const view = makeChartView(tf);
       view.chart = {
         ...view.chart,
         last_bar_ts: "2026-10-03T14:00:00Z",
@@ -30,7 +29,7 @@ describe("DrillDownView", () => {
       };
       return view;
     });
-    render(<DrillDownView symbol="BTC" fetchScalp={fetchScalp} />);
+    render(<DrillDownView symbol="BTC" fetchChart={fetchChart} />);
 
     await waitFor(() => expect(screen.getByTestId("chart-freshness-caption")).toBeInTheDocument());
     expect(screen.getByTestId("chart-freshness-caption").textContent).toBe("Last bar 2026-10-03 14:00 UTC, 22 min ago");
@@ -38,11 +37,11 @@ describe("DrillDownView", () => {
   });
 
   it("shows no caption or stale marker when the chart is unavailable (T34 / S2)", async () => {
-    const fetchScalp = vi.fn(async (_symbol: string, tf: Timeframe) => ({
-      ...makeScalpView(tf),
+    const fetchChart = vi.fn(async (_symbol: string, tf: Timeframe) => ({
+      ...makeChartView(tf),
       chart: { price: [], sma: [], available: false, reason: null, ...NO_FRESHNESS },
     }));
-    render(<DrillDownView symbol="BTC" fetchScalp={fetchScalp} />);
+    render(<DrillDownView symbol="BTC" fetchChart={fetchChart} />);
 
     await waitFor(() => expect(screen.getByTestId("drilldown-chart-unavailable")).toBeInTheDocument());
     expect(screen.queryByTestId("chart-freshness")).toBeNull();
@@ -50,39 +49,25 @@ describe("DrillDownView", () => {
   });
 
   it("re-fetches and re-renders at a newly selected timeframe, independent of any board state (AC-18)", async () => {
-    const fetchScalp = vi.fn(async (_symbol: string, tf: Timeframe) => makeScalpView(tf));
-    render(<DrillDownView symbol="BTC" fetchScalp={fetchScalp} />);
+    const fetchChart = vi.fn(async (_symbol: string, tf: Timeframe) => makeChartView(tf));
+    render(<DrillDownView symbol="BTC" fetchChart={fetchChart} />);
 
-    await waitFor(() => expect(fetchScalp).toHaveBeenCalledWith("BTC", "4h"));
+    await waitFor(() => expect(fetchChart).toHaveBeenCalledWith("BTC", "4h"));
 
     fireEvent.click(screen.getByTestId("drilldown-timeframe-button-1d"));
-    await waitFor(() => expect(fetchScalp).toHaveBeenCalledWith("BTC", "1d"));
-  });
-
-  it("labels the scalp RSI reading with its own timeframe regardless of the chart's zoom (AC-18)", async () => {
-    const fetchScalp = vi.fn(async (_symbol: string, tf: Timeframe) => makeScalpView(tf));
-    render(<DrillDownView symbol="BTC" fetchScalp={fetchScalp} />);
-
-    await waitFor(() => expect(screen.getByTestId("scalp-rsi-reading")).toBeInTheDocument());
-    fireEvent.click(screen.getByTestId("drilldown-timeframe-button-1w"));
-
-    await waitFor(() => expect(fetchScalp).toHaveBeenCalledWith("BTC", "1w"));
-    // scalp_momentum.timeframe is always "4h" in the fixture -> label never
-    // tracks the chart's zoom.
-    expect(screen.getByTestId("scalp-rsi-reading").textContent).toContain("4h");
+    await waitFor(() => expect(fetchChart).toHaveBeenCalledWith("BTC", "1d"));
   });
 
   // RFC-006 (reason-value-rendering slice): written but NOT executed in the
   // session that added it — same environment limitation as the file-level
   // SANDBOX NOTE below.
   it("distinguishes a source-unavailable chart reason from the generic history message (drilldown-chart-unavailable)", async () => {
-    const fetchScalp = vi.fn(async (_symbol: string, tf: Timeframe) => ({
+    const fetchChart = vi.fn(async (_symbol: string, tf: Timeframe) => ({
       symbol: "BTC",
       timeframe: tf,
       chart: { price: [], sma: [], available: false as const, reason: "source-unavailable" as const, ...NO_FRESHNESS },
-      scalp_momentum: { state: "insufficient" as const, value: null, timeframe: "4h" as Timeframe },
     }));
-    render(<DrillDownView symbol="BTC" fetchScalp={fetchScalp} />);
+    render(<DrillDownView symbol="BTC" fetchChart={fetchChart} />);
 
     await waitFor(() => expect(screen.getByTestId("drilldown-chart-unavailable")).toBeInTheDocument());
     const el = screen.getByTestId("drilldown-chart-unavailable");
@@ -95,11 +80,11 @@ describe("DrillDownView", () => {
   // reachable on the machine holding this repo, so vitest never ran. Same
   // limitation as the file-level note above; treat as written-to-spec only.
   it("renders drilldown-error and keeps the header/Close/timeframe-toggle rendered when the fetch rejects (AC-2)", async () => {
-    const fetchScalp = vi.fn(async () => {
-      throw new Error("API request timed out after 10000ms: /api/screener/BTC/scalp?timeframe=4h");
+    const fetchChart = vi.fn(async () => {
+      throw new Error("API request timed out after 10000ms: /api/screener/BTC/chart?timeframe=4h");
     });
     const onClose = vi.fn();
-    render(<DrillDownView symbol="BTC" onClose={onClose} fetchScalp={fetchScalp} />);
+    render(<DrillDownView symbol="BTC" onClose={onClose} fetchChart={fetchChart} />);
 
     await waitFor(() => expect(screen.getByTestId("drilldown-error")).toBeInTheDocument());
     expect(screen.getByTestId("drilldown-error").textContent).toContain(
@@ -107,7 +92,6 @@ describe("DrillDownView", () => {
     );
 
     // Data-dependent body is replaced, not merely hidden alongside.
-    expect(screen.queryByTestId("scalp-rsi-reading")).not.toBeInTheDocument();
     expect(screen.queryByTestId("drilldown-chart-unavailable")).not.toBeInTheDocument();
 
     // Header + timeframe toggle stay rendered and functional.
@@ -122,18 +106,18 @@ describe("DrillDownView", () => {
 
   it("surfaces an error for a fetch that never resolves only once it rejects, and clears it on the next successful fetch (AC-2)", async () => {
     let calls = 0;
-    const fetchScalp = vi.fn(async (_symbol: string, tf: Timeframe) => {
+    const fetchChart = vi.fn(async (_symbol: string, tf: Timeframe) => {
       calls += 1;
-      if (calls === 1) throw new Error("API request timed out after 10000ms: /api/screener/BTC/scalp");
-      return makeScalpView(tf);
+      if (calls === 1) throw new Error("API request timed out after 10000ms: /api/screener/BTC/chart");
+      return makeChartView(tf);
     });
-    render(<DrillDownView symbol="BTC" fetchScalp={fetchScalp} />);
+    render(<DrillDownView symbol="BTC" fetchChart={fetchChart} />);
 
     await waitFor(() => expect(screen.getByTestId("drilldown-error")).toBeInTheDocument());
 
     // Switching timeframe re-issues the call; error is cleared before it.
     fireEvent.click(screen.getByTestId("drilldown-timeframe-button-1d"));
     await waitFor(() => expect(screen.queryByTestId("drilldown-error")).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.getByTestId("scalp-rsi-reading")).toBeInTheDocument());
+    await waitFor(() => expect(fetchChart).toHaveBeenCalledWith("BTC", "1d"));
   });
 });

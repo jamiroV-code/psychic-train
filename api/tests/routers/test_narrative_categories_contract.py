@@ -1,14 +1,15 @@
 """RFC-1 (narrative dashboard) contract test — AC-1 / E5, option B.
 
-`GET /api/narrative/categories` and `/screener`'s `narrative_state` must be
-byte-identical before and after the curated narrative map
-(`api/data/narrative_category_map.json`) lands — INCLUDING when a coin that
-is mapped only in that new map shows up in CoinGecko's trending list.
+`GET /api/narrative/categories` must be byte-identical before and after the
+curated narrative map (`api/data/narrative_category_map.json`) lands —
+INCLUDING when a coin that is mapped only in that new map shows up in
+CoinGecko's trending list. (T36 / S4 removed the screener's per-coin
+narrative reading and its golden blocks.)
 
 The golden file `fixtures/narrative_categories_contract.json` was captured
 against the pre-RFC-1 code (legacy 3-entry `COIN_CATEGORY_MAP` only). If a
 future change makes this test fail, the curated map has leaked into the
-trigger/screener path — that is an AC-1 break, not a snapshot to refresh.
+trigger path — that is an AC-1 break, not a snapshot to refresh.
 
 Same SANDBOX NOTE as test_narrative.py: drives the exact assembly function
 the router calls (`trigger.assemble_narrative_categories`) rather than a
@@ -20,7 +21,6 @@ import json
 from datetime import date, timedelta
 from pathlib import Path
 
-from api.analytics import screener_board
 from api.analytics.narrative import trigger
 from api.data import cache, coingecko_adapter, pytrends_adapter, reddit_adapter
 
@@ -34,7 +34,6 @@ TRENDING_SCENARIOS = {
     "legacy_only": ["ETH", "HYPE", "BTC", "SOMEUNMAPPED"],
     "with_newly_mapped": ["ETH", "HYPE", "ARB", "OP", "FET", "TAO", "ONDO", "LINK", "DOGE", "PEPE", "WIF"],
 }
-SCREENER_SYMBOLS = ("BTC", "ETH", "HYPE", "ARB", "FET", "ONDO", "DOGE", "SOMEUNMAPPED")
 
 
 def _seed_history() -> None:
@@ -72,7 +71,6 @@ def _run_scenario(symbols: list[str], monkeypatch, tmp_path: Path) -> dict:
     )
 
     categories = trigger.assemble_narrative_categories(as_of=AS_OF)
-    by_id = {c.id: c for c in categories}
     coingecko_today = {
         cat: cache.read_narrative_series("coingecko", cat).set_index("date")["raw_value"].get(AS_OF)
         for cat in SEED_IDS
@@ -80,7 +78,6 @@ def _run_scenario(symbols: list[str], monkeypatch, tmp_path: Path) -> dict:
     return {
         "categories": [c.model_dump(mode="json") for c in categories],
         "coingecko_cache_as_of": coingecko_today,
-        "screener_narrative_state": {s: screener_board._coin_narrative_state(s, by_id) for s in SCREENER_SYMBOLS},
     }
 
 
@@ -100,10 +97,3 @@ class TestNarrativeCategoriesContract:
         assert legacy["coingecko_cache_as_of"] == widened["coingecko_cache_as_of"]
         assert widened["coingecko_cache_as_of"]["l2s"] == 2.0  # ETH + HYPE only
         assert widened["coingecko_cache_as_of"]["ai"] == 0.0
-
-    def test_screener_state_ignores_curated_only_mappings(self, monkeypatch, tmp_path):
-        snap = json.loads(build_contract_snapshot(monkeypatch, tmp_path))
-        states = snap["with_newly_mapped"]["screener_narrative_state"]
-        for sym in ("ARB", "FET", "ONDO", "DOGE", "SOMEUNMAPPED"):
-            assert states[sym] == "unmapped"
-        assert states["BTC"] == "unavailable"  # legacy non-seed store-of-value

@@ -3,20 +3,20 @@
 import { useEffect, useState } from "react";
 import { CoinPanel } from "@/components/screener/CoinPanel";
 import { DrillDownView } from "@/components/screener/DrillDownView";
-import { fetchScalpView, fetchScreenerBoard } from "@/lib/api/screener";
-import { TIMEFRAMES, type ScalpView, type ScreenerBoardResponse, type Timeframe } from "@/lib/types/screener";
+import { fetchChartView, fetchScreenerBoard } from "@/lib/api/screener";
+import { TIMEFRAMES, type ChartView, type ScreenerBoardResponse, type Timeframe } from "@/lib/types/screener";
 
 export interface ScreenerBoardProps {
   // Injectable for tests (avoids requiring a real fetch/network layer);
   // defaults to the real API client in the app.
   fetchBoard?: (timeframe: Timeframe) => Promise<ScreenerBoardResponse>;
-  fetchScalp?: (symbol: string, timeframe: Timeframe) => Promise<ScalpView>;
+  fetchChart?: (symbol: string, timeframe: Timeframe) => Promise<ChartView>;
   initialTimeframe?: Timeframe;
 }
 
 export function ScreenerBoard({
   fetchBoard = fetchScreenerBoard,
-  fetchScalp = fetchScalpView,
+  fetchChart = fetchChartView,
   initialTimeframe = "1d",
 }: ScreenerBoardProps) {
   // Amendment 2 (AC-16): ONE global timeframe control lifted here, passed
@@ -43,9 +43,6 @@ export function ScreenerBoard({
   return (
     <section data-testid="screener-board" aria-label="Screener board">
       <div className="screener-board__toolbar">
-        <span className="screener-board__benchmark" data-testid="active-benchmark">
-          Benchmark: {board?.active_benchmark.active ?? "…"}
-        </span>
         <div role="group" aria-label="Board timeframe" data-testid="timeframe-toggle">
           {TIMEFRAMES.map((tf) => (
             <button
@@ -79,7 +76,7 @@ export function ScreenerBoard({
         <DrillDownView
           symbol={drillDownSymbol}
           onClose={() => setDrillDownSymbol(null)}
-          fetchScalp={fetchScalp}
+          fetchChart={fetchChart}
         />
       )}
     </section>

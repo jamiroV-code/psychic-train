@@ -125,18 +125,6 @@ class GainChip(BaseModel):
 
 class CoinPanel(BaseModel):
     symbol: str
-    momentum: MomentumState
-    trend: TrendState
-    # RFC-004 wires the real badge here; RFC-001 always returns this literal
-    # placeholder (item 15).
-    confidence: ConfidenceState = "insufficient-data"
-    # RFC-004 (item 64a, Risk Prediction #4): the same two derived inputs
-    # `compute_badge` used to reach `confidence` above, exposed individually
-    # so the frontend's `SignalDetailPanel` never has to reverse-engineer a
-    # per-signal reading from the aggregate badge value. Defaults match
-    # `confidence`'s own pre-RFC-004 placeholder shape.
-    leg_context: LegContextLiteral = "unavailable"
-    narrative_state: NarrativeStateLiteral = "unavailable"
     chart: ChartSeries
     # Kept for existing consumers; filled from `gain_by_timeframe[tf].pct`.
     percent_change_by_timeframe: dict[Timeframe, float | None]
@@ -146,7 +134,6 @@ class CoinPanel(BaseModel):
 
 class ScreenerBoardResponse(BaseModel):
     timeframe: Timeframe
-    active_benchmark: BenchmarkSelection
     coins: list[CoinPanel]
     # T32 / S1 (additive, defaulted): server clock and its measured skew
     # against the exchange (seconds, host minus exchange; None = unknown).
@@ -155,19 +142,12 @@ class ScreenerBoardResponse(BaseModel):
     clock_skew_warning: bool = False
 
 
-class ScalpMomentumState(BaseModel):
-    state: MomentumStateLiteral
-    value: float | None = None
-    timeframe: Timeframe = "4h"
+class ChartView(BaseModel):
+    """T36 / S4: the drill-down's chart at its own interval (default 4h)."""
 
-
-class ScalpView(BaseModel):
     symbol: str
-    timeframe: Timeframe  # the chart's own interval (Amendment 2, default 4h)
+    timeframe: Timeframe
     chart: ChartSeries
-    # Always independently labeled with its own timeframe (default 4h) so
-    # it's never visually mistaken for the chart's current zoom (AC-18).
-    scalp_momentum: ScalpMomentumState
 
 
 class RelativePerformanceSeries(BaseModel):

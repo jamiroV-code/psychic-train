@@ -15,7 +15,7 @@ from api.analytics import screener_board
 from api.data import ccxt_adapter
 from api.data import watchlist as watchlist_store
 from api.data.ccxt_adapter import OhlcvResult
-from api.models.screener import BenchmarkSelection, ChartSeries, ScreenerBoardResponse
+from api.models.screener import ChartSeries, ScreenerBoardResponse
 
 NOW = pd.Timestamp("2026-10-03T14:10:00Z")
 FETCHED = pd.Timestamp("2026-10-03T14:08:30Z")
@@ -42,11 +42,6 @@ def _install(monkeypatch, frames: dict[str, pd.DataFrame], status: str = "ok", s
     monkeypatch.setattr(ccxt_adapter, "_now", lambda: NOW, raising=False)
     monkeypatch.setattr(ccxt_adapter, "last_clock_skew", lambda: skew, raising=False)
     monkeypatch.setattr(watchlist_store, "read_watchlist", lambda *a, **kw: ["BTC"])
-    monkeypatch.setattr(screener_board.leg_boundary, "compute_current_leg_state", lambda *a, **k: None)
-    monkeypatch.setattr(screener_board, "select_active_benchmark",
-                        lambda *a, **k: BenchmarkSelection(active="BTC", reason="test"))
-    monkeypatch.setattr(screener_board.badge, "derive_leg_context", lambda *a, **k: "unavailable")
-    monkeypatch.setattr(screener_board.narrative_trigger, "assemble_narrative_categories", lambda *a, **k: [])
 
 
 def _fresh_frames():
@@ -94,12 +89,12 @@ def test_chart_series_carries_freshness_fields(monkeypatch):
     # 1w with an aged daily leg is stale too
     assert screener_board.build_coin_panel("BTC", "1w").chart.stale is True
 
-    # the scalp view's chart carries the same fields
+    # the drill-down chart view carries the same fields
     _install(monkeypatch, frames)
-    scalp = screener_board.build_scalp_view("BTC", "4h").chart
-    assert scalp.last_bar_ts == "2026-10-03T12:00:00Z"
-    assert scalp.server_time == "2026-10-03T14:10:00Z"
-    assert scalp.stale is False
+    view_chart = screener_board.build_chart_view("BTC", "4h").chart
+    assert view_chart.last_bar_ts == "2026-10-03T12:00:00Z"
+    assert view_chart.server_time == "2026-10-03T14:10:00Z"
+    assert view_chart.stale is False
 
 
 def test_unavailable_chart_has_null_freshness(monkeypatch):

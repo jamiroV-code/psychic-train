@@ -102,8 +102,8 @@ def test_unavailable_chart_states_its_reason(client, monkeypatch):
         )
 
 
-def test_scalp_view_populated(client):
-    body = client.get("/api/screener/BTC/scalp", params={"timeframe": "4h"}).json()
+def test_chart_view_populated(client):
+    body = client.get("/api/screener/BTC/chart", params={"timeframe": "4h"}).json()
     assert body["symbol"] == "BTC"
     assert body["chart"]["available"] is True
     assert len(body["chart"]["price"]) > 0
