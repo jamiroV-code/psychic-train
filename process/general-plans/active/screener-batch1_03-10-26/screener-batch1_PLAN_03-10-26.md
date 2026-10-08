@@ -8,7 +8,8 @@ feature: general-plans
 # Screener Batch 1: Freshness, Chips, Equities Adapter and Refresh Worker (S1, S2, S3, S8)
 
 Date: 03-10-26
-Status: VALIDATED (PASS after 2 supplement cycles and 1 verdict pass, 03-10-26). Awaiting the user's explicit ENTER EXECUTE MODE; no worker envelopes written yet.
+Status: EXECUTED, merged, live probes pending (04-10-26). S1 = T32 PR #34 `161e7be`, S3 = T33 PR #33 `dc0cbb3` (EVL CONDITIONAL: G-S3-6 skipped until the LSE probe fixture exists), S8 = T35 PR #35 `d10aebf`, S2 = T34 PR #36 `605424d`; main pytest 963/2/5/0, vitest 245 in 33 files. Kept in `active/` until P-S1-1, P-S2-1, P-S8-1 and the LSE probe are run on the PC. Earlier: VALIDATED (PASS after 2 supplement cycles and 1 verdict pass, 03-10-26).
+Folder index (worker artefacts, 04-10-26): `screener-batch1-s1_REF_04-10-26.md` and `_REPORT_`, `screener-batch1-s2_REF_04-10-26.md` and `_REPORT_`, `screener-batch1-s3_REF_04-10-26.md` and `_REPORT_`, `screener-batch1-s8_REF_04-10-26.md` and `_REPORT_`; PVL iterations 001-003 `_REPORT_03-10-26.md`; `results.tsv`; probes `s1-probe/`, `s3-probe/`.
 Complexity: COMPLEX (S1 first; then S2 and S8 in parallel; S3 parallel throughout; RT3 shared cache, models, adapters, app startup)
 
 **TL;DR:** Charts and chips show stale or wrong numbers: the forming candle counts as fresh until it closes, and a cache over 500 bars behind never catches up. S1 fixes the data layer and adds freshness fields. S2 adds correct chips and UTC labels. S8 (pulled forward by the user) adds a background refresh worker so a page load only reads the cache and the web client's 10 s timeout never bites. S3 builds the LSE equities adapter, probe-first. Estimate 9-19 USD [estimate]. A worker reads its slice section, "Decisions locked", "Gate conventions" and its Validate Contract rows (line ranges via `grep -n '^## \|^### '` at spawn time).
@@ -496,7 +497,7 @@ Written by the planner AFTER the user's explicit ENTER EXECUTE MODE (not now): o
 ## Resume and Execution Handoff
 
 1. Selected plan file: `process/general-plans/active/screener-batch1_03-10-26/screener-batch1_PLAN_03-10-26.md`
-2. Last completed step: re-VALIDATE cycle 3 verdict (0 FAIL, 0 CONCERN, advisories A1-A4 folded into S1, S8), 03-10-26.
+2. Last completed step: EXECUTE of S1, S3, S8, S2 merged (PRs #34, #33, #35, #36); independent EVL by vc-tester; UPDATE PROCESS bookkeeping 04-10-26. Earlier: re-VALIDATE cycle 3 verdict (0 FAIL, 0 CONCERN), 03-10-26.
 3. Validate-contract status: written and validated PASS after 2 supplement cycles and 1 verdict pass; remaining conditions are the user-accepted probes (U-1, U-2, U-4).
 4. Context loaded: SPEC, INNOVATE, findings note, operating-instructions.md, master-planner.md, decisions.md, all-tests.md, `api/main.py`, `ccxt_adapter.py`, `refresh_cache.py`, deploy tests, cycle-3 verdict.
 5. Next step for a fresh agent: wait for the user's explicit "ENTER EXECUTE MODE"; then the planner writes the four envelopes (user confirms the pointer-list mechanism) and spawns S1 and S3 (S2 and S8 after the S1 merge SHA). Next instruction (RIPER-5): say **ENTER EXECUTE MODE**.
