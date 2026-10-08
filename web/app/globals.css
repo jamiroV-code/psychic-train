@@ -385,11 +385,6 @@
   padding-bottom: var(--sp-3);
   border-bottom: 1px solid var(--sh-rule);
 }
-.screener-board__benchmark {
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--ink-3);
-}
 .screener-board__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -430,25 +425,6 @@
   padding: 7px 11px;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
-.coin-panel__signals {
-  display: flex;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-  font-size: var(--fs-sm);
-  color: var(--ink-2);
-}
-.coin-panel__signals [data-state="PASS"],
-.coin-panel__signals [data-state="up"] {
-  color: var(--sev-mature);
-}
-.coin-panel__signals [data-state="FAIL"],
-.coin-panel__signals [data-state="down"] {
-  color: var(--sev-bad);
-}
-.coin-panel__signals [data-state="insufficient"] {
-  color: var(--ink-3);
-}
-
 /* The "compact 5-chip row" its own comment describes, finally rendered. */
 .coin-panel__gain-row {
   display: grid;
@@ -477,61 +453,6 @@
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   color: var(--ink-1);
-}
-
-/* Four closed confidence states — never a score or a percent. */
-.confidence-badge {
-  font: inherit;
-  font-size: var(--fs-2xs);
-  font-weight: 600;
-  border-radius: 3px;
-  padding: 2px 7px;
-  background: transparent;
-  border: 1px solid currentColor;
-  color: var(--ink-3);
-  cursor: default;
-  white-space: nowrap;
-  transition: background var(--t-fast) var(--ease);
-}
-.confidence-badge:not(:disabled) {
-  cursor: pointer;
-}
-.confidence-badge:not(:disabled):hover {
-  background: var(--sh-2);
-}
-.confidence-badge--aligned {
-  color: var(--sev-mature);
-}
-.confidence-badge--mixed {
-  color: var(--sev-prov);
-}
-.confidence-badge--conflicting {
-  color: var(--sev-bad);
-}
-.confidence-badge--insufficient-data {
-  color: var(--sev-insuf);
-}
-
-.signal-detail-panel {
-  background: var(--sh-2);
-  border-radius: var(--radius-sm);
-  padding: var(--sp-2);
-  font-size: var(--fs-sm);
-}
-.signal-detail-panel__content {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 2px var(--sp-3);
-  margin: var(--sp-2) 0 0;
-}
-.signal-detail-panel__content dt {
-  color: var(--ink-3);
-}
-.signal-detail-panel__content dd {
-  margin: 0;
-  color: var(--ink-1);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
 }
 
 .drilldown-view__header {
@@ -673,7 +594,7 @@
 }
 
 /* Standalone actions (Drill down, Close) — not part of a group. */
-.app-main button:not([role="group"] *):not([role="radiogroup"] *):not(.confidence-badge) {
+.app-main button:not([role="group"] *):not([role="radiogroup"] *) {
   font: inherit;
   font-size: var(--fs-sm);
   padding: 4px 10px;
@@ -687,14 +608,13 @@
     background var(--t-fast) var(--ease),
     color var(--t-fast) var(--ease);
 }
-.app-main button:not([role="group"] *):not([role="radiogroup"] *):not(.confidence-badge):hover {
+.app-main button:not([role="group"] *):not([role="radiogroup"] *):hover {
   background: var(--sh-3);
   color: var(--ink-1);
 }
 
-/* The leg-timeline and narrative strips carry no class hooks of their own.
-   Giving their headings a consistent, smaller weight stops them dominating
-   the page above the board. */
+/* Section headings without a class hook of their own get a consistent,
+   smaller weight so they never dominate the content beneath them. */
 .app-main section > strong,
 .app-main section > div > strong {
   display: block;

@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 from api.analytics import screener_board
-from api.analytics.indicators.trend import SMA_LENGTH
+from api.analytics.indicators.sma import SMA_LENGTH
 from api.data.ccxt_adapter import OhlcvResult
 from api.data import watchlist as watchlist_store
 

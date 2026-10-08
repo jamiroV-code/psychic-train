@@ -16,19 +16,16 @@ import pandas as pd
 import pytest
 
 from api.analytics.regime import leg_boundary
-from api.analytics.regime.benchmark import select_active_benchmark
 from api.models.regime import CurrentLegState, LegBoundary, LegBoundaryResponse
 
 
 def _get_legs() -> LegBoundaryResponse:
     """Mirrors `routers/regime.py::get_legs` exactly."""
     state = leg_boundary.compute_current_leg_state()
-    benchmark = select_active_benchmark(state)
     return LegBoundaryResponse(
         composite_variant=state.composite_variant,
         candidate_boundaries=state.candidate_boundaries,
         confirmed_boundaries=state.confirmed_boundaries,
-        active_benchmark_reason=benchmark.reason,
     )
 
 
@@ -42,7 +39,6 @@ class TestGetLegsShape:
         assert response.composite_variant == "reduced"
         assert response.candidate_boundaries == []
         assert response.confirmed_boundaries == []
-        assert response.active_benchmark_reason  # never blank/silent
 
     def test_variant_selection_is_reflected_in_response(self, monkeypatch):
         fake_state = CurrentLegState(
@@ -56,9 +52,8 @@ class TestGetLegsShape:
         response = _get_legs()
         assert response.composite_variant == "full"
         assert len(response.candidate_boundaries) == 1
-        assert response.active_benchmark_reason.startswith("BTC-dominant") or "BTC" in response.active_benchmark_reason
 
-    def test_confirmed_boundary_wires_hype_benchmark_into_response(self, monkeypatch):
+    def test_confirmed_boundary_is_passed_through_to_the_response(self, monkeypatch):
         fake_state = CurrentLegState(
             candidate_boundaries=[LegBoundary(date="2024-06-01", z_score=1.8, confirmed=True, confirmed_date="2024-06-03")],
             confirmed_boundaries=[LegBoundary(date="2024-06-01", z_score=1.8, confirmed=True, confirmed_date="2024-06-03")],
@@ -68,4 +63,5 @@ class TestGetLegsShape:
         monkeypatch.setattr(leg_boundary, "compute_current_leg_state", lambda: fake_state)
 
         response = _get_legs()
-        assert "HYPE" in response.active_benchmark_reason or "rotation" in response.active_benchmark_reason.lower()
+        assert len(response.confirmed_boundaries) == 1
+        assert response.confirmed_boundaries[0].date == "2024-06-01"

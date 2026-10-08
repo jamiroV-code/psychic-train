@@ -1,7 +1,7 @@
 """In-process background OHLCV refresh worker (T35 / S8, decisions B9, D3, D7).
 
 The API refreshes its own cache, so a page load only reads it: while the
-worker runs, board, scalp and relative-performance reads are cache-only
+worker runs, board and chart reads are cache-only
 (`ccxt_adapter.cached_reads_only`) and queue a refresh for any pair that is
 not fresh. The web client's 10 s timeout is unchanged (D7).
 

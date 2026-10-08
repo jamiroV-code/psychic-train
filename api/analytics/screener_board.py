@@ -18,7 +18,7 @@ from __future__ import annotations
 import pandas as pd
 
 from api.analytics.indicators import gain as gain_mod
-from api.analytics.indicators import trend as trend_mod
+from api.analytics.indicators import sma as sma_mod
 from api.data import ccxt_adapter, freshness
 from api.data import watchlist as watchlist_store
 from api.models.screener import (
@@ -97,7 +97,7 @@ def _chart_series(
         return ChartSeries(
             price=[], sma=[], available=False, reason=_reason_for(status)
         )
-    sma = trend_mod.compute_sma(df)
+    sma = sma_mod.compute_sma(df)
     freshness_fields = {}
     if timeframe is not None:
         now = ccxt_adapter._now() if now is None else now
@@ -141,7 +141,7 @@ def build_coin_panel(
     chips_by_tf = gain_mod.compute_gain_chips(dfs_by_tf, statuses_by_tf, ccxt_adapter.reference_now(now))
 
     display_df = dfs_by_tf[timeframe]
-    display_available = len(display_df) >= trend_mod.SMA_LENGTH
+    display_available = len(display_df) >= sma_mod.SMA_LENGTH
     # RFC-005: carry the adapter's own verdict for the displayed timeframe.
     display_status = statuses_by_tf.get(timeframe)
 
@@ -180,7 +180,7 @@ def build_chart_view(symbol: str, timeframe: Timeframe = DEFAULT_CHART_TIMEFRAME
     """
     display = ccxt_adapter.fetch_ohlcv(symbol, timeframe)
     daily_ref = ccxt_adapter.fetch_ohlcv(symbol, "1d").df if timeframe == "1w" else None
-    display_available = len(display.df) >= trend_mod.SMA_LENGTH
+    display_available = len(display.df) >= sma_mod.SMA_LENGTH
 
     return ChartView(
         symbol=symbol,

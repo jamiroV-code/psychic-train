@@ -8,7 +8,7 @@ const AREAS = [
     href: "/screener",
     testId: "home-link-screener",
     label: "Screener",
-    blurb: "Relative-strength momentum across the watchlist, with a confidence read per coin.",
+    blurb: "Price charts and gain chips across the watchlist.",
   },
   {
     href: "/regime",
