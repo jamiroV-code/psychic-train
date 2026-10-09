@@ -80,6 +80,37 @@
       "sha": "5b68192"
     }
   ],
-  "manualChecks": [],
+  "manualChecks": [
+    {
+      "check": "PC step 1: git fetch origin; git checkout claude/r12-deploy-fixes",
+      "result": "success",
+      "sha": "314bc0a",
+      "source": "user report in session, 2026-10-09; output not pasted"
+    },
+    {
+      "check": "PC step 2: PowerShell parser on _common.ps1, build-web.ps1, start-web.ps1",
+      "result": "success (0 parse errors reported)",
+      "sha": "314bc0a",
+      "source": "user report in session, 2026-10-09; output not pasted"
+    },
+    {
+      "check": "PC step 3: Get-NetTCPConnection -State Listen -LocalPort 65000 -ErrorAction SilentlyContinue under ErrorActionPreference Stop",
+      "result": "success (no throw on a free port; D2 free-port risk cleared)",
+      "sha": "314bc0a",
+      "source": "user report in session, 2026-10-09; output not pasted"
+    },
+    {
+      "check": "PC step 4: start-web.ps1 -DryRun",
+      "result": "success (stale-check and port report lines, exit 0)",
+      "sha": "314bc0a",
+      "source": "user report in session, 2026-10-09; output not pasted"
+    },
+    {
+      "check": "PC step 5: real build-web.ps1 then start-web.ps1 (marker written, Build is current, port stop, server start)",
+      "result": "NOT RUN",
+      "sha": "",
+      "source": "user report in session, 2026-10-09; output not pasted"
+    }
+  ],
   "result": "CONDITIONAL"
 }

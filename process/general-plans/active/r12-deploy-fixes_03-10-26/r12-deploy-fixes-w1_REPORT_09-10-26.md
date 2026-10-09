@@ -59,3 +59,12 @@ None. No needs_input open.
 
 ## 11 Context cost
 Read: CLAUDE.md (session), the envelope, the named plan line ranges only. No other docs opened. About 40 tool calls.
+
+## 12 PC check (added after the session, user report 2026-10-09)
+The user ran on the PC, at branch head 314bc0a, and reported all four as success (output not pasted into the session):
+1. checkout of `claude/r12-deploy-fixes`;
+2. PowerShell parser on `_common.ps1`, `build-web.ps1`, `start-web.ps1`: no parse errors;
+3. `Get-NetTCPConnection -State Listen -LocalPort 65000 -ErrorAction SilentlyContinue` under `$ErrorActionPreference = 'Stop'`: no throw on a free port, so the D2 free-port risk named in heading 10 is cleared;
+4. `start-web.ps1 -DryRun`: stale-check and port report lines, exit 0.
+
+NOT run yet: step 5, the real `build-web.ps1` then `start-web.ps1` (marker write, `Build is current`, real port stop, server start). Overall result stays CONDITIONAL until that runs.
