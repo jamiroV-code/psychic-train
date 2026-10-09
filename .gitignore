@@ -50,3 +50,6 @@ web/e2e/.fixture-manifest.json
 
 # Built Svelte/LayerChart islands (pnpm build:islands)
 web/public/islands/
+api/data/layout.json
+api/data/layout.json.bad
+api/data/.layout.json.*.tmp

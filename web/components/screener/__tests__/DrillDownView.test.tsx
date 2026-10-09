@@ -6,7 +6,7 @@ import { DrillDownView } from "@/components/screener/DrillDownView";
 import type { ChartView, Timeframe } from "@/lib/types/screener";
 
 // T32 / S1 freshness fields (ChartSeries); nulls = no freshness information.
-const NO_FRESHNESS = { last_bar_ts: null, fetched_at: null, is_partial: null, server_time: null, stale: false };
+const NO_FRESHNESS = { last_bar_ts: null, fetched_at: null, is_partial: null, server_time: null, stale: false, rsi: [] };
 
 function makeChartView(timeframe: Timeframe): ChartView {
   return {

@@ -19,6 +19,27 @@ TIMEFRAMES: tuple[Timeframe, ...] = ("15m", "1h", "4h", "1d", "1w")
 # the operator as a history problem.
 UnavailableReason = Literal["insufficient-history", "bad-symbol", "source-unavailable"]
 
+# T40 / S5a (C6): why an RSI reading has no value. The chart's reasons, plus
+# `flat-price` for a frame long enough but with no price change at all.
+RsiReason = Literal["insufficient-history", "bad-symbol", "source-unavailable", "flat-price"]
+
+
+class RsiReading(BaseModel):
+    """RSI(14, Wilder) on the displayed timeframe's own frame, forming candle
+    included. `value` is None with a `reason` when there is nothing honest to
+    show, never 0. `as_of` is the last bar, ISO-8601 UTC with a trailing `Z`.
+    """
+
+    value: float | None = None
+    length: int = 14
+    as_of: str | None = None
+    reason: RsiReason | None = None
+
+
+class RsiPoint(BaseModel):
+    timestamp: str
+    value: float
+
 
 class ChartBar(BaseModel):
     timestamp: str
@@ -48,6 +69,9 @@ class ChartSeries(BaseModel):
     is_partial: bool | None = None
     server_time: str | None = None
     stale: bool = False
+    # T40 / S5a (additive, defaulted): the RSI series, filled only by the
+    # drill-down chart view; board charts keep `[]`. Timestamps end in `Z`.
+    rsi: list[RsiPoint] = []
 
 
 class GainChip(BaseModel):
@@ -73,6 +97,8 @@ class CoinPanel(BaseModel):
     percent_change_by_timeframe: dict[Timeframe, float | None]
     # T34 / S2 (additive): the current-candle chips themselves.
     gain_by_timeframe: dict[Timeframe, GainChip] = {}
+    # T40 / S5a (additive): RSI of the displayed timeframe.
+    rsi: RsiReading = RsiReading()
 
 
 class ScreenerBoardResponse(BaseModel):
