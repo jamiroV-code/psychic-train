@@ -1,0 +1,15 @@
+ROLE: WORKER
+You are a WORKER: direct lane. Do not orchestrate, do not spawn sessions or subagents, load only the files listed below; this overrides any orchestrator wording in CLAUDE.md.
+
+Task: R12 session W2 (RT4 deploy class): commit C3 (start-web runs next start as a child process, the post-start smoke check, the README guard section, tests 12-17), then the final full gates.
+Acceptance: C3 committed on the branch, final gates green (pytest 968, api/tests/deploy 68 with 1 skipped; vitest 251 in 34 files, tsc 0, islands 0; e2e hybrid, NOT-RUN with a stated reason is allowed); scans G-R12-9..12 run AFTER the commit they cover (Gate convention 8), note the SHA.
+Base: the EXISTING branch claude/r12-deploy-fixes at its pushed head (W1 done: C1, C2 and docs commits). Do not cut a new branch from main. Push the same branch; do NOT open a PR and NEVER merge (W3 opens the PR).
+Owned / Forbidden: plan lines 103-104. Design: D2, D6-D8, D10 (D4/D5 are already C2 code: read the marker-path function and the two D5 log strings from deploy/_common.ps1 at the branch head and leave the stale-check call order untouched). Tests 12-17 with the README work; checklist steps 8-10; criteria AC-R12-3 and AC-R12-5.
+Resolved by the user: Q4 A = the smoke check may use the PC's own Tailscale address; Q5 = leave README step M0 and Rollback lines that name uvicorn,node as operator text.
+Read (plan, re-derive with `grep -n '^## \|^### '`): process/general-plans/active/r12-deploy-fixes_03-10-26/r12-deploy-fixes_PLAN_09-10-26.md lines 44, 48-50, 52, 71-79, 103-104, 106-113, 123-126, 138-143, 145, 147, 229-231, 250, 252-253, 258, 261, 269-282, 288-309, 313. Also the W1 report in the same folder, heading 8 and 10 only. operating-instructions.md: not named.
+Commits: C3, then a docs commit (session report + harness/verification.json extended; commands only) before the push. verification.json shape: {"task":"R12","commands":[{"command":"","result":"","utc":"","sha":""}],"manualChecks":[],"result":"CONDITIONAL"}.
+Tests: UV_FROZEN=1 on every pytest; red run of tests 12-17 first; full-suite budget 2 runs; each gate once after the last edit.
+Retry budget: 2 fix cycles; same failure twice stops. Budget 90 tool calls, 70 min, 1.5-2.5 USD.
+Report: process/general-plans/active/r12-deploy-fixes_03-10-26/r12-deploy-fixes-w2_REPORT_09-10-26.md, 11 headings: 1 Task ID, 2 Outcome, 3 Summary, 4 Files changed, 5 Commits, 6 Tests run (gate, SHA, UTC), 7 Tests NOT run, 8 Deviations, 9 Blockers, 10 Follow-up, 11 Context cost.
+Stop at review if: any step would kill a process other than the one on the configured port, need a secret, change Task Scheduler registration, be unbounded in time (the one deliberate WaitForExit is shown to the user, D6), any count differs from the plan arithmetic, a diff touching CLAUDE.md, AGENTS.md, README.md (root), .claude/ or .github/, or any needs_input/blocker is open.
+Autonomy: edit owned files, commit and push the branch. No PowerShell exists here: never claim a script works. A PC result the user reports to you is recorded as user-reported, with what was and was not pasted.
