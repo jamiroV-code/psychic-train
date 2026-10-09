@@ -74,7 +74,7 @@ def test_coin_panel_has_no_verdict_fields(monkeypatch):
     assert not VERDICT_PANEL_FIELDS & set(CoinPanel.model_fields)
     _install(monkeypatch, _fresh_frames())
     payload = screener_board.build_coin_panel("BTC", "1d", now=NOW).model_dump()
-    assert set(payload) == {"symbol", "chart", "percent_change_by_timeframe", "gain_by_timeframe"}
+    assert set(payload) == {"symbol", "chart", "percent_change_by_timeframe", "gain_by_timeframe", "rsi"}
     for name in ("ScalpView", "ScalpMomentumState"):
         assert not hasattr(screener_models, name), name
     assert hasattr(screener_models, "ChartView")
