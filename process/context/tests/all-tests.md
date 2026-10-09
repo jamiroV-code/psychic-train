@@ -29,7 +29,7 @@ Which tests to run per change, the full commands, the test budget, bounded retry
 
 ## Seeded-stack E2E: refresh worker off (A3, 04-10-26)
 
-Run E2E for the seeded stack with `SCREENER_REFRESH_WORKER=0` (the S8 background refresh worker is on when the variable is unset; pytest's conftest already sets `0`). Example: `cd web && SCREENER_REFRESH_WORKER=0 pnpm test:e2e -- screener` (plan batch 1 G-S2-8). Main baseline after batch 1 (`605424d`, CI-style, not run locally by UPDATE PROCESS): pytest 963 passed, 2 skipped, 5 deselected, 0 xfailed; vitest 245 in 33 files; `tsc` 0; `build:islands` 0. The 2 skips include G-S3-6 `test_probe_fixture_parses` (needs the user's LSE probe fixture).
+Run E2E for the seeded stack with `SCREENER_REFRESH_WORKER=0` (the S8 background refresh worker is on when the variable is unset; pytest's conftest already sets `0`). Example: `cd web && SCREENER_REFRESH_WORKER=0 pnpm test:e2e -- screener` (plan batch 1 G-S2-8). **CI does not run Playwright** (pytest, vitest, tsc and the island build only), so the seeded e2e gates (`screener.spec.ts`, `contrast.spec.ts`, with `SCREENER_REFRESH_WORKER=0` and `PLAYWRIGHT_CHROMIUM_PATH` set) are run by workers and the independent tester; the planner re-runs the e2e after each UI slice (PR #40 merged with an e2e red until PR #41). Main baseline after batch 2 (`270f9ac`, worker and tester reports): pytest 951 passed, 2 skipped, 5 deselected, 0 xfailed; vitest 251 in 34 files; `tsc` 0; `build:islands` 0 (e2e at T38: screener 10, contrast 7). The 2 skips include G-S3-6 `test_probe_fixture_parses` (needs the user's LSE probe fixture).
 
 ## Current evidence (Gate 4)
 

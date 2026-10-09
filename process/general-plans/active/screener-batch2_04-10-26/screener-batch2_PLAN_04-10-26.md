@@ -8,7 +8,9 @@ feature: general-plans
 # Screener Batch 2: Verdict Removal, Chart Interaction, Spaghetti and BTC Leg Chart (S4, S6, S7)
 
 Date: 04-10-26
-Status: VALIDATED PASS (PVL cycle 5, 04-10-26; cycle 1 F1-F7 and cycle 3 F8-F9 plus advisories e-j folded by supplements and re-verified). Q1-Q6 are RESOLVED by the user (04-10-26). Waiting for the user's explicit ENTER EXECUTE MODE. Nothing executed; code read at origin/main 605424d.
+Status: EXECUTED, merged, live probes pending (09-10-26): S4 PR #38 `69fedd2` (T36), S6 PR #39 `8858469` (T37), S7 PR #40 `38fe860` (T38), e2e fix PR #41 `270f9ac` (T39); all EVL PASS; probes P-S4-1, P-S6-1, P-S7-1 are the user's; AC-S6-6 CONDITIONAL until S5. Earlier: VALIDATED PASS (PVL cycle 5, 04-10-26; Q1-Q6 resolved). Code below was read at origin/main 605424d.
+
+Folder index: `results.tsv`; PVL reports `screener-batch2-pvl-iteration-001..005_REPORT_04-10-26.md`; envelopes `screener-batch2-s{4,6,7}_REF_{08,09,09}-10-26.md`; slice reports `screener-batch2-s{4,6,7}_REPORT_{08,09,09}-10-26.md` and `screener-batch2-t39_REPORT_09-10-26.md`.
 Complexity: COMPLEX (S4 first, then S6, then S7, strictly sequential; RT3 response models, shared chart island, regime router)
 
 **TL;DR:** S4 deletes every verdict (confidence badge, momentum/trend/scalp, benchmark label, both strips) in one worker with two ordered commits: A = API and web contract plus web consumers, B = dead backend code, CSS and copy; 53 file touches, under the 100 limit, so no split. S6 gives every chart Ctrl/Cmd+wheel zoom, pinch, drag pan, double-click reset, crisp SVG axis text, and replaces the relative-performance chart by the spaghetti chart. S7 adds the BTC leg chart (confirmed legs over all cached BTC history) with the D-14 estimate label and makes the BTC OHLCV read of `/api/regime/legs` cache-only. Estimate 9-19 USD [estimate] against about 27.4 USD left. Questions Q1-Q6 are resolved (see "Questions Q1-Q6"). A worker reads its slice section, "Decisions locked", "Gate conventions", its criteria rows, gates and scope commands (fine line ranges at the end).
