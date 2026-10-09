@@ -20,8 +20,12 @@ if ($DryRun) {
     Write-Host "host    = $ip"
     Write-Host "port    = $($config.WebPort)"
     Write-Host "command = $($config.PnpmPath) $($webArgs -join ' ')  (in $($config.RepoRoot))"
+    Stop-WebPortListener -Config $config -ReportOnly
     exit 0
 }
+
+# Free the web port (by PID, never by name) so the new server can bind it.
+Stop-WebPortListener -Config $config
 
 Write-MySiteLog "Starting web on ${ip}:$($config.WebPort)"
 Set-Location $config.RepoRoot

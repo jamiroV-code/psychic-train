@@ -23,8 +23,12 @@ Write-Host "Reminder: changing the API address needs a rebuild (run this script 
 if ($DryRun) {
     Write-Host "DRY RUN (nothing built)"
     Write-Host "command = $($config.PnpmPath) $($buildArgs -join ' ')  (in $($config.RepoRoot))"
+    Stop-WebPortListener -Config $config -ReportOnly
     exit 0
 }
+
+# A running web server holds the build output open; free the web port (by PID) first.
+Stop-WebPortListener -Config $config
 
 Write-MySiteLog "Building web with NEXT_PUBLIC_API_BASE_URL=$env:NEXT_PUBLIC_API_BASE_URL"
 Set-Location $config.RepoRoot

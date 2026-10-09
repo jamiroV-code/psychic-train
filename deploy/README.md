@@ -101,8 +101,8 @@ them already.
 
 ### Do NOT need copying — dead weight
 
-`api\data\cache\legs\`. Nothing reads it: `cache.write_confirmed_boundaries` and
-`cache.read_confirmed_boundaries` have no non-test callers. Skip it.
+`api\data\cache\legs\`. Nothing reads it, and the code that wrote it has been removed, so an
+existing folder is leftover data. Skip it.
 
 ### MUST NOT be copied — rebuild these on the new PC instead
 

@@ -88,3 +88,102 @@ function Invoke-StageAPull {
         Write-MySiteLog "Stage A: git pull --ff-only failed, starting on current code. $($_.Exception.Message)"
     }
 }
+
+function Get-WebPortListenerIds {
+    # Unique PIDs listening on a local TCP port, selected by port only. Nothing returned means
+    # the port is free. SilentlyContinue keeps a no-match quiet under the global Stop
+    # preference; a real failure (cmdlet missing, CIM error) is thrown to the caller.
+    param([Parameter(Mandatory)][int]$Port)
+    $ids = @()
+    try {
+        $conns = @(Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue)
+    } catch {
+        throw ('Get-NetTCPConnection failed: ' + $_.Exception.Message)
+    }
+    foreach ($conn in $conns) {
+        if ($null -ne $conn) { $ids += [int]$conn.OwningProcess }
+    }
+    return @($ids | Sort-Object -Unique)
+}
+
+function Stop-WebPortListener {
+    # Stop whatever listens on the configured web port, by PID only, then wait (bounded) for
+    # the port to clear. Refuses System/Idle (PID 4 or less) and this script itself. Any
+    # failure is fail-closed: log and exit 5. With -ReportOnly nothing is stopped or logged
+    # to the file; it only prints what would happen and never exits.
+    param(
+        [Parameter(Mandatory)][hashtable]$Config,
+        [switch]$ReportOnly
+    )
+    $port = 0
+    $valid = [int]::TryParse([string]$Config.WebPort, [ref]$port)
+    if (-not $valid -or $port -lt 1 -or $port -gt 65535 -or [string]$port -eq [string]$Config.ApiPort) {
+        $message = "WebPort $($Config.WebPort) is not a usable port: it must be 1-65535 and differ from ApiPort."
+        if ($ReportOnly) { Write-Host "DRY RUN: $message" } else { Write-MySiteLog $message }
+        exit 2
+    }
+    try {
+        $ids = @(Get-WebPortListenerIds -Port $port)
+    } catch {
+        $reason = $_.Exception.Message
+        if ($ReportOnly) {
+            Write-Host "DRY RUN: cannot list listeners: $reason"
+            return
+        }
+        Write-MySiteLog "Port ${port}: cannot list listeners, not continuing: $reason"
+        exit 5
+    }
+    if ($ids.Count -eq 0) {
+        if ($ReportOnly) {
+            Write-Host "DRY RUN: port $port is free; nothing would be stopped."
+        } else {
+            Write-MySiteLog "Port ${port}: nothing listening; nothing to stop."
+        }
+        return
+    }
+    foreach ($listenerId in $ids) {
+        $name = '(unknown)'
+        $proc = Get-Process -Id $listenerId -ErrorAction SilentlyContinue
+        if ($null -ne $proc) { $name = [string]$proc.ProcessName }
+        if ($listenerId -le 4 -or $listenerId -eq $PID) {
+            if ($ReportOnly) {
+                Write-Host "DRY RUN: would refuse to stop PID $listenerId (protected)"
+                continue
+            }
+            Write-MySiteLog "Port ${port}: PID $listenerId ($name) is protected; refusing to stop it."
+            exit 5
+        }
+        if ($ReportOnly) {
+            Write-Host "DRY RUN: would stop PID $listenerId ($name) listening on port $port (nothing stopped)."
+            continue
+        }
+        Write-MySiteLog "Port ${port}: stopping PID $listenerId ($name) listening on it."
+        try {
+            Stop-Process -Id $listenerId -ErrorAction Stop
+        } catch {
+            $reason = $_.Exception.Message
+            $still = Get-Process -Id $listenerId -ErrorAction SilentlyContinue
+            if ($null -ne $still) {
+                Write-MySiteLog "Port ${port}: could not stop PID ${listenerId}: $reason."
+                exit 5
+            }
+        }
+    }
+    if ($ReportOnly) { return }
+    $deadline = (Get-Date).AddSeconds(10)
+    while ($true) {
+        try {
+            $left = @(Get-WebPortListenerIds -Port $port)
+        } catch {
+            Write-MySiteLog "Port ${port}: cannot list listeners, not continuing: $($_.Exception.Message)"
+            exit 5
+        }
+        if ($left.Count -eq 0) { break }
+        if ((Get-Date) -ge $deadline) {
+            Write-MySiteLog "Port ${port}: still in use after 10s; not continuing."
+            exit 5
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    Write-MySiteLog "Port ${port}: free."
+}

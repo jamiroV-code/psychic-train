@@ -255,7 +255,8 @@ def test_readme_migration_marks_next_build_as_must_not_copy():
 def test_readme_migration_says_legs_cache_is_not_needed():
     section = _migration_section()
     assert r"api\data\cache\legs" in section, "migration section must mention the legs cache"
-    assert "write_confirmed_boundaries" in section, "say plainly why legs/ is dead weight"
+    assert "write_confirmed_boundaries" not in section and "read_confirmed_boundaries" not in section, "the removed helpers must not be named"
+    assert "has been removed" in section
     assert "dead weight" in section.lower()
 
 
