@@ -239,11 +239,11 @@ W3 (sonnet): 11 Check out the branch. Write the PC runbook and the record templa
 
 ## Validate Contract
 
-(skeleton written by the planner 09-10-26; vc-validate-agent completes it before EXECUTE)
+(skeleton by the planner 09-10-26, completed by vc-validate-agent in PVL cycle 5, 09-10-26; verdict record in iteration-005; the remaining contract fields sit after the Failing stubs paragraph below)
 supersedes: none
-Status: PENDING
-Gate: PENDING
-generated-by: plan-agent (skeleton)
+Status: PASS (re-VALIDATE, PVL cycle 5; 0 FAIL, 0 CONCERN)
+Gate: PASS
+generated-by: outer-pvl
 
 ### Test gates
 
@@ -312,6 +312,40 @@ git diff -U0 origin/main...HEAD | grep -nP '^\+[^+].*[^\x00-\x7F]'
 
 Each new test starts as `def test_x(): raise NotImplementedError("NOT IMPLEMENTED - TDD stub: <behaviour>")` in the commit that introduces it; the worker runs G-R12-1 on that state, records the red run in heading 6, then writes the real assertions. The edited legs assertion is red against the unedited README: write the new assertions first, run G-R12-2 (expect 1 failed), then reword the README.
 
+### Validate contract completed (PVL cycle 5, outer-pvl)
+
+Date: 09-10-26
+date: 2026-10-09
+(The header above carries generated-by outer-pvl and supersedes none: the earlier text was a skeleton, Status PENDING, not a completed contract.)
+
+Parallel strategy: sequential
+Rationale: 7-signal score 2/7 (S6 deploy/runtime high-risk class, S7 five or more files in the blast radius), dominant signal S6; the threshold alone would suggest parallel subagents, but the fit rule wins: all code files are shared (`_common.ps1`, `build-web.ps1`, `start-web.ps1`, `README.md`) and each session reads the commits of the previous one (D1), so the execution is three sequential worker sessions plus one EVL tester. Agent count: 3 workers (W1 opus, W2 opus, W3 sonnet) + 1 vc-tester (sonnet) = 4, no subagents; cost guard not triggered (estimate 3-5 USD against 25.27 USD left). This validation itself ran as one sequential read-only agent (no cross-talk needed).
+
+Test gates: the 5-column table above is the contract (strategy values Fully-Automated | Hybrid | Agent-Probe only; Known-Gap is a named residual via gap-resolution D, never a strategy). Legacy line form:
+- Port-scoped stop (change 1): [Fully-automated: G-R12-1 tests 1-4] | [hybrid: PC-2, PC-5, PC-7, PC-8, PC-11; precondition Windows PowerShell 5.1 PC with Tailscale, runner the user]
+- Build marker and stale guard (change 2): [Fully-automated: G-R12-1 tests 7-11] | [hybrid: PC-6, PC-9, PC-12, PC-13]
+- Child process and smoke check (change 3): [Fully-automated: G-R12-1 tests 12-14] | [hybrid: PC-10, PC-14, PC-15]
+- Dry run and regression: [Fully-automated: G-R12-1 tests 3, 4, 11, 15; G-R12-2, G-R12-3, G-R12-4 (968)] | [hybrid: PC-5, PC-7] | RT3 floor G-R12-5..7 | [hybrid: G-R12-8 whole E2E, NOT-RUN with a reason allowed]
+- Hard constraints: [Fully-automated: tests 5, 6, 13, 17; G-R12-9..12]; evidence pack G-R12-13 (one expected failure until the user's record)
+- Diff check P-R12-1: [agent-probe: the user reads the deploy/ diff incl. D6's unbounded WaitForExit]
+- [known-gap: documented] PowerShell parse and run, process stop, Task Scheduler, `next start` serving the marker and the HTML build id; residual stub `deploy-runtime-user-pc-verification_NOTE_02-10-26.md` (gap-resolution D), closed only by the user's PC record (AC-R12-9)
+Failing stubs (Fully-Automated rows): each of the 17 tests starts as `def test_<name>(): raise NotImplementedError("NOT IMPLEMENTED - TDD stub: <behaviour>")` per the Failing stubs paragraph above and the red-first rule (Gate convention 3); the table of tests and their stub names is the plan section "New tests".
+
+Dimension findings:
+- Infra fit: PASS - paths, ports, PowerShell 5.1 rules, Set-Location ordering and the existing first -H parse verified against the real files at origin/main abda8e7
+- Test coverage: PASS - N1 fixed (every scan follows the commit it covers; reproduced in a scratch repo); counts 951/957/962/968 and 51/57/62/68 reproduce; baseline re-run (51 passed, 1 skipped; full 951 passed, 2 skipped, 5 deselected); runtime criteria stay Hybrid with a named residual, not a vacuous green
+- Breaking changes: PASS - one new non-secret static file, exit codes 4-7, one new parameter, one edited assertion; no contract of other consumers changes
+- Security surface: PASS - no auth or secret surface; kill by port only with protected PIDs, no -Name/taskkill/-Force; marker non-secret
+- Section C1 port stop: PASS - mechanically feasible; highest-risk edit the Get-NetTCPConnection no-match path (F1 folded)
+- Section C2 marker and stale guard: PASS - absolute paths and git -C (F2), floored epoch compare (F3), Test-Path guard (A5)
+- Section C3 child process and smoke check: PASS - highest-risk edit of the task (Start-Process restructure); revertable alone; PC-14, PC-15
+- Section C4 runbook, record template, evidence pack: PASS - abort order (A3), validator expectation reproduced on a scratch pack
+
+Open gaps: the user's PC record (AC-R12-9; R12 stays `review` until then); follow-up backlog line (marker does not record the baked API address); planner UPDATE PROCESS item (MASTER-PLAN lacks the 60 USD ceiling). Advisories B1-B5 of iteration-005 (W2 envelope: read D4/D5 strings from `_common.ps1` at the branch head; test 1 `-Force` check scoped to Stop-Process lines; planner refreshes line 11 and Resume lines 360-363 after this stamp). None blocks.
+What This Coverage Does NOT Prove: see the section "What this coverage does NOT prove" below; in short, the 17 shape tests prove script TEXT and its order, not that any script parses, stops the right process, refuses a stale build or reports a failed start; the balance test catches truncation, not PowerShell syntax errors.
+Accepted by: n/a - no CONCERN to accept (0 FAIL, 0 CONCERN); the runtime criteria are a named residual (AC-R12-1r, -2r, -3r, -9: hybrid, user PC), not accepted concerns.
+Range-table check after this stamp: lines 1-313 changed only at 242, 244, 245, 246 (outside every envelope range); everything else was inserted after line 313; the range table at the end of the file (W1 20,024 / room 2,533, W2 19,168 / 3,389, W3 20,605 / 1,952) was recomputed from the saved file and is unchanged.
+
 ### Red-today evidence (origin/main abda8e7; read-only checks, nothing committed)
 
 Change 1: `_common.ps1`, `build-web.ps1`, `start-web.ps1` contain no `Get-NetTCPConnection`, `Stop-Process` or `build-marker` (counts 0); `start-web.ps1` line 28 and `build-web.ps1` line 31 run pnpm in the foreground with no prior stop. Change 2: no marker is written anywhere; `start-web.ps1` has no freshness check. Change 3: `start-web.ps1` line 28 blocks until the server exits, so nothing can poll; no `Invoke-WebRequest` in any script. README: no R12 section; lines 104-105 name `write_confirmed_boundaries`. Not run: any PowerShell (none in the sandbox); the full pytest suite (given by the brief: 951/2/5/0).
@@ -345,6 +379,23 @@ Everything PowerShell: parse, run, port discovery, process stop, Start-Process b
 ### Open gaps
 
 Q1-Q5 resolved (09-10-26). The user's PC record (AC-R12-9). Follow-up backlog line (not this slice): the marker does not record the baked API address, so a changed Tailscale IP with an unchanged `web/` tree is not detected (the README rebuild rule is the control). For the planner's UPDATE PROCESS: `process/MASTER-PLAN.md` lacks the 60 USD programme ceiling (P4 still says 45); this plan does not edit it. Test Infra: a Windows CI runner with a PowerShell parse step. Backlog stub exists: `process/general-plans/backlog/deploy-runtime-user-pc-verification_NOTE_02-10-26.md`.
+
+## Autonomous Goal Block
+
+SESSION GOAL: R12 deploy fixes - port-scoped stop before build and start, stale-build guard via a build marker, post-start smoke check; three sequential worker sessions on one branch (W1 opus: C1 port stop then C2 marker and stale guard; W2 opus: C3 child process, smoke check, README section, final gates; W3 sonnet: C4 PC runbook, record template, evidence pack, PR); no worker merges; the task stops at review
+Charter + umbrella plan: N/A - single plan (SPEC r12-deploy-fixes_SPEC_03-10-26.md; no umbrella plan with a Stable Program Goal)
+Autonomy: validated PASS after 2 supplement cycles and 3 verdict passes (PVL cycles 1, 3, 5). EXECUTE needs the user's explicit "ENTER EXECUTE MODE". The planner then records registry blocked -> approved, writes the W1 envelope (master-planner.md section 8, at most 8,000 bytes, a pointer list citing the "Envelope line ranges" table; W1 room 2,533 B, drafted W1 envelope 2,157 B), saved as `r12-deploy-fixes-w{1,2,3}_REF_<dd-mm-yy>.md`, and spawns W1 only (opus, no subagents). W2 follows after W1 reported DONE and pushed, W3 after W2 (rooms 3,389 B and 1,952 B; drafted W3 envelope 1,714 B). Workers run gates once after the last edit, run the scans G-R12-9..12 AFTER the commit they cover, record red runs, and stop at needs_input when an observed count differs from the plan arithmetic or the same failure occurs twice. The user runs the PC runbook on the PR branch with the planner's help in chat.
+Hard stop conditions / safety constraints:
+- No envelope or worker before the user's "ENTER EXECUTE MODE".
+- W2 only after W1 is done and pushed, W3 only after W2; the sessions are never parallel.
+- A diff touching CLAUDE.md, AGENTS.md, README.md, `.claude/`, `.github/` stops at review; the `deploy/` diff always goes to the user for a diff check (P-R12-1, including D6's unbounded WaitForExit).
+- No worker merges or pushes `main`; workers push only `claude/r12-deploy-fixes`; only W3 opens the PR.
+- No run of deploy scripts outside tests (no PowerShell in the sandbox); no worker claims a script works.
+- Push, merge, deploy, branch deletion, or spend above 15 USD per slice or 60 USD in total (about 25.27 USD left at plan time) needs the user's approval.
+- The PC runbook PC-1..PC-16 is the user's and is never claimed by a worker; R12 stays at review until the user's record exists.
+Next phase: EXECUTE: process/general-plans/active/r12-deploy-fixes_03-10-26/r12-deploy-fixes_PLAN_09-10-26.md
+Validate contract: process/general-plans/active/r12-deploy-fixes_03-10-26/r12-deploy-fixes_PLAN_09-10-26.md (inline, validated PASS, PVL cycle 5)
+Execute start: W1: `UV_FROZEN=1 uv run --project api pytest api/tests/deploy -q` baseline (51 passed, 1 skipped), then C1 stubs red run of `api/tests/deploy/test_deploy_r12_guards_shape.py` (G-R12-1, 6 failed), then C1 code and gates, then C2 | probes: PC-1..PC-16 on the user PC | high-risk pack: yes (harness/ written by W3; review-decision.json by the planner from the user's record)
 
 ## Worker envelope
 
