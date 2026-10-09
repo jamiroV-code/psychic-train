@@ -225,11 +225,11 @@ Decided without asking (reversible): layout save is `POST` not `PUT` (CORS pin);
 
 ## Validate Contract
 
-(PVL not run. vc-validate-agent writes the verdict; the tables below are the contract as planned.)
+(PVL cycle 1 verdict: CONDITIONAL; the full record is "Validation record (PVL cycle 1)" after the Open gaps below; the tables stay as proposed content, amended by findings F1-F8 until a supplement folds them)
 supersedes: none
-Status: PENDING
-Gate: PENDING
-generated-by: plan-agent (skeleton for outer-pvl)
+Status: CONDITIONAL (first-pass VALIDATE, PVL cycle 1, 09-10-26; 0 FAIL, 8 CONCERN; supplement cycle required)
+Gate: CONDITIONAL (8 concerns F1-F8 to fold; no PASS stamp yet)
+generated-by: outer-pvl
 
 ### Test gates
 
@@ -370,6 +370,58 @@ Live Hyperliquid; real display, phone and keyboard-only use; Edge/Windows contro
 ### Open gaps
 
 Q1 and Q2 (above). AC-S5b-8r (on-demand states contrast) is a named residual with a backlog stub. known-gap: real device and browser behaviour: probes P-S5a-1, P-S5b-1.
+
+### Validation record (PVL cycle 1)
+
+Status: CONDITIONAL
+Date: 09-10-26
+date: 2026-10-09
+generated-by: outer-pvl
+Code under test: origin/main `abda8e7` (`git diff 270f9ac origin/main -- api web` is empty, so api/ and web/ equal `270f9ac`). First-pass VALIDATE, so this verdict is not terminal: a supplement cycle folds F1-F8, then VALIDATE re-runs from V1. The goal block is written by the cycle that reaches the PASS stamp (caller instruction: only on PASS). Full evidence: `screener-batch3-pvl-iteration-001_REPORT_09-10-26.md` and `results.tsv` row 1.
+Parallel strategy: sequential (one validator agent ran Layer 1 and Layer 2 inline; score 4 of 7: S2 API surface, S6 new personal-data file and public routes, S7 more than 5 files, S1 api plus web; no cross-talk needed and the user asked for economy)
+Rationale: dominant signal S6 (new write surface and personal data); inline reads of a 403-line plan were cheaper than 8-15 agents.
+Validators and baselines (run once): `validate-plan-artifact.mjs` 0 failures, 0 warnings; vitest 251 passed in 34 files; pytest collect-only 953 of 958 (951 + 2 skipped, 5 deselected); full seeded e2e 65 passed (2.9 min); `compute_rsi` probes: 60 flat bars 0 defined, 60 rising 46 defined ending 100.0, 15 rising 1 defined. All equal the plan.
+
+Resolved by the user 09-10-26 (recorded, not open; the plan's recommendations): Q1 A (group sort AC-8 deferred to a small follow-up slice after S5b; see F1, it must be a named residual); Q2 A (the S5 estimate 9.5-13.5 USD accepted; programme ceiling 60 USD, 34.73 spent, checked before each spawn). Binding earlier decisions hold: server layout file, buttons plus menu (no drag-and-drop), cap 30 keep all and block new adds, RSI on boxes and drill-down, toggle persistence via the layout file, cached-first refresh, no verdicts, badges, flags or scores.
+
+Dimension findings:
+- Infra fit: PASS - paths, env names, call-time path rule, the e2e `rmtree` of the cache root (a stale layout cannot leak), CORS set and reload hazards match real code.
+- Test coverage: CONCERN - F3 (G-S5b-11 count), F7 (re-mount reviewer-only), F8 (no-reorder claim untested), and F4/F5/F6 lack the test that would catch them. Counts re-derived item by item: 45 (15+10+11+9), 65 vitest (23+36+6) and 7 Playwright; pytest 951 to 996, vitest 251 to 316 (34 to 41 files), G-S5b-1 92 in 11 files, e2e 17 to 24 and 65 to 72, all consistent between body and contract tables.
+- Breaking changes: PASS - every consumer of the changed symbols, routes and payload fields found by grep is listed or unaffected; the three tsc edits are the complete set; advisory c names two unlisted source-text scans and three globals.css parsers.
+- Security surface: PASS - no auth, key or secret surface; writes validated; Tailscale-only; F6 (cap race under concurrent adds) and advisory e (array bounds) are the residue.
+- S5a feasibility: CONCERN - F4, F5, F6 (mechanically executable; highest-risk edit: `screener_board.py`, which must not change chart, chip or spaghetti output, and the reload-safe exception usage).
+- S5b feasibility: CONCERN - F3, F7, F8 (highest-risk edit: `SpaghettiChart`/`ScreenerBoard` controlled-hidden wiring, then the global CSS against the contrast audit).
+- Envelopes: PASS - bytes recomputed from the file: S5a 19,612 B (room 2,945 B), S5b 20,124 B (room 2,433 B), CLAUDE.md 13,443 B; drafted envelopes with every required item measure 1,962 B and 2,053 B and fit; F2 requires the range table to be re-derived last.
+
+Findings (supplement wanted; one fixer can fold all; evidence lines are plan or repo lines at this commit):
+
+| # | Sev | Evidence | Exact fix wanted |
+|---|---|---|---|
+| F1 | CONCERN | AC-8 (SPEC line 154, Locked) has no criterion row (table 238-261), no backlog note (`process/general-plans/backlog/` has none; S5b's only stub is the contrast one); mentioned only at 35, 171, 368. After Q1 A it is a Known-Gap residual by gate convention 8. | Add row `AC-8r / group sort by name, % change or RSI, unavailable last and labelled / Known-Gap residual / deferred to a follow-up slice after S5b; backlog screener-group-sort_NOTE_<dd-mm-yy>.md / D (CONDITIONAL)` to the criterion table; add to Open gaps, coverage limits (368) and Later batches (171, about 3 web files, 0.7 USD); the planner (not a slice) writes the note in `process/general-plans/backlog/` so S5b-scope and the 28 touches stay; Phase Completion Rules (215): SPEC AC-8 marked deferred. |
+| F2 | CONCERN | Q1/Q2 still shown open at 11, 35, 80, 171, 217-222, 368, 372, 392; any earlier edit moves every line number in the table at 398-401. | Mark Q1 A and Q2 A RESOLVED 09-10-26 at those lines (retitle 217 "Resolved questions"; step 5 at 392 becomes "run VALIDATE to PASS, then wait for ENTER EXECUTE MODE"); line 11 status "VALIDATED CONDITIONAL, supplement pending" until the PASS stamp; re-derive the sub-range table LAST (`grep -n '^## \|^### '`), recompute bytes and rooms, fix the union to 34,268 B / 11,711 B. |
+| F3 | CONCERN | Line 295 G-S5b-11 says "59 new stubs + 6 added tests failing, 251 existing passing" for the G-S5b-1 red run, but G-S5b-1 (285) covers 27 existing tests (6+6+9+6) plus 65 stubs = 92 in 11 files; 251 holds only for the full `pnpm test`. Conventions 2 and 5 turn a differing count into `needs_input`. | G-S5b-11: "G-S5b-1 on the untouched base: 92 in 11 files, 65 failed (59 in the 7 new files + 6 stubs inside DrillDownView/SpaghettiChart tests), 27 passed; the full `pnpm test` then shows 316 in 41 files, 65 failed, 251 passed." |
+| F4 | CONCERN | C4 (50) "`DELETE` removes the file" vs C2 (48) sectioned file, "Unknown sections survive a save (S9 adds `equities`)", design 2 (93) `reset_layout(section)`; the e2e `afterEach` (160) calls DELETE after every test. A later `equities` section would be wiped by a crypto reset. | `DELETE` removes only the `crypto` section and deletes the file only when no section remains; fold into existing tests: `test_layout_store` 13 "survive a save and a reset", `test_layout` 7 asserts a second section survives. No count change. |
+| F5 | CONCERN | C2 (48) and test 12 (111): "renamed to `layout.json.bad`". `os.rename` raises `FileExistsError` on Windows when the target exists; a second corruption on the PC would make every save return 500. POSIX tests cannot see it. | Say "rename with `os.replace` (overwrites an older `.bad`)"; test 12 pre-creates `layout.json.bad` and asserts the save succeeds with the new content in `.bad`. No count change. |
+| F6 | CONCERN | `watchlist.py:79-88` read-modify-write, no lock; `_save_raw` 68-72 truncates then dumps; `routers/watchlist.py:26` is a sync `def` (thread pool). Measured: 40 threads on `add_coin` (5 trials) kept 4 of 41 coins and raised `JSONDecodeError` every trial; a concurrent GET can read the truncated file. AC-26 (Locked) says the API enforces the cap; two tabs at 29 coins can both pass the check. | Design 1: one module-level `threading.Lock` around `add_coin`/`remove_coin` (cap check inside); `_save_raw` stays non-atomic (Test Infra note) or reuses the temp-file helper. Fold into `test_watchlist_cap` test 11: at 29 coins, 8 threads behind a `threading.Barrier` add distinct new symbols; exactly one succeeds, the rest raise `watchlist_store.WatchlistFullError`, the file parses with 30. No count change. |
+| F7 | CONCERN | U5 (135) and Lane (163): "the reviewer checks" no re-mount. `SpaghettiChart.tsx:50` `lines` memo on `[data, hidden]`, island effect on `[lines, span, chartTimeframe]` (82): any new Set identity re-mounts and loses zoom. A vitest can `vi.mock("@/lib/island-loader")` and count `mountSimpleLines`; `screener.spec.ts:280-302` already reads `data-zoomed`. `hidden_lines` is ordered, so an order change between the optimistic list and the server's reply changes a join key; U2 gates the panels but not the spaghetti chart on the layout. | U5: key = SORTED joined list; render `SpaghettiChart` only after board and layout settled. SpaghettiChart test 1 also re-renders with an equal-content new array and asserts one mocked `mountSimpleLines` call; e2e `layout.spec` test 2 first ctrl-wheel zooms the spaghetti plot, then reorders with the button and asserts `data-zoomed="true"`. No count change; keep the reviewer check as a second line. |
+| F8 | CONCERN | Goal (125) "no panel reordering or space jumps" and coverage limits (364) "The tests prove that panels never reorder after first render"; the S5b test list (157) has no assertion of order stability across a timeframe change, board refetch or the +4 s/+12 s retry; "space jumps" is not provable (layout shift is not measured). | `ScreenerBoardLayout` test 3 records the panel order, changes the timeframe, runs the add retry timers and asserts the same order. Reword 125 to "no panel reordering caused by this slice (layout shift is not measured)" and 364 to what the test proves. No count change. |
+
+Advisories (no verdict effect, fold if cheap): (a) envelope drafts measure S5a 1,962 B and S5b 2,053 B, so "stays under 2,000 B" (380, 403) cannot hold for S5b; the limit is the room (2,945 / 2,433 B), S5b has about 380 B of fold budget in its ranges (line 53, 298 B, is droppable); (b) C6: TS `RsiReading.length: number` (not a literal) and name `RsiPoint {timestamp: string; value: number}`; (c) line 108 misnames the `confidence` ban (it is `test_screener_no_verdict_contract.py:29-33,168-175`, non-comment lines) and the stay-green rows omit `test_exchange_attention.py:157`, `test_history.py:286` (S5a) and the globals.css parsers `chart-palette`, `plot-ink`, `onchain-ink` tests (S5b); (d) gate convention 10: comments in scanned files must avoid the scanned words (the plan text itself says "overbought", "oversold"), and new test files must use `watchlist_store.<Name>`; (e) `max_length` on `coins` (64), `hidden_lines` (64) and symbol strings (15) in `LayoutUpdate`; (f) RSI row accessible name as visible text, `board-announcer` rendered from first render, close the drill-down when its coin is removed, `getByRole("region", { name, exact: true })`; (g) register T40/T41 in MASTER-PLAN at ENTER EXECUTE MODE, R12 README note to cover a custom `WatchlistPath`, a Windows save failure reaches the browser as a network error (no CORS header on a 500), comma typo at 215.
+
+What This Coverage Does NOT Prove (additions from PVL cycle 1): no automated test exercises two real processes writing `watchlist.json` (F6 covers threads in one process only); the island's zoom survival is proven only in the seeded browser (F7), never in jsdom; Windows `os.replace`/`os.rename` behaviour is a PC probe (P-S5a-1, U5); the full e2e baseline pass (65) was measured on this machine only.
+
+Open gaps: none new beyond F1-F8 (AC-S5b-8r on-demand contrast and the probes P-S5a-1, P-S5b-1 stay named residuals; AC-8r joins them via F1).
+Accepted by: none yet (first-pass CONDITIONAL; a supplement cycle folds F1-F8 and VALIDATE re-runs from V1; no user acceptance is claimed)
+
+SUPPLEMENT REQUEST:
+- Gap 1: Section validate-contract | Concern: F1 AC-8 group sort is not a named residual with a backlog stub | Severity: CONCERN | Suggested addition: AC-8r Known-Gap row, Open gaps and coverage wording, Later batches entry; planner writes the backlog note.
+- Gap 2: Section open-questions-for-the-user | Concern: F2 Q1 and Q2 shown open; range table | Severity: CONCERN | Suggested addition: mark both RESOLVED at lines 11, 35, 80, 171, 217-222, 368, 372, 392; re-derive the sub-range table last.
+- Gap 3: Section validate-contract | Concern: F3 G-S5b-11 red-run count | Severity: CONCERN | Suggested addition: 92 in 11 files, 65 failed, 27 passed for G-S5b-1; full suite 316 in 41, 65 failed, 251 passed.
+- Gap 4: Section decisions-locked-for-this-batch | Concern: F4 DELETE removes the whole sectioned file | Severity: CONCERN | Suggested addition: DELETE removes only the section; assert in tests 13 and 7.
+- Gap 5: Section decisions-locked-for-this-batch | Concern: F5 `.bad` rename on Windows | Severity: CONCERN | Suggested addition: `os.replace`; test 12 pre-creates `.bad`.
+- Gap 6: Section s5a-layout-file-api-30-coin-cap-rsi-numbers-ts-mirrors-rt3-capped-subagent-lane-yes | Concern: F6 cap check-and-append race | Severity: CONCERN | Suggested addition: module-level lock; threaded assertion in test 11.
+- Gap 7: Section s5b-layout-ui-addremove-coins-rsi-display-toggle-persistence-rt3-capped-subagent-lane-yes | Concern: F7 re-mount automation, sorted key, gate on layout | Severity: CONCERN | Suggested addition: U5 sorted key; mocked-island assertion; e2e zoom survives a reorder.
+- Gap 8: Section s5b-layout-ui-addremove-coins-rsi-display-toggle-persistence-rt3-capped-subagent-lane-yes | Concern: F8 never-reorder claim without a test | Severity: CONCERN | Suggested addition: order-stability assertion in ScreenerBoardLayout test 3; reword Goal and coverage limits.
 
 ## Autonomous Goal Block
 
