@@ -78,6 +78,84 @@
       "result": "all print nothing; git diff --check exit 0; pwsh absent",
       "utc": "2026-10-09T12:05:34Z",
       "sha": "5b68192"
+    },
+    {
+      "command": "UV_FROZEN=1 uv run --project api pytest api/tests/deploy -q (W2 baseline)",
+      "result": "62 passed, 1 skipped",
+      "utc": "2026-10-09T18:09:10Z",
+      "sha": "7f58c9b"
+    },
+    {
+      "command": "command -v pwsh (W2 baseline)",
+      "result": "prints nothing (exit 1)",
+      "utc": "2026-10-09T18:09:10Z",
+      "sha": "7f58c9b"
+    },
+    {
+      "command": "G-R12-1 red run, C3 stubs",
+      "result": "6 failed, 11 passed",
+      "utc": "2026-10-09T18:09:30Z",
+      "sha": "7f58c9b"
+    },
+    {
+      "command": "G-R12-1 UV_FROZEN=1 uv run --project api pytest api/tests/deploy/test_deploy_r12_guards_shape.py -q (C3)",
+      "result": "17 passed",
+      "utc": "2026-10-09T18:11:45Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "G-R12-2 UV_FROZEN=1 uv run --project api pytest api/tests/deploy/test_deploy_config_shape.py -q (C3)",
+      "result": "24 passed",
+      "utc": "2026-10-09T18:11:53Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "G-R12-3 UV_FROZEN=1 uv run --project api pytest api/tests/deploy -q (C3)",
+      "result": "68 passed, 1 skipped",
+      "utc": "2026-10-09T18:11:53Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "G-R12-4 UV_FROZEN=1 uv run --project api pytest api/ -q",
+      "result": "968 passed, 2 skipped, 5 deselected, 0 xfailed",
+      "utc": "2026-10-09T18:14:53Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "cd web && pnpm install --frozen-lockfile",
+      "result": "done",
+      "utc": "2026-10-09T18:14:59Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "G-R12-5 pnpm --filter web test",
+      "result": "251 passed in 34 files",
+      "utc": "2026-10-09T18:14:59Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "G-R12-6 pnpm --filter web exec tsc --noEmit --incremental false",
+      "result": "exit 0",
+      "utc": "2026-10-09T18:15:23Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "G-R12-7 cd web && pnpm build:islands",
+      "result": "exit 0",
+      "utc": "2026-10-09T18:15:23Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "G-R12-8 cd web && SCREENER_REFRESH_WORKER=0 PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome pnpm test:e2e",
+      "result": "65 passed (whole suite)",
+      "utc": "2026-10-09T18:18:12Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "G-R12-9..12 scans on committed C3",
+      "result": "all print nothing; git diff --check exit 0; pwsh absent",
+      "utc": "2026-10-09T18:18:26Z",
+      "sha": "c090f72"
     }
   ],
   "manualChecks": [
