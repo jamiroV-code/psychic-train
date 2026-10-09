@@ -29,10 +29,15 @@ if ($DryRun) {
 
 # A running web server holds the build output open; free the web port (by PID) first.
 Stop-WebPortListener -Config $config
+# No marker while building: start-web.ps1 refuses until a build finishes cleanly.
+Remove-WebBuildMarker -Config $config
 
 Write-MySiteLog "Building web with NEXT_PUBLIC_API_BASE_URL=$env:NEXT_PUBLIC_API_BASE_URL"
 Set-Location $config.RepoRoot
 & $config.PnpmPath @buildArgs
 $code = $LASTEXITCODE
 Write-MySiteLog "Web build exited with code $code"
+if ($code -eq 0) {
+    Write-WebBuildMarker -Config $config
+}
 exit $code

@@ -141,3 +141,82 @@ def test_changed_ps1_files_have_balanced_brackets_and_quotes():
             assert code.count(open_) == code.count(close), f"{name}: unbalanced {open_}{close}"
         assert code.count('"') % 2 == 0, f"{name}: odd number of double quotes"
         assert code.count("'") % 2 == 0, f"{name}: odd number of single quotes"
+
+
+
+def _blocks_after(code: str, opener: str) -> list[str]:
+    """Each `{ ... }` block that starts at `opener` (brace-counted)."""
+    blocks = []
+    for m in re.finditer(re.escape(opener), code):
+        start = code.index("{", m.start())
+        depth = 0
+        for i in range(start, len(code)):
+            depth += {"{": 1, "}": -1}.get(code[i], 0)
+            if depth == 0:
+                blocks.append(code[start:i + 1])
+                break
+    return blocks
+
+
+def test_build_web_clears_marker_before_build_and_writes_it_only_after_success():
+    lines = _code_lines(_read("build-web.ps1"))
+    build = _first_index(lines, "& $config.PnpmPath @buildArgs")
+    remove = _first_index(lines, "Remove-WebBuildMarker")
+    write = _first_index(lines, "Write-WebBuildMarker")
+    assert 0 <= remove < build, "the marker must be removed before the build"
+    assert write > build, "the marker must be written after the build"
+    guard = next((i for i in range(write - 1, build, -1) if lines[i].strip().startswith("if ")), -1)
+    assert guard > build and "$code -eq 0" in lines[guard], "write the marker only when the build exited 0"
+    assert any(line.strip() == "exit $code" for line in lines[write:]), "keep exit $code"
+
+
+def test_marker_records_commit_web_tree_build_id_and_time_without_bom():
+    common = _read("_common.ps1")
+    for token in (
+        "build-marker.json",
+        "static",
+        "BUILD_ID",
+        "rev-parse",
+        "HEAD:web",
+        "commit",
+        "web_tree",
+        "build_id",
+        "built_at_epoch",
+        "UTF8Encoding($false)",
+        "exit 7",
+        "Test-Path -LiteralPath",
+    ):
+        assert token in common, f"_common.ps1 is missing {token!r}"
+
+
+def test_start_web_refuses_stale_or_missing_build_with_exit_4():
+    lines = _code_lines(_read("start-web.ps1"))
+    fresh = [i for i in _call_lines(lines, "Test-WebBuildFresh") if "-ReportOnly" not in lines[i]]
+    stop = [i for i in _call_lines(lines, "Stop-WebPortListener") if "-ReportOnly" not in lines[i]]
+    assert fresh and stop, "start-web.ps1 needs a real stale check and a real stop"
+    assert fresh[0] < stop[0], "check the build before stopping the running server"
+    common = _read("_common.ps1")
+    assert "exit 4" in _function_body(common, "Test-WebBuildFresh")
+    stale = [line for line in common.splitlines() if "Stale build:" in line]
+    assert stale and all("build-web.ps1" in line for line in stale), "tell the user to run build-web.ps1"
+
+
+def test_stale_check_covers_web_tree_and_newest_tracked_source_mtime():
+    body = _function_body(_read("_common.ps1"), "Test-WebBuildFresh")
+    common = _read("_common.ps1")
+    for token in ("ls-files", "GetLastWriteTimeUtc", "built_at_epoch", "HEAD:web", "no build marker", "-gt"):
+        assert token in body, f"Test-WebBuildFresh is missing {token!r}"
+    for token in ("git -C", "RepoRoot", "Floor"):
+        assert token in common, f"_common.ps1 is missing {token!r}"
+
+
+def test_stale_check_is_report_only_in_dry_run():
+    lines = _code_lines(_read("start-web.ps1"))
+    begin, end = _dry_run_block(lines)
+    report = [i for i in range(begin, end) if "Test-WebBuildFresh" in lines[i] and "-ReportOnly" in lines[i]]
+    assert report, "the dry run must run the stale check with -ReportOnly before exit 0"
+    body = _function_body(_read("_common.ps1"), "Test-WebBuildFresh")
+    blocks = _blocks_after(body, "if ($ReportOnly)")
+    assert blocks, "Test-WebBuildFresh needs a -ReportOnly branch"
+    for block in blocks:
+        assert "exit 4" not in block, "the -ReportOnly branch must never exit 4"

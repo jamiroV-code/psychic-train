@@ -187,3 +187,190 @@ function Stop-WebPortListener {
     }
     Write-MySiteLog "Port ${port}: free."
 }
+
+function Get-WebBuildMarkerPath {
+    # Inside the build output: every next build clears it, and git already ignores it.
+    # Absolute, because the stale check runs before any Set-Location.
+    param([Parameter(Mandatory)][hashtable]$Config)
+    return (Join-Path $Config.RepoRoot 'web\.next\static\build-marker.json')
+}
+
+function Get-WebBuildIdPath {
+    param([Parameter(Mandatory)][hashtable]$Config)
+    return (Join-Path $Config.RepoRoot 'web\.next\BUILD_ID')
+}
+
+function Get-ShortSha {
+    param([string]$Sha)
+    if ($null -eq $Sha) { return '' }
+    $text = $Sha.Trim()
+    if ($text.Length -gt 7) { return $text.Substring(0, 7) }
+    return $text
+}
+
+function ConvertTo-MySiteEpoch {
+    # Whole UTC seconds since 1970, floored (file times have 100 ns resolution).
+    param([Parameter(Mandatory)][DateTime]$Utc)
+    $origin = New-Object DateTime 1970, 1, 1, 0, 0, 0, ([DateTimeKind]::Utc)
+    return [int64][Math]::Floor(($Utc - $origin).TotalSeconds)
+}
+
+function Invoke-MySiteGit {
+    # One read-only git call in the repo: git -C RepoRoot <GitArgs>. Returns the output lines
+    # and throws when git is missing or exits non-zero. Stderr is left alone on purpose: under
+    # the global Stop preference, PowerShell 5.1 turns redirected stderr text into an error.
+    param(
+        [Parameter(Mandatory)][hashtable]$Config,
+        [Parameter(Mandatory)][string[]]$GitArgs
+    )
+    $out = @(& git -C $Config.RepoRoot @GitArgs)
+    if ($LASTEXITCODE -ne 0) {
+        throw ('git ' + ($GitArgs -join ' ') + ' exited with code ' + $LASTEXITCODE)
+    }
+    return $out
+}
+
+function Remove-WebBuildMarker {
+    # Called before a build: a failed or running build must leave no marker behind.
+    param([Parameter(Mandatory)][hashtable]$Config)
+    $markerPath = Get-WebBuildMarkerPath -Config $Config
+    if (Test-Path -LiteralPath $markerPath) {
+        Remove-Item -LiteralPath $markerPath
+        Write-MySiteLog 'Build marker removed before the build.'
+    }
+}
+
+function Write-WebBuildMarker {
+    # Called only after a successful build, as the last step. Records what was built so
+    # start-web.ps1 can refuse a stale build. Nothing secret goes in it. Any failure: exit 7.
+    param([Parameter(Mandatory)][hashtable]$Config)
+    $now = [DateTime]::UtcNow
+    $epoch = ConvertTo-MySiteEpoch -Utc $now
+    $markerPath = Get-WebBuildMarkerPath -Config $Config
+    $buildIdPath = Get-WebBuildIdPath -Config $Config
+    try {
+        if (-not (Test-Path -LiteralPath $buildIdPath)) { throw 'BUILD_ID not found after the build' }
+        $buildId = ([System.IO.File]::ReadAllText($buildIdPath)).Trim()
+        $commit = ([string](@(Invoke-MySiteGit -Config $Config -GitArgs @('rev-parse', 'HEAD'))[0])).Trim()
+        $webTree = ([string](@(Invoke-MySiteGit -Config $Config -GitArgs @('rev-parse', 'HEAD:web'))[0])).Trim()
+        $changes = @(Invoke-MySiteGit -Config $Config -GitArgs @('status', '--porcelain', '--', 'web') | Where-Object { $_ })
+        if (-not $buildId -or -not $commit -or -not $webTree) { throw 'empty BUILD_ID or git output' }
+        $marker = [ordered]@{
+            schema         = 1
+            commit         = $commit
+            web_tree       = $webTree
+            dirty          = ($changes.Count -gt 0)
+            build_id       = $buildId
+            built_at_epoch = $epoch
+            built_at_utc   = $now.ToString('yyyy-MM-ddTHH:mm:ss', [System.Globalization.CultureInfo]::InvariantCulture) + 'Z'
+        }
+        $json = ConvertTo-Json -InputObject $marker -Compress
+        $markerDir = Split-Path -Parent $markerPath
+        if (-not (Test-Path -LiteralPath $markerDir)) {
+            New-Item -ItemType Directory -Path $markerDir | Out-Null
+        }
+        [System.IO.File]::WriteAllText($markerPath, $json, (New-Object System.Text.UTF8Encoding($false)))
+    } catch {
+        Write-MySiteLog "Build marker not written: $($_.Exception.Message)"
+        exit 7
+    }
+    Write-MySiteLog "Build marker written: commit $(Get-ShortSha $commit) web tree $(Get-ShortSha $webTree) build id $buildId"
+}
+
+function Test-WebBuildFresh {
+    # Refuse to start a missing or stale build. First failing check wins: marker present,
+    # marker readable, build output matches it, git readable, web/ tree unchanged, no tracked
+    # web file newer than the build. HEAD alone moving is only a note. Refusal: exit 4.
+    # With -ReportOnly it prints the result and returns; it never exits.
+    param(
+        [Parameter(Mandatory)][hashtable]$Config,
+        [switch]$ReportOnly
+    )
+    $reason = $null
+    $marker = $null
+    $headCommit = ''
+    $webTree = ''
+    $notes = @()
+    $markerPath = Get-WebBuildMarkerPath -Config $Config
+    $buildIdPath = Get-WebBuildIdPath -Config $Config
+    if (-not (Test-Path -LiteralPath $markerPath)) {
+        $reason = 'no build marker'
+    }
+    if ($null -eq $reason) {
+        try {
+            $marker = [System.IO.File]::ReadAllText($markerPath) | ConvertFrom-Json
+            $names = @($marker.PSObject.Properties | ForEach-Object { $_.Name })
+            foreach ($field in 'schema', 'commit', 'web_tree', 'dirty', 'build_id', 'built_at_epoch') {
+                if ($names -notcontains $field) { throw ('missing field ' + $field) }
+            }
+        } catch {
+            $reason = 'build marker unreadable'
+        }
+    }
+    if ($null -eq $reason) {
+        $currentBuildId = ''
+        if (Test-Path -LiteralPath $buildIdPath) {
+            $currentBuildId = ([System.IO.File]::ReadAllText($buildIdPath)).Trim()
+        }
+        if (-not $currentBuildId -or $currentBuildId -ne [string]$marker.build_id) {
+            $reason = 'build output missing or differs from the marker'
+        }
+    }
+    if ($null -eq $reason) {
+        try {
+            $headCommit = ([string](@(Invoke-MySiteGit -Config $Config -GitArgs @('rev-parse', 'HEAD'))[0])).Trim()
+            $webTree = ([string](@(Invoke-MySiteGit -Config $Config -GitArgs @('rev-parse', 'HEAD:web'))[0])).Trim()
+            if (-not $headCommit -or -not $webTree) { throw 'empty git output' }
+        } catch {
+            $reason = 'cannot read git state'
+        }
+    }
+    if ($null -eq $reason -and $webTree -ne [string]$marker.web_tree) {
+        $builtTree = Get-ShortSha ([string]$marker.web_tree)
+        $currentTree = Get-ShortSha $webTree
+        $reason = "web/ sources changed since the build (built tree $builtTree, current $currentTree)"
+    }
+    if ($null -eq $reason) {
+        $files = @()
+        try {
+            $files = @(Invoke-MySiteGit -Config $Config -GitArgs @('-c', 'core.quotepath=off', 'ls-files', '--', 'web'))
+        } catch {
+            $reason = 'cannot read git state'
+        }
+        $builtAt = [int64][Math]::Floor([double]$marker.built_at_epoch)
+        $newest = [int64]0
+        $newestPath = ''
+        foreach ($relative in $files) {
+            if (-not $relative) { continue }
+            $full = Join-Path $Config.RepoRoot ([string]$relative)
+            if (-not [System.IO.File]::Exists($full)) { continue }
+            $written = ConvertTo-MySiteEpoch -Utc ([System.IO.File]::GetLastWriteTimeUtc($full))
+            if ($written -gt $newest) {
+                $newest = $written
+                $newestPath = [string]$relative
+            }
+        }
+        if ($null -eq $reason -and $newest -gt $builtAt) {
+            $reason = "tracked web file newer than the build: $newestPath"
+        }
+    }
+    if ($null -ne $reason) {
+        $line = "Stale build: $reason. Run deploy\build-web.ps1, then start again."
+        if ($ReportOnly) {
+            Write-Host "DRY RUN: $line"
+            return
+        }
+        Write-MySiteLog $line
+        exit 4
+    }
+    if ($headCommit -ne [string]$marker.commit) {
+        $notes += "Note: HEAD $(Get-ShortSha $headCommit) differs from the build commit $(Get-ShortSha ([string]$marker.commit)); web/ is unchanged."
+    }
+    if ($marker.dirty -eq $true) {
+        $notes += 'Note: built from uncommitted web/ changes.'
+    }
+    $result = @("Build is current: commit $(Get-ShortSha ([string]$marker.commit)) web tree $(Get-ShortSha $webTree) build id $($marker.build_id)") + $notes
+    foreach ($text in $result) {
+        if ($ReportOnly) { Write-Host "DRY RUN: $text" } else { Write-MySiteLog $text }
+    }
+}

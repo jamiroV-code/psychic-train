@@ -20,9 +20,13 @@ if ($DryRun) {
     Write-Host "host    = $ip"
     Write-Host "port    = $($config.WebPort)"
     Write-Host "command = $($config.PnpmPath) $($webArgs -join ' ')  (in $($config.RepoRoot))"
+    Test-WebBuildFresh -Config $config -ReportOnly
     Stop-WebPortListener -Config $config -ReportOnly
     exit 0
 }
+
+# Refuse a missing or stale build before touching the running server (exit 4).
+Test-WebBuildFresh -Config $config
 
 # Free the web port (by PID, never by name) so the new server can bind it.
 Stop-WebPortListener -Config $config
