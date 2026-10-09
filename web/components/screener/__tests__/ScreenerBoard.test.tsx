@@ -6,7 +6,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ScreenerBoard } from "@/components/screener/ScreenerBoard";
-import type { GainChip, ScreenerBoardResponse, Timeframe } from "@/lib/types/screener";
+import type { GainChip, ScreenerBoardResponse, SpaghettiResponse, Timeframe } from "@/lib/types/screener";
 
 // T32 / S1 freshness fields (ChartSeries); nulls = no freshness information.
 const NO_FRESHNESS = { last_bar_ts: null, fetched_at: null, is_partial: null, server_time: null, stale: false };
@@ -54,6 +54,18 @@ function makeBoard(timeframe: Timeframe, coins: ReturnType<typeof makeCoin>[]): 
   };
 }
 
+// T37 / S6: the board mounts SpaghettiChart; every render passes this stub so
+// no real fetch runs.
+const fetchSpaghetti = vi.fn(
+  async (tf: Timeframe): Promise<SpaghettiResponse> => ({
+    timeframe: tf,
+    window_cap_bars: tf === "1w" ? 28 : 200,
+    server_time: null,
+    series: [],
+    references: [],
+  }),
+);
+
 describe("ScreenerBoard", () => {
   it("renders N panels for N mock coins, each panel's values matching its own fixture (AC-5)", async () => {
     const coins = [
@@ -64,7 +76,7 @@ describe("ScreenerBoard", () => {
     ];
     const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
 
-    render(<ScreenerBoard fetchBoard={fetchBoard} />);
+    render(<ScreenerBoard fetchBoard={fetchBoard} fetchSpaghetti={fetchSpaghetti} />);
 
     await waitFor(() => expect(screen.getByTestId("coin-panel-BTC")).toBeInTheDocument());
     expect(screen.getByTestId("coin-panel-ETH")).toBeInTheDocument();
@@ -79,7 +91,7 @@ describe("ScreenerBoard", () => {
     const coins = [makeCoin("BTC"), makeCoin("ETH")];
     const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
 
-    const { container } = render(<ScreenerBoard fetchBoard={fetchBoard} />);
+    const { container } = render(<ScreenerBoard fetchBoard={fetchBoard} fetchSpaghetti={fetchSpaghetti} />);
     await waitFor(() => expect(screen.getByTestId("coin-panel-BTC")).toBeInTheDocument());
 
     fireEvent.click(screen.getByTestId("timeframe-button-1h"));
@@ -108,7 +120,7 @@ describe("ScreenerBoard", () => {
     ];
     const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
 
-    render(<ScreenerBoard fetchBoard={fetchBoard} />);
+    render(<ScreenerBoard fetchBoard={fetchBoard} fetchSpaghetti={fetchSpaghetti} />);
     await waitFor(() => expect(screen.getByTestId("gain-chip-15m")).toBeInTheDocument());
 
     expect(screen.getByTestId("gain-chip-15m").textContent).toContain("N/A");
@@ -133,7 +145,7 @@ describe("ScreenerBoard", () => {
     ];
     const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
 
-    render(<ScreenerBoard fetchBoard={fetchBoard} />);
+    render(<ScreenerBoard fetchBoard={fetchBoard} fetchSpaghetti={fetchSpaghetti} />);
     await waitFor(() => expect(screen.getByTestId("gain-chip-1d")).toBeInTheDocument());
 
     expect(screen.getByTestId("gain-chip-1d").textContent).toContain("-1.2%");
@@ -158,7 +170,7 @@ describe("ScreenerBoard", () => {
     ];
     const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
 
-    render(<ScreenerBoard fetchBoard={fetchBoard} />);
+    render(<ScreenerBoard fetchBoard={fetchBoard} fetchSpaghetti={fetchSpaghetti} />);
     await waitFor(() => expect(screen.getByTestId("coin-panel-BTC")).toBeInTheDocument());
 
     const btc = screen.getByTestId("coin-panel-BTC");
@@ -174,7 +186,7 @@ describe("ScreenerBoard", () => {
     const coins = [makeCoin("THIN", { chart: { price: [], sma: [], available: false, reason: null, ...NO_FRESHNESS } })];
     const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
 
-    render(<ScreenerBoard fetchBoard={fetchBoard} />);
+    render(<ScreenerBoard fetchBoard={fetchBoard} fetchSpaghetti={fetchSpaghetti} />);
     await waitFor(() => expect(screen.getByTestId("chart-unavailable")).toBeInTheDocument());
     // reason: null falls back to the pre-RFC-005 default copy, unchanged.
     expect(screen.getByTestId("chart-unavailable").textContent).toContain("Not enough history at this timeframe");
@@ -189,7 +201,7 @@ describe("ScreenerBoard", () => {
     ];
     const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
 
-    render(<ScreenerBoard fetchBoard={fetchBoard} />);
+    render(<ScreenerBoard fetchBoard={fetchBoard} fetchSpaghetti={fetchSpaghetti} />);
     await waitFor(() => expect(screen.getByTestId("chart-unavailable")).toBeInTheDocument());
 
     const el = screen.getByTestId("chart-unavailable");
@@ -206,11 +218,25 @@ describe("ScreenerBoard", () => {
       chart: { price: [], sma: [], available: false, reason: null, ...NO_FRESHNESS },
     }));
 
-    render(<ScreenerBoard fetchBoard={fetchBoard} fetchChart={fetchChart} />);
+    render(<ScreenerBoard fetchBoard={fetchBoard} fetchSpaghetti={fetchSpaghetti} fetchChart={fetchChart} />);
     await waitFor(() => expect(screen.getByTestId("open-drilldown-BTC")).toBeInTheDocument());
 
     expect(screen.queryByTestId("drilldown-view")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("open-drilldown-BTC"));
     await waitFor(() => expect(screen.getByTestId("drilldown-view")).toBeInTheDocument());
+  });
+
+  it("hosts the spaghetti chart, which follows the board timeframe (T37 / S6)", async () => {
+    const coins = [makeCoin("BTC")];
+    const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
+    const spaghetti = vi.fn(fetchSpaghetti);
+
+    render(<ScreenerBoard fetchBoard={fetchBoard} fetchSpaghetti={spaghetti} />);
+    await waitFor(() => expect(spaghetti).toHaveBeenCalledWith("1d"));
+    expect(screen.getByTestId("spaghetti-chart")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("timeframe-button-1w"));
+    await waitFor(() => expect(spaghetti).toHaveBeenLastCalledWith("1w"));
+    expect(fetchBoard).toHaveBeenLastCalledWith("1w");
   });
 });

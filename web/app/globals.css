@@ -465,7 +465,7 @@
   font-weight: 600;
 }
 
-.relative-performance-chart__note {
+.spaghetti-chart__note {
   font-size: var(--fs-sm);
   color: var(--ink-2);
   border-left: 2px solid var(--sev-insuf);
@@ -778,6 +778,68 @@
   box-shadow:
     0 1px 2px rgb(0 0 0 / 0.45),
     0 6px 20px -12px rgb(0 0 0 / 0.6);
+}
+
+/* T37 / S6: the simple-lines island (coin boxes, drill-down, spaghetti). Its
+   axes are an SVG layer over the light plot, so the words are themed here and
+   pass 4.5:1 like every other 10px label (--an-ink-2 is 7.7:1). */
+.simple-lines {
+  position: relative;
+  user-select: none;
+}
+.simple-lines svg {
+  overflow: visible;
+}
+.simple-lines text {
+  fill: var(--an-ink-2);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.simple-lines .tick line,
+.simple-lines .tick-mark,
+.simple-lines .grid line {
+  stroke: var(--an-grid);
+}
+.simple-lines .rule {
+  stroke: var(--an-axis);
+}
+.simple-lines__reset {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: var(--fs-xs);
+  padding: 1px 6px;
+  color: var(--an-ink-2);
+  background: var(--an-panel);
+  border: 1px solid var(--an-axis);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.simple-lines__reset:focus-visible {
+  outline: 2px solid var(--brand-navy-lift);
+  outline-offset: 2px;
+}
+
+.spaghetti-chart {
+  margin-top: var(--sp-4);
+}
+.spaghetti-chart__span {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  margin: 0 0 var(--sp-2);
+}
+.spaghetti-chart__toggle {
+  all: unset;
+  cursor: pointer;
+  margin-right: var(--sp-3);
+}
+.spaghetti-chart__toggle[aria-pressed="false"] {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.spaghetti-chart__toggle:focus-visible {
+  outline: 2px solid var(--brand-navy-lift);
+  outline-offset: 2px;
 }
 
 /* Narrative panels share the regime panel's chrome; only the plot differs. */

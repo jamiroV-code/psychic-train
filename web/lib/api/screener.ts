@@ -1,8 +1,7 @@
 import type {
   ChartView,
-  RelativePerformanceResponse,
-  RelativePerformanceTimeframe,
   ScreenerBoardResponse,
+  SpaghettiResponse,
   Timeframe,
 } from "@/lib/types/screener";
 
@@ -35,8 +34,6 @@ export function fetchChartView(symbol: string, timeframe: Timeframe = "4h"): Pro
   return getJson<ChartView>(`/api/screener/${encodeURIComponent(symbol)}/chart?timeframe=${timeframe}`);
 }
 
-export function fetchRelativePerformance(
-  timeframe: RelativePerformanceTimeframe = "30d"
-): Promise<RelativePerformanceResponse> {
-  return getJson<RelativePerformanceResponse>(`/api/screener/relative-performance?timeframe=${timeframe}`);
+export function fetchSpaghetti(timeframe: Timeframe = "1d"): Promise<SpaghettiResponse> {
+  return getJson<SpaghettiResponse>(`/api/screener/spaghetti?timeframe=${timeframe}`);
 }
