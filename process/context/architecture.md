@@ -18,10 +18,11 @@ Carved out of all-context.md on 03-10-26. The earlier long-form layout, stack an
 | `web/app/` | Next.js App Router pages: `screener/`, `regime/`, `narrative/`, `pairs/` (plus `pairs/[a]/[b]/` detail), `onchain/`, root `page.tsx` and `layout.tsx` |
 | `web/components/` | React components per page (`screener/`, `regime/`, `narrative/`, `pairs/`, `onchain/`), plus `shell/` (app nav), `brand/` (OwlMark), `chart/` |
 | `web/islands/` | Svelte 5 chart islands (LayerChart): regime, narrative, onchain, spread chart, shared panel sync |
+| `web/lib/chart-viewport.ts` | custom chart viewport: Ctrl/Cmd+wheel and pinch zoom, drag pan, double-click reset; vector axis text over Canvas lines; `screener/SpaghettiChart.tsx` replaced the relative-performance chart |
 | `web/lib/` | API clients (`api/`), types, formatters, `island-loader.ts`, view models |
 | `web/e2e/` | Playwright specs (screener, regime, narrative, pairs, onchain, contrast) |
 | `api/routers/` | `screener.py`, `regime.py`, `narrative.py`, `pairs.py`, `onchain_activity.py`, `watchlist.py` |
-| `api/analytics/` | `indicators/`, `confidence/`, `regime/`, `narrative/`, `cointegration/`, `onchain/`, `screener_board.py` |
+| `api/analytics/` | `indicators/` (`gain.py`, `rsi.py`, `sma.py`; verdict, confidence, benchmark and momentum modules removed in S4), `regime/` (`/api/regime/legs` and `/btc-legs` read BTC OHLCV cache-only), `narrative/`, `cointegration/`, `onchain/`, `screener_board.py` |
 | `api/data/` | provider adapters (`*_adapter.py`; `lse_adapter.py` and `equities_store.py` are private-use, non-redistributable), `cache.py`, `freshness.py` (pure staleness rules; `fetched_at` sidecar `<tf>.meta.json`; 200-bar sub-daily retention), `refresh_worker.py` (background refresh, env `SCREENER_REFRESH_WORKER` 0/1/unset = on), config JSON (watchlist, pairs universe, narratives, chains) |
 | `api/models/` | pydantic response models per router |
 | `api/scripts/` | refresh, backfill, snapshot, compute and diagnostic scripts; `BOOTSTRAP.md` runbook |
