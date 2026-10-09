@@ -1,14 +1,84 @@
 {
   "task": "R12",
   "commands": [
-    {"command": "UV_FROZEN=1 uv run --project api pytest api/tests/deploy -q (baseline)", "result": "51 passed, 1 skipped", "utc": "2026-10-09T11:59:30Z", "sha": "7ead516"},
-    {"command": "command -v pwsh (baseline)", "result": "prints nothing (exit 1)", "utc": "2026-10-09T11:59:30Z", "sha": "7ead516"},
-    {"command": "G-R12-1 red run, C1 stubs", "result": "6 failed", "utc": "2026-10-09T12:00:27Z", "sha": "7ead516"},
-    {"command": "G-R12-2 red run, legs assertion edited, README unedited", "result": "1 failed, 23 passed", "utc": "2026-10-09T12:00:27Z", "sha": "7ead516"},
-    {"command": "G-R12-1 UV_FROZEN=1 uv run --project api pytest api/tests/deploy/test_deploy_r12_guards_shape.py -q (C1)", "result": "6 passed", "utc": "2026-10-09T12:03:14Z", "sha": "1cc96d2"},
-    {"command": "G-R12-2 UV_FROZEN=1 uv run --project api pytest api/tests/deploy/test_deploy_config_shape.py -q (C1)", "result": "24 passed", "utc": "2026-10-09T12:03:14Z", "sha": "1cc96d2"},
-    {"command": "G-R12-3 UV_FROZEN=1 uv run --project api pytest api/tests/deploy -q (C1)", "result": "57 passed, 1 skipped", "utc": "2026-10-09T12:03:14Z", "sha": "1cc96d2"},
-    {"command": "G-R12-9..12 scans on committed C1", "result": "all print nothing; git diff --check exit 0; pwsh absent", "utc": "2026-10-09T12:03:14Z", "sha": "1cc96d2"}
+    {
+      "command": "UV_FROZEN=1 uv run --project api pytest api/tests/deploy -q (baseline)",
+      "result": "51 passed, 1 skipped",
+      "utc": "2026-10-09T11:59:30Z",
+      "sha": "7ead516"
+    },
+    {
+      "command": "command -v pwsh (baseline)",
+      "result": "prints nothing (exit 1)",
+      "utc": "2026-10-09T11:59:30Z",
+      "sha": "7ead516"
+    },
+    {
+      "command": "G-R12-1 red run, C1 stubs",
+      "result": "6 failed",
+      "utc": "2026-10-09T12:00:27Z",
+      "sha": "7ead516"
+    },
+    {
+      "command": "G-R12-2 red run, legs assertion edited, README unedited",
+      "result": "1 failed, 23 passed",
+      "utc": "2026-10-09T12:00:27Z",
+      "sha": "7ead516"
+    },
+    {
+      "command": "G-R12-1 UV_FROZEN=1 uv run --project api pytest api/tests/deploy/test_deploy_r12_guards_shape.py -q (C1)",
+      "result": "6 passed",
+      "utc": "2026-10-09T12:03:14Z",
+      "sha": "1cc96d2"
+    },
+    {
+      "command": "G-R12-2 UV_FROZEN=1 uv run --project api pytest api/tests/deploy/test_deploy_config_shape.py -q (C1)",
+      "result": "24 passed",
+      "utc": "2026-10-09T12:03:14Z",
+      "sha": "1cc96d2"
+    },
+    {
+      "command": "G-R12-3 UV_FROZEN=1 uv run --project api pytest api/tests/deploy -q (C1)",
+      "result": "57 passed, 1 skipped",
+      "utc": "2026-10-09T12:03:14Z",
+      "sha": "1cc96d2"
+    },
+    {
+      "command": "G-R12-9..12 scans on committed C1",
+      "result": "all print nothing; git diff --check exit 0; pwsh absent",
+      "utc": "2026-10-09T12:03:14Z",
+      "sha": "1cc96d2"
+    },
+    {
+      "command": "G-R12-1 red run, C2 stubs",
+      "result": "5 failed, 6 passed",
+      "utc": "2026-10-09T12:03:29Z",
+      "sha": "601380f"
+    },
+    {
+      "command": "G-R12-1 UV_FROZEN=1 uv run --project api pytest api/tests/deploy/test_deploy_r12_guards_shape.py -q (C2)",
+      "result": "11 passed",
+      "utc": "2026-10-09T12:05:27Z",
+      "sha": "5b68192"
+    },
+    {
+      "command": "G-R12-2 UV_FROZEN=1 uv run --project api pytest api/tests/deploy/test_deploy_config_shape.py -q (C2)",
+      "result": "24 passed",
+      "utc": "2026-10-09T12:05:27Z",
+      "sha": "5b68192"
+    },
+    {
+      "command": "G-R12-3 UV_FROZEN=1 uv run --project api pytest api/tests/deploy -q (C2)",
+      "result": "62 passed, 1 skipped",
+      "utc": "2026-10-09T12:05:27Z",
+      "sha": "5b68192"
+    },
+    {
+      "command": "G-R12-9..12 scans on committed C2",
+      "result": "all print nothing; git diff --check exit 0; pwsh absent",
+      "utc": "2026-10-09T12:05:34Z",
+      "sha": "5b68192"
+    }
   ],
   "manualChecks": [],
   "result": "CONDITIONAL"
