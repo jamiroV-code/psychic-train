@@ -383,3 +383,36 @@ test.describe("at device pixel ratio 2", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// T38 / S7: the BTC leg chart over all cached BTC daily history.
+//    Catches: a payload that trims daily bars, legs out of order, or an
+//    estimate panel whose heading drifted from the D-14 wording.
+// ---------------------------------------------------------------------------
+test("the BTC leg chart covers every seeded daily bar, with ordered legs and the estimate heading", async ({
+  page,
+  request,
+}) => {
+  const res = await request.get(`${API_BASE_URL}/api/regime/btc-legs`);
+  expect(res.ok(), `btc-legs returned ${res.status()}`).toBe(true);
+  const body = (await res.json()) as {
+    available: boolean;
+    bar_count: number;
+    legs: { start: string; end: string | null }[];
+    estimate: { heading: string } | null;
+  };
+  expect(body.available).toBe(true);
+  expect(body.bar_count).toBe(manifest.bars_written.BTC["1d"]);
+  for (let i = 1; i < body.legs.length; i++) {
+    expect(body.legs[i].start > body.legs[i - 1].start, "legs strictly increasing").toBe(true);
+  }
+
+  await page.goto("/screener");
+  await expect(page.getByTestId("btc-leg-chart-container")).toBeVisible();
+  await expect(page.getByTestId("btc-leg-span")).toContainText(`${body.bar_count} bars`);
+  if (body.estimate) {
+    await expect(page.getByTestId("leg-estimate-heading")).toHaveText("Estimate (rule over the numbers shown)");
+  } else {
+    await expect(page.getByTestId("leg-estimate-na")).toContainText("N/A:");
+  }
+});

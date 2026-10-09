@@ -30,6 +30,11 @@
    *
    * Axis text is drawn in an <Svg> layer so it stays vector-sharp at any
    * pixel ratio; the lines stay on the <Canvas> below it.
+   *
+   * T38 / S7 (additive): `bands` shade time spans in two tints and `markers`
+   * draw a dated vertical line each (the BTC leg chart). Both are plain
+   * absolutely positioned elements under the plot, placed from the same
+   * x domain and padding the Chart uses, so they zoom and pan with it.
    */
   let {
     series = [],
@@ -38,6 +43,8 @@
     label = "chart",
     timeframe = null,
     highlight = false,
+    bands = [],
+    markers = [],
   } = $props();
 
   const PAD_LEFT = 52;
@@ -118,6 +125,42 @@
     const pad = (max - min) * 0.08;
     return [min - pad, max + pad];
   });
+
+  // Fraction of the plot width at time `t` for the visible x domain.
+  function xFraction(t) {
+    if (!xDomain) return 0;
+    const lo = xDomain[0].getTime();
+    const hi = xDomain[1].getTime();
+    return hi === lo ? 0 : (t - lo) / (hi - lo);
+  }
+
+  function plotLeft(fraction) {
+    return `calc(${PAD_LEFT}px + ${fraction} * (100% - ${PAD_LEFT + padRight}px))`;
+  }
+
+  function plotWidthCss(fraction) {
+    return `calc(${fraction} * (100% - ${PAD_LEFT + padRight}px))`;
+  }
+
+  // Bands and markers clipped to the visible range; anything outside is not drawn.
+  const visibleBands = $derived(
+    xDomain
+      ? bands
+          .map((b) => {
+            const from = Math.max(0, xFraction(new Date(b.from).getTime()));
+            const to = Math.min(1, xFraction(new Date(b.to).getTime()));
+            return { ...b, f0: from, f1: to };
+          })
+          .filter((b) => Number.isFinite(b.f0) && Number.isFinite(b.f1) && b.f1 > b.f0)
+      : [],
+  );
+  const visibleMarkers = $derived(
+    xDomain
+      ? markers
+          .map((m) => ({ ...m, f: xFraction(new Date(m.timestamp).getTime()) }))
+          .filter((m) => Number.isFinite(m.f) && m.f >= 0 && m.f <= 1)
+      : [],
+  );
 
   // ---- interaction --------------------------------------------------------
 
@@ -254,6 +297,26 @@
   onpointercancel={onPointerUp}
   onpointerleave={() => (hoverKey = null)}
 >
+  {#if xDomain && yDomain && (visibleBands.length || visibleMarkers.length)}
+    <div
+      class="simple-lines__overlay"
+      style="top: {PAD_TOP}px; bottom: {PAD_BOTTOM}px"
+      aria-hidden="true"
+      data-band-count={visibleBands.length}
+      data-marker-count={visibleMarkers.length}
+    >
+      {#each visibleBands as band (band.from)}
+        <div
+          class="simple-lines__band simple-lines__band--{band.tint}"
+          data-current={band.current ? "true" : undefined}
+          style="left: {plotLeft(band.f0)}; width: {plotWidthCss(band.f1 - band.f0)}"
+        ></div>
+      {/each}
+      {#each visibleMarkers as marker (marker.timestamp)}
+        <div class="simple-lines__marker" style="left: {plotLeft(marker.f)}" title={marker.label}></div>
+      {/each}
+    </div>
+  {/if}
   {#if xDomain && yDomain}
     <Chart
       x="date"
