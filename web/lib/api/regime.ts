@@ -1,3 +1,4 @@
+import type { BtcLegChartResponse } from "@/lib/types/btc-legs";
 import type { RegimeComponentsResponse } from "@/lib/types/regime";
 
 // Same getJson pattern as lib/api/screener.ts (base URL fallback, 10 s
@@ -30,4 +31,9 @@ export function fetchRegimeComponents(start?: string, end?: string): Promise<Reg
   if (end) params.set("end", end);
   const query = params.toString();
   return getJson<RegimeComponentsResponse>(`/api/regime/components${query ? `?${query}` : ""}`);
+}
+
+/** GET /api/regime/btc-legs — BTC daily history, confirmed legs and the D-14 estimate (T38 / S7). */
+export function fetchBtcLegs(): Promise<BtcLegChartResponse> {
+  return getJson<BtcLegChartResponse>("/api/regime/btc-legs");
 }

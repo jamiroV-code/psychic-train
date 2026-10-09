@@ -54,6 +54,20 @@ export interface SimpleLineSeries {
   points: { timestamp: string; value: number }[];
 }
 
+// T38 / S7: shaded time spans (the BTC legs) and dated markers (their
+// boundaries) on a simple-lines chart. Timestamps are ISO UTC with a `Z`.
+export interface SimpleLineBand {
+  from: string;
+  to: string;
+  tint: 0 | 1;
+  current?: boolean;
+}
+
+export interface SimpleLineMarker {
+  timestamp: string;
+  label: string;
+}
+
 export interface IslandApi {
   mountSpreadChart(
     target: HTMLElement,
@@ -119,6 +133,9 @@ export interface IslandApi {
       timeframe?: Timeframe;
       // T37 / S6: emphasise the line nearest the pointer (the spaghetti chart).
       highlight?: boolean;
+      // T38 / S7: additive; absent means no bands and no markers.
+      bands?: SimpleLineBand[];
+      markers?: SimpleLineMarker[];
     },
   ): () => void;
   mountRegimePanel(
