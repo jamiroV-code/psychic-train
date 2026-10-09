@@ -236,23 +236,26 @@ async function seriesPixels(canvas: import("@playwright/test").Locator, hex: str
   }, hex);
 }
 
-test("the relative-performance chart draws its lines, and the board's mini charts are not blank", async ({ page }) => {
+test("the spaghetti chart draws its lines, and the board's mini charts are not blank", async ({ page }) => {
   await page.goto("/screener");
   await expect(page.getByTestId("coin-panel-BTC")).toBeVisible();
 
-  const relative = page.getByTestId("rp-chart-container").locator("canvas").first();
-  await expect(relative).toBeVisible();
-  // The first watchlist coin is the first line, so its colour must be on the plot.
-  expect(await seriesPixels(relative, FIRST_SERIES), "relative-performance has no line drawn").toBeGreaterThan(20);
+  const spaghetti = page.getByTestId("spaghetti-chart-container").locator("canvas").first();
+  await expect(spaghetti).toBeVisible();
+  // BTC is a reference line in the first palette slot, so its colour must be on the plot.
+  expect(await seriesPixels(spaghetti, FIRST_SERIES), "spaghetti chart has no BTC line drawn").toBeGreaterThan(20);
 
-  // Which line is which. A multi-coin chart with no names on it cannot be read.
-  await expect(page.getByTestId("rp-legend-BTC")).toBeVisible();
-  await expect(page.getByTestId("rp-legend-ETH")).toBeVisible();
+  // Which line is which: one legend toggle per line, both references among them.
+  await expect(page.getByTestId("spaghetti-legend")).toBeVisible();
+  await expect(page.getByTestId("spaghetti-toggle-BTC")).toHaveAttribute("data-reference", "true");
+  await expect(page.getByTestId("spaghetti-toggle-HYPE")).toHaveAttribute("data-reference", "true");
+  await expect(page.getByTestId("spaghetti-span")).toContainText("UTC");
 
   // The role/label is what makes the plot reachable by assistive tech.
-  await expect(page.getByTestId("rp-chart-container").getByRole("img")).toHaveAttribute(
+  // (The plot itself, not LayerChart's per-label text nodes, which also carry role="img".)
+  await expect(page.getByTestId("spaghetti-chart-container").locator(".simple-lines")).toHaveAttribute(
     "aria-label",
-    /Relative performance over/
+    /Percent change from the window start/
   );
 
   // A mini chart per coin, each drawing something.
@@ -265,4 +268,118 @@ test("the relative-performance chart draws its lines, and the board's mini chart
     if ((await canvas.count()) === 0) continue; // an honest unavailable state has no plot
     expect(await seriesPixels(canvas, FIRST_SERIES), `mini chart ${i} has no price line`).toBeGreaterThan(10);
   }
+});
+
+// ---------------------------------------------------------------------------
+// 8. Every simple-lines chart zooms, pans and resets (T37 / S6, C6).
+//    Catches: a wheel that hijacks page scrolling, a zoom with no way back,
+//    and a drag that does nothing. Read through the plot's own test hooks.
+// ---------------------------------------------------------------------------
+async function exerciseZoom(page: import("@playwright/test").Page, plot: import("@playwright/test").Locator) {
+  await plot.scrollIntoViewIfNeeded();
+  await expect(plot).toHaveAttribute("data-zoomed", "false");
+  const fullFrom = (await plot.getAttribute("data-visible-from"))!;
+  const fullTo = (await plot.getAttribute("data-visible-to"))!;
+  expect(fullFrom).toMatch(/Z$/);
+
+  const box = (await plot.boundingBox())!;
+  const cx = box.x + box.width * 0.6;
+  const cy = box.y + box.height / 2;
+  await page.mouse.move(cx, cy);
+
+  // A plain wheel is the page's, not the chart's.
+  await page.mouse.wheel(0, -400);
+  await expect(plot).toHaveAttribute("data-zoomed", "false");
+
+  // Ctrl + wheel zooms about the pointer.
+  await page.mouse.move(cx, cy);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, -400);
+  await page.keyboard.up("Control");
+  await expect(plot).toHaveAttribute("data-zoomed", "true");
+  const zFrom = (await plot.getAttribute("data-visible-from"))!;
+  const zTo = (await plot.getAttribute("data-visible-to"))!;
+  expect(Date.parse(zFrom)).toBeGreaterThan(Date.parse(fullFrom));
+  expect(Date.parse(zTo)).toBeLessThanOrEqual(Date.parse(fullTo));
+  await expect(plot.getByTestId("chart-reset")).toBeVisible();
+
+  // A drag to the right brings earlier time into view.
+  const pb = (await plot.boundingBox())!;
+  const py = pb.y + pb.height / 2;
+  await page.mouse.move(pb.x + pb.width * 0.6, py);
+  await page.mouse.down();
+  await page.mouse.move(pb.x + pb.width * 0.75, py, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => Date.parse((await plot.getAttribute("data-visible-from"))!)).toBeLessThan(Date.parse(zFrom));
+
+  // A double-click resets to the full range.
+  await page.mouse.dblclick(pb.x + pb.width * 0.5, py);
+  await expect(plot).toHaveAttribute("data-zoomed", "false");
+  await expect(plot).toHaveAttribute("data-visible-from", fullFrom);
+  await expect(plot.getByTestId("chart-reset")).toHaveCount(0);
+}
+
+test("ctrl-wheel zooms, drag pans, double-click resets, plain wheel does not zoom", async ({ page }) => {
+  await page.goto("/screener");
+  await expect(page.getByTestId("coin-panel-BTC")).toBeVisible();
+
+  const coinPlot = page.getByTestId("coin-panel-BTC").getByTestId("mini-chart").locator(".simple-lines");
+  await expect(coinPlot.locator("canvas").first()).toBeVisible();
+  await exerciseZoom(page, coinPlot);
+
+  const spaghettiPlot = page.getByTestId("spaghetti-chart-container").locator(".simple-lines");
+  await expect(spaghettiPlot.locator("canvas").first()).toBeVisible();
+  await exerciseZoom(page, spaghettiPlot);
+
+  // The reset button resets too.
+  const box = (await spaghettiPlot.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, -400);
+  await page.keyboard.up("Control");
+  await expect(spaghettiPlot).toHaveAttribute("data-zoomed", "true");
+  await spaghettiPlot.getByTestId("chart-reset").click();
+  await expect(spaghettiPlot).toHaveAttribute("data-zoomed", "false");
+});
+
+// ---------------------------------------------------------------------------
+// 9. Axis text is crisp: SVG text, never clipped, over a DPR-sized canvas.
+//    Its own describe at DPR 2, so tests 1-8 keep DPR 1 (test 7's pixel
+//    thresholds are tuned there).
+// ---------------------------------------------------------------------------
+test.describe("at device pixel ratio 2", () => {
+  test.use({ deviceScaleFactor: 2 });
+
+  test("axis text is SVG, every tick label stays inside the plot box, canvas backing store matches DPR 2", async ({ page }) => {
+    await page.goto("/screener");
+    await expect(page.getByTestId("coin-panel-BTC")).toBeVisible();
+    expect(await page.evaluate(() => window.devicePixelRatio)).toBe(2);
+
+    const plots = [
+      page.getByTestId("coin-panel-BTC").getByTestId("mini-chart").locator(".simple-lines"),
+      page.getByTestId("spaghetti-chart-container").locator(".simple-lines"),
+    ];
+    for (const plot of plots) {
+      await expect(plot.locator("canvas").first()).toBeVisible();
+      await expect(plot.locator("svg text").first()).toBeVisible();
+      const result = await plot.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        const texts = [...el.querySelectorAll("svg text")].filter((t) => (t.textContent ?? "").trim() !== "");
+        const outside = texts
+          .map((t) => ({ text: t.textContent, r: t.getBoundingClientRect() }))
+          .filter(({ r }) => r.left < box.left - 0.5 || r.right > box.right + 0.5 || r.top < box.top - 0.5 || r.bottom > box.bottom + 0.5)
+          .map(({ text }) => text);
+        const canvas = el.querySelector("canvas") as HTMLCanvasElement;
+        return {
+          labels: texts.length,
+          outside,
+          width: canvas.width,
+          expected: Math.round(canvas.clientWidth * 2),
+        };
+      });
+      expect(result.labels, "no SVG axis labels").toBeGreaterThan(3);
+      expect(result.outside, "tick labels outside the plot box").toEqual([]);
+      expect(result.width, "canvas backing store is not DPR 2").toBe(result.expected);
+    }
+  });
 });

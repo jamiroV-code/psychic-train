@@ -3,20 +3,30 @@
 import { useEffect, useState } from "react";
 import { CoinPanel } from "@/components/screener/CoinPanel";
 import { DrillDownView } from "@/components/screener/DrillDownView";
-import { fetchChartView, fetchScreenerBoard } from "@/lib/api/screener";
-import { TIMEFRAMES, type ChartView, type ScreenerBoardResponse, type Timeframe } from "@/lib/types/screener";
+import { SpaghettiChart } from "@/components/screener/SpaghettiChart";
+import { fetchChartView, fetchScreenerBoard, fetchSpaghetti as fetchSpaghettiDefault } from "@/lib/api/screener";
+import {
+  TIMEFRAMES,
+  type ChartView,
+  type ScreenerBoardResponse,
+  type SpaghettiResponse,
+  type Timeframe,
+} from "@/lib/types/screener";
 
 export interface ScreenerBoardProps {
   // Injectable for tests (avoids requiring a real fetch/network layer);
   // defaults to the real API client in the app.
   fetchBoard?: (timeframe: Timeframe) => Promise<ScreenerBoardResponse>;
   fetchChart?: (symbol: string, timeframe: Timeframe) => Promise<ChartView>;
+  // T37 / S6: the spaghetti chart below the grid follows the board timeframe.
+  fetchSpaghetti?: (timeframe: Timeframe) => Promise<SpaghettiResponse>;
   initialTimeframe?: Timeframe;
 }
 
 export function ScreenerBoard({
   fetchBoard = fetchScreenerBoard,
   fetchChart = fetchChartView,
+  fetchSpaghetti = fetchSpaghettiDefault,
   initialTimeframe = "1d",
 }: ScreenerBoardProps) {
   // Amendment 2 (AC-16): ONE global timeframe control lifted here, passed
@@ -70,6 +80,8 @@ export function ScreenerBoard({
           />
         ))}
       </div>
+
+      <SpaghettiChart timeframe={timeframe} fetchSpaghetti={fetchSpaghetti} />
 
       {/* On-demand only (AC-7) — never rendered as part of the grid above. */}
       {drillDownSymbol && (

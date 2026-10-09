@@ -12,8 +12,6 @@ from pydantic import BaseModel
 Timeframe = Literal["15m", "1h", "4h", "1d", "1w"]
 TIMEFRAMES: tuple[Timeframe, ...] = ("15m", "1h", "4h", "1d", "1w")
 
-RelativePerformanceTimeframe = Literal["7d", "30d", "90d", "ytd"]
-
 # RFC-005: why a ChartSeries has no data. Before this existed, `available:
 # False` was documented as meaning "insufficient history" and was in fact
 # produced by three unrelated causes — a misconfigured symbol, a dead data
@@ -95,16 +93,32 @@ class ChartView(BaseModel):
     chart: ChartSeries
 
 
-class RelativePerformanceSeries(BaseModel):
+class SpaghettiLine(BaseModel):
+    """T37 / S6: one coin's line on the spaghetti chart. `points[].close`
+    holds the percent change from the window's first close, so an available
+    line starts at 0. An unavailable coin has no points and a `reason`, never
+    a flat line. Timestamps are ISO-8601 UTC with a trailing `Z`.
+    """
+
     symbol: str
     available: bool
-    points: list[ChartBar]  # `close` here holds % change from the window's start
-    # RFC-005: build_relative_performance sets available=False at three
-    # separate call sites for three different reasons and previously said
-    # which at none of them.
     reason: UnavailableReason | None = None
+    points: list[ChartBar]
+    window_start: str | None = None
+    window_end: str | None = None
+    bars: int = 0
+    last_bar_ts: str | None = None
+    stale: bool = False
 
 
-class RelativePerformanceResponse(BaseModel):
-    timeframe: RelativePerformanceTimeframe
-    series: list[RelativePerformanceSeries]
+class SpaghettiResponse(BaseModel):
+    """T37 / S6: every watchlist coin over the last `window_cap_bars` bars of
+    its own frame at `timeframe`. BTC and HYPE ride in `references`, never in
+    `series`, whether or not they are on the watchlist.
+    """
+
+    timeframe: Timeframe
+    window_cap_bars: int
+    server_time: str | None = None
+    series: list[SpaghettiLine]
+    references: list[SpaghettiLine]
