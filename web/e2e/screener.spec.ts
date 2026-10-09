@@ -291,8 +291,11 @@ async function exerciseZoom(page: import("@playwright/test").Page, plot: import(
   await page.mouse.wheel(0, -400);
   await expect(plot).toHaveAttribute("data-zoomed", "false");
 
-  // Ctrl + wheel zooms about the pointer.
-  await page.mouse.move(cx, cy);
+  // Ctrl + wheel zooms about the pointer. The plain wheel may have scrolled
+  // the page, so bring the plot back into view and re-read its position first.
+  await plot.scrollIntoViewIfNeeded();
+  const zb = (await plot.boundingBox())!;
+  await page.mouse.move(zb.x + zb.width * 0.6, zb.y + zb.height / 2);
   await page.keyboard.down("Control");
   await page.mouse.wheel(0, -400);
   await page.keyboard.up("Control");
