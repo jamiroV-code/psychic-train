@@ -27,22 +27,26 @@ from api.models.screener import (
     ChartSeries,
     ChartView,
     CoinPanel,
-    RelativePerformanceResponse,
-    RelativePerformanceSeries,
-    RelativePerformanceTimeframe,
     ScreenerBoardResponse,
+    SpaghettiLine,
+    SpaghettiResponse,
     Timeframe,
 )
 
 DEFAULT_BOARD_TIMEFRAME: Timeframe = "1d"
 DEFAULT_CHART_TIMEFRAME: Timeframe = "4h"
 
-RELATIVE_PERFORMANCE_WINDOW_DAYS: dict[RelativePerformanceTimeframe, int] = {
-    "7d": 7,
-    "30d": 30,
-    "90d": 90,
-    "ytd": 365,
+# T37 / S6 (C5): the spaghetti window is the last N bars of each coin's own
+# frame; 1w is capped at 28 weeks.
+SPAGHETTI_WINDOW_BARS: dict[Timeframe, int] = {
+    "15m": 200,
+    "1h": 200,
+    "4h": 200,
+    "1d": 200,
+    "1w": 28,
 }
+# Always drawn as references, never as coin lines.
+SPAGHETTI_REFERENCES: tuple[str, ...] = ("BTC", "HYPE")
 
 
 def _series_to_chart_bars(timestamps: pd.Series, values: pd.Series) -> list[ChartBar]:
@@ -192,66 +196,58 @@ def build_chart_view(symbol: str, timeframe: Timeframe = DEFAULT_CHART_TIMEFRAME
     )
 
 
-def build_relative_performance(
-    timeframe: RelativePerformanceTimeframe = "30d",
-) -> RelativePerformanceResponse:
-    """AC-14/15: every watchlist coin normalized to % change from the
-    selected window's own start bar. A coin with too little history for
-    that window returns `available=False` individually (AC-12's rule
-    applied here too) — never omitted or zero-filled, and other coins on
-    the same response are unaffected.
+def _spaghetti_line(symbol: str, timeframe: Timeframe, ref_now: pd.Timestamp) -> SpaghettiLine:
+    """One coin over the last `SPAGHETTI_WINDOW_BARS[timeframe]` bars of its
+    own frame, as percent change from the window's first close. A coin with
+    fewer bars than the board chart needs (`sma.SMA_LENGTH`), or whose fetch
+    failed, is `available=False` with a reason and no points.
     """
-    coins = watchlist_store.read_watchlist()
-    window_days = RELATIVE_PERFORMANCE_WINDOW_DAYS[timeframe]
-    series_list: list[RelativePerformanceSeries] = []
+    result = ccxt_adapter.fetch_ohlcv(symbol, timeframe)
+    df = result.df
+    if df is None or df.empty or len(df) < sma_mod.SMA_LENGTH:
+        return SpaghettiLine(symbol=symbol, available=False, reason=_reason_for(result.status), points=[])
 
-    for symbol in coins:
-        result = ccxt_adapter.fetch_ohlcv(symbol, "1d")
-        df = result.df
-        if df.empty:
-            # RFC-005: an empty frame here means the fetch failed, not that
-            # the coin is young. Say which.
-            series_list.append(
-                RelativePerformanceSeries(
-                    symbol=symbol, available=False, points=[],
-                    reason=_reason_for(result.status),
-                )
-            )
-            continue
+    df = df.sort_values("timestamp")
+    window = df.tail(SPAGHETTI_WINDOW_BARS[timeframe])
+    start_close = window["close"].iloc[0]
+    if pd.isna(start_close) or start_close == 0:
+        return SpaghettiLine(symbol=symbol, available=False, reason="insufficient-history", points=[])
 
-        cutoff = df["timestamp"].max() - pd.Timedelta(days=window_days)
+    pct = (window["close"] - start_close) / start_close * 100.0
+    points = [
+        ChartBar(timestamp=freshness.iso_z(ts), close=float(v))
+        for ts, v in zip(window["timestamp"], pct)
+        if not pd.isna(v)
+    ]
+    last = _last_bar(df)
+    # 1w staleness is judged on its daily bar (B5), as on the board.
+    stale_ref = _last_bar(ccxt_adapter.fetch_ohlcv(symbol, "1d").df) if timeframe == "1w" else last
+    return SpaghettiLine(
+        symbol=symbol,
+        available=True,
+        points=points,
+        window_start=freshness.iso_z(window["timestamp"].iloc[0]),
+        window_end=freshness.iso_z(window["timestamp"].iloc[-1]),
+        bars=len(points),
+        last_bar_ts=freshness.iso_z(last),
+        stale=freshness.is_stale(stale_ref, timeframe, ref_now),
+    )
 
-        # A coin whose own earliest cached bar is AFTER the window's start
-        # doesn't actually cover the requested window — flag unavailable
-        # rather than silently normalizing a truncated line (AC-15).
-        if df["timestamp"].min() > cutoff:
-            series_list.append(
-                RelativePerformanceSeries(
-                    symbol=symbol, available=False, points=[],
-                    reason="insufficient-history",
-                )
-            )
-            continue
 
-        windowed = df[df["timestamp"] >= cutoff]
-        start_close = windowed["close"].iloc[0] if len(windowed) else None
-
-        if len(windowed) < 2 or start_close is None or pd.isna(start_close) or start_close == 0:
-            series_list.append(
-                RelativePerformanceSeries(
-                    symbol=symbol, available=False, points=[],
-                    reason="insufficient-history",
-                )
-            )
-            continue
-
-        pct = (windowed["close"] - start_close) / start_close * 100.0
-        series_list.append(
-            RelativePerformanceSeries(
-                symbol=symbol,
-                available=True,
-                points=_series_to_chart_bars(windowed["timestamp"], pct),
-            )
-        )
-
-    return RelativePerformanceResponse(timeframe=timeframe, series=series_list)
+def build_spaghetti(timeframe: Timeframe = DEFAULT_BOARD_TIMEFRAME) -> SpaghettiResponse:
+    """T37 / S6 (C5): every watchlist coin as percent change from its own
+    window start, so every available line starts at 0. BTC and HYPE are
+    always references, never coin lines. No ranking: the order is the
+    watchlist's.
+    """
+    now = ccxt_adapter._now()
+    ref_now = ccxt_adapter.reference_now(now)
+    references = {s.upper() for s in SPAGHETTI_REFERENCES}
+    coins = [s for s in watchlist_store.read_watchlist() if s.upper() not in references]
+    return SpaghettiResponse(
+        timeframe=timeframe,
+        window_cap_bars=SPAGHETTI_WINDOW_BARS[timeframe],
+        server_time=freshness.iso_z(now),
+        series=[_spaghetti_line(s, timeframe, ref_now) for s in coins],
+        references=[_spaghetti_line(s, timeframe, ref_now) for s in SPAGHETTI_REFERENCES],
+    )

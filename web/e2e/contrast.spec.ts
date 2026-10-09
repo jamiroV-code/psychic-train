@@ -118,7 +118,7 @@ async function textContrastOffenders(page: Page): Promise<Offender[]> {
 
 const ROUTES: { name: string; path: string; ready: string | null }[] = [
   { name: "home", path: "/", ready: null },
-  { name: "screener", path: "/screener", ready: '[data-testid="rp-legend"]' },
+  { name: "screener", path: "/screener", ready: '[data-testid="spaghetti-legend"]' },
   { name: "regime", path: "/regime", ready: '[data-testid="regime-chart-net_liquidity"] canvas' },
   { name: "narrative", path: "/narrative", ready: '[data-testid="narrative-chart-ai"] canvas' },
   { name: "pairs table", path: "/pairs", ready: '[data-testid="pairs-table"]' },

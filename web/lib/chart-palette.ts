@@ -32,7 +32,7 @@ export const SERIES = {
  * The eight categorical slots, in assignment order.
  *
  * For charts that colour by position rather than by a named entity — the
- * relative-performance lines, the mindshare bars. Both previously carried
+ * spaghetti chart's coin lines, the mindshare bars. Both previously carried
  * their own hand-picked eight, and the UI audit measured one of them
  * (MindshareView) at a worst adjacent pair of ΔE 5.1: for a protanopic reader
  * two of its series were the same colour, on the view whose whole job is

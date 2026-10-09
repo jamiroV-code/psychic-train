@@ -1,5 +1,5 @@
 """GET /api/screener/board, GET /api/screener/{symbol}/chart,
-GET /api/screener/relative-performance (API Surface).
+GET /api/screener/spaghetti (API Surface).
 
 Thin FastAPI wrapper — all real logic lives in
 `api/analytics/screener_board.py` (framework-independent, directly testable
@@ -19,9 +19,8 @@ from api.analytics import screener_board
 from api.data.refresh_worker import reads_cache_only_if_running
 from api.models.screener import (
     ChartView,
-    RelativePerformanceResponse,
-    RelativePerformanceTimeframe,
     ScreenerBoardResponse,
+    SpaghettiResponse,
     Timeframe,
 )
 
@@ -37,12 +36,11 @@ def get_board(timeframe: Timeframe = Query(default="1d")) -> ScreenerBoardRespon
         return screener_board.build_screener_board(timeframe=timeframe)
 
 
-@router.get("/relative-performance", response_model=RelativePerformanceResponse)
-def get_relative_performance(
-    timeframe: RelativePerformanceTimeframe = Query(default="30d"),
-) -> RelativePerformanceResponse:
+@router.get("/spaghetti", response_model=SpaghettiResponse)
+def get_spaghetti(timeframe: Timeframe = Query(default="1d")) -> SpaghettiResponse:
+    """T37 / S6: the spaghetti chart, following the board's timeframe."""
     with reads_cache_only_if_running():
-        return screener_board.build_relative_performance(timeframe=timeframe)
+        return screener_board.build_spaghetti(timeframe=timeframe)
 
 
 @router.get("/{symbol}/chart", response_model=ChartView)

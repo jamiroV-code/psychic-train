@@ -4,7 +4,7 @@ import type { UnavailableReason } from "@/lib/types/screener";
  * RFC-006 (reason-value-rendering slice): single shared mapping from the
  * backend's `UnavailableReason` to human-facing copy. Kept in one place so
  * the three render sites (`CoinPanel`, `DrillDownView`,
- * `RelativePerformanceChart`) can't drift from each other — the same
+ * `SpaghettiChart`) can't drift from each other — the same
  * discipline `all-context.md`'s "one source of numerical truth" applies to
  * computed numbers, applied here to display copy instead.
  *

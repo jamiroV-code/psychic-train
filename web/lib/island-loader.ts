@@ -117,6 +117,8 @@ export interface IslandApi {
       // T34 / S2: when set, the time axis is UTC with labels from
       // chart-time-format; when absent it is exactly the old local axis.
       timeframe?: Timeframe;
+      // T37 / S6: emphasise the line nearest the pointer (the spaghetti chart).
+      highlight?: boolean;
     },
   ): () => void;
   mountRegimePanel(

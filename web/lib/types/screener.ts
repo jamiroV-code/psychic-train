@@ -7,9 +7,7 @@
 export type Timeframe = "15m" | "1h" | "4h" | "1d" | "1w";
 export const TIMEFRAMES: Timeframe[] = ["15m", "1h", "4h", "1d", "1w"];
 
-export type RelativePerformanceTimeframe = "7d" | "30d" | "90d" | "ytd";
-
-// RFC-005 (mirrors api/models/screener.py): why a ChartSeries/RelativePerformanceSeries
+// RFC-005 (mirrors api/models/screener.py): why a ChartSeries/SpaghettiLine
 // entry has no data. Before this existed, `available: false` collapsed three unrelated
 // causes — a misconfigured symbol, a dead data source, and genuinely short history —
 // into one signal.
@@ -72,14 +70,26 @@ export interface ChartView {
   chart: ChartSeries;
 }
 
-export interface RelativePerformanceSeries {
+// T37 / S6 (mirrors api/models/screener.py::SpaghettiLine/SpaghettiResponse;
+// api/tests/routers/test_spaghetti.py cross-checks the fields). `close` on a
+// point is the percent change from the window's first close; timestamps are
+// ISO-8601 UTC with a trailing "Z".
+export interface SpaghettiLine {
   symbol: string;
   available: boolean;
-  points: ChartBar[]; // `close` holds % change from the window's start here
   reason: UnavailableReason | null;
+  points: ChartBar[];
+  window_start: string | null;
+  window_end: string | null;
+  bars: number;
+  last_bar_ts: string | null;
+  stale: boolean;
 }
 
-export interface RelativePerformanceResponse {
-  timeframe: RelativePerformanceTimeframe;
-  series: RelativePerformanceSeries[];
+export interface SpaghettiResponse {
+  timeframe: Timeframe;
+  window_cap_bars: number;
+  server_time: string | null;
+  series: SpaghettiLine[];
+  references: SpaghettiLine[];
 }

@@ -109,10 +109,8 @@ def test_chart_view_populated(client):
     assert len(body["chart"]["price"]) > 0
 
 
-def test_relative_performance_populated(client):
-    body = client.get(
-        "/api/screener/relative-performance", params={"timeframe": "30d"}
-    ).json()
+def test_spaghetti_populated(client):
+    body = client.get("/api/screener/spaghetti", params={"timeframe": "1d"}).json()
     available = [s for s in body["series"] if s["available"]]
     assert available, f"no series available: {body['series']}"
     assert len(available[0]["points"]) > 0
