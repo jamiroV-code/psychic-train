@@ -15,6 +15,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from api.models.screener import ChartBar
+
 LiquidityCompositeVariant = Literal["reduced", "full"]
 
 
@@ -139,3 +141,89 @@ class RegimeComponentsResponse(BaseModel):
     grid_dates: list[str]
     components: list[RegimeComponent]
     composite: RegimeComposite
+
+
+# --- T38 / S7: GET /api/regime/btc-legs (C7, C8, C9) ------------------------
+#
+# The BTC leg chart: every cached BTC `1d` bar, the confirmed boundaries, the
+# legs between them, the current leg and the D-14 estimate. A leg runs from a
+# confirmed boundary's `date` to the next one; the current leg runs to the
+# last BTC bar. Timestamps are ISO UTC with a trailing `Z`; dates YYYY-MM-DD.
+# The two estimate labels are closed enums and are never merged; a label is
+# null only together with a `reason`.
+
+AgeLabel = Literal["early", "mid", "late"]
+CompositeChangeLabel = Literal["rising", "falling", "flat"]
+
+
+class BtcLegBoundary(BaseModel):
+    date: str
+    z_score: float
+    confirmed_date: str | None = None
+
+
+class BtcLeg(BaseModel):
+    start: str
+    end: str | None = None  # null for the current leg
+    days: int
+    is_current: bool
+
+
+class LatestCandidate(BaseModel):
+    date: str
+    z_score: float
+    confirmed: bool
+
+
+class CurrentLeg(BaseModel):
+    start_date: str
+    days_in_leg: int
+    composite_value: float | None = None
+    composite_as_of: str | None = None
+    change_14d: float | None = None
+    last_boundary_z: float
+    latest_candidate: LatestCandidate | None = None
+    composite_variant: LiquidityCompositeVariant
+
+
+class AgeEstimate(BaseModel):
+    label: AgeLabel | None = None
+    age_days: int
+    median_days: float | None = None
+    ratio: float | None = None
+    earlier_legs: int
+    earlier_lengths_days: list[int]
+    rule: str
+    reason: str | None = None
+
+
+class CompositeEstimate(BaseModel):
+    label: CompositeChangeLabel | None = None
+    change_14d: float | None = None
+    threshold: float | None = None
+    history_std: float | None = None
+    n_changes: int
+    composite_as_of: str | None = None
+    rule: str
+    reason: str | None = None
+
+
+class LegEstimate(BaseModel):
+    heading: str
+    age: AgeEstimate
+    composite: CompositeEstimate
+
+
+class BtcLegChartResponse(BaseModel):
+    available: bool
+    reason: str | None = None
+    server_time: str
+    composite_variant: LiquidityCompositeVariant
+    first_bar_ts: str | None = None
+    last_bar_ts: str | None = None
+    bar_count: int
+    btc: list[ChartBar]
+    boundaries: list[BtcLegBoundary]
+    legs: list[BtcLeg]
+    current_leg: CurrentLeg | None = None
+    estimate: LegEstimate | None = None

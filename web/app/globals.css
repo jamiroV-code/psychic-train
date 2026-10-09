@@ -820,6 +820,75 @@
   outline-offset: 2px;
 }
 
+/* T38 / S7: leg bands and boundary markers under the simple-lines plot. */
+.simple-lines__overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+.simple-lines__band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+.simple-lines__band--0 {
+  background: color-mix(in srgb, var(--series-1) 12%, transparent);
+}
+.simple-lines__band--1 {
+  background: color-mix(in srgb, var(--series-7) 14%, transparent);
+}
+.simple-lines__marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed var(--an-axis);
+}
+
+.btc-leg-chart {
+  margin-bottom: var(--sp-4);
+}
+.btc-leg-chart__span,
+.btc-leg-chart__note {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  margin: 0 0 var(--sp-2);
+}
+.btc-leg-chart__readouts,
+.leg-estimate__inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  margin: var(--sp-2) 0;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.btc-leg-chart__readouts dt,
+.leg-estimate__inputs dt {
+  color: var(--ink-3);
+}
+.btc-leg-chart__readouts dd,
+.leg-estimate__inputs dd {
+  margin: 0;
+  color: var(--ink-1);
+}
+.leg-estimate {
+  border-top: 1px solid var(--sh-3);
+  padding-top: var(--sp-2);
+}
+.leg-estimate__heading {
+  font-size: var(--fs-sm);
+  margin: 0 0 var(--sp-2);
+}
+.leg-estimate__label {
+  margin: 0;
+}
+.leg-estimate__rule {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  margin: 0 0 var(--sp-2);
+}
+
 .spaghetti-chart {
   margin-top: var(--sp-4);
 }

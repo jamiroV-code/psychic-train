@@ -5,6 +5,11 @@ Thin FastAPI wrapper — real logic lives in
 `api/analytics/regime/leg_boundary.py::compute_current_leg_state`
 (Architecture Clarification: routers/ exposes HTTP only, no router calls a
 provider directly).
+
+T38 / S7 (C8): `/legs` and `/btc-legs` run inside
+`refresh_worker.reads_cache_only_if_running()`, so their BTC OHLCV read is
+cache-only while the worker runs. FRED and DefiLlama composite inputs may
+still fetch on TTL expiry (accepted residual).
 """
 from __future__ import annotations
 
@@ -12,21 +17,30 @@ from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query
 
-from api.analytics.regime import components, leg_boundary
+from api.analytics.regime import btc_legs, components, leg_boundary
 from api.analytics.regime.components_response import serialize_components
-from api.models.regime import LegBoundaryResponse, RegimeComponentsResponse
+from api.data.refresh_worker import reads_cache_only_if_running
+from api.models.regime import BtcLegChartResponse, LegBoundaryResponse, RegimeComponentsResponse
 
 router = APIRouter(prefix="/api/regime", tags=["regime"])
 
 
 @router.get("/legs", response_model=LegBoundaryResponse)
 def get_legs() -> LegBoundaryResponse:
-    state = leg_boundary.compute_current_leg_state()
+    with reads_cache_only_if_running():
+        state = leg_boundary.compute_current_leg_state()
     return LegBoundaryResponse(
         composite_variant=state.composite_variant,
         candidate_boundaries=state.candidate_boundaries,
         confirmed_boundaries=state.confirmed_boundaries,
     )
+
+
+@router.get("/btc-legs", response_model=BtcLegChartResponse)
+def get_btc_legs() -> BtcLegChartResponse:
+    """BTC daily history with confirmed legs and the D-14 estimate (S7)."""
+    with reads_cache_only_if_running():
+        return btc_legs.build_btc_leg_chart()
 
 
 @router.get("/components", response_model=RegimeComponentsResponse)

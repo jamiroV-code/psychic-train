@@ -142,10 +142,28 @@ def confirm_boundaries(
     return results
 
 
-def compute_current_leg_state(as_of: pd.Timestamp | None = None) -> CurrentLegState:
-    """Orchestrates variant selection + candidate detection + confirmation
-    into the `CurrentLegState` (item 44). Backs `GET /api/regime/legs`
-    (item 42).
+@dataclass
+class LegInputs:
+    """Everything one leg read is computed from (T38 / S7): shared by
+    `compute_current_leg_state` and `btc_legs.build_btc_leg_chart`, so both
+    read the same composite, candidates, confirmations and BTC bars. `btc`
+    is the BTC `1d` `OhlcvResult`, or None when it was not read; callers use
+    only its `.df`.
+    """
+
+    variant: str
+    composite: object
+    candidates: list[BoundaryCandidate]
+    confirmations: list[BoundaryConfirmation]
+    btc: object | None
+
+
+def _leg_inputs(as_of: pd.Timestamp | None = None, *, always_read_btc: bool = False) -> LegInputs:
+    """Variant selection + candidate detection + confirmation. BTC `1d` is
+    read only when there is a composite to confirm against, unless
+    `always_read_btc` (the BTC leg chart draws BTC either way).
+    `liquidity_composite` and `ccxt_adapter` are looked up as module
+    attributes here, so tests that monkeypatch them still apply.
     """
     as_of = as_of or pd.Timestamp.now(tz="utc")
     variant = liquidity_composite.select_composite_variant(as_of)
@@ -156,12 +174,29 @@ def compute_current_leg_state(as_of: pd.Timestamp | None = None) -> CurrentLegSt
     )
 
     if not composite.available:
-        return CurrentLegState(candidate_boundaries=[], confirmed_boundaries=[], composite_variant=variant, has_data=False)
+        btc = ccxt_adapter.fetch_ohlcv("BTC", "1d") if always_read_btc else None
+        return LegInputs(variant=variant, composite=composite, candidates=[], confirmations=[], btc=btc)
 
     candidates = detect_candidate_boundaries(composite.series)
-    btc_daily = ccxt_adapter.fetch_ohlcv("BTC", "1d")
-    confirmations = confirm_boundaries(candidates, btc_daily.df)
-    confirmed_by_date = {c.candidate_date: c for c in confirmations if c.confirmed}
+    btc = ccxt_adapter.fetch_ohlcv("BTC", "1d")
+    confirmations = confirm_boundaries(candidates, btc.df)
+    return LegInputs(
+        variant=variant, composite=composite, candidates=candidates, confirmations=confirmations, btc=btc
+    )
+
+
+def compute_current_leg_state(as_of: pd.Timestamp | None = None) -> CurrentLegState:
+    """Orchestrates variant selection + candidate detection + confirmation
+    into the `CurrentLegState` (item 44). Backs `GET /api/regime/legs`
+    (item 42).
+    """
+    inputs = _leg_inputs(as_of)
+    variant = inputs.variant
+    if not inputs.composite.available:
+        return CurrentLegState(candidate_boundaries=[], confirmed_boundaries=[], composite_variant=variant, has_data=False)
+
+    candidates = inputs.candidates
+    confirmed_by_date = {c.candidate_date: c for c in inputs.confirmations if c.confirmed}
 
     candidate_models = [
         LegBoundary(
