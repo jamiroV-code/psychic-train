@@ -374,3 +374,86 @@ function Test-WebBuildFresh {
         if ($ReportOnly) { Write-Host "DRY RUN: $text" } else { Write-MySiteLog $text }
     }
 }
+
+function Get-WebSmokeResponse {
+    # One GET with a 5 s timeout. Returns StatusCode (0 = no answer) and Body as text.
+    # PowerShell 5.1 throws for any non-200 answer, so the code is read from the exception.
+    param([Parameter(Mandatory)][string]$Url)
+    $result = [pscustomobject]@{ StatusCode = 0; Body = '' }
+    try {
+        $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 5
+        $result.StatusCode = [int]$response.StatusCode
+        $body = $response.Content
+        if ($body -is [byte[]]) { $body = [System.Text.Encoding]::UTF8.GetString($body) }
+        $result.Body = [string]$body
+    } catch {
+        $exception = $_.Exception
+        if ($exception.PSObject.Properties['Response'] -and $null -ne $exception.Response) {
+            $result.StatusCode = [int]$exception.Response.StatusCode
+        }
+    }
+    return $result
+}
+
+function Invoke-WebSmokeCheck {
+    # After start-web.ps1 starts next start: poll this PC's own Tailscale address every 2 s
+    # until the root page answers 200 and the served build id matches the marker (evidence:
+    # the served marker file, else the page HTML). Bounded by TimeoutSeconds; stops early
+    # when the web process exits. Returns $true or $false; the caller decides the exit code.
+    param(
+        [Parameter(Mandatory)][hashtable]$Config,
+        [Parameter(Mandatory)][string]$Ip,
+        [Parameter(Mandatory)][System.Diagnostics.Process]$Process,
+        [int]$TimeoutSeconds = 90
+    )
+    $ProgressPreference = 'SilentlyContinue'
+    $baseUrl = "http://${Ip}:$($Config.WebPort)"
+    $url = $baseUrl + '/'
+    $markerUrl = $baseUrl + '/_next/static/build-marker.json'
+    $expectedId = ''
+    $markerPath = Get-WebBuildMarkerPath -Config $Config
+    if (Test-Path -LiteralPath $markerPath) {
+        try {
+            $expectedId = [string](([System.IO.File]::ReadAllText($markerPath) | ConvertFrom-Json).build_id)
+        } catch {
+            $expectedId = ''
+        }
+    }
+    $reason = 'no answer'
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if ($Process.HasExited) {
+            Write-MySiteLog "Smoke check FAILED: web process exited with code $($Process.ExitCode) before answering."
+            return $false
+        }
+        $page = Get-WebSmokeResponse -Url $url
+        if ($page.StatusCode -eq 200) {
+            if (-not $expectedId) {
+                Write-MySiteLog "Smoke check ok: $url returned 200 (no build marker, build id not checked)."
+                return $true
+            }
+            $evidence = ''
+            $served = Get-WebSmokeResponse -Url $markerUrl
+            if ($served.StatusCode -eq 200) {
+                try {
+                    if ([string](($served.Body | ConvertFrom-Json).build_id) -eq $expectedId) { $evidence = 'marker-file' }
+                } catch {
+                    $evidence = ''
+                }
+            }
+            if (-not $evidence -and $page.Body.Contains($expectedId)) { $evidence = 'html' }
+            if ($evidence) {
+                Write-MySiteLog "Smoke check ok: $url returned 200 and build id $expectedId matches the marker (evidence: $evidence)."
+                return $true
+            }
+            $reason = 'served build id does not match the marker'
+        } elseif ($page.StatusCode -gt 0) {
+            $reason = "HTTP $($page.StatusCode)"
+        } else {
+            $reason = 'no answer'
+        }
+        Start-Sleep -Seconds 2
+    }
+    Write-MySiteLog "Smoke check FAILED: $reason after ${TimeoutSeconds}s."
+    return $false
+}

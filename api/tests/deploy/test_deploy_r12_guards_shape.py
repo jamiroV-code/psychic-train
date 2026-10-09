@@ -220,3 +220,107 @@ def test_stale_check_is_report_only_in_dry_run():
     assert blocks, "Test-WebBuildFresh needs a -ReportOnly branch"
     for block in blocks:
         assert "exit 4" not in block, "the -ReportOnly branch must never exit 4"
+
+
+# --- C3: child process, smoke check, README guard section ---------------------
+
+
+def _readme_guard_section() -> str:
+    text = (DEPLOY / "README.md").read_text(encoding="utf-8")
+    start = text.find(GUARD_HEADING)
+    assert start != -1, f"README needs the section {GUARD_HEADING!r}"
+    end = text.find("\n## ", start + 1)
+    return text[start:] if end == -1 else text[start:end]
+
+
+GUARD_HEADING = "## Restarting safely after a web change (R12 guards)"
+CREDENTIAL_WORDS = ("authorization", "bearer", "credential", "securestring", "password")
+
+
+def test_start_web_runs_next_as_child_with_exit_code_passthrough():
+    lines = _code_lines(_read("start-web.ps1"))
+    code = "\n".join(lines)
+    for token in ("Start-Process", "-PassThru", "-NoNewWindow", "$proc.WaitForExit()", "$proc.ExitCode", "exit 6"):
+        assert token in code, f"start-web.ps1 is missing {token!r}"
+    assert "& $config.PnpmPath @webArgs" not in code, "the old foreground call must be gone"
+    start = _first_index(lines, "Start-Process")
+    assert "$webArgs" in lines[start] and "-WorkingDirectory" in lines[start]
+    wait = _first_index(lines, "$proc.WaitForExit()")
+    assert any(line.strip() == "exit $code" for line in lines[wait:]), "pass the server exit code through"
+
+
+def test_smoke_check_is_bounded_and_polls_own_tailscale_address_only():
+    common = _read("_common.ps1")
+    for token in (
+        "Invoke-WebRequest",
+        "-UseBasicParsing",
+        "-TimeoutSec",
+        "$deadline",
+        "Start-Sleep -Seconds 2",
+        ".HasExited",
+        "StatusCode -eq 200",
+    ):
+        assert token in common, f"_common.ps1 is missing {token!r}"
+    body = _function_body(common, "Invoke-WebSmokeCheck")
+    urls = [line for line in body.splitlines() if "http://" in line]
+    assert urls and all(re.search(r"http://\$\{?Ip\}?:", line) and "WebPort" in line for line in urls), (
+        "the smoke URL must be built from $Ip and WebPort only"
+    )
+    for literal in ("localhost", "127.0.0.1"):
+        assert literal not in body, f"the smoke check must not poll {literal}"
+
+
+def test_smoke_compares_served_build_id_with_marker_and_exits_6_on_failure():
+    common = _read("_common.ps1")
+    for token in ("_next/static/build-marker.json", "build_id", "evidence", "Smoke check FAILED:", "Smoke check ok:"):
+        assert token in common, f"_common.ps1 is missing {token!r}"
+    text = _read("start-web.ps1")
+    lines = _code_lines(text)
+    smoke = _first_index(lines, "Invoke-WebSmokeCheck")
+    wait = _first_index(lines, "$proc.WaitForExit()")
+    assert 0 <= smoke < wait, "run the smoke check before waiting for the server"
+    exit6 = _first_index(lines, "exit 6", smoke)
+    assert smoke < exit6 < wait, "a failed smoke check exits 6 before the wait"
+    param = re.search(r"param\((.*?)\n\)", "\n".join(lines), re.S)
+    assert param and "$SmokeTimeoutSeconds" in param.group(1), "-SmokeTimeoutSeconds must be a parameter"
+
+
+def test_start_web_dry_run_prints_and_exits_before_any_start_or_stop():
+    lines = _code_lines(_read("start-web.ps1"))
+    begin, end = _dry_run_block(lines)
+    banner = _first_index(lines, "DRY RUN (nothing started)")
+    start = _first_index(lines, "Start-Process")
+    assert begin < banner < end < start, "the dry run prints and exits 0 before Start-Process"
+    real_stops = [i for i in _call_lines(lines, "Stop-WebPortListener") if "-ReportOnly" not in lines[i]]
+    assert real_stops and min(real_stops) > end, "no real stop before the dry-run exit 0"
+
+
+def test_readme_documents_r12_guards_exit_codes_and_restart_procedure():
+    text = (DEPLOY / "README.md").read_text(encoding="utf-8")
+    rebuild = text.find("## Building the web app: the rebuild rule")
+    guard = text.find(GUARD_HEADING)
+    scheduler = text.find("## Starting it automatically")
+    assert 0 <= rebuild < guard < scheduler, "the guard section sits between the rebuild rule and Task Scheduler"
+    section = _readme_guard_section()
+    for token in (
+        "Stop-ScheduledTask mysite-web",
+        "build-web.ps1",
+        "Start-ScheduledTask mysite-web",
+        "build-marker.json",
+        "-SmokeTimeoutSeconds",
+    ):
+        assert token in section, f"README guard section is missing {token!r}"
+    assert section.index("Stop-ScheduledTask") < section.index("build-web.ps1") < section.index("Start-ScheduledTask")
+    for code in ("4", "5", "6", "7"):
+        assert re.search(rf"^\| {code} \|", section, re.M), f"exit code {code} missing from the table"
+    assert "by hand only while the `mysite-web` task is stopped" in section
+
+
+def test_no_credentials_or_literal_remote_hosts_in_deploy_scripts():
+    for path in _ps1_files():
+        code = "\n".join(_code_lines(path.read_text(encoding="utf-8")))
+        lower = code.lower()
+        for word in CREDENTIAL_WORDS:
+            assert word not in lower, f"{path.name} mentions {word!r}"
+        for m in re.finditer(r"https?://", code):
+            assert code[m.end():m.end() + 1] == "$", f"{path.name}: URL must take a variable host: {code[m.start():m.end() + 20]!r}"
