@@ -15,9 +15,12 @@ architecture rule, not invented solely to route around that.
 """
 from __future__ import annotations
 
+import math
+
 import pandas as pd
 
 from api.analytics.indicators import gain as gain_mod
+from api.analytics.indicators import rsi as rsi_mod
 from api.analytics.indicators import sma as sma_mod
 from api.data import ccxt_adapter, freshness
 from api.data import watchlist as watchlist_store
@@ -27,6 +30,8 @@ from api.models.screener import (
     ChartSeries,
     ChartView,
     CoinPanel,
+    RsiPoint,
+    RsiReading,
     ScreenerBoardResponse,
     SpaghettiLine,
     SpaghettiResponse,
@@ -123,6 +128,36 @@ def _chart_series(
     )
 
 
+def _finite(value) -> bool:
+    return value is not None and not pd.isna(value) and math.isfinite(float(value))
+
+
+def _rsi_reading(df: pd.DataFrame | None, available: bool, status: str | None = None) -> RsiReading:
+    """T40 / S5a (C6): RSI exists iff the frame meets the chart's 60-bar rule
+    and the last value is defined; a long frame with no defined value (no
+    price change at all) is `flat-price`. Never 0, never NaN."""
+    if not available or df is None or df.empty:
+        return RsiReading(reason=_reason_for(status))
+    as_of = freshness.iso_z(_last_bar(df))
+    series = rsi_mod.compute_rsi(df)
+    last = None if series is None or series.empty else series.iloc[-1]
+    if not _finite(last):
+        return RsiReading(as_of=as_of, reason="flat-price")
+    return RsiReading(value=float(last), as_of=as_of)
+
+
+def _rsi_series(df: pd.DataFrame) -> list[RsiPoint]:
+    """The RSI line for the drill-down chart; undefined points are skipped."""
+    series = rsi_mod.compute_rsi(df)
+    if series is None:
+        return []
+    return [
+        RsiPoint(timestamp=freshness.iso_z(ts), value=float(val))
+        for ts, val in zip(df["timestamp"], series)
+        if _finite(val)
+    ]
+
+
 def build_coin_panel(
     symbol: str,
     timeframe: Timeframe = DEFAULT_BOARD_TIMEFRAME,
@@ -161,6 +196,7 @@ def build_coin_panel(
         ),
         percent_change_by_timeframe={tf: chip.pct for tf, chip in chips_by_tf.items()},
         gain_by_timeframe=chips_by_tf,
+        rsi=_rsi_reading(display_df, display_available, display_status),
     )
 
 
@@ -185,15 +221,14 @@ def build_chart_view(symbol: str, timeframe: Timeframe = DEFAULT_CHART_TIMEFRAME
     display = ccxt_adapter.fetch_ohlcv(symbol, timeframe)
     daily_ref = ccxt_adapter.fetch_ohlcv(symbol, "1d").df if timeframe == "1w" else None
     display_available = len(display.df) >= sma_mod.SMA_LENGTH
-
-    return ChartView(
-        symbol=symbol,
-        timeframe=timeframe,
-        chart=_chart_series(
-            display.df, display_available, display.status,
-            timeframe=timeframe, fetched_at=display.fetched_at, stale_ref_df=daily_ref,
-        ),
+    chart = _chart_series(
+        display.df, display_available, display.status,
+        timeframe=timeframe, fetched_at=display.fetched_at, stale_ref_df=daily_ref,
     )
+    if chart.available:
+        chart.rsi = _rsi_series(display.df)
+
+    return ChartView(symbol=symbol, timeframe=timeframe, chart=chart)
 
 
 def _spaghetti_line(symbol: str, timeframe: Timeframe, ref_now: pd.Timestamp) -> SpaghettiLine:

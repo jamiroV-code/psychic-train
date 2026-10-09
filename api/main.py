@@ -35,7 +35,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 # NOTE (RFC-002/RFC-003 scope): routers/regime.py (item 42) and
 # routers/narrative.py (item 56) are now both wired in.
 from api.data import refresh_worker
-from api.routers import narrative, onchain_activity, pairs, refresh, regime, screener, watchlist
+from api.routers import layout, narrative, onchain_activity, pairs, refresh, regime, screener, watchlist
 
 
 @asynccontextmanager
@@ -71,7 +71,7 @@ def _parse_cors_origins(raw: str | None) -> list[str]:
 
 def _cors_options(origins: list[str]) -> dict:
     # No credentialed fetch exists in web/, and the API serves only GET plus
-    # the watchlist's POST/DELETE. Starlette answers OPTIONS preflight itself.
+    # the watchlist's and the layout's POST/DELETE. Starlette answers OPTIONS preflight itself.
     return {
         "allow_origins": list(origins),
         "allow_credentials": False,
@@ -90,6 +90,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.include_router(screener.router)
 app.include_router(watchlist.router)
+app.include_router(layout.router)
 app.include_router(regime.router)
 app.include_router(narrative.router)
 app.include_router(onchain_activity.router)

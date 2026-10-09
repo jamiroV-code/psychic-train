@@ -9,7 +9,7 @@ import { ScreenerBoard } from "@/components/screener/ScreenerBoard";
 import type { GainChip, ScreenerBoardResponse, SpaghettiResponse, Timeframe } from "@/lib/types/screener";
 
 // T32 / S1 freshness fields (ChartSeries); nulls = no freshness information.
-const NO_FRESHNESS = { last_bar_ts: null, fetched_at: null, is_partial: null, server_time: null, stale: false };
+const NO_FRESHNESS = { last_bar_ts: null, fetched_at: null, is_partial: null, server_time: null, stale: false, rsi: [] };
 
 // T34 / S2: a current-candle chip; `pct: null` needs a reason.
 function chip(pct: number | null, reason: GainChip["reason"] = null): GainChip {
@@ -40,6 +40,7 @@ function makeCoin(symbol: string, overrides: Partial<ScreenerBoardResponse["coin
       "1d": chip(4.5),
       "1w": chip(5.6),
     },
+    rsi: { value: 61.3, length: 14, as_of: null, reason: null },
     ...overrides,
   };
 }
@@ -165,8 +166,8 @@ describe("ScreenerBoard", () => {
     };
     const price = [{ timestamp: "2026-10-03T14:15:00Z", close: 100 }];
     const coins = [
-      makeCoin("BTC", { chart: { price, sma: [], available: true, reason: null, ...freshness, stale: false } }),
-      makeCoin("OLD", { chart: { price, sma: [], available: true, reason: null, ...freshness, stale: true } }),
+      makeCoin("BTC", { chart: { price, sma: [], available: true, reason: null, ...freshness, stale: false, rsi: [] } }),
+      makeCoin("OLD", { chart: { price, sma: [], available: true, reason: null, ...freshness, stale: true, rsi: [] } }),
     ];
     const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
 

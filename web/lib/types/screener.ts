@@ -13,6 +13,23 @@ export const TIMEFRAMES: Timeframe[] = ["15m", "1h", "4h", "1d", "1w"];
 // into one signal.
 export type UnavailableReason = "insufficient-history" | "bad-symbol" | "source-unavailable";
 
+// T40 / S5a (mirrors api/models/screener.py::RsiReason/RsiReading/RsiPoint):
+// RSI(14, Wilder) of the displayed timeframe. `value` is null with a `reason`
+// when there is nothing honest to show, never 0; `as_of` ends in "Z".
+export type RsiReason = "insufficient-history" | "bad-symbol" | "source-unavailable" | "flat-price";
+
+export interface RsiReading {
+  value: number | null;
+  length: number;
+  as_of: string | null;
+  reason: RsiReason | null;
+}
+
+export interface RsiPoint {
+  timestamp: string;
+  value: number;
+}
+
 export interface ChartBar {
   timestamp: string;
   close: number;
@@ -30,6 +47,8 @@ export interface ChartSeries {
   is_partial: boolean | null;
   server_time: string | null;
   stale: boolean;
+  // T40 / S5a: filled only by the drill-down chart view; board charts carry [].
+  rsi: RsiPoint[];
 }
 
 // T34 / S2 (mirrors api/models/screener.py::GainChip): the current candle of
@@ -50,6 +69,7 @@ export interface CoinPanel {
   // Kept for existing consumers; equals gain_by_timeframe[tf].pct.
   percent_change_by_timeframe: Record<Timeframe, number | null>;
   gain_by_timeframe: Record<Timeframe, GainChip>;
+  rsi: RsiReading;
 }
 
 export interface ScreenerBoardResponse {

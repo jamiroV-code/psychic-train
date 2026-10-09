@@ -30,6 +30,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import threading
 from pathlib import Path
 
 # Overridable for the same reason as `cache.CACHE_ROOT`: the Playwright E2E
@@ -43,6 +45,34 @@ DEFAULT_WATCHLIST_PATH = (
     if os.environ.get(_WATCHLIST_ENV)
     else Path(__file__).resolve().parent / "watchlist.json"
 )
+
+
+# T40 / S5a (C5): the screener holds at most 30 coins. A file already over
+# the cap is kept as is; only a NEW symbol is refused.
+MAX_COINS = 30
+CAP_MESSAGE = "Screener is full: 30 coins maximum. Remove a coin to add another."
+SYMBOL_RE = re.compile(r"^[A-Z0-9][A-Z0-9._-]{0,14}$")
+
+# One read-modify-write at a time: without it, concurrent adds lose coins
+# and the cap check races.
+_LOCK = threading.Lock()
+
+
+class WatchlistFullError(Exception):
+    """Raised when adding a new symbol to a list that holds MAX_COINS or more."""
+
+
+class InvalidSymbolError(Exception):
+    """Raised when a symbol does not match SYMBOL_RE after normalizing."""
+
+
+def normalize_symbol(symbol: str) -> str:
+    """Strip and upper-case; raises `InvalidSymbolError` when the result is
+    not a plausible ticker."""
+    norm = str(symbol).strip().upper()
+    if not SYMBOL_RE.match(norm):
+        raise InvalidSymbolError(symbol)
+    return norm
 
 
 class SymbolNotFoundError(Exception):
@@ -78,14 +108,18 @@ def read_watchlist(path: Path | None = None) -> list[str]:
 
 def add_coin(symbol: str, path: Path | None = None) -> list[str]:
     """Idempotent add — adding an already-present symbol is a no-op, not a
-    duplicate entry or an error."""
+    duplicate entry or an error. Raises `InvalidSymbolError` for a malformed
+    symbol and `WatchlistFullError` for a new symbol at MAX_COINS or more."""
     path = _resolve(path)
-    symbol = symbol.upper().strip()
-    data = _load_raw(path)
-    if symbol not in data["coins"]:
-        data["coins"].append(symbol)
-        _save_raw(path, data)
-    return list(data["coins"])
+    symbol = normalize_symbol(symbol)
+    with _LOCK:
+        data = _load_raw(path)
+        if symbol not in data["coins"]:
+            if len(data["coins"]) >= MAX_COINS:
+                raise WatchlistFullError(symbol)
+            data["coins"].append(symbol)
+            _save_raw(path, data)
+        return list(data["coins"])
 
 
 def remove_coin(symbol: str, path: Path | None = None) -> list[str]:
@@ -93,9 +127,10 @@ def remove_coin(symbol: str, path: Path | None = None) -> list[str]:
     silent no-op (Public Contracts / API Surface: 404 on remove-missing)."""
     path = _resolve(path)
     symbol = symbol.upper().strip()
-    data = _load_raw(path)
-    if symbol not in data["coins"]:
-        raise SymbolNotFoundError(symbol)
-    data["coins"].remove(symbol)
-    _save_raw(path, data)
-    return list(data["coins"])
+    with _LOCK:
+        data = _load_raw(path)
+        if symbol not in data["coins"]:
+            raise SymbolNotFoundError(symbol)
+        data["coins"].remove(symbol)
+        _save_raw(path, data)
+        return list(data["coins"])
