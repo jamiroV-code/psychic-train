@@ -78,4 +78,6 @@ The user ran the check on the PC at `44060ac` (the log says `Build is current: c
 
 | 8b forced smoke failure, `web\.next\server` renamed, `-SmokeTimeoutSeconds 10` | PASS on the log path. Next failed with ENOENT on `server\pages-manifest.json`; 4 s after the start: `Smoke check FAILED: web process exited with code 1 before answering.`, `Smoke check failed; stopping the new web server.`, `Port 3000: nothing listening; nothing to stop.` The exit code was not shown: the script was run directly in the shell (the `run` helper was not defined in that window), so no `exit code:` line. The following `Get-NetTCPConnection` printed nothing in the paste. | console yes; exit code no |
 
+Restore after 8b: `web.log` shows `Smoke check ok` at 09:49:15 and again at 09:54:32 (`Build is current`, same build id `W1ZAw...`, `evidence: marker-file`), so the server folder was back in place without a rebuild and the site is up (user-reported, log tail pasted).
+
 Open for the PC record (W3 runbook): the exit code 6 value itself (read `$LASTEXITCODE` after a direct run, or use `powershell -File`). This failure covered the "process died" branch; the "HTTP non-200" and "build id mismatch" branches of the smoke check were not exercised on the PC. AC-R12-5 is text only and unaffected.
