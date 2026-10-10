@@ -59,11 +59,11 @@ describe("SpaghettiChart", () => {
     expect(screen.getByTestId("spaghetti-toggle-SOL")).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("span text says the window in UTC", async () => {
+  it("span text says the window in Brussels time", async () => {
     const fetchSpaghetti = vi.fn(async (tf: Timeframe) => makeResponse(tf));
     render(<SpaghettiChart timeframe="1w" fetchSpaghetti={fetchSpaghetti} />);
     expect(await screen.findByTestId("spaghetti-span")).toHaveTextContent(
-      "Last 28 weeks, 2026-03-23 to 2026-10-04 UTC",
+      "Last 28 weeks, 2026-03-23 to 2026-10-04 (Brussels time)",
     );
   });
 

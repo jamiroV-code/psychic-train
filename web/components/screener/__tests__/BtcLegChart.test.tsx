@@ -68,7 +68,7 @@ describe("BtcLegChart", () => {
     await waitFor(() =>
       expect(screen.getByTestId("leg-estimate-heading")).toHaveTextContent(/^Estimate \(rule over the numbers shown\)$/),
     );
-    expect(screen.getByTestId("btc-leg-span")).toHaveTextContent("Daily BTC, 2026-01-01 to 2026-10-08 UTC, 3 bars");
+    expect(screen.getByTestId("btc-leg-span")).toHaveTextContent("Daily BTC, 2026-01-01 to 2026-10-08 (Brussels time), 3 bars");
   });
 
   it("inputs visible beside each label", async () => {

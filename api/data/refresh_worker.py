@@ -428,6 +428,12 @@ def reads_cache_only_if_running() -> Iterator[None]:
 def status() -> dict:
     worker = _worker
     running = worker is not None and worker.running
+    # T42 / S11a: the worker's clock (the adapter's when none is registered),
+    # so the page ages data without the browser clock; None if it raises.
+    try:
+        server_time = freshness.iso_z(worker._clock() if worker else ccxt_adapter._now())
+    except Exception:
+        server_time = None
     body = {
         "running": running,
         "disabled_reason": None if running else disabled_reason(),
@@ -439,5 +445,6 @@ def status() -> dict:
         "next_tick_at": freshness.iso_z(worker.next_tick_at) if running else None,
         "queue_depth": worker.queue_depth if worker else 0,
         "backoff_seconds": worker.backoff_seconds if worker else 0.0,
+        "server_time": server_time,
     }
     return body

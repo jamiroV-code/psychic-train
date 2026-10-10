@@ -1,13 +1,14 @@
 import { ChartFreshness } from "@/components/chart/ChartFreshness";
 import { MiniChart } from "@/components/chart/MiniChart";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
+import { formatDateTimeZone } from "@/lib/brussels-time";
 import { formatUnavailableReason } from "@/lib/format-unavailable-reason";
 import { TIMEFRAMES, type CoinPanel as CoinPanelData, type GainChip, type Timeframe } from "@/lib/types/screener";
 
 export interface CoinPanelProps {
   panel: CoinPanelData;
   onOpenDrillDown?: (symbol: string) => void;
-  // T34 / S2: the board's timeframe, so the chart's time axis is UTC for it.
+  // T34 / S2: the board's timeframe, so the chart's time axis is Brussels time for it.
   timeframe?: Timeframe;
 }
 
@@ -20,8 +21,9 @@ function formatPercent(value: number | null): string {
 function chipTitle(tf: Timeframe, chip: GainChip | undefined): string | undefined {
   if (!chip) return undefined;
   if (chip.pct === null) return chip.reason ? formatUnavailableReason(chip.reason, "timeframe") : undefined;
-  // Current candle, open to latest (T34 / S2).
-  return `${tf} candle from ${chip.open_ts ?? "?"}${chip.is_partial ? " (forming)" : ""}`;
+  // Current candle, open to latest (T34 / S2); the open in Brussels time (T42 / S11a).
+  const open = chip.open_ts ? formatDateTimeZone(new Date(chip.open_ts)) : "?";
+  return `${tf} candle from ${open}${chip.is_partial ? " (forming)" : ""}`;
 }
 
 export function CoinPanel({ panel, onOpenDrillDown, timeframe }: CoinPanelProps) {

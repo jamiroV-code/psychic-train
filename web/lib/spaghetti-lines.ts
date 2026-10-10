@@ -1,3 +1,4 @@
+import { formatDate, formatDateTime, zoneAbbr } from "@/lib/brussels-time";
 import { CATEGORICAL, SERIES } from "@/lib/chart-palette";
 import type { SpaghettiLine, SpaghettiResponse, Timeframe, UnavailableReason } from "@/lib/types/screener";
 
@@ -103,19 +104,31 @@ const SPAN_UNITS: Record<Timeframe, string> = {
   "1w": "weeks",
 };
 
-function spanDate(iso: string, timeframe: Timeframe, end: boolean): string {
-  const ms = Date.parse(iso);
-  if (timeframe === "1w") {
-    // A weekly bar opens Monday 00:00 UTC; the last one ends on its Sunday.
-    const d = new Date(end ? ms + 6 * 86_400_000 : ms);
-    return d.toISOString().slice(0, 10);
+/**
+ * The span's two ends in Brussels time (T42 / S11a). Daily and weekly spans
+ * are plain Brussels dates; a weekly bar opens on a Monday, so the last one
+ * ends on its Sunday. Intraday ends carry their zone abbreviation, once when
+ * both ends share it and on each end across a clock change.
+ */
+function spanEnds(startIso: string, endIso: string, timeframe: Timeframe): string {
+  const start = new Date(startIso);
+  const endMs = Date.parse(endIso);
+  if (timeframe === "1w" || timeframe === "1d") {
+    const end = new Date(timeframe === "1w" ? endMs + 6 * 86_400_000 : endMs);
+    return `${formatDate(start)} to ${formatDate(end)} (Brussels time)`;
   }
-  const d = new Date(ms).toISOString();
-  return timeframe === "1d" ? d.slice(0, 10) : `${d.slice(0, 10)} ${d.slice(11, 16)}`;
+  const end = new Date(endMs);
+  const startZone = zoneAbbr(start);
+  const endZone = zoneAbbr(end);
+  return startZone === endZone
+    ? `${formatDateTime(start)} to ${formatDateTime(end)} ${endZone}`
+    : `${formatDateTime(start)} ${startZone} to ${formatDateTime(end)} ${endZone}`;
 }
 
 /**
- * What the chart covers, for example `Last 28 weeks, 2026-03-23 to 2026-10-04 UTC`.
+ * What the chart covers, for example
+ * `Last 28 weeks, 2026-03-23 to 2026-10-04 (Brussels time)` or
+ * `Last 27 hourly bars, 2026-10-09 14:00 to 2026-10-10 16:00 CEST`.
  * Null when no line is available.
  */
 export function spaghettiSpanText(data: SpaghettiResponse): string | null {
@@ -125,5 +138,5 @@ export function spaghettiSpanText(data: SpaghettiResponse): string | null {
   const start = lines.map((l) => l.window_start as string).sort()[0];
   const end = lines.map((l) => l.window_end as string).sort()[lines.length - 1];
   const tf = data.timeframe;
-  return `Last ${bars} ${SPAN_UNITS[tf]}, ${spanDate(start, tf, false)} to ${spanDate(end, tf, true)} UTC`;
+  return `Last ${bars} ${SPAN_UNITS[tf]}, ${spanEnds(start, end, tf)}`;
 }
