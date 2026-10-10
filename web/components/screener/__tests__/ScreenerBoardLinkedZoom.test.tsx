@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveProvider } from "@/components/screener/LiveProvider";
 import { ScreenerBoard } from "@/components/screener/ScreenerBoard";
 import type { ChartRange, SimpleLinesProps } from "@/lib/island-loader";
+import type { Layout } from "@/lib/types/layout";
 import type { RefreshStatus } from "@/lib/types/refresh";
 import type { ScreenerBoardResponse, SpaghettiResponse, Timeframe } from "@/lib/types/screener";
 
@@ -79,6 +80,18 @@ const spaghetti = async (timeframe: Timeframe): Promise<SpaghettiResponse> => ({
   references: [],
 });
 
+// T41 / S5b: the board also loads the layout; one group, no coins (the
+// board appends unplaced coins), so no real fetch runs.
+const fetchLayoutStub = async (): Promise<Layout> => ({
+  version: 1,
+  section: "crypto",
+  revision: 0,
+  saved_at: null,
+  source: "default",
+  groups: [{ id: "main", name: "Main", coins: [] }],
+  hidden_lines: [],
+});
+
 let monoNow = 0;
 
 async function advance(ms: number) {
@@ -118,7 +131,7 @@ describe("ScreenerBoard linked zoom (T44)", () => {
     const fetchBoard = vi.fn(async (tf: Timeframe) => board(tf, close));
     render(
       <LiveProvider fetchStatus={async () => status()} mono={() => monoNow}>
-        <ScreenerBoard fetchBoard={fetchBoard} fetchSpaghetti={spaghetti} />
+        <ScreenerBoard fetchLayout={fetchLayoutStub} fetchBoard={fetchBoard} fetchSpaghetti={spaghetti} />
       </LiveProvider>,
     );
     await advance(0);
@@ -145,7 +158,7 @@ describe("ScreenerBoard linked zoom (T44)", () => {
   });
 
   it("a new timeframe starts every small chart at the full range", async () => {
-    render(<ScreenerBoard fetchBoard={async (tf) => board(tf)} fetchSpaghetti={spaghetti} />);
+    render(<ScreenerBoard fetchLayout={fetchLayoutStub} fetchBoard={async (tf) => board(tf)} fetchSpaghetti={spaghetti} />);
     await advance(0);
     zoomFrom("BTC", RANGE);
     expect(panelProps("SOL").linkedRange).toEqual(RANGE);
@@ -155,7 +168,7 @@ describe("ScreenerBoard linked zoom (T44)", () => {
   });
 
   it("the spaghetti chart is not linked", async () => {
-    render(<ScreenerBoard fetchBoard={async (tf) => board(tf)} fetchSpaghetti={spaghetti} />);
+    render(<ScreenerBoard fetchLayout={fetchLayoutStub} fetchBoard={async (tf) => board(tf)} fetchSpaghetti={spaghetti} />);
     await advance(0);
     const spag = island.mounts.filter((m) => m.target.closest('[data-testid="spaghetti-chart-container"]'));
     expect(spag.length).toBeGreaterThan(0);

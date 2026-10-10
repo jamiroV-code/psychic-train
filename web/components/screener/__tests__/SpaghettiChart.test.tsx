@@ -100,4 +100,48 @@ describe("SpaghettiChart", () => {
       expect(text).not.toContain(word);
     }
   });
+
+  it("a controlled hidden list sets aria-pressed, and an equal list in another order mounts once and never updates", async () => {
+    vi.resetModules();
+    const update = vi.fn();
+    const mountSimpleLines = vi.fn(() => Object.assign(() => undefined, { update }));
+    vi.doMock("@/lib/island-loader", () => ({ loadIslands: () => Promise.resolve({ mountSimpleLines }) }));
+    try {
+      const { SpaghettiChart: Fresh } = await import("@/components/screener/SpaghettiChart");
+      const fetchSpaghetti = vi.fn(async (tf: Timeframe) => makeResponse(tf));
+      const { rerender } = render(<Fresh timeframe="1d" fetchSpaghetti={fetchSpaghetti} hidden={["SOL", "BTC"]} />);
+      await waitFor(() => expect(mountSimpleLines).toHaveBeenCalledTimes(1));
+      await screen.findByTestId("spaghetti-legend");
+      await waitFor(() => expect(screen.getByTestId("spaghetti-toggle-SOL")).toHaveAttribute("aria-pressed", "false"));
+      expect(screen.getByTestId("spaghetti-toggle-BTC")).toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByTestId("spaghetti-toggle-ETH")).toHaveAttribute("aria-pressed", "true");
+      const updates = update.mock.calls.length;
+      rerender(<Fresh timeframe="1d" fetchSpaghetti={fetchSpaghetti} hidden={["BTC", "SOL"]} />);
+      await new Promise((r) => setTimeout(r, 0));
+      expect(mountSimpleLines).toHaveBeenCalledTimes(1);
+      expect(update.mock.calls.length).toBe(updates);
+    } finally {
+      vi.doUnmock("@/lib/island-loader");
+      vi.resetModules();
+    }
+  });
+
+  it("onToggle gets the symbol and the controlled state is left to the parent", async () => {
+    const fetchSpaghetti = vi.fn(async (tf: Timeframe) => makeResponse(tf));
+    const onToggle = vi.fn();
+    render(<SpaghettiChart timeframe="1d" fetchSpaghetti={fetchSpaghetti} hidden={[]} onToggle={onToggle} />);
+    const sol = await screen.findByTestId("spaghetti-toggle-SOL");
+    fireEvent.click(sol);
+    expect(onToggle).toHaveBeenCalledWith("SOL");
+    expect(screen.getByTestId("spaghetti-toggle-SOL")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("a changed reloadToken refetches", async () => {
+    const fetchSpaghetti = vi.fn(async (tf: Timeframe) => makeResponse(tf));
+    const { rerender } = render(<SpaghettiChart timeframe="1d" fetchSpaghetti={fetchSpaghetti} reloadToken={0} />);
+    await screen.findByTestId("spaghetti-legend");
+    expect(fetchSpaghetti).toHaveBeenCalledTimes(1);
+    rerender(<SpaghettiChart timeframe="1d" fetchSpaghetti={fetchSpaghetti} reloadToken={1} />);
+    await waitFor(() => expect(fetchSpaghetti).toHaveBeenCalledTimes(2));
+  });
 });
