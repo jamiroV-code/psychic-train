@@ -4,6 +4,7 @@ import {
   fullRange,
   isDoubleTap,
   isZoomed,
+  keepRange,
   pan,
   pinchFactor,
   shouldHandleWheel,
@@ -96,5 +97,29 @@ describe("chart-viewport", () => {
   it("Ctrl and Meta both zoom", () => {
     expect(shouldHandleWheel({ ctrlKey: true })).toBe(true);
     expect(shouldHandleWheel({ metaKey: true })).toBe(true);
+  });
+
+  it("keepRange: null stays null", () => {
+    expect(keepRange(null, EXTENT)).toBeNull();
+    expect(keepRange({ from: FULL.from, to: FULL.from + 10 * HOUR }, null)).toBeNull();
+  });
+
+  it("keepRange: a range inside the extent is unchanged", () => {
+    const range = { from: FULL.from + 20 * HOUR, to: FULL.from + 40 * HOUR };
+    expect(keepRange(range, EXTENT)).toEqual(range);
+  });
+
+  it("keepRange: a slid extent clamps with the span kept", () => {
+    // The window moved on by ten bars: the oldest ten fell out of the data.
+    const slid = extentOf(TIMES.map((t) => t + 10 * HOUR)) as Extent;
+    const range = { from: FULL.from + 2 * HOUR, to: FULL.from + 22 * HOUR };
+    const kept = keepRange(range, slid);
+    expect(kept).toEqual({ from: slid.from, to: slid.from + 20 * HOUR });
+  });
+
+  it("keepRange: a range no longer zoomed gives null", () => {
+    // Wider than the new data: clamped, it is the full range, so not a zoom.
+    const short = extentOf(TIMES.slice(0, 10)) as Extent;
+    expect(keepRange({ from: FULL.from, to: FULL.from + 50 * HOUR }, short)).toBeNull();
   });
 });

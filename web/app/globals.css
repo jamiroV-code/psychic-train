@@ -969,3 +969,57 @@
 .plot-legend .legend-glyph {
   font-weight: 700;
 }
+
+/* ---------------------------------------------------------------------------
+   T43 / S11b: the freshness strip at the top of /screener. Shell ink on the
+   shell surface; the height is reserved from the first render so the page
+   below does not jump when the first answer arrives. Overdue is a border and
+   weight, never coloured text.
+--------------------------------------------------------------------------- */
+.freshness-strip {
+  min-height: 4.5rem;
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--sh-rule);
+  border-radius: var(--radius-md);
+  background: var(--sh-1);
+  font-size: var(--fs-sm);
+  color: var(--ink-1);
+}
+.freshness-strip__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+}
+.freshness-strip__item {
+  font-variant-numeric: tabular-nums;
+}
+.freshness-strip__overdue {
+  padding: 0 var(--sp-2);
+  border: 2px solid var(--sev-prov);
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+}
+.freshness-strip__failed {
+  margin: var(--sp-1) 0 0;
+  padding-left: var(--sp-2);
+  border-left: 3px solid var(--sev-bad);
+  font-weight: 600;
+}
+.freshness-strip__zone,
+.freshness-strip__help {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

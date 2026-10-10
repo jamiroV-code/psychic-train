@@ -58,4 +58,18 @@ describe("freshnessCaption", () => {
       "Last bar 2026-10-04 00:30 CEST",
     );
   });
+
+  it("nowMs overrides the payload clock", () => {
+    const fields = { last_bar_ts: "2026-10-03T14:00:00Z", is_partial: false, server_time: "2026-10-03T14:22:00Z", stale: false };
+    // 14:00Z + 45 min, by the live server clock; the payload says 22 min.
+    expect(freshnessCaption(fields, Date.UTC(2026, 9, 3, 14, 45))).toBe("Last bar 2026-10-03 16:00 CEST, 45 min ago");
+    expect(freshnessCaption(fields, null)).toBe("Last bar 2026-10-03 16:00 CEST, 22 min ago");
+  });
+
+  it("a negative age reads <1 min", () => {
+    const fields = { last_bar_ts: "2026-10-03T14:15:00Z", is_partial: true, server_time: null, stale: false };
+    expect(freshnessCaption(fields, Date.UTC(2026, 9, 3, 14, 10))).toBe(
+      "Last bar 2026-10-03 16:15 CEST, opened <1 min ago (forming)",
+    );
+  });
 });

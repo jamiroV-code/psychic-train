@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { ChartFreshness } from "@/components/chart/ChartFreshness";
 import { MiniChart } from "@/components/chart/MiniChart";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
@@ -26,7 +27,9 @@ function chipTitle(tf: Timeframe, chip: GainChip | undefined): string | undefine
   return `${tf} candle from ${open}${chip.is_partial ? " (forming)" : ""}`;
 }
 
-export function CoinPanel({ panel, onOpenDrillDown, timeframe }: CoinPanelProps) {
+// T43 / S11b: memoised, so a refresh that leaves this coin's data the same
+// object (structural sharing in the board) re-renders nothing here.
+export const CoinPanel = memo(function CoinPanel({ panel, onOpenDrillDown, timeframe }: CoinPanelProps) {
   return (
     <div data-testid={`coin-panel-${panel.symbol}`} className="coin-panel">
       <div className="coin-panel__header">
@@ -80,4 +83,4 @@ export function CoinPanel({ panel, onOpenDrillDown, timeframe }: CoinPanelProps)
       </div>
     </div>
   );
-}
+});

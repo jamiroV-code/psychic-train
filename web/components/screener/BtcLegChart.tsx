@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { loadIslands } from "@/lib/island-loader";
+import { useLiveData } from "@/components/screener/LiveProvider";
+import type { SimpleLinesProps } from "@/lib/island-loader";
+import { shareStructure, VOLATILE } from "@/lib/same-data";
+import { useSimpleLines } from "@/lib/use-simple-lines";
 import { boundaryMarkers, btcLegSpanText, btcSeries, currentLegReadouts, legBands } from "@/lib/btc-leg-lines";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
 import { LegEstimate } from "@/components/screener/LegEstimate";
@@ -23,17 +26,24 @@ function formatPrice(v: number): string {
  * the current leg's numbers and the D-14 estimate. Zoom and pan come from
  * the simple-lines island (S6). Bands, markers and readouts are built in
  * lib/btc-leg-lines.ts, where they are unit-tested.
+ *
+ * T43 / S11b: refetches when the server's data changes (`dataVersion`),
+ * keeps the last data on a failure, and updates the mounted chart in place.
  */
 export function BtcLegChart({ fetchData = fetchBtcLegs }: BtcLegChartProps) {
   const [data, setData] = useState<BtcLegChartResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const { dataVersion } = useLiveData();
+
   useEffect(() => {
     let cancelled = false;
     fetchData()
       .then((res) => {
-        if (!cancelled) setData(res);
+        if (cancelled) return;
+        setData((prev) => shareStructure(prev, res, VOLATILE));
+        setError(null);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -41,7 +51,7 @@ export function BtcLegChart({ fetchData = fetchBtcLegs }: BtcLegChartProps) {
     return () => {
       cancelled = true;
     };
-  }, [fetchData]);
+  }, [fetchData, dataVersion]);
 
   const available = data?.available === true;
   const series = useMemo(() => (data && available ? btcSeries(data) : []), [data, available]);
@@ -50,35 +60,22 @@ export function BtcLegChart({ fetchData = fetchBtcLegs }: BtcLegChartProps) {
   const span = data ? btcLegSpanText(data) : null;
   const readouts = data ? currentLegReadouts(data) : [];
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || series.length === 0) return;
-
-    let disposed = false;
-    let dispose: (() => void) | undefined;
-
-    loadIslands()
-      .then((api) => {
-        if (disposed) return;
-        dispose = api.mountSimpleLines(container, {
-          series,
-          bands,
-          markers,
-          height: 280,
-          format: formatPrice,
-          label: span ? `BTC daily close with confirmed legs shaded. ${span}` : "BTC daily close with confirmed legs shaded",
-          timeframe: "1d",
-        });
-      })
-      .catch(() => {
-        // The readouts and the estimate below still carry the numbers.
-      });
-
-    return () => {
-      disposed = true;
-      dispose?.();
-    };
-  }, [series, bands, markers, span]);
+  const islandProps = useMemo<SimpleLinesProps | null>(
+    () =>
+      series.length === 0
+        ? null
+        : {
+            series,
+            bands,
+            markers,
+            height: 280,
+            format: formatPrice,
+            label: span ? `BTC daily close with confirmed legs shaded. ${span}` : "BTC daily close with confirmed legs shaded",
+            timeframe: "1d",
+          },
+    [series, bands, markers, span],
+  );
+  useSimpleLines(containerRef, islandProps, "btc");
 
   return (
     <section data-testid="btc-leg-chart" aria-label="BTC legs" className="btc-leg-chart">
