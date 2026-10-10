@@ -215,9 +215,9 @@
     },
     {
       "check": "W2 PC step 8: forced smoke failure (exit 6, port left free)",
-      "result": "NOT RUN: the user identified the 08:56:06 run as step 9; no step 8 run in the record. next start is ready in about 1 s, so -SmokeTimeoutSeconds 5 would not force a failure anyway",
+      "result": "RAN, failure NOT EXERCISED: start-web.ps1 -SmokeTimeoutSeconds 5 at 08:54:10 was accepted, Next Ready in 646ms, Smoke check ok at 08:54:12 (evidence: marker-file); the server then ran until the step 9 task start stopped it (Web process exited with code 1, exit code 1 at 08:56:07). A short timeout cannot force a failure on this PC; exit 6 and its cleanup remain unproven",
       "sha": "44060ac",
-      "source": "user report in session, 2026-10-10"
+      "source": "user report in session, 2026-10-10; console output pasted; output of the Get-NetTCPConnection line typed after it not shown in the paste"
     },
     {
       "check": "W2 PC step 9: scheduled task start, and listener left after Stop-ScheduledTask",
