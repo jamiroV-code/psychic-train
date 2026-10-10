@@ -1,0 +1,15 @@
+{
+  "task": "r12-deploy-fixes",
+  "decision": "approved-with-concerns",
+  "blockingFindings": [],
+  "nonBlockingFindings": [
+    "Known gap: smoke check 'HTTP <code>' (non-200) and 'served build id does not match the marker' branches cannot be forced on the PC without editing code; covered by shape tests only.",
+    "Exit code 6 was observed only for the 'process exited before answering' branch.",
+    "A failed-smoke Stop-WebPortListener could itself exit 5 before the exit 6 line (EVL note, not observed).",
+    "An invalid WebPort under -ReportOnly still exits 2 (harmless, nothing killed).",
+    "start-web.ps1 line 61 has one deliberately unbounded WaitForExit; the user read the deploy/ diff and accepted it as a design choice (2026-10-10).",
+    "PC-13 has no separate run (covered by PC-8); PC-12 and PC-15 are earlier user-reported results, PC-15 with a partial paste.",
+    "No PowerShell in the sandbox: the PowerShell behaviour rests on the user's PC record, not on a worker run."
+  ],
+  "notes": "User verdict 2026-10-10: ACCEPTED WITH KNOWN GAPS, recorded via the planner. All PC results are user-reported (Windows PowerShell 5.1, branch head 7fd38ac, deploy tree 65b61e510d3bc2c1d3278832ba8087fe7dbb6726). Record: r12-deploy-fixes-pc-record_REPORT_10-10-26.md. Tailscale address written as 100.x only."
+}
