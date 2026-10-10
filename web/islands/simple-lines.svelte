@@ -26,9 +26,14 @@
    * T37 / S6 (C6): every chart zooms and pans on its own. Ctrl or Cmd + wheel
    * zooms about the pointer (a plain wheel scrolls the page), two pointers
    * pinch, a drag pans while zoomed, a double-click or double-tap resets, and
-   * so does the reset button. The range math is lib/chart-viewport.ts; this
+   * so does the reset button (not on a linked chart). The range math is lib/chart-viewport.ts; this
    * file only turns events into calls to it. The y axis re-fits to what is
    * visible.
+   *
+   * T44: a linked chart has no reset button. With `onRangeChange` the chart is linked: every
+   * zoom, pan or reset is reported (null = full range), and a `linkedRange`
+   * handed back in is applied, clamped into this chart's own data by
+   * `keepRange`. The board's small charts share one range this way.
    *
    * T43 / S11b: the page hands new data in place (`update` in entry.js). The
    * zoom resets only when the timeframe or the list of line keys changes; a
@@ -51,6 +56,8 @@
     highlight = false,
     bands = [],
     markers = [],
+    linkedRange = null,
+    onRangeChange = null,
   } = $props();
 
   const PAD_LEFT = 52;
@@ -90,6 +97,27 @@
       if (range !== null) range = keepRange(range, next);
     });
   });
+
+  // T44: a shared range from the page, applied when its value changes. The
+  // range this chart reported itself is remembered, so its echo is a no-op.
+  let linkedKey = "";
+  const rangeKey = (r) => (r ? `${r.from}|${r.to}` : "");
+  $effect(() => {
+    const next = linkedRange;
+    untrack(() => {
+      const key = rangeKey(next);
+      if (!onRangeChange || key === linkedKey) return;
+      linkedKey = key;
+      range = keepRange(next, extent);
+    });
+  });
+
+  function setRange(next) {
+    range = next;
+    if (!onRangeChange) return;
+    linkedKey = rangeKey(next);
+    onRangeChange(next ? { from: next.from, to: next.to } : null);
+  }
 
   const view = $derived(range ?? (extent ? fullRange(extent) : null));
   const zoomed = $derived(isZoomed(range, extent));
@@ -198,11 +226,11 @@
   function zoomBy(clientX, factor) {
     if (!extent || !view) return;
     const next = zoomAt(view, fractionAt(clientX), factor, extent);
-    range = isZoomed(next, extent) ? next : null;
+    setRange(isZoomed(next, extent) ? next : null);
   }
 
   function reset() {
-    range = null;
+    setRange(null);
   }
 
   // Non-passive, so Ctrl/Cmd + wheel can stop the browser's own page zoom; a
@@ -260,11 +288,11 @@
       const [a, b] = [...pointers.values()];
       const mid = (a.x + b.x) / 2;
       const next = zoomAt(pinchStart.range, fractionAt(mid), pinchFactor(pinchStart.dist, distance()), extent);
-      range = isZoomed(next, extent) ? next : null;
+      setRange(isZoomed(next, extent) ? next : null);
       return;
     }
     if (pointers.size === 1 && zoomed && extent && view) {
-      range = pan(view, (e.clientX - prev.x) / plotWidth(), extent);
+      setRange(pan(view, (e.clientX - prev.x) / plotWidth(), extent));
     }
   }
 
@@ -370,7 +398,7 @@
       </Canvas>
     </Chart>
   {/if}
-  {#if zoomed}
+  {#if zoomed && !onRangeChange}
     <button type="button" class="simple-lines__reset" data-testid="chart-reset" onclick={reset}>
       Reset zoom
     </button>

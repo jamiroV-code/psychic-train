@@ -275,7 +275,20 @@ test("the spaghetti chart draws its lines, and the board's mini charts are not b
 //    Catches: a wheel that hijacks page scrolling, a zoom with no way back,
 //    and a drag that does nothing. Read through the plot's own test hooks.
 // ---------------------------------------------------------------------------
-async function exerciseZoom(page: import("@playwright/test").Page, plot: import("@playwright/test").Locator) {
+// T44: the small charts have no reset button; `linked` is a second small
+// chart that must follow every zoom, pan and reset of `plot` (linked zoom).
+// Charts that are not linked keep their reset button.
+async function exerciseZoom(
+  page: import("@playwright/test").Page,
+  plot: import("@playwright/test").Locator,
+  linked?: import("@playwright/test").Locator,
+) {
+  const follows = async () => {
+    if (!linked) return;
+    await expect(linked).toHaveAttribute("data-zoomed", (await plot.getAttribute("data-zoomed"))!);
+    await expect(linked).toHaveAttribute("data-visible-from", (await plot.getAttribute("data-visible-from"))!);
+    await expect(linked).toHaveAttribute("data-visible-to", (await plot.getAttribute("data-visible-to"))!);
+  };
   await plot.scrollIntoViewIfNeeded();
   await expect(plot).toHaveAttribute("data-zoomed", "false");
   const fullFrom = (await plot.getAttribute("data-visible-from"))!;
@@ -304,7 +317,8 @@ async function exerciseZoom(page: import("@playwright/test").Page, plot: import(
   const zTo = (await plot.getAttribute("data-visible-to"))!;
   expect(Date.parse(zFrom)).toBeGreaterThan(Date.parse(fullFrom));
   expect(Date.parse(zTo)).toBeLessThanOrEqual(Date.parse(fullTo));
-  await expect(plot.getByTestId("chart-reset")).toBeVisible();
+  await expect(plot.getByTestId("chart-reset")).toHaveCount(linked ? 0 : 1);
+  await follows();
 
   // A drag to the right brings earlier time into view.
   const pb = (await plot.boundingBox())!;
@@ -314,27 +328,30 @@ async function exerciseZoom(page: import("@playwright/test").Page, plot: import(
   await page.mouse.move(pb.x + pb.width * 0.75, py, { steps: 5 });
   await page.mouse.up();
   await expect.poll(async () => Date.parse((await plot.getAttribute("data-visible-from"))!)).toBeLessThan(Date.parse(zFrom));
+  await follows();
 
   // A double-click resets to the full range.
   await page.mouse.dblclick(pb.x + pb.width * 0.5, py);
   await expect(plot).toHaveAttribute("data-zoomed", "false");
   await expect(plot).toHaveAttribute("data-visible-from", fullFrom);
   await expect(plot.getByTestId("chart-reset")).toHaveCount(0);
+  await follows();
 }
 
-test("ctrl-wheel zooms, drag pans, double-click resets, plain wheel does not zoom", async ({ page }) => {
+test("ctrl-wheel zooms, drag pans, double-click resets, plain wheel does not zoom, small charts zoom together", async ({ page }) => {
   await page.goto("/screener");
   await expect(page.getByTestId("coin-panel-BTC")).toBeVisible();
 
   const coinPlot = page.getByTestId("coin-panel-BTC").getByTestId("mini-chart").locator(".simple-lines");
   await expect(coinPlot.locator("canvas").first()).toBeVisible();
-  await exerciseZoom(page, coinPlot);
+  const ethPlot = page.getByTestId("coin-panel-ETH").getByTestId("mini-chart").locator(".simple-lines");
+  await exerciseZoom(page, coinPlot, ethPlot);
 
   const spaghettiPlot = page.getByTestId("spaghetti-chart-container").locator(".simple-lines");
   await expect(spaghettiPlot.locator("canvas").first()).toBeVisible();
   await exerciseZoom(page, spaghettiPlot);
 
-  // The reset button resets too.
+  // The reset button resets too (the spaghetti chart keeps it).
   const box = (await spaghettiPlot.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.keyboard.down("Control");
