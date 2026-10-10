@@ -5,7 +5,9 @@ import { ChartFreshness } from "@/components/chart/ChartFreshness";
 import { MiniChart } from "@/components/chart/MiniChart";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
 import { useLiveData } from "@/components/screener/LiveProvider";
+import { RsiChart } from "@/components/screener/RsiChart";
 import { fetchChartView } from "@/lib/api/screener";
+import { formatRsi } from "@/lib/rsi-format";
 import { shareStructure, VOLATILE } from "@/lib/same-data";
 import { TIMEFRAMES, type ChartView, type Timeframe } from "@/lib/types/screener";
 
@@ -81,6 +83,19 @@ export function DrillDownView({ symbol, onClose, fetchChart = fetchChartView }: 
         <>
           <MiniChart price={view.chart.price} sma={view.chart.sma} height={240} timeframe={view.timeframe} />
           <ChartFreshness chart={view.chart} />
+          {/* T41 / S5b: RSI 14 below the price, zoomed on its own. */}
+          {(view.chart.rsi ?? []).length > 0 ? (
+            <>
+              <RsiChart points={view.chart.rsi} timeframe={view.timeframe} />
+              <p data-testid="drilldown-rsi-value" className="drilldown-view__rsi-value">
+                RSI 14 ({view.timeframe}): {formatRsi(view.chart.rsi[view.chart.rsi.length - 1].value)}
+              </p>
+            </>
+          ) : (
+            <p data-testid="drilldown-rsi-na" className="drilldown-view__rsi-value">
+              RSI 14: N/A, price did not change in this window
+            </p>
+          )}
         </>
       ) : error && !view ? null : (
         <DeadDataNotice

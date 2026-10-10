@@ -120,4 +120,49 @@ describe("DrillDownView", () => {
     await waitFor(() => expect(screen.queryByTestId("drilldown-error")).not.toBeInTheDocument());
     await waitFor(() => expect(fetchChart).toHaveBeenCalledWith("BTC", "1d"));
   });
+
+  it("draws the RSI chart below the price chart with the latest RSI value", async () => {
+    const fetchChart = vi.fn(async (_symbol: string, tf: Timeframe) => {
+      const view = makeChartView(tf);
+      view.chart = {
+        ...view.chart,
+        rsi: [
+          { timestamp: "2024-01-01T00:00:00Z", value: 48.21 },
+          { timestamp: "2024-01-02T00:00:00Z", value: 52.06 },
+        ],
+      };
+      return view;
+    });
+    render(<DrillDownView symbol="BTC" fetchChart={fetchChart} />);
+    await waitFor(() => expect(screen.getByTestId("drilldown-rsi-chart")).toBeInTheDocument());
+    const price = screen.getByTestId("mini-chart");
+    expect(price.compareDocumentPosition(screen.getByTestId("drilldown-rsi-chart")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId("drilldown-rsi-value")).toHaveTextContent("RSI 14 (4h): 52.1");
+  });
+
+  it("an available chart with an empty RSI series says N/A and mounts no RSI chart", async () => {
+    const fetchChart = vi.fn(async (_symbol: string, tf: Timeframe) => makeChartView(tf));
+    render(<DrillDownView symbol="BTC" fetchChart={fetchChart} />);
+    await waitFor(() => expect(screen.getByTestId("drilldown-rsi-na")).toBeInTheDocument());
+    expect(screen.getByTestId("drilldown-rsi-na")).toHaveTextContent("RSI 14: N/A, price did not change in this window");
+    expect(screen.queryByTestId("drilldown-rsi-chart")).toBeNull();
+    expect(screen.queryByTestId("drilldown-rsi-value")).toBeNull();
+  });
+
+  it("the shown RSI value is the last point of the series", async () => {
+    const fetchChart = vi.fn(async (_symbol: string, tf: Timeframe) => {
+      const view = makeChartView(tf);
+      view.chart = {
+        ...view.chart,
+        rsi: [
+          { timestamp: "2024-01-01T00:00:00Z", value: 99 },
+          { timestamp: "2024-01-02T00:00:00Z", value: 12.34 },
+        ],
+      };
+      return view;
+    });
+    render(<DrillDownView symbol="BTC" fetchChart={fetchChart} />);
+    await waitFor(() => expect(screen.getByTestId("drilldown-rsi-value")).toBeInTheDocument());
+    expect(screen.getByTestId("drilldown-rsi-value").textContent).toMatch(/: 12\.3$/);
+  });
 });

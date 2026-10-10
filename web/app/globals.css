@@ -385,7 +385,13 @@
   padding-bottom: var(--sp-3);
   border-bottom: 1px solid var(--sh-rule);
 }
+/* T41 / S5b: the grid holds the layout groups; each group grids its coins. */
 .screener-board__grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+.coin-group__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: var(--sp-3);
@@ -453,6 +459,171 @@
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   color: var(--ink-1);
+}
+
+/* T41 / S5b: layout groups, coin actions, add form, notices, RSI row. */
+.coin-group__header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+.coin-group__name {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--ink-1);
+}
+.coin-group__name:focus-visible {
+  outline: 2px solid var(--brand-navy-lift);
+  outline-offset: 2px;
+}
+.coin-group__count,
+.coin-group__hint {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.coin-group__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-left: auto;
+}
+.coin-group__rename,
+.board-edit__groups {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+.coin-group__empty {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.coin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1);
+  width: 100%;
+}
+.coin-actions__confirm {
+  display: inline-flex;
+  gap: var(--sp-1);
+}
+.board-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+.add-coin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.add-coin label,
+.board-edit__groups label {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.add-coin__count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+.add-coin__full {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-1);
+}
+.board-input,
+.board-select {
+  font: inherit;
+  font-size: var(--fs-sm);
+  padding: 4px 8px;
+  background: var(--sh-2);
+  color: var(--ink-1);
+  border: 1px solid var(--sh-rule);
+  border-radius: var(--radius-sm);
+}
+.board-input:focus-visible,
+.board-select:focus-visible,
+.app-main .board-button:focus-visible {
+  outline: 2px solid var(--brand-navy-lift);
+  outline-offset: 2px;
+}
+.board-select option {
+  background: var(--sh-2);
+  color: var(--ink-1);
+}
+/* An action that cannot act now: still readable and focusable, never faded. */
+.app-main .board-button[aria-disabled="true"],
+.board-select[aria-disabled="true"] {
+  color: var(--ink-2);
+  border-style: dashed;
+  cursor: not-allowed;
+}
+.app-main .board-button[aria-disabled="true"]:hover {
+  background: var(--sh-2);
+  color: var(--ink-2);
+}
+.board-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 1.6em;
+  margin-bottom: var(--sp-2);
+}
+.board-notice,
+.board-alert {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-1);
+}
+.board-loading {
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sh-1);
+  border: 1px solid var(--sh-rule);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.board-empty {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.coin-panel__rsi-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  min-height: 1.5em;
+  font-size: var(--fs-xs);
+}
+.coin-panel__rsi-label {
+  color: var(--ink-2);
+}
+.coin-panel__rsi-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-1);
+}
+.drilldown-view__rsi-value {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
 }
 
 .drilldown-view__header {
