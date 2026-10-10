@@ -8,7 +8,7 @@ feature: general-plans
 # Screener Batch 4: Brussels Time, Automatic Page Updates, Freshness Strip (S11a, S11b)
 
 Date: 10-10-26
-Status: PLANNED; PVL cycle 1 returned CONDITIONAL (0 FAIL, 7 CONCERN) and supplement cycle 1 folded F1-F7 and advisories a-j (10-10-26); validate-contract PENDING (skeleton below), no PASS stamp yet. Q1 (budget) RESOLVED 10-10-26: programme ceiling 75 USD. Code read at origin/main `1e7d337` (local HEAD `20a6c92` adds process files only; `git diff 1e7d337 HEAD -- api web` is empty). Baselines re-measured 10-10-26: pytest 996 passed, 2 skipped, 5 deselected (188 s); vitest 251 in 34 files; tsc 0; build:islands 0; `playwright test --list` 65 in 6 files; full seeded e2e 65 passed (2.6 min, worker off).
+Status: VALIDATED; PVL cycle 1 returned CONDITIONAL (0 FAIL, 7 CONCERN), supplement cycle 1 folded F1-F7 and advisories a-j, PVL cycle 3 returned PASS (0 FAIL, 0 CONCERN) and stamped the contract below (10-10-26); waiting for the user's ENTER EXECUTE MODE. Q1 (budget) RESOLVED 10-10-26: programme ceiling 75 USD. Code read at origin/main `1e7d337` (local HEAD `20a6c92` adds process files only; `git diff 1e7d337 HEAD -- api web` is empty). Baselines re-measured 10-10-26: pytest 996 passed, 2 skipped, 5 deselected (188 s); vitest 251 in 34 files; tsc 0; build:islands 0; `playwright test --list` 65 in 6 files; full seeded e2e 65 passed (2.6 min, worker off).
 Folder index: this plan; PVL reports `screener-batch4-pvl-iteration-NNN_REPORT_<dd-mm-yy>.md` and `results.tsv` (written by VALIDATE); envelopes `screener-batch4-s11{a,b}_REF_<dd-mm-yy>.md` and slice reports `screener-batch4-s11{a,b}_REPORT_<dd-mm-yy>.md` (written by the planner and workers).
 Complexity: COMPLEX (S11a then S11b, strictly sequential; one added field on a public endpoint, a display module used by every screener caption, a polling layer, a change to the shared chart island)
 
@@ -16,7 +16,7 @@ Complexity: COMPLEX (S11a then S11b, strictly sequential; one added field on a p
 
 Sources: user request and four option answers 10-10-26 (U1-U4; no separate SPEC file for this slice); SPEC `personal-tracker-realignment_SPEC_02-10-26.md` (its S2 UTC axis and caption decisions are superseded for DISPLAY by U3); batch 1 to 3 plans and PVL reports; `process/context/{current-state,architecture,operating-instructions,decisions}.md`, `tests/all-tests.md`; real code at `1e7d337`. Router: `process/context/all-context.md`.
 
-Context Envelope: general-plans | PLAN | batch 4 (S11) | claude/pensive-albattani-ou0cgv | /home/user/psychic-train | tests | api/data/refresh_worker.py, web/ | this file | pytest then vitest then playwright | contract PENDING.
+Context Envelope: general-plans | PLAN | batch 4 (S11) | claude/pensive-albattani-ou0cgv | /home/user/psychic-train | tests | api/data/refresh_worker.py, web/ | this file | pytest then vitest then playwright | contract PASS (PVL cycle 3).
 
 ## Overview
 
@@ -222,11 +222,11 @@ S5b (layout UI) after the S11b merge and the re-validation above; S9 needs S5b; 
 
 ## Validate Contract
 
-(skeleton by the planner; vc-validate-agent completes it in PVL and stamps it; the tables are the contract as planned; Known-Gap residuals carry a proving strategy, never Known-Gap)
-supersedes: none (first draft)
-Status: PENDING
-Gate: PENDING
-generated-by: plan-agent (skeleton)
+Date: 10-10-26 (stamped by vc-validate-agent in PVL cycle 3; the tables below are the contract; the stamp fields sit in "Stamp" after "Failing stubs"; Known-Gap residuals carry a proving strategy, never Known-Gap)
+date: 2026-10-10
+Status: PASS
+Gate: PASS
+generated-by: outer-pvl
 
 ### Test gates
 
@@ -329,6 +329,64 @@ grep -nE 'Date\.now\(|new Date\(\)' web/lib/{live-poll,refresh-strip,chart-fresh
 
 Each test in a slice's Tests list starts as a stub (`raise NotImplementedError("NOT IMPLEMENTED - TDD stub: <behaviour>")`; vitest and Playwright: `throw new Error(...)`) and follows convention 5. Tests added to existing files are stubbed inside them; changed goldens are written as the new text.
 
+### Stamp (VALIDATE, PVL cycle 3, 10-10-26)
+
+Stamped on the plan as saved after supplement cycle 1 (401 lines, 71,864 B before this stamp). No earlier stamped contract exists (PVL cycle 1 wrote none and the skeleton was never a contract), so there is no supersedes line. Full evidence: `screener-batch4-pvl-iteration-003_REPORT_10-10-26.md` and `results.tsv` row 3; history in iteration 001 (CONDITIONAL, F1-F7, advisories a-j) and 002 (supplement fold).
+Code under test: origin/main `1e7d337` (local HEAD `a03e917` adds process files only; `git diff 1e7d337 HEAD --stat -- api web` is empty).
+Parallel strategy: sequential (one validator ran Layer 1 and Layer 2 inline; score 3 of 7: S2 public endpoint field, S6 public API contract, S7 more than 5 files; no cross-talk needed; 1 agent, cost guard not triggered)
+Rationale: dominant signal S6 (a public endpoint field plus a shared chart island); every check was a read of the saved plan against real files plus targeted runs, so extra agents would only have re-read the same 72 KB. EXECUTE strategy for the planner: sequential, one opus worker per slice (S11a, then S11b after the S11a merge SHA), at most 3 sonnet subagents each in the capped lane, one sonnet tester at EVL per slice; parallel subagents, a workflow and an agent team add nothing (the slices share chart-freshness.ts, island-loader.ts, simple-lines.svelte, CoinPanel.tsx, ChartFreshness.tsx and S11b imports the S11a module).
+Validators and targeted runs (no full suite; baselines stand: pytest 996/2/5/0, vitest 251 in 34 files, tsc 0, build:islands 0, e2e 65): `validate-plan-artifact.mjs` 0 failures, 0 warnings before and after the stamp; `pnpm test` 251 in 34 files with per-file counts read from the JSON reporter; `playwright test --list` 65 in 6 files (screener 10, contrast 7); a zoneinfo re-derivation of every date and tick golden plus a scratch port of the C3 tick text swept over 12,000 windows around the eight clock changes of 2025-2028 (0 non-monotonic axes); the process-zone switch re-proven under vitest 2.1.9 with jsdom; scope, forbidden, fixtures, secret and word regexes dry-run on the 25 S11a and 35 S11b owned paths and on strays.
+
+Test gates (legacy line form; the 5-column table above is the contract; strategy values Fully-Automated | Hybrid | Agent-Probe only; Known-Gap is a named residual via gap-resolution D, never a strategy):
+- Status field and TS mirror (AC-S11a-4): [Fully-automated: G-S11a-1 `test_refresh_router.py` 1, 4-6] | [hybrid: G-S11a-11 test 3]
+- Brussels labels, DST, goldens (AC-S11a-1, 2, 3): [Fully-automated: G-S11a-3 (73 in 10 files), G-S11a-4 (268 in 35 files); G-S11a-10 `S11a-utc`, `S11a-words`] | [hybrid: G-S11a-11 tests 1-2, Tokyo browser zone, arithmetic oracle]
+- S11a regression (AC-S11a-5): [Fully-automated: G-S11a-2 (999), G-S11a-5, G-S11a-6] | [hybrid: G-S11a-11 (20), G-S11a-12 (68 in 7 files); precondition Chromium plus seeded stack, runner the worker, CI does not run Playwright]
+- Poller, provider, in-place updates, strip (AC-S11b-1..7): [Fully-automated: G-S11b-1 (111 in 14 files), G-S11b-2 (331 in 42 files); G-S11b-8 `S11b-utc`, `S11b-words`, `S11-nostore`, `S11-clock`] | [hybrid: G-S11b-9 `live-refresh.spec.ts` 4 plus screener 10 plus brussels-time 3 plus contrast 7 (24)]
+- S11b regression (AC-S11b-8): [Fully-automated: G-S11b-3..5] | [hybrid: G-S11b-9, G-S11b-10 (72 in 8 files)]
+- PC use: [agent-probe: P-S11-1, P-S11-2 (25 Oct 2026, date-bound), P-S11-3, P-S11-4, P-S11-5]
+- [known-gap: documented] AC-S11b-8r contrast of the overdue and failed strip variants (backlog `screener-live-ondemand-states-contrast_NOTE`, written by S11b), AC-S11a-1r, AC-S11a-2r, AC-S11b-9r (probes on the user PC); each is gap-resolution D or C, none is a PASS claim.
+Failing stubs: kept as the "Failing stubs" paragraph (convention 5, one per Tests-list entry, vitest `throw new Error("NOT IMPLEMENTED - TDD stub: <behaviour>")`); not repeated under the table rows so no envelope range moves.
+
+Dimension findings:
+- Infra fit: PASS - `status()` (`refresh_worker.py:428-443`), `ccxt_adapter._now` (`:110`), `freshness.iso_z` (`:55`), the router (`refresh.py:20`), the island build (relative imports only), ports 8001 and 3100 and `reactStrictMode` match the plan.
+- Test coverage: PASS - counts recounted from the listed test names (S11a 17 + 3 pytest + 3 e2e, S11b 63 + 4 e2e; pytest 996 to 999, vitest 251 to 331 in 34 to 42 files, e2e 65 to 72 in 6 to 8 files; G-S11a-3 73 in 10 files, 37 failed / 36 passed red; G-S11b-1 111 in 14 files, 63 failed / 48 passed red); F3, F4, F5, F6 tests can fail; every golden re-derived independently.
+- Breaking changes: PASS - one added key on a public endpoint (other 10 keys, `POST /api/refresh/now`, payloads unchanged); the three CSS parsers, `test_layout.py` interface parse, the existing `DrillDownView` error tests, the `ScreenerBoard` render tests and e2e tests 1-9 stay green; the S5b hand-over lists every shared file and the two test files S5b must adapt.
+- Security surface: PASS - no auth, key, secret or browser storage; read-only GETs with a 10 s abort and a capped 300 s backoff; copy rendered as React text.
+- S11a feasibility: PASS - mechanically executable; highest-risk edit the tick algorithm in `chart-time-format.ts` (C3; goldens derived independently, monotonic over 12,000 swept windows) and the island import staying relative.
+- S11b feasibility: PASS - highest-risk edit the in-place island update (P4 ladder; U1 proven on a scratch Svelte 5.57.1 component; the real LayerChart path is proven only by e2e test 3 and P-S11-3), then the fake browser clock (U2, fallback stated).
+- Hand-over to S5b: PASS - cited S5b lines and the 396/49, 113/13, 79/9 arithmetic re-checked.
+- Envelopes: PASS - recomputed from the saved file: S11a 74 lines 17,924 B (room 4,633 B), S11b 66 lines 20,435 B (room 2,122 B), union 120 lines 34,940 B (12,383 B over), CLAUDE.md 13,443 B; a realistic S11b envelope was drafted and measured at 2,020 B (102 B under the cap).
+
+Findings history (cycle 1, folded by supplement cycle 1, verified in cycle 3 against the saved file and the real code; line numbers are the saved file's):
+| # | Fold verified at | Cycle 3 evidence |
+|---|---|---|
+| F1 drill-down | 131, 146, 245, 247 | `DrillDownView.tsx:69-82` ternary and `ScreenerBoard.tsx:87-93` (no key) read; test 6 fails on the old code twice over; the three existing error tests have no `view` and stay green |
+| F2 S5b hand-over | 215-217 | S5b plan lines 130, 148-150, 327-328 match; arithmetic re-done |
+| F3 silent abort | 129, 141, 146, 246 | tests live-poll 3 and 11, Live 12 in StrictMode |
+| F4 month step | 109 | zoneinfo and scratch port give the planned instants and labels |
+| F5 repeated hour | 43, 109 | 15m case gives ticks 00:30Z and 00:45Z, labels `["25 Oct","02:45"]` |
+| F6 null server_time | 111, 130, 141, 142 | server and client sides present and consistent |
+| F7 visibility trigger | 129, 148, 153, 341 | override plus `visibilitychange` triggers an immediate check; test 2 sets a 150 s timeout (config default 30 s) |
+| a-j | 42-43, 108, 129, 132, 151, 163, 194, 198, 340-342, 357-358, 382 | all present |
+| Q1 | 11, 69, 75, 77, 204, 206, 378 | ceiling 75 USD, 29.9 left, 20.4 left at the top S11 figure |
+
+Advisories (none blocks; planner or worker notes; full text in the iteration-003 report):
+A1. S11b envelope slack: a complete envelope is 2,020 B against 2,122 B of room (102 B spare); trim the stub lines first, then autonomy wording, never a range; re-measure CLAUDE.md at spawn.
+A2. Line 394 says "the fence lines 276 and 322"; the fences are 293 and 326 (byte-neutral fix for the planner; the range table is right).
+A3. Name the listener target in the envelope: `document.addEventListener("visibilitychange", ...)`; the e2e fallback dispatches on `document`.
+A4. E2E test 2 with `page.clock`: await the baseline check (the strip shows a time) before `runFor(61_000)`.
+A5. E2E test 3 must use an answer that really changes (one more bar) and assert a board request happened, else the zoom check is vacuous.
+A6. Live test 6 counts only the drill-down's island mounts (delta or `within`); Live test 12 compares board fetch counts before and after the first status check.
+A7. Anchor the 14-day step to Mondays since 1970-01-05 and say so in the module comment.
+A8. Lane stops (ask above 5 USD S11a, 7 USD S11b) sit below the programme hard stop (15 USD per slice, 75 USD total, user approval); the goal block states both.
+A9. The envelope REF files are committed on main before the spawn, so the scope commands do not see them.
+A10. "First in page.tsx" leaves open whether the strip sits above or below the h1; either passes.
+
+What This Coverage Does NOT Prove (additions from PVL cycle 3): the island is never mounted under jsdom, so the zoom survival of the real LayerChart island and the Chromium `Europe/Brussels` data (U4) are proven only by the seeded e2e (hybrid) and the probes; the Svelte update path was proven on a scratch component, not on the real island; `page.clock` with the Next dev server (U2) is not run; the tick text was checked with a scratch port, not the planned code; Windows time zones, the live 15-minute cycle, a real hidden tab, sleep and the exchange request rate are probes P-S11-1..5; neither CI nor the gates run `next build`; contrast of the overdue and failed strip variants is not audited (AC-S11b-8r).
+
+Open gaps: AC-S11b-8r (backlog stub written by S11b, named residual, gap-resolution D); known-gap: AC-S11a-1r, AC-S11a-2r, AC-S11b-9r are probes P-S11-1 to P-S11-5 on the user PC (gap-resolution C); Q1 (budget) is RESOLVED, not open; advisories A1-A10 above; none is a FAIL or an unresolved CONCERN.
+Accepted by: n/a - no CONCERN outstanding to accept (0 FAIL, 0 CONCERN); the residuals are named, not accepted concerns; the user's U1-U4 and Q1 answers of 10-10-26 are recorded in the plan.
+
 ### Red-today evidence (origin/main 1e7d337; read-only checks run 10-10-26, nothing committed)
 
 AC-S11a-1,3: `grep -w UTC` finds the word in `chart-freshness.ts`, `spaghetti-lines.ts`, `btc-leg-lines.ts`, `CoinPanel.tsx`, `ChartFreshness.tsx`, `MiniChart.tsx`, `simple-lines.svelte`, `island-loader.ts`; `CoinPanel.chipTitle` builds `candle from ${chip.open_ts}` from the raw payload string. AC-S11a-4: `STATUS_KEYS` lists 10 keys and the test asserts equality. AC-S11b-1: `grep -rn "refresh/status" web` is empty; `ScreenerBoard` has no timer. AC-S11b-2: `simple-lines.svelte` resets `range` whenever `series` changes. Scratch runs (Node 22.22.0, ICU 77.1, system zone UTC): offsets 60/120 at the 2026-03-29T01:00:00Z change and 120/60 at 2026-10-25T01:00:00Z; Brussels midnights and day lengths as in C3; the last Sundays of March and October 2026 are the 29th and the 25th; `en-US` short zone name `GMT+2`, `en-GB` `CEST`; `format(new Date("x"))` throws `RangeError`; `h23` and `hour12: false` both print `00:00` at midnight. Baselines 10-10-26 as in the header (pytest 187.7 s, vitest 13.9 s, build:islands 7.6 s, e2e 2.6 min); Playwright 1.63.0 has `page.clock`.
@@ -377,6 +435,23 @@ P-S11-5: stop the API task for 3 minutes: the strip says `Could not check the se
 
 Q1 (budget) is RESOLVED 10-10-26 (ceiling 75 USD); no budget gap remains. AC-S11b-8r (backlog stub written by S11b) is a named residual. known-gap: AC-S11a-1r, AC-S11a-2r, AC-S11b-9r are probes P-S11-1 to P-S11-5 on the user PC.
 
+## Autonomous Goal Block
+
+SESSION GOAL: screener batch 4 (S11) - Brussels time everywhere on /screener, automatic 60 s page updates that keep zoom and selection, and a freshness status strip. S11a (status server_time, web/lib/brussels-time.ts, every label; one worker, opus, capped subagent lane) then S11b (poller, strip, in-place chart updates; one worker, opus, capped lane); strictly sequential; both before S5b.
+Charter + umbrella plan: N/A - single plan (user decisions U1-U4 and Q1 of 10-10-26 are recorded in the plan; no separate SPEC; no umbrella plan with a Stable Program Goal).
+Autonomy: validated PASS after 1 supplement cycle and 2 verdict passes (PVL cycles 1 and 3). EXECUTE needs the user's explicit "ENTER EXECUTE MODE". The planner then registers S11a and S11b in MASTER-PLAN, writes the S11a envelope (master-planner.md section 8, at most 8,000 bytes, a pointer list citing the "Envelope line ranges" table; S11a room 4,633 B, S11b room 2,122 B with a drafted envelope of 2,020 B; measure with wc -c and re-measure CLAUDE.md, 13,443 B, at spawn), saved as `screener-batch4-s11{a,b}_REF_<dd-mm-yy>.md`, and spawns S11a only (opus; subagents sonnet, capped lane: 3 subagents, one level). S11b's envelope follows the S11a merge SHA. Workers record red runs, run gates once after the last edit, run the seeded e2e (CI does not run Playwright) before any merge, and stop at needs_input when an observed count differs from the plan arithmetic or the same failure occurs twice. Lane stops: ask the planner above 5 USD (S11a) or 7 USD (S11b).
+Hard stop conditions / safety constraints:
+- No envelope or worker before the user's "ENTER EXECUTE MODE".
+- S11b never before the S11a merge SHA exists and an independent tester pass on S11a; the slices are never parallel.
+- S5b never before S11b is merged and the S5b plan is re-validated (see "Hand-over to S5b").
+- A diff touching CLAUDE.md, AGENTS.md, README.md, `.claude/`, `.github/`, `deploy/` stops at review; no slice touches `deploy/**` or `api/scripts/**`.
+- No worker merges with an open needs_input or blocker; the seeded e2e gates (G-S11a-11, G-S11a-12, G-S11b-9, G-S11b-10) run on the head SHA before any merge, NOT-RUN stops at needs_input.
+- Push, merge, deploy, branch deletion, or spend above 15 USD per slice or 75 USD in total (29.9 USD left at plan time) needs the user's approval.
+- PC probes P-S11-1..5 are the user's and are never claimed by a worker; S11a stays at review until P-S11-1, S11b until P-S11-3 (P-S11-2, 25 Oct 2026, holds no merge).
+Next phase: EXECUTE: process/general-plans/active/screener-batch4_10-10-26/screener-batch4_PLAN_10-10-26.md
+Validate contract: process/general-plans/active/screener-batch4_10-10-26/screener-batch4_PLAN_10-10-26.md (inline, validated PASS, PVL cycle 3)
+Execute start: S11a: `UV_FROZEN=1 uv run --project api pytest api/tests/routers/test_refresh_router.py -q` red run on the untouched base with stubs (G-S11a-13: 4 failed, 2 passed), then the code and all gates once | probes: P-S11-1..5 on the user PC | high-risk pack: no
+
 ## Test Infra Improvement Notes
 
 (none identified yet) Candidates: a CI job for the seeded Playwright specs (S11 is the fourth UI slice that needs a local e2e run CI cannot confirm); a Svelte component test runner so island behaviour (axis labels, update in place) is not only an e2e matter (a scratch config ran in 1.4 s); a TZ matrix for the vitest run (`TZ=UTC`, `Asia/Tokyo`) against local-zone formatting.
@@ -384,10 +459,10 @@ Q1 (budget) is RESOLVED 10-10-26 (ceiling 75 USD); no budget gap remains. AC-S11
 ## Resume and Execution Handoff
 
 1. Selected plan file: `process/general-plans/active/screener-batch4_10-10-26/screener-batch4_PLAN_10-10-26.md`
-2. Last completed step: PLAN drafted 10-10-26 against origin/main `1e7d337`; PVL cycle 1 returned CONDITIONAL and supplement cycle 1 folded F1-F7 and advisories a-j (results.tsv row 2); PVL cycle 2 is next.
-3. Validate-contract status: pending (skeleton above, Status PENDING, Gate PENDING); no PASS stamp and no goal block.
+2. Last completed step: PLAN drafted 10-10-26 against origin/main `1e7d337`; PVL cycle 1 returned CONDITIONAL, supplement cycle 1 folded F1-F7 and advisories a-j (results.tsv row 2), PVL cycle 3 returned PASS and stamped the contract (results.tsv row 3).
+3. Validate-contract status: PASS (stamp after "Failing stubs", header above, goal block after "Open gaps").
 4. Context loaded: CLAUDE.md, all-context.md, all-tests.md, the batch 1 to 3 plans and PVL reports, the S5b plan, and the real code and tests named in the owned lists.
-5. Next step for a fresh agent: Q1 is resolved (ceiling 75 USD); run VALIDATE (PVL cycle 2) on this file until the PASS stamp, wait for the user's explicit "ENTER EXECUTE MODE", then the planner registers S11a and S11b in MASTER-PLAN, writes the S11a envelope (master-planner.md section 8, at most 8,000 bytes, a pointer list citing the sub-range table) and spawns S11a only; S11b's envelope follows the S11a merge SHA; after S11b the planner re-validates the S5b plan with "Hand-over to S5b".
+5. Next step for a fresh agent: Q1 is resolved (ceiling 75 USD) and the contract is stamped PASS; wait for the user's explicit "ENTER EXECUTE MODE", then the planner registers S11a and S11b in MASTER-PLAN, writes the S11a envelope (master-planner.md section 8, at most 8,000 bytes, a pointer list citing the sub-range table) and spawns S11a only; S11b's envelope follows the S11a merge SHA; after S11b the planner re-validates the S5b plan with "Hand-over to S5b".
 
 ## Envelope line ranges (re-derive with `grep -n '^## \|^### '` at spawn time; worker cap 36,000 B = CLAUDE.md 13,443 counted once + envelope (cap 8,000) + plan bytes)
 
