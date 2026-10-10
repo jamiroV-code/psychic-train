@@ -249,7 +249,7 @@ test("the spaghetti chart draws its lines, and the board's mini charts are not b
   await expect(page.getByTestId("spaghetti-legend")).toBeVisible();
   await expect(page.getByTestId("spaghetti-toggle-BTC")).toHaveAttribute("data-reference", "true");
   await expect(page.getByTestId("spaghetti-toggle-HYPE")).toHaveAttribute("data-reference", "true");
-  await expect(page.getByTestId("spaghetti-span")).toContainText("UTC");
+  await expect(page.getByTestId("spaghetti-span")).toContainText("Brussels time");
 
   // The role/label is what makes the plot reachable by assistive tech.
   // (The plot itself, not LayerChart's per-label text nodes, which also carry role="img".)

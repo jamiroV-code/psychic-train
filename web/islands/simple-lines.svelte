@@ -1,7 +1,7 @@
 <script>
   import { Chart, Canvas, Svg, Spline, Points, Axis } from "layerchart";
   import { scaleTime, scaleUtc, scaleLinear } from "d3-scale";
-  import { utcAxis } from "../lib/chart-time-format";
+  import { brusselsAxis } from "../lib/chart-time-format";
   import {
     extentOf,
     fullRange,
@@ -94,10 +94,10 @@
     return [new Date(view.from), new Date(view.to)];
   });
 
-  // With a timeframe the x axis is UTC, its ticks and labels taken from
+  // With a timeframe the x axis is Brussels time, its ticks and labels taken from
   // chart-time-format for the VISIBLE span, so they never depend on the
   // browser's zone. Without one it stays a local time axis.
-  const xAxis = $derived(timeframe && xDomain ? utcAxis(xDomain[0], xDomain[1], timeframe, 4) : null);
+  const xAxis = $derived(timeframe && xDomain ? brusselsAxis(xDomain[0], xDomain[1], timeframe, 4) : null);
 
   // The last tick label is centred on the plot's right edge, so the right
   // padding is at least half the widest label: it never clips.

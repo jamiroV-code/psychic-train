@@ -128,7 +128,7 @@ export interface IslandApi {
       height: number;
       format?: (v: number) => string;
       label: string;
-      // T34 / S2: when set, the time axis is UTC with labels from
+      // T34 / S2: when set, the time axis is Brussels time with labels from
       // chart-time-format; when absent it is exactly the old local axis.
       timeframe?: Timeframe;
       // T37 / S6: emphasise the line nearest the pointer (the spaghetti chart).

@@ -8,14 +8,14 @@ describe("ChartFreshness", () => {
   it("renders the caption and no stale marker for fresh data", () => {
     render(<ChartFreshness chart={BASE} />);
     expect(screen.getByTestId("chart-freshness-caption").textContent).toBe(
-      "Last bar 2026-10-03 14:15 UTC, opened 7 min ago (forming)",
+      "Last bar 2026-10-03 16:15 CEST, opened 7 min ago (forming)",
     );
     expect(screen.queryByTestId("stale-marker")).toBeNull();
   });
 
   it("renders a plain 'stale' marker when stale", () => {
     render(<ChartFreshness chart={{ ...BASE, is_partial: false, server_time: "2026-10-05T14:15:00Z", stale: true }} />);
-    expect(screen.getByTestId("chart-freshness-caption").textContent).toBe("Last bar 2026-10-03 14:15 UTC, 2 d ago");
+    expect(screen.getByTestId("chart-freshness-caption").textContent).toBe("Last bar 2026-10-03 16:15 CEST, 2 d ago");
     expect(screen.getByTestId("stale-marker").textContent).toBe("stale");
   });
 

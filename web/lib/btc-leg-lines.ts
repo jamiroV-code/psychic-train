@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/brussels-time";
 import { SERIES } from "@/lib/chart-palette";
 import type { SimpleLineSeries } from "@/lib/island-loader";
 import type {
@@ -102,13 +103,13 @@ function signed(v: number | null | undefined, digits = 3): string {
 }
 
 function day(ts: string | null): string {
-  return ts ? ts.slice(0, 10) : "n/a";
+  return ts ? formatDate(new Date(ts)) : "n/a";
 }
 
-/** "Daily BTC, 2023-01-01 to 2026-10-08 UTC, 1377 bars (all cached history)". */
+/** "Daily BTC, 2023-01-01 to 2026-10-08 (Brussels time), 1377 bars (all cached history)". */
 export function btcLegSpanText(data: Pick<BtcLegChartResponse, "first_bar_ts" | "last_bar_ts" | "bar_count">): string | null {
   if (!data.first_bar_ts || !data.last_bar_ts) return null;
-  return `Daily BTC, ${day(data.first_bar_ts)} to ${day(data.last_bar_ts)} UTC, ${data.bar_count} bars (all cached history)`;
+  return `Daily BTC, ${day(data.first_bar_ts)} to ${day(data.last_bar_ts)} (Brussels time), ${data.bar_count} bars (all cached history)`;
 }
 
 /** The current-leg numbers, each with its own testid key. */

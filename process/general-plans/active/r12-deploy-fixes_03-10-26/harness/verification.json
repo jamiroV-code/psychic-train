@@ -161,70 +161,134 @@
   "manualChecks": [
     {
       "id": "PC-1",
-      "result": "pending-user"
+      "check": "environment (Tailscale 100.x, clean deploy/)",
+      "result": "PASS",
+      "paste": "full paste; only 4 live-cache parquet files modified, left untouched by decision",
+      "sha": "7fd38ac",
+      "source": "user-reported, PC DESKTOP-3QG46B4, Windows PowerShell 5.1, 2026-10-10; record r12-deploy-fixes-pc-record_REPORT_10-10-26.md"
     },
     {
       "id": "PC-2",
-      "result": "pending-user"
+      "check": "tasks stopped, ports 3000/8000 free",
+      "result": "PASS",
+      "paste": "full paste; first paste had a trailing-pipe parser artefact, rerun clean",
+      "sha": "7fd38ac",
+      "source": "user-reported, PC DESKTOP-3QG46B4, Windows PowerShell 5.1, 2026-10-10; record r12-deploy-fixes-pc-record_REPORT_10-10-26.md"
     },
     {
       "id": "PC-3",
-      "result": "pending-user"
+      "check": "branch, head, deploy tree 65b61e51...",
+      "result": "PASS",
+      "paste": "full paste; HEAD:deploy equals expected",
+      "sha": "7fd38ac",
+      "source": "user-reported, PC DESKTOP-3QG46B4, Windows PowerShell 5.1, 2026-10-10; record r12-deploy-fixes-pc-record_REPORT_10-10-26.md"
     },
     {
       "id": "PC-4",
-      "result": "pending-user"
+      "check": "parser, five scripts, 0 errors",
+      "result": "PASS",
+      "paste": "full paste; run at 44060ac, deploy tree identical to 7fd38ac",
+      "sha": "44060ac",
+      "source": "user-reported, PC DESKTOP-3QG46B4, Windows PowerShell 5.1, 2026-10-10; record r12-deploy-fixes-pc-record_REPORT_10-10-26.md"
     },
     {
       "id": "PC-5",
-      "result": "pending-user"
+      "check": "dry runs (start-web, build-web, start-api), exit 0, Q1 B note seen",
+      "result": "PASS",
+      "paste": "full paste",
+      "sha": "7fd38ac",
+      "source": "user-reported, PC DESKTOP-3QG46B4, Windows PowerShell 5.1, 2026-10-10; record r12-deploy-fixes-pc-record_REPORT_10-10-26.md"
     },
     {
       "id": "PC-6",
-      "result": "pending-user"
+      "check": "missing marker refused, exit 4",
+      "result": "PASS",
+      "paste": "full paste",
+      "sha": "7fd38ac",
+      "source": "user-reported, PC DESKTOP-3QG46B4, Windows PowerShell 5.1, 2026-10-10; record r12-deploy-fixes-pc-record_REPORT_10-10-26.md"
     },
     {
       "id": "PC-7",
-      "result": "pending-user"
+      "check": "non-node decoy named by dry run, not stopped",
+      "result": "PASS",
+      "paste": "full paste; PID 4252 powershell",
+      "sha": "7fd38ac",
+      "source": "user-reported, PC DESKTOP-3QG46B4, Windows PowerShell 5.1, 2026-10-10; record r12-deploy-fixes-pc-record_REPORT_10-10-26.md"
     },
     {
       "id": "PC-8",
-      "result": "pending-user"
+      "check": "real build stops the decoy by PID, marker written, exit 0",
+      "result": "PASS",
+      "paste": "full paste",
+      "sha": "7fd38ac",
+      "source": "user-reported, PC DESKTOP-3QG46B4, Windows PowerShell 5.1, 2026-10-10; record r12-deploy-fixes-pc-record_REPORT_10-10-26.md"
     },
     {
       "id": "PC-9",
-      "result": "pending-user"
+      "check": "marker equals HEAD, HEAD:web, BUILD_ID",
+      "result": "PASS",
+      "paste": "full paste; build id v5K0mognZxyFRFiOIh_aP",
+      "sha": "7fd38ac",
+      "source": "user-reported, PC DESKTOP-3QG46B4, Windows PowerShell 5.1, 2026-10-10; record r12-deploy-fixes-pc-record_REPORT_10-10-26.md"
     },
     {
       "id": "PC-10",
-      "result": "pending-user"
+      "check": "start, Build is current, smoke ok, served marker equals marker file",
+      "result": "PASS",
+      "paste": "observed inside PC-11 and PC-16, not a separate step; evidence marker-file",
+      "sha": "7fd38ac",
+      "source": "user-reported, PC DESKTOP-3QG46B4, Windows PowerShell 5.1, 2026-10-10; record r12-deploy-fixes-pc-record_REPORT_10-10-26.md"
     },
     {
       "id": "PC-11",
-      "result": "pending-user"
+      "check": "incident replay: non-node decoy stopped, smoke ok",
+      "result": "PASS",
+      "paste": "full paste; PID 16604 stopped, evidence A confirmed",
+      "sha": "7fd38ac",
+      "source": "user-reported, PC DESKTOP-3QG46B4, Windows PowerShell 5.1, 2026-10-10; record r12-deploy-fixes-pc-record_REPORT_10-10-26.md"
     },
     {
       "id": "PC-12",
-      "result": "pending-user"
+      "check": "stale refusal after tracked web file newer, exit 4",
+      "result": "PASS",
+      "paste": "earlier W2 report heading 12, with paste",
+      "sha": "44060ac",
+      "source": "user-reported, PC DESKTOP-3QG46B4, Windows PowerShell 5.1, 2026-10-10; record r12-deploy-fixes-pc-record_REPORT_10-10-26.md"
     },
     {
       "id": "PC-13",
-      "result": "pending-user"
+      "check": "rebuild restores a fresh build",
+      "result": "PASS (covered by PC-8, no separate run)",
+      "paste": "none separate",
+      "sha": "7fd38ac",
+      "source": "user-reported, PC DESKTOP-3QG46B4, Windows PowerShell 5.1, 2026-10-10; record r12-deploy-fixes-pc-record_REPORT_10-10-26.md"
     },
     {
       "id": "PC-14",
-      "result": "pending-user"
+      "check": "forced smoke failure, exit 6, no listener left",
+      "result": "PASS (process-died branch only)",
+      "paste": "full paste; HTTP non-200 and build-id mismatch branches NOT exercised (known gap)",
+      "sha": "7fd38ac",
+      "source": "user-reported, PC DESKTOP-3QG46B4, Windows PowerShell 5.1, 2026-10-10; record r12-deploy-fixes-pc-record_REPORT_10-10-26.md"
     },
     {
       "id": "PC-15",
-      "result": "pending-user"
+      "check": "scheduled task start, smoke ok, no listener after stop",
+      "result": "PASS (partial paste)",
+      "paste": "earlier W2 report heading 12; the two task command lines not pasted",
+      "sha": "44060ac",
+      "source": "user-reported, PC DESKTOP-3QG46B4, Windows PowerShell 5.1, 2026-10-10; record r12-deploy-fixes-pc-record_REPORT_10-10-26.md"
     },
     {
       "id": "PC-16",
-      "result": "pending-user"
+      "check": "restore, both services up, tree clean apart from 4 parquet files",
+      "result": "PASS",
+      "paste": "web.log tail and listeners pasted; user said 'site running, all working'",
+      "sha": "7fd38ac",
+      "source": "user-reported, PC DESKTOP-3QG46B4, Windows PowerShell 5.1, 2026-10-10; record r12-deploy-fixes-pc-record_REPORT_10-10-26.md"
     }
   ],
-  "result": "CONDITIONAL",
+  "result": "ACCEPTED_WITH_KNOWN_GAPS",
   "legacyUserReportedChecks": [
     {
       "check": "PC step 1: git fetch origin; git checkout claude/r12-deploy-fixes",
@@ -298,5 +362,6 @@
       "sha": "44060ac",
       "source": "user report in session, 2026-10-10; Get-NetTCPConnection (empty) and web.log pasted; the Start-ScheduledTask and Stop-ScheduledTask command lines not pasted"
     }
-  ]
+  ],
+  "resultNote": "The validator does not constrain result; ACCEPTED_WITH_KNOWN_GAPS replaces CONDITIONAL after the user's PC record. Known gaps stay gaps: smoke check HTTP non-200 and build-id mismatch branches (shape tests only), exit 6 only for the process-died branch."
 }

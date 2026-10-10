@@ -2,7 +2,7 @@ import { freshnessCaption, type ChartFreshnessFields } from "@/lib/chart-freshne
 
 /**
  * Caption and plain `stale` marker under a screener chart (T34 / S2): when
- * the last bar is, in UTC, how old it is against the server's clock, and
+ * the last bar is, in Brussels time, how old it is against the server's clock, and
  * whether the data is older than the timeframe allows.
  */
 export function ChartFreshness({ chart }: { chart: ChartFreshnessFields }) {

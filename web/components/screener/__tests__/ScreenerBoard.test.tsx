@@ -157,7 +157,7 @@ describe("ScreenerBoard", () => {
     expect(screen.getByTestId("gain-chip-4h").getAttribute("title")).toBe("Data source unavailable");
   });
 
-  it("captions the coin chart's last bar in UTC aged against server_time, with a plain stale marker (T34 / S2)", async () => {
+  it("captions the coin chart's last bar in Brussels time aged against server_time, with a plain stale marker (T34 / S2)", async () => {
     const freshness = {
       last_bar_ts: "2026-10-03T14:15:00Z",
       fetched_at: "2026-10-03T14:21:00Z",
@@ -176,11 +176,33 @@ describe("ScreenerBoard", () => {
 
     const btc = screen.getByTestId("coin-panel-BTC");
     expect(btc.querySelector('[data-testid="chart-freshness-caption"]')?.textContent).toBe(
-      "Last bar 2026-10-03 14:15 UTC, opened 7 min ago (forming)",
+      "Last bar 2026-10-03 16:15 CEST, opened 7 min ago (forming)",
     );
     expect(btc.querySelector('[data-testid="stale-marker"]')).toBeNull();
     const old = screen.getByTestId("coin-panel-OLD");
     expect(old.querySelector('[data-testid="stale-marker"]')?.textContent).toBe("stale");
+  });
+
+  it("titles the 1d chip with its candle open in Brussels time and keeps the N/A chip reason", async () => {
+    const coins = [
+      makeCoin("BTC", {
+        gain_by_timeframe: {
+          "15m": chip(0),
+          "1h": chip(-0.25),
+          "4h": chip(null, "source-unavailable"),
+          "1d": chip(-1.234),
+          "1w": chip(6),
+        },
+      }),
+    ];
+    const fetchBoard = vi.fn(async (tf: Timeframe) => makeBoard(tf, coins));
+
+    render(<ScreenerBoard fetchBoard={fetchBoard} fetchSpaghetti={fetchSpaghetti} />);
+    await waitFor(() => expect(screen.getByTestId("gain-chip-1d")).toBeInTheDocument());
+
+    // 2026-10-03T00:00:00Z is 02:00 in Brussels summer time.
+    expect(screen.getByTestId("gain-chip-1d").getAttribute("title")).toBe("1d candle from 2026-10-03 02:00 CEST (forming)");
+    expect(screen.getByTestId("gain-chip-4h").getAttribute("title")).toBe("Data source unavailable");
   });
 
   it("shows a coin's chart as unavailable, not a wrong/truncated chart, when thin history (AC-19)", async () => {
