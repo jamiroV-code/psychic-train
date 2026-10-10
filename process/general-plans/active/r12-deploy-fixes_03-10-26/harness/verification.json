@@ -211,19 +211,19 @@
       "check": "W2 PC real port-scoped stop of a running next server",
       "result": "success: a start at 08:56:06 logged Port 3000: stopping PID 12284 (node) listening on it, Port 3000: free, then started and passed the smoke check; the earlier instance logged Web process exited with code 1 (08:56:07)",
       "sha": "44060ac",
-      "source": "user report in session, 2026-10-10; web.log lines pasted; which command started the 08:56:06 run not pasted"
+      "source": "user report in session, 2026-10-10; web.log lines pasted; the user stated the 08:56:06 run was Start-ScheduledTask mysite-web (step 9), the command itself not pasted"
     },
     {
       "check": "W2 PC step 8: forced smoke failure (exit 6, port left free)",
-      "result": "NOT OBSERVED: no Smoke check FAILED line and no exit 6 in the pasted output; next start was ready in about 1 s, so -SmokeTimeoutSeconds 5 cannot force a failure",
+      "result": "NOT RUN: the user identified the 08:56:06 run as step 9; no step 8 run in the record. next start is ready in about 1 s, so -SmokeTimeoutSeconds 5 would not force a failure anyway",
       "sha": "44060ac",
       "source": "user report in session, 2026-10-10"
     },
     {
       "check": "W2 PC step 9: scheduled task start, and listener left after Stop-ScheduledTask",
-      "result": "UNKNOWN: no line in the pasted output is attributable to the scheduled task; the Get-NetTCPConnection output after the stop was not pasted",
+      "result": "success: task start at 08:56:06 stopped the hand-started node (PID 12284) on the port, started, Smoke check ok 08:56:08 (evidence: marker-file); after Stop-ScheduledTask, Get-NetTCPConnection -State Listen -LocalPort 3000 printed nothing (no orphaned node); no Web process exited line after the stop, expected since the task stop ends the script",
       "sha": "44060ac",
-      "source": "user report in session, 2026-10-10"
+      "source": "user report in session, 2026-10-10; Get-NetTCPConnection (empty) and web.log pasted; the Start-ScheduledTask and Stop-ScheduledTask command lines not pasted"
     }
   ],
   "result": "CONDITIONAL"
