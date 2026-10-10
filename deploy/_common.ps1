@@ -88,3 +88,372 @@ function Invoke-StageAPull {
         Write-MySiteLog "Stage A: git pull --ff-only failed, starting on current code. $($_.Exception.Message)"
     }
 }
+
+function Get-WebPortListenerIds {
+    # Unique PIDs listening on a local TCP port, selected by port only. Nothing returned means
+    # the port is free. SilentlyContinue keeps a no-match quiet under the global Stop
+    # preference; a real failure (cmdlet missing, CIM error) is thrown to the caller.
+    param([Parameter(Mandatory)][int]$Port)
+    $ids = @()
+    try {
+        $conns = @(Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue)
+    } catch {
+        throw ('Get-NetTCPConnection failed: ' + $_.Exception.Message)
+    }
+    foreach ($conn in $conns) {
+        if ($null -ne $conn) { $ids += [int]$conn.OwningProcess }
+    }
+    return @($ids | Sort-Object -Unique)
+}
+
+function Stop-WebPortListener {
+    # Stop whatever listens on the configured web port, by PID only, then wait (bounded) for
+    # the port to clear. Refuses System/Idle (PID 4 or less) and this script itself. Any
+    # failure is fail-closed: log and exit 5. With -ReportOnly nothing is stopped or logged
+    # to the file; it only prints what would happen and never exits.
+    param(
+        [Parameter(Mandatory)][hashtable]$Config,
+        [switch]$ReportOnly
+    )
+    $port = 0
+    $valid = [int]::TryParse([string]$Config.WebPort, [ref]$port)
+    if (-not $valid -or $port -lt 1 -or $port -gt 65535 -or [string]$port -eq [string]$Config.ApiPort) {
+        $message = "WebPort $($Config.WebPort) is not a usable port: it must be 1-65535 and differ from ApiPort."
+        if ($ReportOnly) { Write-Host "DRY RUN: $message" } else { Write-MySiteLog $message }
+        exit 2
+    }
+    try {
+        $ids = @(Get-WebPortListenerIds -Port $port)
+    } catch {
+        $reason = $_.Exception.Message
+        if ($ReportOnly) {
+            Write-Host "DRY RUN: cannot list listeners: $reason"
+            return
+        }
+        Write-MySiteLog "Port ${port}: cannot list listeners, not continuing: $reason"
+        exit 5
+    }
+    if ($ids.Count -eq 0) {
+        if ($ReportOnly) {
+            Write-Host "DRY RUN: port $port is free; nothing would be stopped."
+        } else {
+            Write-MySiteLog "Port ${port}: nothing listening; nothing to stop."
+        }
+        return
+    }
+    foreach ($listenerId in $ids) {
+        $name = '(unknown)'
+        $proc = Get-Process -Id $listenerId -ErrorAction SilentlyContinue
+        if ($null -ne $proc) { $name = [string]$proc.ProcessName }
+        if ($listenerId -le 4 -or $listenerId -eq $PID) {
+            if ($ReportOnly) {
+                Write-Host "DRY RUN: would refuse to stop PID $listenerId (protected)"
+                continue
+            }
+            Write-MySiteLog "Port ${port}: PID $listenerId ($name) is protected; refusing to stop it."
+            exit 5
+        }
+        if ($ReportOnly) {
+            Write-Host "DRY RUN: would stop PID $listenerId ($name) listening on port $port (nothing stopped)."
+            continue
+        }
+        Write-MySiteLog "Port ${port}: stopping PID $listenerId ($name) listening on it."
+        try {
+            Stop-Process -Id $listenerId -ErrorAction Stop
+        } catch {
+            $reason = $_.Exception.Message
+            $still = Get-Process -Id $listenerId -ErrorAction SilentlyContinue
+            if ($null -ne $still) {
+                Write-MySiteLog "Port ${port}: could not stop PID ${listenerId}: $reason."
+                exit 5
+            }
+        }
+    }
+    if ($ReportOnly) { return }
+    $deadline = (Get-Date).AddSeconds(10)
+    while ($true) {
+        try {
+            $left = @(Get-WebPortListenerIds -Port $port)
+        } catch {
+            Write-MySiteLog "Port ${port}: cannot list listeners, not continuing: $($_.Exception.Message)"
+            exit 5
+        }
+        if ($left.Count -eq 0) { break }
+        if ((Get-Date) -ge $deadline) {
+            Write-MySiteLog "Port ${port}: still in use after 10s; not continuing."
+            exit 5
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    Write-MySiteLog "Port ${port}: free."
+}
+
+function Get-WebBuildMarkerPath {
+    # Inside the build output: every next build clears it, and git already ignores it.
+    # Absolute, because the stale check runs before any Set-Location.
+    param([Parameter(Mandatory)][hashtable]$Config)
+    return (Join-Path $Config.RepoRoot 'web\.next\static\build-marker.json')
+}
+
+function Get-WebBuildIdPath {
+    param([Parameter(Mandatory)][hashtable]$Config)
+    return (Join-Path $Config.RepoRoot 'web\.next\BUILD_ID')
+}
+
+function Get-ShortSha {
+    param([string]$Sha)
+    if ($null -eq $Sha) { return '' }
+    $text = $Sha.Trim()
+    if ($text.Length -gt 7) { return $text.Substring(0, 7) }
+    return $text
+}
+
+function ConvertTo-MySiteEpoch {
+    # Whole UTC seconds since 1970, floored (file times have 100 ns resolution).
+    param([Parameter(Mandatory)][DateTime]$Utc)
+    $origin = New-Object DateTime 1970, 1, 1, 0, 0, 0, ([DateTimeKind]::Utc)
+    return [int64][Math]::Floor(($Utc - $origin).TotalSeconds)
+}
+
+function Invoke-MySiteGit {
+    # One read-only git call in the repo: git -C RepoRoot <GitArgs>. Returns the output lines
+    # and throws when git is missing or exits non-zero. Stderr is left alone on purpose: under
+    # the global Stop preference, PowerShell 5.1 turns redirected stderr text into an error.
+    param(
+        [Parameter(Mandatory)][hashtable]$Config,
+        [Parameter(Mandatory)][string[]]$GitArgs
+    )
+    $out = @(& git -C $Config.RepoRoot @GitArgs)
+    if ($LASTEXITCODE -ne 0) {
+        throw ('git ' + ($GitArgs -join ' ') + ' exited with code ' + $LASTEXITCODE)
+    }
+    return $out
+}
+
+function Remove-WebBuildMarker {
+    # Called before a build: a failed or running build must leave no marker behind.
+    param([Parameter(Mandatory)][hashtable]$Config)
+    $markerPath = Get-WebBuildMarkerPath -Config $Config
+    if (Test-Path -LiteralPath $markerPath) {
+        Remove-Item -LiteralPath $markerPath
+        Write-MySiteLog 'Build marker removed before the build.'
+    }
+}
+
+function Write-WebBuildMarker {
+    # Called only after a successful build, as the last step. Records what was built so
+    # start-web.ps1 can refuse a stale build. Nothing secret goes in it. Any failure: exit 7.
+    param([Parameter(Mandatory)][hashtable]$Config)
+    $now = [DateTime]::UtcNow
+    $epoch = ConvertTo-MySiteEpoch -Utc $now
+    $markerPath = Get-WebBuildMarkerPath -Config $Config
+    $buildIdPath = Get-WebBuildIdPath -Config $Config
+    try {
+        if (-not (Test-Path -LiteralPath $buildIdPath)) { throw 'BUILD_ID not found after the build' }
+        $buildId = ([System.IO.File]::ReadAllText($buildIdPath)).Trim()
+        $commit = ([string](@(Invoke-MySiteGit -Config $Config -GitArgs @('rev-parse', 'HEAD'))[0])).Trim()
+        $webTree = ([string](@(Invoke-MySiteGit -Config $Config -GitArgs @('rev-parse', 'HEAD:web'))[0])).Trim()
+        $changes = @(Invoke-MySiteGit -Config $Config -GitArgs @('status', '--porcelain', '--', 'web') | Where-Object { $_ })
+        if (-not $buildId -or -not $commit -or -not $webTree) { throw 'empty BUILD_ID or git output' }
+        $marker = [ordered]@{
+            schema         = 1
+            commit         = $commit
+            web_tree       = $webTree
+            dirty          = ($changes.Count -gt 0)
+            build_id       = $buildId
+            built_at_epoch = $epoch
+            built_at_utc   = $now.ToString('yyyy-MM-ddTHH:mm:ss', [System.Globalization.CultureInfo]::InvariantCulture) + 'Z'
+        }
+        $json = ConvertTo-Json -InputObject $marker -Compress
+        $markerDir = Split-Path -Parent $markerPath
+        if (-not (Test-Path -LiteralPath $markerDir)) {
+            New-Item -ItemType Directory -Path $markerDir | Out-Null
+        }
+        [System.IO.File]::WriteAllText($markerPath, $json, (New-Object System.Text.UTF8Encoding($false)))
+    } catch {
+        Write-MySiteLog "Build marker not written: $($_.Exception.Message)"
+        exit 7
+    }
+    Write-MySiteLog "Build marker written: commit $(Get-ShortSha $commit) web tree $(Get-ShortSha $webTree) build id $buildId"
+}
+
+function Test-WebBuildFresh {
+    # Refuse to start a missing or stale build. First failing check wins: marker present,
+    # marker readable, build output matches it, git readable, web/ tree unchanged, no tracked
+    # web file newer than the build. HEAD alone moving is only a note. Refusal: exit 4.
+    # With -ReportOnly it prints the result and returns; it never exits.
+    param(
+        [Parameter(Mandatory)][hashtable]$Config,
+        [switch]$ReportOnly
+    )
+    $reason = $null
+    $marker = $null
+    $headCommit = ''
+    $webTree = ''
+    $notes = @()
+    $markerPath = Get-WebBuildMarkerPath -Config $Config
+    $buildIdPath = Get-WebBuildIdPath -Config $Config
+    if (-not (Test-Path -LiteralPath $markerPath)) {
+        $reason = 'no build marker'
+    }
+    if ($null -eq $reason) {
+        try {
+            $marker = [System.IO.File]::ReadAllText($markerPath) | ConvertFrom-Json
+            $names = @($marker.PSObject.Properties | ForEach-Object { $_.Name })
+            foreach ($field in 'schema', 'commit', 'web_tree', 'dirty', 'build_id', 'built_at_epoch') {
+                if ($names -notcontains $field) { throw ('missing field ' + $field) }
+            }
+        } catch {
+            $reason = 'build marker unreadable'
+        }
+    }
+    if ($null -eq $reason) {
+        $currentBuildId = ''
+        if (Test-Path -LiteralPath $buildIdPath) {
+            $currentBuildId = ([System.IO.File]::ReadAllText($buildIdPath)).Trim()
+        }
+        if (-not $currentBuildId -or $currentBuildId -ne [string]$marker.build_id) {
+            $reason = 'build output missing or differs from the marker'
+        }
+    }
+    if ($null -eq $reason) {
+        try {
+            $headCommit = ([string](@(Invoke-MySiteGit -Config $Config -GitArgs @('rev-parse', 'HEAD'))[0])).Trim()
+            $webTree = ([string](@(Invoke-MySiteGit -Config $Config -GitArgs @('rev-parse', 'HEAD:web'))[0])).Trim()
+            if (-not $headCommit -or -not $webTree) { throw 'empty git output' }
+        } catch {
+            $reason = 'cannot read git state'
+        }
+    }
+    if ($null -eq $reason -and $webTree -ne [string]$marker.web_tree) {
+        $builtTree = Get-ShortSha ([string]$marker.web_tree)
+        $currentTree = Get-ShortSha $webTree
+        $reason = "web/ sources changed since the build (built tree $builtTree, current $currentTree)"
+    }
+    if ($null -eq $reason) {
+        $files = @()
+        try {
+            $files = @(Invoke-MySiteGit -Config $Config -GitArgs @('-c', 'core.quotepath=off', 'ls-files', '--', 'web'))
+        } catch {
+            $reason = 'cannot read git state'
+        }
+        $builtAt = [int64][Math]::Floor([double]$marker.built_at_epoch)
+        $newest = [int64]0
+        $newestPath = ''
+        foreach ($relative in $files) {
+            if (-not $relative) { continue }
+            $full = Join-Path $Config.RepoRoot ([string]$relative)
+            if (-not [System.IO.File]::Exists($full)) { continue }
+            $written = ConvertTo-MySiteEpoch -Utc ([System.IO.File]::GetLastWriteTimeUtc($full))
+            if ($written -gt $newest) {
+                $newest = $written
+                $newestPath = [string]$relative
+            }
+        }
+        if ($null -eq $reason -and $newest -gt $builtAt) {
+            $reason = "tracked web file newer than the build: $newestPath"
+        }
+    }
+    if ($null -ne $reason) {
+        $line = "Stale build: $reason. Run deploy\build-web.ps1, then start again."
+        if ($ReportOnly) {
+            Write-Host "DRY RUN: $line"
+            return
+        }
+        Write-MySiteLog $line
+        exit 4
+    }
+    if ($headCommit -ne [string]$marker.commit) {
+        $notes += "Note: HEAD $(Get-ShortSha $headCommit) differs from the build commit $(Get-ShortSha ([string]$marker.commit)); web/ is unchanged."
+    }
+    if ($marker.dirty -eq $true) {
+        $notes += 'Note: built from uncommitted web/ changes.'
+    }
+    $result = @("Build is current: commit $(Get-ShortSha ([string]$marker.commit)) web tree $(Get-ShortSha $webTree) build id $($marker.build_id)") + $notes
+    foreach ($text in $result) {
+        if ($ReportOnly) { Write-Host "DRY RUN: $text" } else { Write-MySiteLog $text }
+    }
+}
+
+function Get-WebSmokeResponse {
+    # One GET with a 5 s timeout. Returns StatusCode (0 = no answer) and Body as text.
+    # PowerShell 5.1 throws for any non-200 answer, so the code is read from the exception.
+    param([Parameter(Mandatory)][string]$Url)
+    $result = [pscustomobject]@{ StatusCode = 0; Body = '' }
+    try {
+        $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 5
+        $result.StatusCode = [int]$response.StatusCode
+        $body = $response.Content
+        if ($body -is [byte[]]) { $body = [System.Text.Encoding]::UTF8.GetString($body) }
+        $result.Body = [string]$body
+    } catch {
+        $exception = $_.Exception
+        if ($exception.PSObject.Properties['Response'] -and $null -ne $exception.Response) {
+            $result.StatusCode = [int]$exception.Response.StatusCode
+        }
+    }
+    return $result
+}
+
+function Invoke-WebSmokeCheck {
+    # After start-web.ps1 starts next start: poll this PC's own Tailscale address every 2 s
+    # until the root page answers 200 and the served build id matches the marker (evidence:
+    # the served marker file, else the page HTML). Bounded by TimeoutSeconds; stops early
+    # when the web process exits. Returns $true or $false; the caller decides the exit code.
+    param(
+        [Parameter(Mandatory)][hashtable]$Config,
+        [Parameter(Mandatory)][string]$Ip,
+        [Parameter(Mandatory)][System.Diagnostics.Process]$Process,
+        [int]$TimeoutSeconds = 90
+    )
+    $ProgressPreference = 'SilentlyContinue'
+    $baseUrl = "http://${Ip}:$($Config.WebPort)"
+    $url = $baseUrl + '/'
+    $markerUrl = $baseUrl + '/_next/static/build-marker.json'
+    $expectedId = ''
+    $markerPath = Get-WebBuildMarkerPath -Config $Config
+    if (Test-Path -LiteralPath $markerPath) {
+        try {
+            $expectedId = [string](([System.IO.File]::ReadAllText($markerPath) | ConvertFrom-Json).build_id)
+        } catch {
+            $expectedId = ''
+        }
+    }
+    $reason = 'no answer'
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if ($Process.HasExited) {
+            Write-MySiteLog "Smoke check FAILED: web process exited with code $($Process.ExitCode) before answering."
+            return $false
+        }
+        $page = Get-WebSmokeResponse -Url $url
+        if ($page.StatusCode -eq 200) {
+            if (-not $expectedId) {
+                Write-MySiteLog "Smoke check ok: $url returned 200 (no build marker, build id not checked)."
+                return $true
+            }
+            $evidence = ''
+            $served = Get-WebSmokeResponse -Url $markerUrl
+            if ($served.StatusCode -eq 200) {
+                try {
+                    if ([string](($served.Body | ConvertFrom-Json).build_id) -eq $expectedId) { $evidence = 'marker-file' }
+                } catch {
+                    $evidence = ''
+                }
+            }
+            if (-not $evidence -and $page.Body.Contains($expectedId)) { $evidence = 'html' }
+            if ($evidence) {
+                Write-MySiteLog "Smoke check ok: $url returned 200 and build id $expectedId matches the marker (evidence: $evidence)."
+                return $true
+            }
+            $reason = 'served build id does not match the marker'
+        } elseif ($page.StatusCode -gt 0) {
+            $reason = "HTTP $($page.StatusCode)"
+        } else {
+            $reason = 'no answer'
+        }
+        Start-Sleep -Seconds 2
+    }
+    Write-MySiteLog "Smoke check FAILED: $reason after ${TimeoutSeconds}s."
+    return $false
+}

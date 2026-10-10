@@ -1,0 +1,302 @@
+{
+  "task": "R12",
+  "commands": [
+    {
+      "command": "UV_FROZEN=1 uv run --project api pytest api/tests/deploy -q (baseline)",
+      "result": "51 passed, 1 skipped",
+      "utc": "2026-10-09T11:59:30Z",
+      "sha": "7ead516"
+    },
+    {
+      "command": "command -v pwsh (baseline)",
+      "result": "prints nothing (exit 1)",
+      "utc": "2026-10-09T11:59:30Z",
+      "sha": "7ead516"
+    },
+    {
+      "command": "G-R12-1 red run, C1 stubs",
+      "result": "6 failed",
+      "utc": "2026-10-09T12:00:27Z",
+      "sha": "7ead516"
+    },
+    {
+      "command": "G-R12-2 red run, legs assertion edited, README unedited",
+      "result": "1 failed, 23 passed",
+      "utc": "2026-10-09T12:00:27Z",
+      "sha": "7ead516"
+    },
+    {
+      "command": "G-R12-1 UV_FROZEN=1 uv run --project api pytest api/tests/deploy/test_deploy_r12_guards_shape.py -q (C1)",
+      "result": "6 passed",
+      "utc": "2026-10-09T12:03:14Z",
+      "sha": "1cc96d2"
+    },
+    {
+      "command": "G-R12-2 UV_FROZEN=1 uv run --project api pytest api/tests/deploy/test_deploy_config_shape.py -q (C1)",
+      "result": "24 passed",
+      "utc": "2026-10-09T12:03:14Z",
+      "sha": "1cc96d2"
+    },
+    {
+      "command": "G-R12-3 UV_FROZEN=1 uv run --project api pytest api/tests/deploy -q (C1)",
+      "result": "57 passed, 1 skipped",
+      "utc": "2026-10-09T12:03:14Z",
+      "sha": "1cc96d2"
+    },
+    {
+      "command": "G-R12-9..12 scans on committed C1",
+      "result": "all print nothing; git diff --check exit 0; pwsh absent",
+      "utc": "2026-10-09T12:03:14Z",
+      "sha": "1cc96d2"
+    },
+    {
+      "command": "G-R12-1 red run, C2 stubs",
+      "result": "5 failed, 6 passed",
+      "utc": "2026-10-09T12:03:29Z",
+      "sha": "601380f"
+    },
+    {
+      "command": "G-R12-1 UV_FROZEN=1 uv run --project api pytest api/tests/deploy/test_deploy_r12_guards_shape.py -q (C2)",
+      "result": "11 passed",
+      "utc": "2026-10-09T12:05:27Z",
+      "sha": "5b68192"
+    },
+    {
+      "command": "G-R12-2 UV_FROZEN=1 uv run --project api pytest api/tests/deploy/test_deploy_config_shape.py -q (C2)",
+      "result": "24 passed",
+      "utc": "2026-10-09T12:05:27Z",
+      "sha": "5b68192"
+    },
+    {
+      "command": "G-R12-3 UV_FROZEN=1 uv run --project api pytest api/tests/deploy -q (C2)",
+      "result": "62 passed, 1 skipped",
+      "utc": "2026-10-09T12:05:27Z",
+      "sha": "5b68192"
+    },
+    {
+      "command": "G-R12-9..12 scans on committed C2",
+      "result": "all print nothing; git diff --check exit 0; pwsh absent",
+      "utc": "2026-10-09T12:05:34Z",
+      "sha": "5b68192"
+    },
+    {
+      "command": "UV_FROZEN=1 uv run --project api pytest api/tests/deploy -q (W2 baseline)",
+      "result": "62 passed, 1 skipped",
+      "utc": "2026-10-09T18:09:10Z",
+      "sha": "7f58c9b"
+    },
+    {
+      "command": "command -v pwsh (W2 baseline)",
+      "result": "prints nothing (exit 1)",
+      "utc": "2026-10-09T18:09:10Z",
+      "sha": "7f58c9b"
+    },
+    {
+      "command": "G-R12-1 red run, C3 stubs",
+      "result": "6 failed, 11 passed",
+      "utc": "2026-10-09T18:09:30Z",
+      "sha": "7f58c9b"
+    },
+    {
+      "command": "G-R12-1 UV_FROZEN=1 uv run --project api pytest api/tests/deploy/test_deploy_r12_guards_shape.py -q (C3)",
+      "result": "17 passed",
+      "utc": "2026-10-09T18:11:45Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "G-R12-2 UV_FROZEN=1 uv run --project api pytest api/tests/deploy/test_deploy_config_shape.py -q (C3)",
+      "result": "24 passed",
+      "utc": "2026-10-09T18:11:53Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "G-R12-3 UV_FROZEN=1 uv run --project api pytest api/tests/deploy -q (C3)",
+      "result": "68 passed, 1 skipped",
+      "utc": "2026-10-09T18:11:53Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "G-R12-4 UV_FROZEN=1 uv run --project api pytest api/ -q",
+      "result": "968 passed, 2 skipped, 5 deselected, 0 xfailed",
+      "utc": "2026-10-09T18:14:53Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "cd web && pnpm install --frozen-lockfile",
+      "result": "done",
+      "utc": "2026-10-09T18:14:59Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "G-R12-5 pnpm --filter web test",
+      "result": "251 passed in 34 files",
+      "utc": "2026-10-09T18:14:59Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "G-R12-6 pnpm --filter web exec tsc --noEmit --incremental false",
+      "result": "exit 0",
+      "utc": "2026-10-09T18:15:23Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "G-R12-7 cd web && pnpm build:islands",
+      "result": "exit 0",
+      "utc": "2026-10-09T18:15:23Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "G-R12-8 cd web && SCREENER_REFRESH_WORKER=0 PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome pnpm test:e2e",
+      "result": "65 passed (whole suite)",
+      "utc": "2026-10-09T18:18:12Z",
+      "sha": "c090f72"
+    },
+    {
+      "command": "G-R12-9..12 scans on committed C3",
+      "result": "all print nothing; git diff --check exit 0; pwsh absent",
+      "utc": "2026-10-09T18:18:26Z",
+      "sha": "c090f72"
+    }
+  ],
+  "manualChecks": [
+    {
+      "id": "PC-1",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-2",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-3",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-4",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-5",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-6",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-7",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-8",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-9",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-10",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-11",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-12",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-13",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-14",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-15",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-16",
+      "result": "pending-user"
+    }
+  ],
+  "result": "CONDITIONAL",
+  "legacyUserReportedChecks": [
+    {
+      "check": "PC step 1: git fetch origin; git checkout claude/r12-deploy-fixes",
+      "result": "success",
+      "sha": "314bc0a",
+      "source": "user report in session, 2026-10-09; output not pasted"
+    },
+    {
+      "check": "PC step 2: PowerShell parser on _common.ps1, build-web.ps1, start-web.ps1",
+      "result": "success (0 parse errors reported)",
+      "sha": "314bc0a",
+      "source": "user report in session, 2026-10-09; output not pasted"
+    },
+    {
+      "check": "PC step 3: Get-NetTCPConnection -State Listen -LocalPort 65000 -ErrorAction SilentlyContinue under ErrorActionPreference Stop",
+      "result": "success (no throw on a free port; D2 free-port risk cleared)",
+      "sha": "314bc0a",
+      "source": "user report in session, 2026-10-09; output not pasted"
+    },
+    {
+      "check": "PC step 4: start-web.ps1 -DryRun",
+      "result": "success (stale-check and port report lines, exit 0)",
+      "sha": "314bc0a",
+      "source": "user report in session, 2026-10-09; output not pasted"
+    },
+    {
+      "check": "PC step 5: real build-web.ps1 then start-web.ps1 (marker written, Build is current, port stop, server start)",
+      "result": "NOT RUN",
+      "sha": "",
+      "source": "user report in session, 2026-10-09; output not pasted"
+    },
+    {
+      "check": "W2 PC step 5: start-web.ps1 at the C3 head (stale check, port stop, child start, smoke check)",
+      "result": "success: Build is current (commit 44060ac), Starting web on <ip>:3000, Next Ready in 1029ms, Smoke check ok ... returned 200 and build id matches the marker (evidence: marker-file), 08:41:13; same result at 08:54:12 and 08:56:08 after a rebuild. Evidence A (U3) holds; evidence B not needed. Also covers W1 step 5 (marker written by a real build, Build is current, real server start)",
+      "sha": "44060ac",
+      "source": "user report in session, 2026-10-10; console and web.log lines pasted; build-web.ps1 console output not pasted"
+    },
+    {
+      "check": "W2 PC step 6: exit-code passthrough after the node listener was stopped",
+      "result": "success: pnpm printed ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL, script logged Web process exited with code 1 and exited 1 (08:49:26)",
+      "sha": "44060ac",
+      "source": "user report in session, 2026-10-10; script output pasted; the stop command in the second window not pasted"
+    },
+    {
+      "check": "W2 PC step 7: stale refusal after touching web/app/page.tsx",
+      "result": "success: Stale build: tracked web file newer than the build: web/app/page.tsx. Run deploy\\build-web.ps1, then start again. exit code 4 (08:52:56)",
+      "sha": "44060ac",
+      "source": "user report in session, 2026-10-10; output pasted"
+    },
+    {
+      "check": "W2 PC real port-scoped stop of a running next server",
+      "result": "success: a start at 08:56:06 logged Port 3000: stopping PID 12284 (node) listening on it, Port 3000: free, then started and passed the smoke check; the earlier instance logged Web process exited with code 1 (08:56:07)",
+      "sha": "44060ac",
+      "source": "user report in session, 2026-10-10; web.log lines pasted; the user stated the 08:56:06 run was Start-ScheduledTask mysite-web (step 9), the command itself not pasted"
+    },
+    {
+      "check": "W2 PC step 8: forced smoke failure (exit 6, port left free)",
+      "result": "RAN, failure NOT EXERCISED: start-web.ps1 -SmokeTimeoutSeconds 5 at 08:54:10 was accepted, Next Ready in 646ms, Smoke check ok at 08:54:12 (evidence: marker-file); the server then ran until the step 9 task start stopped it (Web process exited with code 1, exit code 1 at 08:56:07). A short timeout cannot force a failure on this PC; exit 6 and its cleanup remain unproven",
+      "sha": "44060ac",
+      "source": "user report in session, 2026-10-10; console output pasted; output of the Get-NetTCPConnection line typed after it not shown in the paste"
+    },
+    {
+      "check": "W2 PC step 8b: forced smoke failure, web\\.next\\server renamed, start-web.ps1 -SmokeTimeoutSeconds 10",
+      "result": "success (log path): Build is current, Port 3000: nothing listening, Starting web, Next failed with ENOENT on server\\pages-manifest.json, pnpm ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL, then Smoke check FAILED: web process exited with code 1 before answering (4 s after the start), Smoke check failed; stopping the new web server., Port 3000: nothing listening; nothing to stop. (09:48:42 to 09:48:46). The exit code itself was not shown: the script was run directly in the shell, not through powershell -File, so no exit-code line; the Get-NetTCPConnection line after it printed nothing in the paste",
+      "sha": "44060ac",
+      "source": "user report in session, 2026-10-10; console output pasted; exit code (LASTEXITCODE) not pasted"
+    },
+    {
+      "check": "W2 PC step 9: scheduled task start, and listener left after Stop-ScheduledTask",
+      "result": "success: task start at 08:56:06 stopped the hand-started node (PID 12284) on the port, started, Smoke check ok 08:56:08 (evidence: marker-file); after Stop-ScheduledTask, Get-NetTCPConnection -State Listen -LocalPort 3000 printed nothing (no orphaned node); no Web process exited line after the stop, expected since the task stop ends the script",
+      "sha": "44060ac",
+      "source": "user report in session, 2026-10-10; Get-NetTCPConnection (empty) and web.log pasted; the Start-ScheduledTask and Stop-ScheduledTask command lines not pasted"
+    }
+  ]
+}

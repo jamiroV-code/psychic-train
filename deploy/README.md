@@ -30,8 +30,8 @@ Full plan (with the long version of every step): `process/general-plans/active/d
 | `config.example.psd1` | Example settings. Copy it to `%LOCALAPPDATA%\my_site\deploy.psd1` and edit the paths. Holds nothing private. |
 | `_common.ps1` | Shared helpers: load the config, wait (bounded) for the Tailscale address, log to `%LOCALAPPDATA%\my_site\logs\`, stage A pull. |
 | `start-api.ps1` | Waits for the Tailscale address, runs the stage A pull, sets `SCREENER_CORS_ORIGINS`, starts the API on `<tailscale-ip>:8000`. `-DryRun` prints what it would do. |
-| `start-web.ps1` | Starts the built web app (`next start`, never the dev server) on `<tailscale-ip>:3000`. `-DryRun` available. |
-| `build-web.ps1` | Builds the web app with `NEXT_PUBLIC_API_BASE_URL=http://<tailscale-ip>:8000` baked in. `-DryRun` available. |
+| `start-web.ps1` | Starts the built web app (`next start`, never the dev server) on `<tailscale-ip>:3000`. `-DryRun` available. Refuses a stale build, frees only the web port, smoke-checks the new server (see "Restarting safely"). |
+| `build-web.ps1` | Builds the web app with `NEXT_PUBLIC_API_BASE_URL=http://<tailscale-ip>:8000` baked in. `-DryRun` available. Frees only the web port first, then writes the build marker after a successful build (see "Restarting safely"). |
 | `register-tasks.ps1` | Creates Task Scheduler tasks `mysite-api` and `mysite-web` that start at your logon (no admin, no SYSTEM account). `-Remove` deletes them. |
 
 **These scripts were written in a container that has no PowerShell.** Automated tests only
@@ -101,8 +101,8 @@ them already.
 
 ### Do NOT need copying — dead weight
 
-`api\data\cache\legs\`. Nothing reads it: `cache.write_confirmed_boundaries` and
-`cache.read_confirmed_boundaries` have no non-test callers. Skip it.
+`api\data\cache\legs\`. Nothing reads it, and the code that wrote it has been removed, so an
+existing folder is leftover data. Skip it.
 
 ### MUST NOT be copied — rebuild these on the new PC instead
 
@@ -205,10 +205,61 @@ starts. So:
 
 - Always build with `deploy\build-web.ps1` (it sets the variable first and prints the baked URL).
 - If your Tailscale address changes, or you switch to a MagicDNS name, **rebuild**. A restart is not enough.
-- If a `git pull` changes anything under `web\`, rebuild before the change appears.
+- If a `git pull` changes anything under `web\`, rebuild before the change appears. `start-web.ps1` now refuses a stale build (exit 4).
 
 A build without the variable silently falls back to `http://127.0.0.1:8000`, which on your
 phone means the phone itself — every panel would fail.
+
+## Restarting safely after a web change (R12 guards)
+
+The supported way to put a web change live:
+
+1. `Stop-ScheduledTask mysite-web`
+2. `git pull --ff-only`
+3. `powershell -NoProfile -ExecutionPolicy Bypass -File deploy\build-web.ps1`
+4. `Start-ScheduledTask mysite-web`
+5. Read `%LOCALAPPDATA%\my_site\logs\web.log` and look for `Smoke check ok`.
+
+Run `start-web.ps1` by hand only while the `mysite-web` task is stopped. If you start a
+second copy while the task runs, it stops the running server; the old script then exits
+with an error, Task Scheduler restarts it a minute later, and that restart stops your new
+server in turn.
+
+What the guards do:
+
+- **Port-scoped stop.** `build-web.ps1` and `start-web.ps1` stop only the process listening
+  on the configured web port, by its process id, never by program name. Log lines:
+  `Port <p>: nothing listening; nothing to stop.`, `Port <p>: stopping PID <id> (<name>) listening on it.`,
+  `Port <p>: still in use after 10s; not continuing.`
+- **Build marker and stale refusal.** A successful `build-web.ps1` writes
+  `web\.next\static\build-marker.json` (commit, web tree, build id, build time; nothing
+  secret), served by the app at `http://<ip>:3000/_next/static/build-marker.json`.
+  `start-web.ps1` refuses to start when the marker is absent or the `web\` sources changed
+  since the build. Log lines: `Build is current: ...` or
+  `Stale build: <reason>. Run deploy\build-web.ps1, then start again.`
+- **Smoke check.** `start-web.ps1` runs `next start` as a child process, then polls
+  `http://<ip>:3000/` on this PC's own Tailscale address every 2 s for HTTP 200 and the
+  marker's build id (from the served marker file, else the page HTML). The default limit
+  is 90 s; `start-web.ps1 -SmokeTimeoutSeconds <5..600>` changes it. Log lines:
+  `Smoke check ok: <url> returned 200 and build id <id> matches the marker (evidence: marker-file|html).`
+  or `Smoke check FAILED: <reason> after <n>s.`
+
+Exit codes of `build-web.ps1` and `start-web.ps1`:
+
+| Code | Meaning |
+|---|---|
+| 2 | Config error (missing key, bad `WebPort`, bad `-SmokeTimeoutSeconds`). |
+| 3 | Timed out waiting for the Tailscale address. |
+| 4 | Stale or missing build: run `build-web.ps1`. |
+| 5 | The web port was not freed, or its listener is a protected process. |
+| 6 | Smoke check failed; the new server was stopped. |
+| 7 | The build marker could not be written. |
+
+A failed build keeps pnpm's own exit code. After a passing smoke check, `start-web.ps1`
+exits with the web server's own code when the server ends.
+
+The first start after this change needs one rebuild: there is no marker yet, so
+`start-web.ps1` refuses with exit 4 until `build-web.ps1` has run once.
 
 ## Starting it automatically (Task Scheduler)
 
