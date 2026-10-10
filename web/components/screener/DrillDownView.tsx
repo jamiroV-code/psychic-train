@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { ChartFreshness } from "@/components/chart/ChartFreshness";
 import { MiniChart } from "@/components/chart/MiniChart";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
+import { useLiveData } from "@/components/screener/LiveProvider";
 import { fetchChartView } from "@/lib/api/screener";
+import { shareStructure, VOLATILE } from "@/lib/same-data";
 import { TIMEFRAMES, type ChartView, type Timeframe } from "@/lib/types/screener";
 
 export interface DrillDownViewProps {
@@ -20,18 +22,26 @@ const DEFAULT_DRILLDOWN_TIMEFRAME: Timeframe = "4h"; // the drill-down opens on 
  * Amendment 2 (AC-18): carries its OWN timeframe control across the same
  * 15m/1h/4h/1D/1W range as the board, independent of whatever the board's
  * own toggle is currently set to.
+ *
+ * T43 / S11b: refetches its own timeframe on every live check (`tick`). A
+ * failed refetch shows `drilldown-error` above the chart it already has; a
+ * timeframe change keeps the old chart until the new one arrives, and an
+ * answer for a timeframe no longer selected is ignored.
  */
 export function DrillDownView({ symbol, onClose, fetchChart = fetchChartView }: DrillDownViewProps) {
   const [timeframe, setTimeframe] = useState<Timeframe>(DEFAULT_DRILLDOWN_TIMEFRAME);
   const [view, setView] = useState<ChartView | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const { tick } = useLiveData();
+
   useEffect(() => {
     let cancelled = false;
-    setError(null);
     fetchChart(symbol, timeframe)
       .then((data) => {
-        if (!cancelled) setView(data);
+        if (cancelled) return;
+        setView((prev) => shareStructure(prev, data, VOLATILE));
+        setError(null);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -39,7 +49,7 @@ export function DrillDownView({ symbol, onClose, fetchChart = fetchChartView }: 
     return () => {
       cancelled = true;
     };
-  }, [symbol, timeframe, fetchChart]);
+  }, [symbol, timeframe, fetchChart, tick]);
 
   return (
     <div data-testid="drilldown-view" role="dialog" aria-label={`${symbol} drill-down`}>
@@ -66,14 +76,13 @@ export function DrillDownView({ symbol, onClose, fetchChart = fetchChartView }: 
         ))}
       </div>
 
-      {error ? (
-        <DeadDataNotice testId="drilldown-error" message={error} />
-      ) : view?.chart.available ? (
+      {error && <DeadDataNotice testId="drilldown-error" message={error} />}
+      {view?.chart.available ? (
         <>
           <MiniChart price={view.chart.price} sma={view.chart.sma} height={240} timeframe={view.timeframe} />
           <ChartFreshness chart={view.chart} />
         </>
-      ) : (
+      ) : error && !view ? null : (
         <DeadDataNotice
           testId="drilldown-chart-unavailable"
           reason={view?.chart.reason ?? null}

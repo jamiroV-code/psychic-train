@@ -6,6 +6,7 @@ import OnchainPanel from "./onchain-panel.svelte";
 import OnchainOverlay from "./onchain-overlay.svelte";
 import SimpleLines from "./simple-lines.svelte";
 import { createPanelSync } from "./panel-sync.svelte.js";
+import { createLiveProps } from "./live-props.svelte.js";
 
 /**
  * The island boundary.
@@ -65,7 +66,14 @@ export function mountOnchainOverlay(target, props) {
  * view and the drill-down MiniChart. No shared store: neither syncs with
  * anything.
  */
+const SIMPLE_LINES_KEYS = ["series", "height", "format", "label", "timeframe", "highlight", "bands", "markers"];
+
+/**
+ * T43 / S11b: still a dispose function, now with an `update(props)` that
+ * hands the mounted chart new data in place, so its zoom survives a refresh.
+ */
 export function mountSimpleLines(target, props) {
-  const app = mount(SimpleLines, { target, props });
-  return () => unmount(app);
+  const live = createLiveProps(props, SIMPLE_LINES_KEYS);
+  const app = mount(SimpleLines, { target, props: live.props });
+  return Object.assign(() => unmount(app), { update: (next) => live.set(next) });
 }

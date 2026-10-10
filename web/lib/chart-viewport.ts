@@ -85,6 +85,17 @@ export function pan(range: Range, dx: number, extent: Extent): Range {
   return clampRange({ from: range.from + shift, to: range.to + shift }, extent);
 }
 
+/**
+ * T43 / S11b: a zoomed range carried through a data update. Clamped into the
+ * new extent with its span kept; null (the full range) when there is nothing
+ * to keep or the clamped range is no longer zoomed.
+ */
+export function keepRange(range: Range | null, extent: Extent | null): Range | null {
+  if (!range || !extent) return null;
+  const next = clampRange(range, extent);
+  return isZoomed(next, extent) ? next : null;
+}
+
 /** The zoom factor of a two-pointer pinch: fingers apart = zoom in. */
 export function pinchFactor(startDist: number, nowDist: number): number {
   if (!(startDist > 0) || !(nowDist > 0)) return 1;
