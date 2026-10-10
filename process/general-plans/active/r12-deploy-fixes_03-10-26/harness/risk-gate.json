@@ -1,0 +1,11 @@
+{
+  "task": "r12-deploy-fixes",
+  "planPath": "process/general-plans/active/r12-deploy-fixes_03-10-26/r12-deploy-fixes_PLAN_09-10-26.md",
+  "riskLevel": "high",
+  "riskClasses": [
+    "deploy/runtime"
+  ],
+  "mustStopBeforeFinalize": true,
+  "humanApprovalRequired": true,
+  "why": "Deploy scripts run on the user's Windows PC as services: they stop a process by PID, rebuild the web output and start the server. PowerShell cannot run in the sandbox, so runtime behaviour is unproven until the user's PC record; the user must check the diff and the record before merge."
+}

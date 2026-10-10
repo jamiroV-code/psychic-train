@@ -160,6 +160,73 @@
   ],
   "manualChecks": [
     {
+      "id": "PC-1",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-2",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-3",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-4",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-5",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-6",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-7",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-8",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-9",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-10",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-11",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-12",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-13",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-14",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-15",
+      "result": "pending-user"
+    },
+    {
+      "id": "PC-16",
+      "result": "pending-user"
+    }
+  ],
+  "result": "CONDITIONAL",
+  "legacyUserReportedChecks": [
+    {
       "check": "PC step 1: git fetch origin; git checkout claude/r12-deploy-fixes",
       "result": "success",
       "sha": "314bc0a",
@@ -231,6 +298,5 @@
       "sha": "44060ac",
       "source": "user report in session, 2026-10-10; Get-NetTCPConnection (empty) and web.log pasted; the Start-ScheduledTask and Stop-ScheduledTask command lines not pasted"
     }
-  ],
-  "result": "CONDITIONAL"
+  ]
 }

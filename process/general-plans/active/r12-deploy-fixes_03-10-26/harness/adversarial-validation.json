@@ -1,0 +1,70 @@
+{
+  "task": "r12-deploy-fixes",
+  "scenarios": [
+    {
+      "scenario": "wrong process on the port (another program listens on 3000)",
+      "ruled_out": "partly",
+      "rationale": "The script stops whatever listens on the web port by PID, by design (that is the incident fix). The dry run names PID and process name first; PC-7/PC-11 replay it with a decoy. A listener owned by another user or a protected PID fails closed with exit 5 rather than being skipped."
+    },
+    {
+      "scenario": "system PID (4 or less) owns the port",
+      "ruled_out": "yes",
+      "rationale": "Stop-WebPortListener refuses ids of 4 or less and logs \"is protected; refusing to stop it\", exit 5. Shape test covers the guard text; not run on the PC."
+    },
+    {
+      "scenario": "self PID (this script owns the port)",
+      "ruled_out": "yes",
+      "rationale": "The listener id equal to $PID is refused with exit 5. Shape test only."
+    },
+    {
+      "scenario": "port reused by another user's process",
+      "ruled_out": "partly",
+      "rationale": "Stop-Process may be denied; the script re-checks with Get-Process, logs \"could not stop PID <id>: <message>.\" and exits 5. Not exercised on the PC (single-user machine)."
+    },
+    {
+      "scenario": "decoy that survives Stop-Process",
+      "ruled_out": "yes",
+      "rationale": "After the stop the script waits at most 10 s and then logs \"still in use after 10s; not continuing.\" and exits 5; nothing is started over a live listener. Shape test only."
+    },
+    {
+      "scenario": "port listing fails silently (reads as port free)",
+      "ruled_out": "partly",
+      "rationale": "A thrown failure of Get-NetTCPConnection is fail closed (exit 5). A silent empty result would read as free and the new bind then fails; the smoke check then reports a failure and exit 6, or the old server still answers with the old build id and the smoke check compares it to the marker. W1 user report: no throw on a free port at 314bc0a."
+    },
+    {
+      "scenario": "stale marker surviving a rebuild",
+      "ruled_out": "yes",
+      "rationale": "build-web.ps1 removes the marker before the build and writes it only after pnpm exits 0; the stale check also compares BUILD_ID to the marker build_id. Shape tests; W2 PC run saw build ids change with a fresh marker."
+    },
+    {
+      "scenario": "marker from a failed build",
+      "ruled_out": "yes",
+      "rationale": "The marker is written only when the build exit code is 0; a failed build leaves no marker, so start-web.ps1 refuses with exit 4 (\"no build marker\"). Shape test; the refusal text for a missing marker is not yet pasted from the PC."
+    },
+    {
+      "scenario": "first start with no marker",
+      "ruled_out": "yes",
+      "rationale": "start-web.ps1 refuses with \"Stale build: no build marker. Run deploy\\build-web.ps1, then start again.\", exit 4; README documents the first-start rebuild. Not pasted from the PC (PC-6)."
+    },
+    {
+      "scenario": "restart loop between an old script instance and a new one",
+      "ruled_out": "partly",
+      "rationale": "A second start stops the first (observed on the PC at 08:56: the hand-started instance logged \"Web process exited with code 1\"). The README warns against a hand start while the task runs. A task retry storm is bounded by Task Scheduler retries; not proven beyond the observed case."
+    },
+    {
+      "scenario": "smoke false positive from a stale process",
+      "ruled_out": "partly",
+      "rationale": "The check needs HTTP 200 and the served build id (marker file, else HTML) equal to the marker build_id, and stops early when the child exits; an old server with an old build id would not match. Its limit: the port was freed first, so a stale process there is already gone. HTTP non-200 and mismatch branches were never exercised on the PC (known gap)."
+    },
+    {
+      "scenario": "smoke request leaving the machine",
+      "ruled_out": "yes",
+      "rationale": "The URL is built from the script's own Tailscale address and the web port only; the NET-scan gate checks no literal remote host in deploy. A system proxy would be honoured by Invoke-WebRequest (not the case on the home PC)."
+    },
+    {
+      "scenario": "secrets in the marker or logs",
+      "ruled_out": "yes",
+      "rationale": "The marker holds schema, commit, web tree, dirty flag, build id and times only; logs hold ports, PIDs and process names. S-secret-scan and PS-secret-scan gates on added lines print nothing."
+    }
+  ]
+}
