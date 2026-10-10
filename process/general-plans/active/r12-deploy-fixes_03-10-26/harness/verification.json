@@ -220,6 +220,12 @@
       "source": "user report in session, 2026-10-10; console output pasted; output of the Get-NetTCPConnection line typed after it not shown in the paste"
     },
     {
+      "check": "W2 PC step 8b: forced smoke failure, web\\.next\\server renamed, start-web.ps1 -SmokeTimeoutSeconds 10",
+      "result": "success (log path): Build is current, Port 3000: nothing listening, Starting web, Next failed with ENOENT on server\\pages-manifest.json, pnpm ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL, then Smoke check FAILED: web process exited with code 1 before answering (4 s after the start), Smoke check failed; stopping the new web server., Port 3000: nothing listening; nothing to stop. (09:48:42 to 09:48:46). The exit code itself was not shown: the script was run directly in the shell, not through powershell -File, so no exit-code line; the Get-NetTCPConnection line after it printed nothing in the paste",
+      "sha": "44060ac",
+      "source": "user report in session, 2026-10-10; console output pasted; exit code (LASTEXITCODE) not pasted"
+    },
+    {
       "check": "W2 PC step 9: scheduled task start, and listener left after Stop-ScheduledTask",
       "result": "success: task start at 08:56:06 stopped the hand-started node (PID 12284) on the port, started, Smoke check ok 08:56:08 (evidence: marker-file); after Stop-ScheduledTask, Get-NetTCPConnection -State Listen -LocalPort 3000 printed nothing (no orphaned node); no Web process exited line after the stop, expected since the task stop ends the script",
       "sha": "44060ac",
