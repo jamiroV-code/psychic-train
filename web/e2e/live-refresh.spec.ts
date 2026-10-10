@@ -171,7 +171,7 @@ test("an update keeps a ctrl-wheel zoom, the scroll position and an open drill-d
   await page.goto("/screener");
   await expect(page.getByTestId("strip-refreshed")).toBeVisible();
 
-  // A second coin, unzoomed, shows when the new data has landed.
+  // A second coin; T44: it follows BTC's zoom (the small charts are linked).
   await expect(plotOf(page, "BTC")).toBeVisible();
   const symbols = await page.locator('[data-testid^="open-drilldown-"]').evaluateAll((els) =>
     els
@@ -180,7 +180,7 @@ test("an update keeps a ctrl-wheel zoom, the scroll position and an open drill-d
   );
   const other = symbols.find((s) => s !== "BTC")!;
   expect(other, "the seeded board needs a second coin").toBeTruthy();
-  const otherBefore = await lastBarIso(page, other);
+  await lastBarIso(page, other);
 
   await page.getByTestId("open-drilldown-BTC").click();
   await expect(page.getByTestId("drilldown-view")).toBeVisible();
@@ -201,8 +201,9 @@ test("an update keeps a ctrl-wheel zoom, the scroll position and an open drill-d
   const calls = live.boardCalls;
   await page.clock.runFor(61_000);
 
-  await expect(plotOf(page, other)).toHaveAttribute("data-visible-to", isoZ(Date.parse(otherBefore) + DAY));
-  expect(live.boardCalls).toBe(calls + 1);
+  await expect.poll(() => live.boardCalls).toBe(calls + 1);
+  await expect(plotOf(page, other)).toHaveAttribute("data-zoomed", "true");
+  await expect(plotOf(page, other)).toHaveAttribute("data-visible-from", from);
   await expect(plot).toHaveAttribute("data-zoomed", "true");
   await expect(plot).toHaveAttribute("data-visible-from", from);
   expect(await page.evaluate(() => window.scrollY)).toBe(scrollY);

@@ -5,6 +5,7 @@ import { CoinPanel } from "@/components/screener/CoinPanel";
 import { DrillDownView } from "@/components/screener/DrillDownView";
 import { useLiveData } from "@/components/screener/LiveProvider";
 import { SpaghettiChart } from "@/components/screener/SpaghettiChart";
+import type { ChartRange } from "@/lib/island-loader";
 import { fetchChartView, fetchScreenerBoard, fetchSpaghetti as fetchSpaghettiDefault } from "@/lib/api/screener";
 import { shareStructure, VOLATILE } from "@/lib/same-data";
 import {
@@ -37,6 +38,15 @@ export function ScreenerBoard({
   const [board, setBoard] = useState<ScreenerBoardResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [drillDownSymbol, setDrillDownSymbol] = useState<string | null>(null);
+  // T44: one zoom for all the small charts. Zooming or panning any of them
+  // sets it, every other one shows it (clamped into its own data). A new
+  // timeframe starts at the full range; live data keeps it.
+  const [sharedRange, setSharedRange] = useState<ChartRange | null>(null);
+  const [rangeTimeframe, setRangeTimeframe] = useState(timeframe);
+  if (rangeTimeframe !== timeframe) {
+    setRangeTimeframe(timeframe);
+    setSharedRange(null);
+  }
 
   // T43 / S11b: every live check (`tick`) refetches the CURRENT timeframe.
   // A coin whose data is the same keeps the same object (structural sharing),
@@ -88,6 +98,8 @@ export function ScreenerBoard({
             panel={panel}
             onOpenDrillDown={setDrillDownSymbol}
             timeframe={board.timeframe}
+            range={sharedRange}
+            onRangeChange={setSharedRange}
           />
         ))}
       </div>

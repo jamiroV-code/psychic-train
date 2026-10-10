@@ -66,7 +66,7 @@ export function mountOnchainOverlay(target, props) {
  * view and the drill-down MiniChart. No shared store: neither syncs with
  * anything.
  */
-const SIMPLE_LINES_KEYS = ["series", "height", "format", "label", "timeframe", "highlight", "bands", "markers"];
+const SIMPLE_LINES_KEYS = ["series", "height", "format", "label", "timeframe", "highlight", "bands", "markers", "linkedRange", "onRangeChange"];
 
 /**
  * T43 / S11b: still a dispose function, now with an `update(props)` that

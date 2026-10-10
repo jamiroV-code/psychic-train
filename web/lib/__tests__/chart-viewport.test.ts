@@ -122,4 +122,14 @@ describe("chart-viewport", () => {
     const short = extentOf(TIMES.slice(0, 10)) as Extent;
     expect(keepRange({ from: FULL.from, to: FULL.from + 50 * HOUR }, short)).toBeNull();
   });
+
+  it("T44 linked zoom: a shared range on a shorter series clamps into it, span kept", () => {
+    // A coin listed later: its bars start 60 hours after the others'.
+    const late = extentOf(TIMES.slice(60)) as Extent;
+    const shared = { from: FULL.from + 40 * HOUR, to: FULL.from + 70 * HOUR };
+    expect(keepRange(shared, late)).toEqual({ from: late.from, to: late.from + 30 * HOUR });
+    // Entirely inside the shorter series it is shown as is.
+    const inside = { from: FULL.from + 70 * HOUR, to: FULL.from + 80 * HOUR };
+    expect(keepRange(inside, late)).toEqual(inside);
+  });
 });
