@@ -1,4 +1,5 @@
 <script>
+  import { untrack } from "svelte";
   import { Chart, Canvas, Svg, Spline, Points, Axis } from "layerchart";
   import { scaleTime, scaleUtc, scaleLinear } from "d3-scale";
   import { brusselsAxis } from "../lib/chart-time-format";
@@ -14,6 +15,7 @@
     shouldHandleWheel,
     touchActionFor,
     isoZ,
+    keepRange,
   } from "../lib/chart-viewport";
 
   /**
@@ -26,7 +28,11 @@
    * pinch, a drag pans while zoomed, a double-click or double-tap resets, and
    * so does the reset button. The range math is lib/chart-viewport.ts; this
    * file only turns events into calls to it. The y axis re-fits to what is
-   * visible, and the zoom resets whenever the series change.
+   * visible.
+   *
+   * T43 / S11b: the page hands new data in place (`update` in entry.js). The
+   * zoom resets only when the timeframe or the list of line keys changes; a
+   * zoomed range is carried through new data by `keepRange`.
    *
    * Axis text is drawn in an <Svg> layer so it stays vector-sharp at any
    * pixel ratio; the lines stay on the <Canvas> below it.
@@ -65,11 +71,24 @@
 
   const extent = $derived(extentOf(lines.flatMap((l) => l.points.map((p) => p.date.getTime()))));
 
-  // null = the full range. Reset whenever the series prop changes.
+  // null = the full range. Reset when the timeframe or the set of lines
+  // changes; new data for the same lines keeps a zoom, clamped into it.
+  // The props are getters over one object that `update` replaces whole, so
+  // this effect re-runs on every update; it compares the actual values.
   let range = $state(null);
+  let resetKey = null;
   $effect(() => {
-    void series;
-    range = null;
+    const key = `${timeframe ?? ""}|${series.map((s) => s.key).join("\n")}`;
+    untrack(() => {
+      if (resetKey !== null && key !== resetKey && range !== null) range = null;
+      resetKey = key;
+    });
+  });
+  $effect(() => {
+    const next = extent;
+    untrack(() => {
+      if (range !== null) range = keepRange(range, next);
+    });
   });
 
   const view = $derived(range ?? (extent ? fullRange(extent) : null));

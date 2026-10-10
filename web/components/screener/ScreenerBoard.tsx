@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { CoinPanel } from "@/components/screener/CoinPanel";
 import { DrillDownView } from "@/components/screener/DrillDownView";
+import { useLiveData } from "@/components/screener/LiveProvider";
 import { SpaghettiChart } from "@/components/screener/SpaghettiChart";
 import { fetchChartView, fetchScreenerBoard, fetchSpaghetti as fetchSpaghettiDefault } from "@/lib/api/screener";
+import { shareStructure, VOLATILE } from "@/lib/same-data";
 import {
   TIMEFRAMES,
   type ChartView,
@@ -36,11 +38,20 @@ export function ScreenerBoard({
   const [error, setError] = useState<string | null>(null);
   const [drillDownSymbol, setDrillDownSymbol] = useState<string | null>(null);
 
+  // T43 / S11b: every live check (`tick`) refetches the CURRENT timeframe.
+  // A coin whose data is the same keeps the same object (structural sharing),
+  // so its panel and chart are not touched; a failure keeps the panels and
+  // shows the error, the next success clears it. The cancelled flag drops an
+  // answer for a timeframe no longer selected.
+  const { tick } = useLiveData();
+
   useEffect(() => {
     let cancelled = false;
     fetchBoard(timeframe)
       .then((data) => {
-        if (!cancelled) setBoard(data);
+        if (cancelled) return;
+        setBoard((prev) => shareStructure(prev, data, VOLATILE));
+        setError(null);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -48,7 +59,7 @@ export function ScreenerBoard({
     return () => {
       cancelled = true;
     };
-  }, [timeframe, fetchBoard]);
+  }, [timeframe, fetchBoard, tick]);
 
   return (
     <section data-testid="screener-board" aria-label="Screener board">
@@ -86,6 +97,7 @@ export function ScreenerBoard({
       {/* On-demand only (AC-7) — never rendered as part of the grid above. */}
       {drillDownSymbol && (
         <DrillDownView
+          key={drillDownSymbol}
           symbol={drillDownSymbol}
           onClose={() => setDrillDownSymbol(null)}
           fetchChart={fetchChart}

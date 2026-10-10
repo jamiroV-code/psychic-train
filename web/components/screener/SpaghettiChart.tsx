@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { loadIslands } from "@/lib/island-loader";
+import { useLiveData } from "@/components/screener/LiveProvider";
+import type { SimpleLinesProps } from "@/lib/island-loader";
+import { shareStructure, VOLATILE } from "@/lib/same-data";
+import { useSimpleLines } from "@/lib/use-simple-lines";
 import {
   buildSpaghettiLines,
   formatPercentChange,
@@ -25,6 +28,10 @@ export interface SpaghettiChartProps {
  * thicker reference lines. Each legend entry toggles its line (in memory
  * only; persistence is a later slice). Line building and colours live in
  * lib/spaghetti-lines.ts, where they are unit-tested.
+ *
+ * T43 / S11b: refetches when the server's data changes (`dataVersion`),
+ * keeps the last data and shows the error on a failure, and hands new lines
+ * to the mounted chart in place (re-mounted only for a new timeframe).
  */
 export function SpaghettiChart({ timeframe, fetchSpaghetti = fetchSpaghettiDefault }: SpaghettiChartProps) {
   const [data, setData] = useState<SpaghettiResponse | null>(null);
@@ -32,12 +39,15 @@ export function SpaghettiChart({ timeframe, fetchSpaghetti = fetchSpaghettiDefau
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const { dataVersion } = useLiveData();
+
   useEffect(() => {
     let cancelled = false;
-    setError(null);
     fetchSpaghetti(timeframe)
       .then((res) => {
-        if (!cancelled) setData(res);
+        if (cancelled) return;
+        setData((prev) => shareStructure(prev, res, VOLATILE));
+        setError(null);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -45,41 +55,25 @@ export function SpaghettiChart({ timeframe, fetchSpaghetti = fetchSpaghettiDefau
     return () => {
       cancelled = true;
     };
-  }, [timeframe, fetchSpaghetti]);
+  }, [timeframe, fetchSpaghetti, dataVersion]);
 
   const lines = useMemo(() => (data ? buildSpaghettiLines(data, hidden) : []), [data, hidden]);
   const legend = useMemo(() => (data ? spaghettiLegend(data) : []), [data]);
   const span = data ? spaghettiSpanText(data) : null;
   const chartTimeframe = data?.timeframe ?? timeframe;
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    let disposed = false;
-    let dispose: (() => void) | undefined;
-
-    loadIslands()
-      .then((api) => {
-        if (disposed) return;
-        dispose = api.mountSimpleLines(container, {
-          series: lines,
-          height: 320,
-          format: formatPercentChange,
-          label: span ? `Percent change from the window start. ${span}` : "Percent change from the window start",
-          timeframe: chartTimeframe,
-          highlight: true,
-        });
-      })
-      .catch(() => {
-        // The legend and the per-coin notes still say what is there and what is not.
-      });
-
-    return () => {
-      disposed = true;
-      dispose?.();
-    };
-  }, [lines, span, chartTimeframe]);
+  const islandProps = useMemo<SimpleLinesProps>(
+    () => ({
+      series: lines,
+      height: 320,
+      format: formatPercentChange,
+      label: span ? `Percent change from the window start. ${span}` : "Percent change from the window start",
+      timeframe: chartTimeframe,
+      highlight: true,
+    }),
+    [lines, span, chartTimeframe],
+  );
+  useSimpleLines(containerRef, islandProps, chartTimeframe);
 
   const toggle = (symbol: string) =>
     setHidden((prev) => {

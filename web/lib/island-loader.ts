@@ -68,6 +68,28 @@ export interface SimpleLineMarker {
   label: string;
 }
 
+export interface SimpleLinesProps {
+  series: SimpleLineSeries[];
+  height: number;
+  format?: (v: number) => string;
+  label: string;
+  // T34 / S2: when set, the time axis is Brussels time with labels from
+  // chart-time-format; when absent it is exactly the old local axis.
+  timeframe?: Timeframe;
+  // T37 / S6: emphasise the line nearest the pointer (the spaghetti chart).
+  highlight?: boolean;
+  // T38 / S7: additive; absent means no bands and no markers.
+  bands?: SimpleLineBand[];
+  markers?: SimpleLineMarker[];
+}
+
+/**
+ * T43 / S11b: still a dispose FUNCTION, as before, with an optional `update`
+ * that hands the mounted chart new props in place (zoom and scroll kept). A
+ * handle without `update` is re-mounted instead.
+ */
+export type SimpleLinesHandle = (() => void) & { update?: (props: SimpleLinesProps) => void };
+
 export interface IslandApi {
   mountSpreadChart(
     target: HTMLElement,
@@ -121,23 +143,7 @@ export interface IslandApi {
       label: string;
     },
   ): () => void;
-  mountSimpleLines(
-    target: HTMLElement,
-    props: {
-      series: SimpleLineSeries[];
-      height: number;
-      format?: (v: number) => string;
-      label: string;
-      // T34 / S2: when set, the time axis is Brussels time with labels from
-      // chart-time-format; when absent it is exactly the old local axis.
-      timeframe?: Timeframe;
-      // T37 / S6: emphasise the line nearest the pointer (the spaghetti chart).
-      highlight?: boolean;
-      // T38 / S7: additive; absent means no bands and no markers.
-      bands?: SimpleLineBand[];
-      markers?: SimpleLineMarker[];
-    },
-  ): () => void;
+  mountSimpleLines(target: HTMLElement, props: SimpleLinesProps): SimpleLinesHandle;
   mountRegimePanel(
     target: HTMLElement,
     props: {

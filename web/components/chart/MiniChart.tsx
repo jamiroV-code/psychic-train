@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { loadIslands } from "@/lib/island-loader";
+import { useMemo, useRef } from "react";
 import { SERIES } from "@/lib/chart-palette";
+import type { SimpleLinesProps } from "@/lib/island-loader";
+import { useSimpleLines } from "@/lib/use-simple-lines";
 import type { ChartBar, Timeframe } from "@/lib/types/screener";
 
 /**
@@ -11,13 +12,17 @@ import type { ChartBar, Timeframe } from "@/lib/types/screener";
  * A Svelte/LayerChart island (ADR-1), like every other chart in the app. It
  * syncs with nothing and has no crosshair, so it takes no store — it is the
  * simplest use of the shared simple-lines island.
+ *
+ * T43 / S11b: mounted once per timeframe and height; new bars go to the
+ * mounted chart in place, so its zoom survives a refresh. Unchanged bars
+ * (the same arrays, kept by the board's structural sharing) touch nothing.
  */
 
 export interface MiniChartProps {
   price: ChartBar[];
   sma: ChartBar[];
   height?: number;
-  // T34 / S2: optional; when given the time axis is UTC for that timeframe.
+  // T34 / S2: optional; when given the time axis is Brussels time for that timeframe.
   timeframe?: Timeframe;
 }
 
@@ -28,36 +33,20 @@ function points(bars: ChartBar[]) {
 export function MiniChart({ price, sma, height = 120, timeframe }: MiniChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+  const props = useMemo<SimpleLinesProps>(
+    () => ({
+      series: [
+        { key: "price", color: SERIES.primary, width: 2, points: points(price) },
+        { key: "sma", color: SERIES.secondary, width: 1, points: points(sma) },
+      ],
+      height,
+      label: "Close price with its moving average",
+      ...(timeframe ? { timeframe } : {}),
+    }),
+    [price, sma, height, timeframe],
+  );
 
-    let disposed = false;
-    let dispose: (() => void) | undefined;
-
-    loadIslands()
-      .then((api) => {
-        if (disposed) return;
-        dispose = api.mountSimpleLines(container, {
-          series: [
-            { key: "price", color: SERIES.primary, width: 2, points: points(price) },
-            { key: "sma", color: SERIES.secondary, width: 1, points: points(sma) },
-          ],
-          height,
-          label: "Close price with its moving average",
-          ...(timeframe ? { timeframe } : {}),
-        });
-      })
-      .catch(() => {
-        // The drill-down's numbers are all in the surrounding markup, so a
-        // chart that cannot load stays silent rather than breaking the view.
-      });
-
-    return () => {
-      disposed = true;
-      dispose?.();
-    };
-  }, [price, sma, height, timeframe]);
+  useSimpleLines(containerRef, props, `${timeframe ?? ""}|${height}`);
 
   return <div ref={containerRef} data-testid="mini-chart" />;
 }
