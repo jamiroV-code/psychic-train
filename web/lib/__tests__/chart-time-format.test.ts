@@ -1,95 +1,98 @@
-// Runs green in any zone; G-S2-4 runs it again under TZ=Pacific/Kiritimati
-// (UTC+14), where every local date differs from the UTC one for ten hours a day.
 import { describe, expect, it } from "vitest";
-import { formatUtcDateTime, formatUtcTicks, utcAxis, utcTicks } from "@/lib/chart-time-format";
+import { brusselsAxis, brusselsTicks, formatBrusselsTicks } from "@/lib/chart-time-format";
 
-const d = (iso: string) => new Date(iso);
-const iso = (dates: Date[]) => dates.map((x) => x.toISOString());
+// Goldens come from the EU rule (summer time from the last Sunday of March
+// 01:00Z to the last Sunday of October 01:00Z), never from the module.
+const DAY = 86_400_000;
+const at = (iso: string) => new Date(iso);
+const isos = (ticks: Date[]) => ticks.map((t) => t.toISOString().replace(".000Z", "Z"));
 
-function axisLabels(start: string, end: string, tf: Parameters<typeof utcAxis>[2]) {
-  return utcAxis(d(start), d(end), tf, 4).labels;
-}
-
-describe("chart-time-format: per-timeframe goldens", () => {
-  it("15m: HH:mm with the day on the first tick", () => {
-    expect(axisLabels("2026-10-03T13:00:00Z", "2026-10-03T14:00:00Z", "15m")).toEqual([
-      "03 Oct",
-      "13:15",
-      "13:30",
-      "13:45",
-      "14:00",
-    ]);
+describe("chart-time-format", () => {
+  it("15m ticks put the Brussels midnight on the day label", () => {
+    const axis = brusselsAxis(at("2026-10-03T21:00:00Z"), at("2026-10-03T23:30:00Z"), "15m");
+    expect(isos(axis.ticks)).toEqual(["2026-10-03T21:00:00Z", "2026-10-03T22:00:00Z", "2026-10-03T23:00:00Z"]);
+    expect(axis.labels).toEqual(["03 Oct", "04 Oct", "01:00"]);
   });
 
-  it("1h: the first tick of each UTC day reads DD MMM (day-boundary tick)", () => {
-    const axis = utcAxis(d("2026-10-03T18:00:00Z"), d("2026-10-04T06:00:00Z"), "1h", 4);
-    expect(iso(axis.ticks)).toEqual([
-      "2026-10-03T18:00:00.000Z",
-      "2026-10-03T21:00:00.000Z",
-      "2026-10-04T00:00:00.000Z",
-      "2026-10-04T03:00:00.000Z",
-      "2026-10-04T06:00:00.000Z",
-    ]);
-    expect(axis.labels).toEqual(["03 Oct", "21:00", "04 Oct", "03:00", "06:00"]);
+  it("4h frame steps 6 h on the Brussels clock", () => {
+    const axis = brusselsAxis(at("2026-10-03T00:00:00Z"), at("2026-10-04T00:00:00Z"), "4h");
+    expect(isos(axis.ticks)).toEqual(["2026-10-03T04:00:00Z", "2026-10-03T10:00:00Z", "2026-10-03T16:00:00Z", "2026-10-03T22:00:00Z"]);
+    expect(axis.labels).toEqual(["03 Oct", "12:00", "18:00", "04 Oct"]);
   });
 
-  it("4h: HH:mm between UTC midnights", () => {
-    expect(axisLabels("2026-10-01T00:00:00Z", "2026-10-03T00:00:00Z", "4h")).toEqual([
-      "01 Oct",
-      "12:00",
-      "02 Oct",
-      "12:00",
-      "03 Oct",
-    ]);
+  it("1d ticks sit on Brussels midnights across 25 Oct", () => {
+    const axis = brusselsAxis(at("2026-10-23T22:00:00Z"), at("2026-10-27T00:00:00Z"), "1d");
+    expect(isos(axis.ticks)).toEqual(["2026-10-23T22:00:00Z", "2026-10-24T22:00:00Z", "2026-10-25T23:00:00Z", "2026-10-26T23:00:00Z"]);
+    const gaps = axis.ticks.slice(1).map((t, i) => (t.getTime() - axis.ticks[i].getTime()) / 3_600_000);
+    expect(gaps).toEqual([24, 25, 24]);
+    expect(axis.labels).toEqual(["24 Oct", "25 Oct", "26 Oct", "27 Oct"]);
   });
 
-  it("1d: DD MMM on Monday-aligned ticks", () => {
-    const axis = utcAxis(d("2026-09-01T00:00:00Z"), d("2026-10-01T00:00:00Z"), "1d", 4);
-    for (const tick of axis.ticks) {
-      expect(tick.getUTCDay()).toBe(1);
-      expect(tick.getUTCHours()).toBe(0);
-    }
-    expect(axis.labels.length).toBeGreaterThanOrEqual(2);
-    for (const label of axis.labels) expect(label).toMatch(/^\d{2} [A-Z][a-z]{2}$/);
+  it("1w ticks sit on Brussels Mondays", () => {
+    // 28 days / 4 = a 7-day step; Mondays 05, 12, 19 and 26 Oct 2026 (CET from 25 Oct).
+    const axis = brusselsAxis(at("2026-10-01T00:00:00Z"), at("2026-10-29T00:00:00Z"), "1w");
+    expect(isos(axis.ticks)).toEqual(["2026-10-04T22:00:00Z", "2026-10-11T22:00:00Z", "2026-10-18T22:00:00Z", "2026-10-25T23:00:00Z"]);
+    expect(axis.labels).toEqual(["05 Oct", "12 Oct", "19 Oct", "26 Oct"]);
   });
 
-  it("1w: DD MMM within a year", () => {
-    const labels = axisLabels("2026-01-01T00:00:00Z", "2026-10-01T00:00:00Z", "1w");
-    expect(labels).toEqual(["01 Jan", "01 Apr", "01 Jul", "01 Oct"]);
-  });
-});
+  it("year rule beyond 365 days and the month step", () => {
+    const years = brusselsAxis(at("2024-10-01T00:00:00Z"), at("2026-10-01T00:00:00Z"), "1d");
+    expect(isos(years.ticks)).toEqual(["2024-12-31T23:00:00Z", "2025-12-31T23:00:00Z"]);
+    expect(years.labels).toEqual(["Jan 25", "Jan 26"]);
 
-describe("chart-time-format: year rule", () => {
-  it("1d/1w switch to MMM YY only once the span exceeds 365 days", () => {
-    const ticks = [d("2025-01-01T00:00:00Z"), d("2026-01-01T00:00:00Z")];
-    const day = 86_400_000;
-    expect(formatUtcTicks(ticks, "1w", 365 * day)).toEqual(["01 Jan", "01 Jan"]);
-    expect(formatUtcTicks(ticks, "1w", 365 * day + 1)).toEqual(["Jan 25", "Jan 26"]);
-    expect(axisLabels("2024-10-01T00:00:00Z", "2026-10-01T00:00:00Z", "1d")).toEqual(["Jan 25", "Jan 26"]);
+    const months = brusselsAxis(at("2026-01-01T00:00:00Z"), at("2026-10-01T00:00:00Z"), "1w");
+    expect(isos(months.ticks)).toEqual(["2026-03-31T22:00:00Z", "2026-06-30T22:00:00Z", "2026-09-30T22:00:00Z"]);
+    expect(months.labels).toEqual(["01 Apr", "01 Jul", "01 Oct"]);
   });
 
-  it("intraday frames never use the year rule", () => {
-    const ticks = [d("2025-01-01T00:00:00Z"), d("2025-01-01T12:00:00Z")];
-    expect(formatUtcTicks(ticks, "4h", 400 * 86_400_000)).toEqual(["01 Jan", "12:00"]);
-  });
-});
-
-describe("chart-time-format: zone independence", () => {
-  it("labels a 23:30 UTC instant by its UTC day and time, whatever the local zone", () => {
-    const late = d("2026-10-03T23:30:00Z");
-    expect(formatUtcDateTime(late)).toBe("2026-10-03 23:30");
-    expect(formatUtcTicks([d("2026-10-03T23:00:00Z"), late], "15m", 3_600_000)).toEqual(["03 Oct", "23:30"]);
+  it("intraday never uses the year rule", () => {
+    const ticks = [at("2026-10-03T21:00:00Z"), at("2026-10-03T22:00:00Z"), at("2026-10-03T23:00:00Z")];
+    expect(formatBrusselsTicks(ticks, "1h", 400 * DAY)).toEqual(["03 Oct", "04 Oct", "01:00"]);
+    expect(formatBrusselsTicks(ticks, "1d", 400 * DAY)).toEqual(["Oct 26", "Oct 26", "Oct 26"]);
   });
 
-  it("utcAxis.format returns the tick's own label and formats off-tick values in UTC", () => {
-    const axis = utcAxis(d("2026-10-03T18:00:00Z"), d("2026-10-04T06:00:00Z"), "1h", 4);
-    expect(axis.format(d("2026-10-04T00:00:00Z"))).toBe("04 Oct");
-    expect(axis.format(d("2026-10-04T03:00:00Z").getTime())).toBe("03:00");
-    expect(axis.format(d("2026-10-04T05:30:00Z"))).toBe("04 Oct");
+  it("spring change with a 3 h step", () => {
+    const axis = brusselsAxis(at("2026-03-28T22:00:00Z"), at("2026-03-29T04:00:00Z"), "1h");
+    expect(isos(axis.ticks)).toEqual(["2026-03-28T23:00:00Z", "2026-03-29T01:00:00Z", "2026-03-29T04:00:00Z"]);
+    expect(axis.labels).toEqual(["29 Mar", "03:00", "06:00"]);
   });
 
-  it("degenerate domains yield at most one tick", () => {
-    expect(utcTicks(d("2026-10-03T00:00:00Z"), d("2026-10-03T00:00:00Z"))).toHaveLength(1);
-    expect(utcTicks(d("invalid"), d("invalid"))).toHaveLength(0);
+  it("spring change with a 1 h step has no 02:00", () => {
+    const axis = brusselsAxis(at("2026-03-29T00:00:00Z"), at("2026-03-29T03:00:00Z"), "15m");
+    expect(axis.labels).toEqual(["29 Mar", "03:00", "04:00", "05:00"]);
+    expect(axis.labels).not.toContain("02:00");
+  });
+
+  it("autumn change keeps 02:00 once", () => {
+    const hourly = brusselsAxis(at("2026-10-24T23:00:00Z"), at("2026-10-25T03:00:00Z"), "1h");
+    expect(isos(hourly.ticks)).toEqual(["2026-10-24T23:00:00Z", "2026-10-25T00:00:00Z", "2026-10-25T02:00:00Z", "2026-10-25T03:00:00Z"]);
+    expect(hourly.labels).toEqual(["25 Oct", "02:00", "03:00", "04:00"]);
+
+    const quarter = brusselsAxis(at("2026-10-25T00:30:00Z"), at("2026-10-25T01:30:00Z"), "15m");
+    expect(isos(quarter.ticks)).toEqual(["2026-10-25T00:30:00Z", "2026-10-25T00:45:00Z"]);
+    expect(quarter.labels).toEqual(["25 Oct", "02:45"]);
+  });
+
+  it("a 23:30 instant belongs to the next Brussels day", () => {
+    expect(formatBrusselsTicks([at("2026-01-15T23:30:00Z")], "1d", DAY)).toEqual(["16 Jan"]);
+    expect(formatBrusselsTicks([at("2026-07-15T23:30:00Z")], "1d", DAY)).toEqual(["16 Jul"]);
+    expect(formatBrusselsTicks([at("2026-01-15T22:00:00Z"), at("2026-01-15T23:30:00Z")], "1h", DAY)).toEqual(["15 Jan", "16 Jan"]);
+  });
+
+  it("brusselsAxis.format returns tick labels and formats other values", () => {
+    const axis = brusselsAxis(at("2026-10-03T21:00:00Z"), at("2026-10-03T23:30:00Z"), "15m");
+    expect(axis.format(at("2026-10-03T23:00:00Z"))).toBe("01:00");
+    expect(axis.format(at("2026-10-03T23:00:00Z").getTime())).toBe("01:00");
+    // Off-tick: a single label, which is the Brussels day for an intraday frame.
+    expect(axis.format(at("2026-10-03T22:40:00Z"))).toBe("04 Oct");
+    const daily = brusselsAxis(at("2026-10-23T22:00:00Z"), at("2026-10-27T00:00:00Z"), "1d");
+    expect(daily.format(at("2026-10-26T12:00:00Z"))).toBe("26 Oct");
+  });
+
+  it("degenerate or invalid domains give at most one tick", () => {
+    expect(isos(brusselsTicks(at("2026-10-03T12:00:00Z"), at("2026-10-03T12:00:00Z")))).toEqual(["2026-10-03T12:00:00Z"]);
+    expect(brusselsTicks(at("2026-10-04T00:00:00Z"), at("2026-10-03T00:00:00Z")).length).toBeLessThanOrEqual(1);
+    expect(brusselsTicks(new Date("bad"), new Date("bad"))).toEqual([]);
+    expect(brusselsAxis(new Date("bad"), at("2026-10-03T00:00:00Z"), "1d").ticks).toEqual([]);
   });
 });

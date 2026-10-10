@@ -17,7 +17,7 @@ function makeChartView(timeframe: Timeframe): ChartView {
 }
 
 describe("DrillDownView", () => {
-  it("captions the drill-down chart's last bar in UTC with its age and a plain stale marker (T34 / S2)", async () => {
+  it("captions the drill-down chart's last bar in Brussels time with its age and a plain stale marker (T34 / S2)", async () => {
     const fetchChart = vi.fn(async (_symbol: string, tf: Timeframe) => {
       const view = makeChartView(tf);
       view.chart = {
@@ -32,7 +32,7 @@ describe("DrillDownView", () => {
     render(<DrillDownView symbol="BTC" fetchChart={fetchChart} />);
 
     await waitFor(() => expect(screen.getByTestId("chart-freshness-caption")).toBeInTheDocument());
-    expect(screen.getByTestId("chart-freshness-caption").textContent).toBe("Last bar 2026-10-03 14:00 UTC, 22 min ago");
+    expect(screen.getByTestId("chart-freshness-caption").textContent).toBe("Last bar 2026-10-03 16:00 CEST, 22 min ago");
     expect(screen.getByTestId("stale-marker").textContent).toBe("stale");
   });
 

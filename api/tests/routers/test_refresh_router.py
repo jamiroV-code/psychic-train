@@ -6,6 +6,7 @@ worker in the registry, and nothing reaches the network.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -28,6 +29,7 @@ STATUS_KEYS = {
     "next_tick_at",
     "queue_depth",
     "backoff_seconds",
+    "server_time",
 }
 
 
@@ -120,3 +122,45 @@ def test_refresh_now_returns_503_worker_not_running_when_off():
     body = client.get("/api/refresh/status").json()
     assert body["running"] is False
     assert body["disabled_reason"] == "SCREENER_REFRESH_WORKER=0"
+
+
+
+def test_status_server_time_is_iso_z_and_equals_the_worker_clock():
+    refresh_worker.install_worker(_worker(lambda s, tf, exchange=None: Result("ok")))
+
+    body = TestClient(app).get("/api/refresh/status").json()
+
+    assert ISO_Z.match(body["server_time"]), body["server_time"]
+    assert body["server_time"] == "2026-10-04T12:07:00Z"
+
+
+def test_status_server_time_without_worker_uses_adapter_clock_and_is_none_when_it_raises(monkeypatch):
+    monkeypatch.setattr(ccxt_adapter, "_now", lambda: pd.Timestamp("2026-10-05T08:30:15Z"))
+    body = TestClient(app).get("/api/refresh/status").json()
+    assert body["server_time"] == "2026-10-05T08:30:15Z"
+
+    def broken():
+        raise RuntimeError("clock unavailable")
+
+    monkeypatch.setattr(ccxt_adapter, "_now", broken)
+    body = TestClient(app).get("/api/refresh/status").json()
+    assert set(body) == STATUS_KEYS
+    assert body["server_time"] is None
+    assert body["running"] is False and body["queue_depth"] == 0
+
+
+_TS_PATH = Path(__file__).resolve().parents[3] / "web" / "lib" / "types" / "refresh.ts"
+NULLABLE = {"disabled_reason", "last_tick_started", "last_tick_finished", "next_tick_at", "server_time"}
+
+
+def _ts_interface(source: str, name: str) -> dict[str, str]:
+    match = re.search(rf"export interface {name} \{{(.*?)\n\}}", source, re.S)
+    assert match, f"interface {name} not found in {_TS_PATH}"
+    return dict(re.findall(r"^\s*(\w+\??):\s*([^;]+);", match.group(1), re.M))
+
+
+def test_refresh_status_ts_interface_matches_status_keys_and_nullability():
+    fields = _ts_interface(_TS_PATH.read_text(), "RefreshStatus")
+
+    assert set(fields) == STATUS_KEYS == set(refresh_worker.status())
+    assert {k for k, v in fields.items() if "null" in v} == NULLABLE

@@ -1,13 +1,14 @@
-import { formatUtcDateTime } from "@/lib/chart-time-format";
+import { formatDateTimeZone } from "@/lib/brussels-time";
 import type { ChartSeries } from "@/lib/types/screener";
 
 /**
- * The "last bar" caption under a screener chart (T34 / S2).
+ * The "last bar" caption under a screener chart (T34 / S2), in Brussels time
+ * with its CET or CEST abbreviation (T42 / S11a).
  *
  * Aged against the payload's own `server_time`, never the browser clock, so a
  * machine with a wrong clock still reads the same caption:
- *   forming: `Last bar 2026-10-03 14:15 UTC, opened 7 min ago (forming)`
- *   closed:  `Last bar 2026-10-03 14:00 UTC, 22 min ago`
+ *   forming: `Last bar 2026-10-03 16:15 CEST, opened 7 min ago (forming)`
+ *   closed:  `Last bar 2026-10-03 16:00 CEST, 22 min ago`
  * Age is measured from the bar's open in both cases.
  */
 
@@ -33,7 +34,7 @@ function parse(ts: string | null): Date | null {
 export function freshnessCaption(fields: ChartFreshnessFields): string | null {
   const lastBar = parse(fields.last_bar_ts);
   if (!lastBar) return null;
-  const head = `Last bar ${formatUtcDateTime(lastBar)} UTC`;
+  const head = `Last bar ${formatDateTimeZone(lastBar)}`;
   const serverTime = parse(fields.server_time);
   if (!serverTime) return fields.is_partial ? `${head} (forming)` : head;
   const age = formatAge((serverTime.getTime() - lastBar.getTime()) / 1000);

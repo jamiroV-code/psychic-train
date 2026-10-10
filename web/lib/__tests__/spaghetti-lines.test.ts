@@ -6,6 +6,7 @@ import {
   formatPercentChange,
   REFERENCE_WIDTH,
   spaghettiLegend,
+  spaghettiSpanText,
 } from "@/lib/spaghetti-lines";
 import { SERIES } from "@/lib/chart-palette";
 import type { SpaghettiLine, SpaghettiResponse } from "@/lib/types/screener";
@@ -83,5 +84,25 @@ describe("spaghetti-lines", () => {
     expect(new Set(colors).size).toBe(6);
     expect(colors).not.toContain(SERIES.primary);
     expect(colors).not.toContain(SERIES.secondary);
+  });
+
+  it("day-level span reads Brussels dates", () => {
+    // 01 Oct 00:00 and 03 Oct 00:00 on the data's own clock are 02:00 CEST the same days.
+    expect(spaghettiSpanText(response([line("SOL", true, [0, 1, 2])]))).toBe(
+      "Last 3 days, 2026-10-01 to 2026-10-03 (Brussels time)",
+    );
+  });
+
+  it("intraday span carries one zone abbreviation", () => {
+    const sol = { ...line("SOL"), window_start: "2026-10-09T12:00:00Z", window_end: "2026-10-10T14:00:00Z", bars: 27 };
+    const data: SpaghettiResponse = { ...response([sol], []), timeframe: "1h" };
+    expect(spaghettiSpanText(data)).toBe("Last 27 hourly bars, 2026-10-09 14:00 to 2026-10-10 16:00 CEST");
+  });
+
+  it("span across the 25 Oct change carries both abbreviations", () => {
+    // 00:00Z is 02:00 CEST; 03:00Z is 04:00 CET, after the clock went back at 01:00Z.
+    const sol = { ...line("SOL"), window_start: "2026-10-25T00:00:00Z", window_end: "2026-10-25T03:00:00Z", bars: 4 };
+    const data: SpaghettiResponse = { ...response([sol], []), timeframe: "1h" };
+    expect(spaghettiSpanText(data)).toBe("Last 4 hourly bars, 2026-10-25 02:00 CEST to 2026-10-25 04:00 CET");
   });
 });

@@ -4,6 +4,7 @@ import {
   ESTIMATE_LABELS,
   ageEstimatePart,
   boundaryMarkers,
+  btcLegSpanText,
   compositeEstimatePart,
   estimatePartText,
   legBands,
@@ -114,5 +115,12 @@ describe("btc-leg-lines", () => {
       expect(text).not.toMatch(words);
       expect(ESTIMATE_LABELS).toContain(part.label);
     }
+  });
+
+  it("span dates are Brussels dates", () => {
+    // 2026-03-28T23:30Z is 00:30 CET on 29 Mar in Brussels.
+    expect(
+      btcLegSpanText({ first_bar_ts: "2026-03-28T23:30:00Z", last_bar_ts: "2026-10-08T00:00:00Z", bar_count: 195 }),
+    ).toBe("Daily BTC, 2026-03-29 to 2026-10-08 (Brussels time), 195 bars (all cached history)");
   });
 });
