@@ -81,6 +81,17 @@ export interface SimpleLinesProps {
   // T38 / S7: additive; absent means no bands and no markers.
   bands?: SimpleLineBand[];
   markers?: SimpleLineMarker[];
+  // T44: linked zoom. With `onRangeChange` the chart reports every zoom, pan
+  // or reset (null = full range) and applies `linkedRange`, clamped into its
+  // own data. Absent means the chart zooms on its own, as before.
+  linkedRange?: ChartRange | null;
+  onRangeChange?: (range: ChartRange | null) => void;
+}
+
+/** A visible time range in epoch milliseconds. */
+export interface ChartRange {
+  from: number;
+  to: number;
 }
 
 /**

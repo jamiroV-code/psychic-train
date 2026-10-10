@@ -3,6 +3,7 @@ import { ChartFreshness } from "@/components/chart/ChartFreshness";
 import { MiniChart } from "@/components/chart/MiniChart";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
 import { formatDateTimeZone } from "@/lib/brussels-time";
+import type { ChartRange } from "@/lib/island-loader";
 import { formatUnavailableReason } from "@/lib/format-unavailable-reason";
 import { TIMEFRAMES, type CoinPanel as CoinPanelData, type GainChip, type Timeframe } from "@/lib/types/screener";
 
@@ -11,6 +12,9 @@ export interface CoinPanelProps {
   onOpenDrillDown?: (symbol: string) => void;
   // T34 / S2: the board's timeframe, so the chart's time axis is Brussels time for it.
   timeframe?: Timeframe;
+  // T44: the board's shared zoom; every small chart shows the same range.
+  range?: ChartRange | null;
+  onRangeChange?: (range: ChartRange | null) => void;
 }
 
 function formatPercent(value: number | null): string {
@@ -29,7 +33,7 @@ function chipTitle(tf: Timeframe, chip: GainChip | undefined): string | undefine
 
 // T43 / S11b: memoised, so a refresh that leaves this coin's data the same
 // object (structural sharing in the board) re-renders nothing here.
-export const CoinPanel = memo(function CoinPanel({ panel, onOpenDrillDown, timeframe }: CoinPanelProps) {
+export const CoinPanel = memo(function CoinPanel({ panel, onOpenDrillDown, timeframe, range, onRangeChange }: CoinPanelProps) {
   return (
     <div data-testid={`coin-panel-${panel.symbol}`} className="coin-panel">
       <div className="coin-panel__header">
@@ -49,7 +53,13 @@ export const CoinPanel = memo(function CoinPanel({ panel, onOpenDrillDown, timef
 
       {panel.chart.available ? (
         <>
-          <MiniChart price={panel.chart.price} sma={panel.chart.sma} timeframe={timeframe} />
+          <MiniChart
+            price={panel.chart.price}
+            sma={panel.chart.sma}
+            timeframe={timeframe}
+            range={range}
+            onRangeChange={onRangeChange}
+          />
           <ChartFreshness chart={panel.chart} />
         </>
       ) : (

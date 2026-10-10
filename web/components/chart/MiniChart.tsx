@@ -2,7 +2,7 @@
 
 import { useMemo, useRef } from "react";
 import { SERIES } from "@/lib/chart-palette";
-import type { SimpleLinesProps } from "@/lib/island-loader";
+import type { ChartRange, SimpleLinesProps } from "@/lib/island-loader";
 import { useSimpleLines } from "@/lib/use-simple-lines";
 import type { ChartBar, Timeframe } from "@/lib/types/screener";
 
@@ -24,13 +24,16 @@ export interface MiniChartProps {
   height?: number;
   // T34 / S2: optional; when given the time axis is Brussels time for that timeframe.
   timeframe?: Timeframe;
+  // T44: linked zoom (the board's small charts). Both or neither.
+  range?: ChartRange | null;
+  onRangeChange?: (range: ChartRange | null) => void;
 }
 
 function points(bars: ChartBar[]) {
   return bars.map((bar) => ({ timestamp: bar.timestamp, value: bar.close }));
 }
 
-export function MiniChart({ price, sma, height = 120, timeframe }: MiniChartProps) {
+export function MiniChart({ price, sma, height = 120, timeframe, range, onRangeChange }: MiniChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const props = useMemo<SimpleLinesProps>(
@@ -42,8 +45,9 @@ export function MiniChart({ price, sma, height = 120, timeframe }: MiniChartProp
       height,
       label: "Close price with its moving average",
       ...(timeframe ? { timeframe } : {}),
+      ...(onRangeChange ? { linkedRange: range ?? null, onRangeChange } : {}),
     }),
-    [price, sma, height, timeframe],
+    [price, sma, height, timeframe, range, onRangeChange],
   );
 
   useSimpleLines(containerRef, props, `${timeframe ?? ""}|${height}`);
