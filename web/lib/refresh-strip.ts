@@ -69,7 +69,7 @@ export function isOverdue(status: LiveStatus, nowMs: number | null): boolean {
 }
 
 export function stripModel(status: LiveStatus, nowMs: number | null): StripModel {
-  const good = status.lastGood;
+  const last = status.lastGood;
   const model: StripModel = {
     state: "waiting",
     checking: null,
@@ -85,7 +85,7 @@ export function stripModel(status: LiveStatus, nowMs: number | null): StripModel
     help: STRIP_HELP,
   };
 
-  const ref = nowMs ?? good?.serverMs ?? null;
+  const ref = nowMs ?? last?.serverMs ?? null;
   const time = (ms: number | null) => stripTime(ms, ref);
 
   if (ref !== null) {
@@ -93,8 +93,8 @@ export function stripModel(status: LiveStatus, nowMs: number | null): StripModel
     model.zone = `Times are Brussels time, ${zoneAbbr(at)} (${offsetLabel(at)}).`;
   }
 
-  if (good) {
-    const s = good.status;
+  if (last) {
+    const s = last.status;
     const finished = instant(s.last_tick_finished);
     const next = instant(s.next_tick_at);
     if (!s.running) {
@@ -112,18 +112,18 @@ export function stripModel(status: LiveStatus, nowMs: number | null): StripModel
       model.notes.push(`${s.last_tick_failed} pairs did not refresh in that run`);
     }
     if (s.backoff_seconds > 0) {
-      const retry = next ?? (good.serverMs !== null ? good.serverMs + s.backoff_seconds * 1000 : null);
+      const retry = next ?? (last.serverMs !== null ? last.serverMs + s.backoff_seconds * 1000 : null);
       model.notes.push(`Refreshes are failing; retrying about ${time(retry)}`);
     }
-    model.checked = `Page checked ${time(good.serverMs)}`;
+    model.checked = `Page checked ${time(last.serverMs)}`;
     if (isOverdue(status, nowMs)) model.overdue = `Refresh overdue: expected ${time(next)}`;
   }
 
   if (status.phase === "failed") {
-    model.failed = `Could not check the server. Last answer from the server: ${good ? time(good.serverMs) : "n/a"}.`;
+    model.failed = `Could not check the server. Last answer from the server: ${last ? time(last.serverMs) : "n/a"}.`;
   }
 
-  if (status.phase === "waiting" && !good) model.checking = STRIP_CHECKING;
+  if (status.phase === "waiting" && !last) model.checking = STRIP_CHECKING;
 
   model.state =
     status.phase === "failed" ? "failed" : model.overdue ? "overdue" : status.phase === "waiting" ? "waiting" : "normal";

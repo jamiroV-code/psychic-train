@@ -12,7 +12,7 @@ const island = vi.hoisted(() => {
   };
   const dispose = vi.fn();
   const update = vi.fn();
-  const mountSimpleLines = vi.fn(() => (state.withUpdate ? Object.assign(() => dispose(), { update }) : () => dispose()));
+  const mountSimpleLines = vi.fn((_target: HTMLElement, _props: unknown) => (state.withUpdate ? Object.assign(() => dispose(), { update }) : () => dispose()));
   const api = { mountSimpleLines };
   const loadIslands = vi.fn(() => {
     if (!state.deferred) return Promise.resolve(api);
