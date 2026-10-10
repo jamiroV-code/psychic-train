@@ -188,6 +188,42 @@
       "result": "NOT RUN",
       "sha": "",
       "source": "user report in session, 2026-10-09; output not pasted"
+    },
+    {
+      "check": "W2 PC step 5: start-web.ps1 at the C3 head (stale check, port stop, child start, smoke check)",
+      "result": "success: Build is current (commit 44060ac), Starting web on <ip>:3000, Next Ready in 1029ms, Smoke check ok ... returned 200 and build id matches the marker (evidence: marker-file), 08:41:13; same result at 08:54:12 and 08:56:08 after a rebuild. Evidence A (U3) holds; evidence B not needed. Also covers W1 step 5 (marker written by a real build, Build is current, real server start)",
+      "sha": "44060ac",
+      "source": "user report in session, 2026-10-10; console and web.log lines pasted; build-web.ps1 console output not pasted"
+    },
+    {
+      "check": "W2 PC step 6: exit-code passthrough after the node listener was stopped",
+      "result": "success: pnpm printed ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL, script logged Web process exited with code 1 and exited 1 (08:49:26)",
+      "sha": "44060ac",
+      "source": "user report in session, 2026-10-10; script output pasted; the stop command in the second window not pasted"
+    },
+    {
+      "check": "W2 PC step 7: stale refusal after touching web/app/page.tsx",
+      "result": "success: Stale build: tracked web file newer than the build: web/app/page.tsx. Run deploy\\build-web.ps1, then start again. exit code 4 (08:52:56)",
+      "sha": "44060ac",
+      "source": "user report in session, 2026-10-10; output pasted"
+    },
+    {
+      "check": "W2 PC real port-scoped stop of a running next server",
+      "result": "success: a start at 08:56:06 logged Port 3000: stopping PID 12284 (node) listening on it, Port 3000: free, then started and passed the smoke check; the earlier instance logged Web process exited with code 1 (08:56:07)",
+      "sha": "44060ac",
+      "source": "user report in session, 2026-10-10; web.log lines pasted; which command started the 08:56:06 run not pasted"
+    },
+    {
+      "check": "W2 PC step 8: forced smoke failure (exit 6, port left free)",
+      "result": "NOT OBSERVED: no Smoke check FAILED line and no exit 6 in the pasted output; next start was ready in about 1 s, so -SmokeTimeoutSeconds 5 cannot force a failure",
+      "sha": "44060ac",
+      "source": "user report in session, 2026-10-10"
+    },
+    {
+      "check": "W2 PC step 9: scheduled task start, and listener left after Stop-ScheduledTask",
+      "result": "UNKNOWN: no line in the pasted output is attributable to the scheduled task; the Get-NetTCPConnection output after the stop was not pasted",
+      "sha": "44060ac",
+      "source": "user report in session, 2026-10-10"
     }
   ],
   "result": "CONDITIONAL"

@@ -62,3 +62,18 @@ None.
 
 ## 11 Context cost
 Read: CLAUDE.md (session), the envelope, the named plan line ranges, W1 report headings 8, 10 (and the 6/11/12 tail while extending the record format). No other docs opened. About 30 tool calls.
+
+## 12 PC check (added after the session, user report 2026-10-10)
+The user ran the check on the PC at `44060ac` (the log says `Build is current: commit 44060ac`) and pasted the console output of three `start-web.ps1` runs and the `web.log` tail. NOT pasted: steps 1-4 output (checkout, parser, dry run, `build-web.ps1`), the command used in the second window, and the `Get-NetTCPConnection` output from step 9.
+
+| Step | Result | Evidence pasted |
+|---|---|---|
+| 1-4 checkout, parser, dry run, build | Not pasted. Implied by what was pasted: the PC was at 44060ac, `start-web.ps1` and `_common.ps1` parsed and ran, and a real build wrote a marker (build id changed `8_pAGY...` to `W1ZAw...`, still `Build is current`). Not an explicit parser record. | no |
+| 5 real start and smoke check | PASS. `Starting web on 100.x:3000`, Next `Ready in 1029ms`, `Smoke check ok: ... returned 200 and build id ... matches the marker (evidence: marker-file)` about 2 s after the start. Same at 08:54:12 and 08:56:08. Evidence A holds (U3: `next start` serves the marker file); B was not needed. This also covers W1 step 5. | yes |
+| 6 exit-code passthrough | PASS. Node stopped from a second window; pnpm printed `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL`; script logged `Web process exited with code 1` and `exit code: 1`. The pnpm error is pnpm reporting the stopped child, expected. | output yes, stop command no |
+| 7 stale refusal | PASS. `Stale build: tracked web file newer than the build: web/app/page.tsx. ...`, `exit code: 4`. | yes |
+| extra: real port-scoped stop | PASS. Run at 08:56:06 logged `Port 3000: stopping PID 12284 (node) listening on it.`, `Port 3000: free.`, then started and passed. The instance started at 08:54 then logged `Web process exited with code 1`. This is the README hand-start warning in action: a second copy stops the running server and the first script exits non-zero. | log yes, which command no |
+| 8 forced smoke failure (exit 6) | NOT OBSERVED. No `Smoke check FAILED` line and no exit 6 in the paste. With Next ready in about 1 s, `-SmokeTimeoutSeconds 5` cannot force a failure; the 08:56:06 run may have been this step and passed. | n/a |
+| 9 scheduled task, listener after Stop-ScheduledTask | UNKNOWN. No pasted line is attributable to the task. | no |
+
+Open for the PC record (W3 runbook): the exit-6 path (smoke failure, cleanup of the node listener and the pnpm parent, port left free) needs a way to make `next start` fail or not answer, not a short timeout; and step 9. Until then AC-R12-3's failure half stays CONDITIONAL. AC-R12-5 is text only and unaffected.
