@@ -62,7 +62,7 @@ test("the board renders one panel per watchlist symbol, from a real request", as
   for (const symbol of manifest.watchlist) {
     await expect(page.getByTestId(`coin-panel-${symbol}`)).toBeVisible();
   }
-  await expect(page.getByTestId("screener-board-grid").locator("> div")).toHaveCount(
+  await expect(page.getByTestId("screener-board-grid").locator('[data-testid^="coin-panel-"]')).toHaveCount(
     manifest.watchlist.length
   );
   // No error path was taken — if the client, CORS or the shape were broken,
