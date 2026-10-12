@@ -174,4 +174,4 @@ def test_layout_routes_use_only_get_post_delete():
     paths = {p: ops for p, ops in app.openapi()["paths"].items() if p.startswith("/api/layout")}
     assert list(paths) == ["/api/layout/{section}"]
     assert set(paths["/api/layout/{section}"]) == {"get", "post", "delete"}
-    assert layout_store.SECTIONS == ("crypto",)
+    assert layout_store.SECTIONS == ("crypto", "equities")

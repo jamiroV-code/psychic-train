@@ -13,6 +13,7 @@ import pytest
 fastapi_testclient = pytest.importorskip("fastapi.testclient")
 
 from api.data import equities_refresh, equities_store, lse_adapter  # noqa: E402
+from api.data import layout as layout_store  # noqa: E402
 from api.data import watchlist as watchlist_store  # noqa: E402
 from api.main import app  # noqa: E402
 from api.tests import equities_fixtures as fx  # noqa: E402
@@ -111,7 +112,11 @@ def test_existing_ticker_does_not_trigger_refresh(client, refreshes):
     assert refreshes == [1]
 
 
-def test_layout_failure_is_logged_not_failed(client, refreshes, caplog):
+def test_layout_failure_is_logged_not_failed(client, refreshes, caplog, monkeypatch):
+    def fail(*args, **kwargs):
+        raise OSError("layout write failed")
+
+    monkeypatch.setattr(layout_store, "place_coin", fail)
     with caplog.at_level(logging.WARNING):
         resp = _add(client, "AAPL", group_id="g-missing")
         assert resp.status_code == 200 and resp.json() == {"tickers": ["AAPL"]}
