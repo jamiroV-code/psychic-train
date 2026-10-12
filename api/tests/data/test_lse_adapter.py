@@ -234,7 +234,7 @@ def test_request_uses_explicit_timeout_and_header_auth(isolated_cache, keyed, sy
     (req,) = rec.requests
     timeout = req.extensions["timeout"]
     assert all(timeout[k] is not None and timeout[k] <= 15 for k in ("connect", "read", "write", "pool"))
-    assert req.headers[lse_adapter.AUTH_HEADER] == f"Bearer {SENTINEL}"
+    assert req.headers[lse_adapter.AUTH_HEADER] == SENTINEL
     assert SENTINEL not in str(req.url)
     assert req.url.params["symbol"] == "SYNTH"
     assert int(req.url.params["limit"]) <= 5000
