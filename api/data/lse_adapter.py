@@ -5,16 +5,17 @@ Private use only: LSE data may not be redistributed without a separate licence
 result carries `redistributable=False` and every cached parquet carries the
 footer tag `mysite.redistributable=false`.
 
-Verified behaviour (`lse-data-verification_17-09-26/findings.md`): rows are
-`{symbol, open, high, low, close, volume, timestamp ISO}`, at most 5000 per
-request; the feed also has bars on NYSE-closed days (filtered here by an
-explicit session calendar); delisted tickers 404 (survivorship bias); series
-are split-adjusted only; the daily close can include extended-hours trades.
-
-ASSUMED until the user-PC probe (`s3-probe/lse_probe.py`) confirms them:
-`BASE_URL`, `CANDLES_PATH`, the header auth scheme (`AUTH_HEADER`), the query
-parameter names, and the bar-timestamp convention (bars are keyed by the UTC
-calendar date of `timestamp`). They are isolated constants for that reason.
+Verified behaviour (`lse-data-verification_17-09-26/findings.md`, and the
+live service probed by the user on 2026-10-12): `GET BASE_URL + CANDLES_PATH`
+with the bare key in the `x-api-key` header and query `symbol`, `timeframe`,
+`order`, `limit` (at most 5000), `start`/`end` (ISO dates). Success is a bare
+JSON list of rows `{ts, symbol, open, high, low, close, volume}` where `ts` is
+a timezone-less string like `"2026-09-01 00:00:00.000000"`; `ts` is renamed to
+`timestamp` here and read as that UTC calendar date. An unknown ticker 404s
+(survivorship bias: delisted tickers too), a malformed request 400s with an
+empty body, a missing or bad key 401s. The feed also has bars on NYSE-closed
+days (filtered here by an explicit session calendar); series are
+split-adjusted only; the daily close can include extended-hours trades.
 
 Public contract: `fetch_equity_ohlcv` never raises past this module and never
 logs; `reason` is a closed enum string, never exception text. The API key is
@@ -37,9 +38,9 @@ from api.data import cache
 from api.data.ccxt_adapter import _derive_weekly_from_daily
 from api.data.equities_store import TICKER_RE
 
-BASE_URL = "https://londonstrategicedge.com/api"  # ASSUMED (probe P-S3-1)
-CANDLES_PATH = "/vault/candles"  # ASSUMED (probe P-S3-1)
-AUTH_HEADER = "Authorization"  # ASSUMED scheme: "Bearer <key>" (probe P-S3-1)
+BASE_URL = "https://api.londonstrategicedge.com/vault"
+CANDLES_PATH = "/candles"
+AUTH_HEADER = "x-api-key"  # value is the bare key, no scheme prefix
 TIMEOUT = httpx.Timeout(15.0)
 MAX_ROWS_PER_REQUEST = 5000
 DAILY_HISTORY_DAYS = 2500  # ~7 years of sessions, well under the 5000-row cap
@@ -161,22 +162,34 @@ def is_nyse_session(d: date) -> bool:
 
 
 def extract_rows(payload) -> list[dict]:
-    """The row list of a candles response: a bare list, or a list under a
-    wrapper key. Raises ValueError on any other shape."""
+    """The row list of a candles response: a bare list (the live shape), or a
+    list under a wrapper key. The live `ts` key is renamed to `timestamp`.
+    Raises ValueError on any other shape."""
+    rows = None
     if isinstance(payload, list):
-        return payload
-    if isinstance(payload, dict):
+        rows = payload
+    elif isinstance(payload, dict):
         for key in ("data", "candles", "rows", "results"):
             if isinstance(payload.get(key), list):
-                return payload[key]
-    raise ValueError("unrecognised candles payload")
+                rows = payload[key]
+                break
+    if rows is None:
+        raise ValueError("unrecognised candles payload")
+    return [_rename_ts(r) for r in rows]
+
+
+def _rename_ts(row):
+    if isinstance(row, dict) and "ts" in row and "timestamp" not in row:
+        row = {("timestamp" if k == "ts" else k): v for k, v in row.items()}
+    return row
 
 
 def parse_candles(payload) -> pd.DataFrame:
     """Documented row shape -> `cache.OHLCV_COLUMNS` frame of NYSE sessions.
 
-    Bars are keyed by the UTC calendar date of `timestamp` (normalised to
-    00:00 UTC like the crypto daily bars); non-session days are dropped and a
+    Bars are keyed by the UTC calendar date of `timestamp` (live `ts`; a
+    timezone-less value is read as UTC), normalised to
+    00:00 UTC like the crypto daily bars; non-session days are dropped and a
     duplicated date keeps its last row.
     """
     rows = extract_rows(payload)
@@ -280,7 +293,7 @@ def _request_daily(symbol: str, key: str, now: pd.Timestamp, transport) -> tuple
             resp = client.get(
                 BASE_URL + CANDLES_PATH,
                 params=params,
-                headers={AUTH_HEADER: f"Bearer {key}"},
+                headers={AUTH_HEADER: key},
                 timeout=TIMEOUT,
             )
     except httpx.TimeoutException:
