@@ -6,6 +6,7 @@ import { FreshnessStrip } from "@/components/screener/FreshnessStrip";
 import { LiveProvider } from "@/components/screener/LiveProvider";
 import { ScreenerBoard } from "@/components/screener/ScreenerBoard";
 import type { SimpleLinesProps } from "@/lib/island-loader";
+import type { Layout } from "@/lib/types/layout";
 import type { BtcLegChartResponse } from "@/lib/types/btc-legs";
 import type { RefreshStatus } from "@/lib/types/refresh";
 import type { ChartView, ScreenerBoardResponse, SpaghettiResponse, Timeframe } from "@/lib/types/screener";
@@ -30,6 +31,18 @@ const island = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/island-loader", () => ({ loadIslands: island.loadIslands }));
+
+// T41 / S5b: the board also loads the layout; one group, no coins (the
+// board appends unplaced coins), so no real fetch runs.
+const fetchLayoutStub = async (): Promise<Layout> => ({
+  version: 1,
+  section: "crypto",
+  revision: 0,
+  saved_at: null,
+  source: "default",
+  groups: [{ id: "main", name: "Main", coins: [] }],
+  hidden_lines: [],
+});
 
 const SERVER = "2026-10-03T14:22:00Z";
 
@@ -123,12 +136,12 @@ function setup(opts: Setup = {}) {
     <>
       <FreshnessStrip />
       <BtcLegChart fetchData={fetchBtc} />
-      <ScreenerBoard fetchBoard={fetchBoard} fetchChart={fetchChart} fetchSpaghetti={fetchSpaghetti} />
+      <ScreenerBoard fetchLayout={fetchLayoutStub} fetchBoard={fetchBoard} fetchChart={fetchChart} fetchSpaghetti={fetchSpaghetti} />
     </>
   );
   let tree: ReactNode =
     opts.provider === false ? (
-      <ScreenerBoard fetchBoard={fetchBoard} fetchChart={fetchChart} fetchSpaghetti={fetchSpaghetti} />
+      <ScreenerBoard fetchLayout={fetchLayoutStub} fetchBoard={fetchBoard} fetchChart={fetchChart} fetchSpaghetti={fetchSpaghetti} />
     ) : (
       <LiveProvider fetchStatus={fetchStatus} mono={() => monoNow}>
         {page}
