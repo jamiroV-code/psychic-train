@@ -361,3 +361,62 @@ def _finish(symbol: str, timeframe: str, df: pd.DataFrame, now: pd.Timestamp, re
     if now - newest > STALE_AFTER:
         return EquityOhlcvResult(symbol, timeframe, df, "stale", "newest-bar-old")
     return EquityOhlcvResult(symbol, timeframe, df, "ok", reason)
+
+
+# --- S9A: cache-only read and forced refresh ----------------------------------
+
+from api.data.freshness import as_utc  # noqa: E402  (S9A: added, no existing line changed)
+
+
+def read_cached_equity(symbol: str, timeframe: str, now=None) -> tuple[EquityOhlcvResult, pd.Timestamp | None]:
+    """The cached bars and their sidecar `fetched_at`, never the network.
+
+    Validates like `fetch_equity_ohlcv` and never reads `LSE_API_KEY`. No
+    cached file gives `unavailable/no-data`; a newest bar older than
+    `STALE_AFTER` gives `stale/newest-bar-old`. The closed `Reason` has no
+    cache-read value, so a served cache reports `fresh-cache` whatever its
+    age; `fetched_at` (None when unknown) carries the real fetch time.
+    Never raises.
+    """
+    ticker = symbol.strip().upper() if isinstance(symbol, str) else ""
+    empty = pd.DataFrame(columns=OHLCV_COLUMNS)
+    if timeframe not in ("1d", "1w"):
+        return EquityOhlcvResult(ticker, timeframe, empty, "unavailable", "unsupported-timeframe"), None
+    if not TICKER_RE.match(ticker):
+        return EquityOhlcvResult(ticker, timeframe, empty, "bad_symbol", "invalid-ticker"), None
+    now = as_utc(_now() if now is None else now)
+    cached = _read_cache(ticker, timeframe)
+    if cached is None or cached.empty:
+        return EquityOhlcvResult(ticker, timeframe, empty, "unavailable", "no-data"), None
+    return _finish(ticker, timeframe, cached, now, "fresh-cache"), _fetched_at(ticker, timeframe)
+
+
+def refresh_equity(symbol: str, transport=None, now=None) -> EquityOhlcvResult:
+    """`fetch_equity_ohlcv` for `1d` without its 6 h fresh-cache branch: one
+    GET (when a key is set), then both `1d` and `1w` are written. Used by the
+    manual refresh and the market-hours tick, which must fetch even within
+    6 h of the last fetch. Closed reasons; never raises.
+    """
+    try:
+        ticker = symbol.strip().upper() if isinstance(symbol, str) else ""
+        empty = pd.DataFrame(columns=OHLCV_COLUMNS)
+        if not TICKER_RE.match(ticker):
+            return EquityOhlcvResult(ticker, "1d", empty, "bad_symbol", "invalid-ticker")
+        now = as_utc(_now() if now is None else now)
+
+        key = os.environ.get("LSE_API_KEY")
+        if not key:
+            return _with_cached(ticker, "1d", "unavailable", "missing-key")
+
+        daily, status, reason = _request_daily(ticker, key, now, transport)
+        if daily is None:
+            return _with_cached(ticker, "1d", status, reason)
+
+        _write_cache(ticker, "1d", daily, now)
+        _write_cache(ticker, "1w", _derive_weekly_from_daily(daily, SOURCE), now)
+        return _finish(ticker, "1d", daily, now, reason)
+    except Exception:
+        return EquityOhlcvResult(
+            symbol if isinstance(symbol, str) else "", "1d",
+            pd.DataFrame(columns=OHLCV_COLUMNS), "unavailable", "network-error",
+        )
