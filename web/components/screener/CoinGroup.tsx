@@ -3,7 +3,9 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { CoinActions } from "@/components/screener/CoinActions";
 import { CoinPanel } from "@/components/screener/CoinPanel";
+import { useVariant } from "@/components/screener/VariantProvider";
 import type { ChartRange } from "@/lib/island-loader";
+import { countText } from "@/lib/screener-variant";
 import type { LayoutGroup } from "@/lib/types/layout";
 import type { CoinPanel as CoinPanelData, Timeframe } from "@/lib/types/screener";
 
@@ -120,6 +122,7 @@ export function CoinGroup({
   onMoveGroup,
   onDeleteGroup,
 }: CoinGroupProps) {
+  const variant = useVariant();
   const inputId = useId();
   const headingId = `group-heading-${group.id}`;
   const [renaming, setRenaming] = useState(false);
@@ -165,7 +168,7 @@ export function CoinGroup({
           {group.name}
         </h2>
         <span className="coin-group__count" data-testid={`group-count-${group.id}`}>
-          {count === 1 ? "1 coin" : `${count} coins`}
+          {countText(variant, count)}
         </span>
         <div className="coin-group__controls">
           <button
@@ -241,7 +244,7 @@ export function CoinGroup({
 
       {count === 0 ? (
         <p className="coin-group__empty" data-testid={`group-empty-${group.id}`}>
-          No coins in this group yet.
+          No {variant.nounPlural} in this group yet.
         </p>
       ) : (
         <div className="coin-group__grid">

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useVariant } from "@/components/screener/VariantProvider";
 import { InvalidSymbolError, WatchlistFullError } from "@/lib/api/watchlist";
-import { CAP_MESSAGE, isFull, MAX_COINS } from "@/lib/layout-state";
+import { isFull, MAX_COINS } from "@/lib/layout-state";
 
 export interface AddCoinFormProps {
   /** Coins on the watchlist now. */
@@ -17,8 +18,10 @@ export interface AddCoinFormProps {
  * last). At the 30-coin cap the button is aria-disabled, the cap message
  * stays on screen and a click sends nothing. Errors go to one alert line;
  * after a successful add focus stays in the cleared input.
+ * T47 / S9C: labels, count and cap text name the variant (coin or ticker).
  */
 export function AddCoinForm({ count, groups, addCoin, onAdded }: AddCoinFormProps) {
+  const variant = useVariant();
   const id = useId();
   const [symbol, setSymbol] = useState("");
   const [groupId, setGroupId] = useState(() => groups.at(-1)?.id ?? "");
@@ -42,7 +45,7 @@ export function AddCoinForm({ count, groups, addCoin, onAdded }: AddCoinFormProp
     if (pending || full) return;
     const clean = symbol.trim().toUpperCase();
     if (!clean) {
-      setError("Enter a coin symbol.");
+      setError(`Enter a ${variant.noun} symbol.`);
       return;
     }
     setError("");
@@ -65,8 +68,8 @@ export function AddCoinForm({ count, groups, addCoin, onAdded }: AddCoinFormProp
   const blocked = full || pending;
 
   return (
-    <form className="add-coin" aria-label="Add a coin" data-testid="add-coin-form" onSubmit={submit} noValidate>
-      <label htmlFor={`${id}-symbol`}>Coin symbol</label>
+    <form className="add-coin" aria-label={`Add a ${variant.noun}`} data-testid="add-coin-form" onSubmit={submit} noValidate>
+      <label htmlFor={`${id}-symbol`}>{`${variant.noun[0].toUpperCase()}${variant.noun.slice(1)} symbol`}</label>
       <input
         id={`${id}-symbol`}
         className="board-input"
@@ -98,14 +101,14 @@ export function AddCoinForm({ count, groups, addCoin, onAdded }: AddCoinFormProp
         aria-disabled={blocked ? "true" : undefined}
         aria-describedby={full ? `${id}-full` : undefined}
       >
-        Add coin
+        Add {variant.noun}
       </button>
       <span className="add-coin__count" data-testid="coin-count">
-        {count} / {MAX_COINS} coins
+        {count} / {MAX_COINS} {variant.nounPlural}
       </span>
       {full && (
         <p id={`${id}-full`} className="add-coin__full" data-testid="add-coin-full">
-          {CAP_MESSAGE}
+          {variant.capMessage}
         </p>
       )}
       <p role="alert" className="board-alert" data-testid="add-coin-error">

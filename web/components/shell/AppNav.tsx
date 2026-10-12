@@ -17,6 +17,7 @@ import { OwlMark } from "@/components/brand/OwlMark";
  */
 const ROUTES = [
   { href: "/screener", label: "Screener" },
+  { href: "/equities", label: "Equities" },
   { href: "/regime", label: "Regime" },
   { href: "/narrative", label: "Narrative" },
   { href: "/pairs", label: "Pairs" },

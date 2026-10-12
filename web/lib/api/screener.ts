@@ -26,14 +26,33 @@ async function getJson<T>(path: string): Promise<T> {
   }
 }
 
+// T47 / S9C: one client per API base (`/api/screener`, `/api/equities`);
+// same paths below the base, same errors and timeout.
+export interface ScreenerClient {
+  fetchBoard: (timeframe: Timeframe) => Promise<ScreenerBoardResponse>;
+  fetchChart: (symbol: string, timeframe: Timeframe) => Promise<ChartView>;
+  fetchSpaghetti: (timeframe: Timeframe) => Promise<SpaghettiResponse>;
+}
+
+export function createScreenerClient(base: string): ScreenerClient {
+  return {
+    fetchBoard: (timeframe) => getJson<ScreenerBoardResponse>(`${base}/board?timeframe=${timeframe}`),
+    fetchChart: (symbol, timeframe) =>
+      getJson<ChartView>(`${base}/${encodeURIComponent(symbol)}/chart?timeframe=${timeframe}`),
+    fetchSpaghetti: (timeframe) => getJson<SpaghettiResponse>(`${base}/spaghetti?timeframe=${timeframe}`),
+  };
+}
+
+const cryptoClient = createScreenerClient("/api/screener");
+
 export function fetchScreenerBoard(timeframe: Timeframe = "1d"): Promise<ScreenerBoardResponse> {
-  return getJson<ScreenerBoardResponse>(`/api/screener/board?timeframe=${timeframe}`);
+  return cryptoClient.fetchBoard(timeframe);
 }
 
 export function fetchChartView(symbol: string, timeframe: Timeframe = "4h"): Promise<ChartView> {
-  return getJson<ChartView>(`/api/screener/${encodeURIComponent(symbol)}/chart?timeframe=${timeframe}`);
+  return cryptoClient.fetchChart(symbol, timeframe);
 }
 
 export function fetchSpaghetti(timeframe: Timeframe = "1d"): Promise<SpaghettiResponse> {
-  return getJson<SpaghettiResponse>(`/api/screener/spaghetti?timeframe=${timeframe}`);
+  return cryptoClient.fetchSpaghetti(timeframe);
 }
