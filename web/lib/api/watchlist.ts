@@ -32,7 +32,7 @@ async function detail(res: Response): Promise<string | null> {
   }
 }
 
-async function send(path: string, init: RequestInit): Promise<WatchlistResponse> {
+async function send<R>(path: string, init: RequestInit): Promise<R> {
   let res: Response;
   try {
     res = await fetch(`${API_BASE_URL}${path}`, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
@@ -45,18 +45,35 @@ async function send(path: string, init: RequestInit): Promise<WatchlistResponse>
   if (res.status === 409) throw new WatchlistFullError((await detail(res)) ?? `API request failed: ${path} -> 409`);
   if (res.status === 422) throw new InvalidSymbolError((await detail(res)) ?? "invalid symbol");
   if (!res.ok) throw new Error(`API request failed: ${path} -> ${res.status}`);
-  return (await res.json()) as WatchlistResponse;
+  return (await res.json()) as R;
 }
 
+// T47 / S9C: one client per list base (`/api/watchlist`, `/api/equities`).
+export interface WatchlistClient<R = WatchlistResponse> {
+  addCoin: (symbol: string, groupId?: string) => Promise<R>;
+  removeCoin: (symbol: string) => Promise<R>;
+}
+
+export function createWatchlistClient<R = WatchlistResponse>(base: string): WatchlistClient<R> {
+  return {
+    addCoin: (symbol, groupId) => {
+      const body = groupId === undefined ? { symbol } : { symbol, group_id: groupId };
+      return send<R>(base, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    },
+    removeCoin: (symbol) => send<R>(`${base}/${encodeURIComponent(symbol)}`, { method: "DELETE" }),
+  };
+}
+
+const cryptoClient = createWatchlistClient("/api/watchlist");
+
 export function addCoin(symbol: string, groupId?: string): Promise<WatchlistResponse> {
-  const body = groupId === undefined ? { symbol } : { symbol, group_id: groupId };
-  return send("/api/watchlist", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  return cryptoClient.addCoin(symbol, groupId);
 }
 
 export function removeCoin(symbol: string): Promise<WatchlistResponse> {
-  return send(`/api/watchlist/${encodeURIComponent(symbol)}`, { method: "DELETE" });
+  return cryptoClient.removeCoin(symbol);
 }

@@ -6,6 +6,7 @@ import { CoinGroup, type GroupOption } from "@/components/screener/CoinGroup";
 import { DrillDownView } from "@/components/screener/DrillDownView";
 import { useLiveData } from "@/components/screener/LiveProvider";
 import { SpaghettiChart } from "@/components/screener/SpaghettiChart";
+import { useVariant } from "@/components/screener/VariantProvider";
 import type { ChartRange } from "@/lib/island-loader";
 import { fetchLayout as fetchLayoutDefault, saveLayout as saveLayoutDefault } from "@/lib/api/layout";
 import { fetchChartView, fetchScreenerBoard, fetchSpaghetti as fetchSpaghettiDefault } from "@/lib/api/screener";
@@ -25,7 +26,6 @@ import { shareStructure, VOLATILE } from "@/lib/same-data";
 import type { Layout, LayoutUpdate } from "@/lib/types/layout";
 import { useBoardLayout } from "@/lib/use-board-layout";
 import {
-  TIMEFRAMES,
   type ChartView,
   type ScreenerBoardResponse,
   type SpaghettiResponse,
@@ -68,11 +68,13 @@ export function ScreenerBoard({
   saveLayout = saveLayoutDefault,
   addCoin = addCoinDefault,
   removeCoin = removeCoinDefault,
-  initialTimeframe = "1d",
+  initialTimeframe,
 }: ScreenerBoardProps) {
+  // T47 / S9C: timeframes and text follow the variant (crypto without a provider).
+  const variant = useVariant();
   // Amendment 2 (AC-16): ONE global timeframe control lifted here, passed
   // down to every CoinPanel/MiniChart — not an independent per-panel toggle.
-  const [timeframe, setTimeframe] = useState<Timeframe>(initialTimeframe);
+  const [timeframe, setTimeframe] = useState<Timeframe>(initialTimeframe ?? variant.initialTimeframe);
   const [board, setBoard] = useState<ScreenerBoardResponse | null>(null);
   const [boardSettled, setBoardSettled] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -292,10 +294,10 @@ export function ScreenerBoard({
       if (receiverId === null) return;
       commit(next, hidden);
       const receiver = next.find((g) => g.id === receiverId)?.name ?? receiverId;
-      announce(`Group ${name} deleted; its coins moved to ${receiver}.`);
+      announce(`Group ${name} deleted; its ${variant.nounPlural} moved to ${receiver}.`);
       focusNext.current = `group-heading-${receiverId}`;
     },
-    [commit, announce],
+    [commit, announce, variant.nounPlural],
   );
 
   const onToggleLine = useCallback(
@@ -383,7 +385,7 @@ export function ScreenerBoard({
     <section data-testid="screener-board" aria-label="Screener board">
       <div className="screener-board__toolbar">
         <div role="group" aria-label="Board timeframe" data-testid="timeframe-toggle">
-          {TIMEFRAMES.map((tf) => (
+          {variant.timeframes.map((tf) => (
             <button
               key={tf}
               type="button"
@@ -419,13 +421,13 @@ export function ScreenerBoard({
 
       {!settled ? (
         <div className="board-loading" data-testid="board-loading" aria-busy="true">
-          Loading coins and layout
+          Loading {variant.nounPlural} and layout
         </div>
       ) : (
         <>
           {board && board.coins.length === 0 && (
             <p className="board-empty" data-testid="board-empty">
-              No coins on the watchlist yet. Add one below.
+              No {variant.nounPlural} on {variant.listName} yet. Add one below.
             </p>
           )}
           {board && editBar}
