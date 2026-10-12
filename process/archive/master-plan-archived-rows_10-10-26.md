@@ -1,6 +1,6 @@
 ---
 name: master-plan-archived-rows_10-10-26
-description: "Registry rows of fully archived tasks (T16, T18, T19, T20, PERF, T29, T30, T31, T8, T9, T10, T17, T24, T25) moved out of MASTER-PLAN.md on 10-10-26 to keep it under its size cap. Verbatim copies."
+description: "Registry rows of fully archived tasks (T16, T18, T19, T20, PERF, T29, T30, T31, T8, T9, T10, T17, T24, T25; T1, T1b, T13 added 12-10-26) moved out of MASTER-PLAN.md to keep it under its size cap. Verbatim copies."
 date: 10-10-26
 ---
 
@@ -24,3 +24,6 @@ Verbatim registry rows, same 13 columns as MASTER-PLAN.md (ID, Objective, Prio, 
 | T17 | `.agents/skills` duplicate | L | cancelled | — | — | — | — | H1 symlink | — | — | user 03-10-26: leave as is | backlog `agents-skills-symlink-windows_NOTE_02-10-26.md` |
 | T24 | one status board | M | superseded by R2/R6 | — | — | — | — | MASTER-PLAN is the one board; exciting-meitner board dropped in R13 | — | decisions.md D-5 | — | this file |
 | T25 | delete stale branches | L | accepted | — | T23 | user | — | seven deleted by the user 03-10-26 | — | `git ls-remote --heads origin` | planner cannot delete | Approvals Log |
+| T1 | pytrends partial-hour zeros in `_fetch_live` | H | accepted | — | — | — | merged | `isPartial` rows dropped | done | PR #8 | — | `narrative-mindshare/completed/pytrends-partial-hour-fix_28-09-26/` |
+| T1b | `isPartial` guard in batched path `_fetch_batch_live` | H | accepted | T1 | — | — | merged | same guard in the batched fetch | done | PR #6/#7 | — | on main |
+| T13 | CI | M | accepted | — | — | — | merged | pytest, vitest, `tsc`, island build | — | `.github/workflows/ci.yml` | no e2e, no linter | on main |

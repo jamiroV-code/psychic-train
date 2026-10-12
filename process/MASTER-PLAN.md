@@ -10,7 +10,7 @@ metadata:
 
 # my_site — Master Plan (board and task registry)
 
-**Last verified:** 2026-10-10 UTC at `origin/main` `fc12f27` (T32-T44 merged; R12 accepted with known gaps) ; **built from:** revision 6 (`18ffd4f`). Gate reports: `process/general-plans/completed/master-planner-recovery_02-10-26/`.
+**Last verified:** 2026-10-12 UTC at `origin/main` `b9e8386` (last code merge `20e9f20`: T32-T44 merged incl. T41; R12 accepted with known gaps) ; **built from:** revision 6 (`18ffd4f`). Gate reports: `process/general-plans/completed/master-planner-recovery_02-10-26/`.
 
 **This file is the one board.** Each task has one row here; details live in its task folder. Revisions 1-6: `process/archive/master-plan-revisions_02-10-26.md`. Protocol: `process/development-protocols/master-planner.md`. Direction: north-star.md. State: current-state.md.
 
@@ -34,8 +34,7 @@ Columns: ID · Objective · Prio · Status · Parent · Deps · Worker/session �
 
 | ID | Objective | Prio | Status | Parent | Deps | Worker/session | Branch/worktree | Scope + acceptance | Test req/budget | Report + commit refs | Blockers/risks | Outcome / archive location |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| T1 | pytrends partial-hour zeros in `_fetch_live` | H | accepted | — | — | — | merged | `isPartial` rows dropped | done | PR #8 | — | `narrative-mindshare/completed/pytrends-partial-hour-fix_28-09-26/` |
-| T1b | `isPartial` guard in batched path `_fetch_batch_live` | H | accepted | T1 | — | — | merged | same guard in the batched fetch | done | PR #6/#7 | — | on main |
+| T1, T1b, T13 | pytrends partial-hour fix (PR #6/#7/#8) and CI workflow | H / M | accepted | - | - | - | merged | done | - | verbatim rows: `process/archive/master-plan-archived-rows_10-10-26.md` | - | on main |
 | T3 | narrative-v2 (PR #7) | H | review | — | T1b | — | merged | RFC-1..6 VERIFIED, RFC-7 CODE DONE | user walkthrough | PR #7 | AC-14 walkthrough outstanding | `narrative-mindshare/active/narrative-v2_25-09-26/` |
 | T4 | Reddit secrets, or drop Reddit | M | needs_input | — | — | user | — | add secrets or drop the source | — | rev 6 | user: leave for now | — |
 | T5 | `/pairs` automation | M | review | — | — | — | merged | nightly refresh then compute | CI | PR #11 | CODE DONE not VERIFIED; commit inert on Actions | — |
@@ -43,7 +42,6 @@ Columns: ID · Objective · Prio · Status · Parent · Deps · Worker/session �
 | T8-T10, T17, T24, T25 | superseded, cancelled or done housekeeping | L | cancelled / superseded / accepted | - | - | - | - | see archive | - | - | - | verbatim rows: `process/archive/master-plan-archived-rows_10-10-26.md` |
 | T11 | lying plan status strips | L | review | — | R13 | — | this branch | fixed strips in two plans | RT0 | R13 `448b10c` | PR #5 fix UNVERIFIED on main | — |
 | T12 | equity provider decision | M | proposed -> superseded in part | — | R13 | — | — | LSE ADOPT-WITH-LIMITS, private use | — | `completed/lse-data-verification_17-09-26/VERDICT.md` | page is P6 | P6 |
-| T13 | CI | M | accepted | — | — | — | merged | pytest, vitest, `tsc`, island build | — | `.github/workflows/ci.yml` | no e2e, no linter | on main |
 | T14 | UI shell | M | review | P3 | — | — | merged | Direction D shell | user visual acceptance | PR #9 | no visual acceptance recorded | `active/ui-shell_28-09-26/` |
 | T15 | adapter provider-term flags | L | proposed | — | — | — | — | demoted 02-10-26 (personal use) | — | RECOVERY Q7 | — | — |
 | T16, T18-T20, PERF, T29-T31 | root README, dead helpers, stale-plan archive, tsbuildinfo, perf baselines and three small fixes | L | archived | - | - | workers | merged | all done | RT0-RT3 | PRs #14, #23, #22, #15, #24, #26, #28, #30; vc-tester PASS each | - | verbatim rows: `process/archive/master-plan-archived-rows_10-10-26.md` |
@@ -62,7 +60,7 @@ Columns: ID · Objective · Prio · Status · Parent · Deps · Worker/session �
 | T38 | S7 BTC leg chart + D-14 estimate label + regime cache-only fix | H | review | P4 | T37 | `session_01Ksxq9nUNTvjAcYyf22MpJM` | `claude/t38-s7-btc-leg-chart` (merged) | S7 | RT3 | PR #40 `38fe860`; EVL PASS (pytest 951/2/5/0, vitest 251 in 34 files, e2e 17); 4.7511942 USD | P-S7-1 (user: run the deep BTC backfill once, then check) is the user's; FRED/DefiLlama may still fetch on TTL expiry (accepted). LAPSE: merged with worker report `needs_input`; main red on an e2e until T39 | `active/screener-batch2_04-10-26/` |
 | T39 | one-line e2e fix after S7 layout (`exerciseZoom` re-reads plot position, `scrollIntoViewIfNeeded`) | H | accepted | T38 | T38 | `session_01FWism1FLg7f172tHwFypMp` | `claude/t39-fix-zoom-e2e` (merged) | e2e helper | RT3 | PR #41 `270f9ac`; EVL PASS; 1.9678292 USD | CI has no Playwright | `active/screener-batch2_04-10-26/` |
 | T40 | S5a layout API (server layout file, groups, 30-coin cap) | H | review | P4 | T39 | worker | `claude/t40-s5a-layout-api` (merged) | S5a | RT3 | PR #44 `2a2f3b6`; tester PASS; 3.40 USD | P-S5a-1 PC probe outstanding; AC-8 group sort deferred (`screener-group-sort_NOTE_09-10-26.md`) | `active/screener-batch3_09-10-26/` |
-| T41 | S5b layout web side | H | proposed | P4 | T40, S11 | - | - | S5b | RT3 | plan rebased on S11 (`a5fcb16`); not started | plan re-validation pending | `active/screener-batch3_09-10-26/` |
+| T41 | S5b layout web side (groups, add/remove, 30-coin cap, RSI) | H | accepted | P4 | T40, S11 | worker `session_01MTJTEUo9ug2o7oyRTp9ApS` | `claude/t41-s5b-layout-ui` (merged) | S5b | RT3 | PR #51 `20e9f20`, user merge 11-10-26 15:07Z; code `71e90e4`, report `1b2dc70`; tester PASS WITH_GAPS (pytest 1016/2/5/0, vitest 400 in 50 files, e2e 79 in 9); 7.28 USD planner-measured | P-S5b-1 PC probe open; AC-8r group sort, AC-S5b-8r contrast (`screener-ondemand-states-contrast_NOTE_10-10-26.md`); worker passed 7 USD ask point unrecorded | `active/screener-batch3_09-10-26/` (accepted with known gaps; not archived, needs the user's go) |
 | T42 | S11a Brussels time (axis and labels) | H | review | P4 | T40 | worker | `claude/t42-s11a-brussels-time` (merged) | S11a | RT3 | PR #47 `68c24d9`; tester PASS; 4.40 USD | P-S11-2 (25 Oct 2026 DST) outstanding; pytest 1016 verified (996+17 R12+3); worker flagged needs_input on the count, merged anyway | `active/screener-batch4_10-10-26/` |
 | T43 | S11b 60 s live polling, freshness strip, in-place chart updates | H | review | P4 | T42 | worker | `claude/t43-s11b-live-updates` (merged) | S11b | RT3 | PR #49 `960758a`, user merge 13:13Z; tester PASS WITH_GAPS; 7.74 USD | contrast notes `screener-live-ondemand-states-contrast_NOTE_10-10-26.md`, `screener-passive-polls_NOTE_10-10-26.md`; 7 USD ask threshold passed unrecorded | `active/screener-batch4_10-10-26/` |
 | T44 | zoom fix: small charts share one zoom; reset button gone on small charts only (user-requested fast lane) | M | accepted | P4 | T43 | one execute agent | `claude/t44-zoom-sync-fix` (merged) | zoom | RT3 | PR #50 `fc12f27`; tester PASS; cost not recorded in worker report | none; user confirmed it works on the PC | `active/screener-zoom-sync_10-10-26/` |
@@ -76,9 +74,9 @@ Columns: ID · Objective · Prio · Status · Parent · Deps · Worker/session �
 | P2 | deployability (home PC + Tailscale) | M | review | — | — | — | merged | `deploy/` launchers, CORS, runbook | user PC | PR #10 | verifiable on user PC only | `active/deployability_28-09-26/` |
 | P2b | stale-build guard | M | superseded by R12 | P2 | — | — | — | gap from the 2026-10-01 live incident | — | — | — | R12 |
 | P3 | UI Direction D | M | review | — | — | — | merged | same as T14 | user visual acceptance | PR #9 | — | `active/ui-shell_28-09-26/` |
-| P4 | realignment: delete verdict code; screener RSI, groups, 30-coin cap, spaghetti chart, BTC leg strip, 15-min refresh, lean storage | H | in_progress | - | - | - | - | 19 ACs | per SPEC | `active/personal-tracker-realignment_02-10-26/` | batches 1-2 (T32-T39), S5a (T40), S11a/b (T42, T43) and zoom fix (T44) merged, `fc12f27`; S5b (T41) planned; S9 later; S10 optional, now unblocked; PC probes pending; workers about 59.0 USD of 75 (ceiling 45 -> 60 -> 75), T44 and testers unmetered | - |
+| P4 | realignment: delete verdict code; screener RSI, groups, 30-coin cap, spaghetti chart, BTC leg strip, 15-min refresh, lean storage | H | in_progress | - | - | - | - | 19 ACs | per SPEC | `active/personal-tracker-realignment_02-10-26/` | batches 1-3 (T32-T41), S11a/b (T42, T43) and zoom fix (T44) merged, `20e9f20`; S9 later; S10 optional; PC probes pending; workers 66.24 USD of 75 (58.96 through S11b + T41 7.28; ceiling 45 -> 60 -> 75), about 8.8 left, S9 and S10 each need an estimate and the user's go; T44 and testers unmetered | - |
 | P5 | narrative baskets: user-defined baskets, equal-weight view, mindshare share-of-total, raw-only /narrative | H | proposed | — | P4 | — | — | 12 active ACs | per SPEC | `process/general-plans/active/narrative-baskets_02-10-26/` | live probe per signal on user PC | — |
-| P6 | LSE equities page with Add button, private-use note | M | in_progress | — | P4 | — | — | realignment SPEC | per SPEC | REALIGN SPEC | S3 adapter merged (T33, probe pending); S9 page unplanned, needs S5 | — |
+| P6 | LSE equities page with Add button, private-use note | M | in_progress | — | P4 | — | — | realignment SPEC | per SPEC | REALIGN SPEC | S3 adapter merged (T33, probe pending); S9 page unplanned, S5 now merged | — |
 | P7 | protect pytrends partial-hour fix and nightly archive (guard tests) | M | proposed | P4 | — | — | — | BASKETS Decision 16, AC-25 | RT2 | BASKETS SPEC | — | — |
 
 ### Recovery program (master-planner-recovery)
@@ -102,8 +100,8 @@ Columns: ID · Objective · Prio · Status · Parent · Deps · Worker/session �
 
 ## Carried notes
 
-- Open backlog notes (`process/general-plans/backlog/<name>_NOTE_<dd-mm-yy>.md`): `screener-weekly-bars-flake`, `mapping-tripwire-gap`, `pipeline-etf-flows-atomic-write`, `pipeline-cron-firing-confirmation`, `token-usage-telemetry`, `agents-skills-symlink-windows`, `deploy-runtime-user-pc-verification`, `gate5-deferred-candidates`, `old-branches-review`, `p3-ui-open-decisions`, `screener-research-findings`, `lse-live-shape-verification`, `spaghetti-toggle-persistence`, `screener-group-sort`, `screener-live-ondemand-states-contrast`, `screener-passive-polls`.
-- Envelope rule (from the 10-10-26 lapses, `process/archive/index.md`): workers get "needs_input means STOP, do not merge, do not open a new PR; cost is reported by the planner, not the worker"; the planner measures cost per session.
+- Open backlog notes (`process/general-plans/backlog/<name>_NOTE_<dd-mm-yy>.md`): `screener-weekly-bars-flake`, `mapping-tripwire-gap`, `pipeline-etf-flows-atomic-write`, `pipeline-cron-firing-confirmation`, `token-usage-telemetry`, `agents-skills-symlink-windows`, `deploy-runtime-user-pc-verification`, `gate5-deferred-candidates`, `old-branches-review`, `p3-ui-open-decisions`, `screener-research-findings`, `lse-live-shape-verification`, `spaghetti-toggle-persistence`, `screener-group-sort`, `screener-live-ondemand-states-contrast`, `screener-ondemand-states-contrast`, `screener-passive-polls`.
+- Envelope rule (from the 10-10-26 lapses, `process/archive/index.md`): workers get "needs_input means STOP, do not merge, do not open a new PR; cost is reported by the planner, not the worker"; the planner measures cost per session from the session record at report time and checks the 7 USD ask point (T41 passed it unrecorded).
 - Known condition: `validate-backlog-notes` fails 45 notes (older schema).
 - Linter/formatter: none configured (undone half of T13, not a task).
 
