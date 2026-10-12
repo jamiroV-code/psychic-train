@@ -1,13 +1,14 @@
 """T40 / S5a: screener layout store, one local JSON file (C2, C3).
 
 `{"version": 1, "sections": {"crypto": {"revision", "saved_at", "groups",
-"hidden_lines"}}}`. The path is `SCREENER_LAYOUT_PATH`, else `layout.json`
+"hidden_lines"}, "equities": {...}}}`. The path is `SCREENER_LAYOUT_PATH`, else `layout.json`
 next to the watchlist file, resolved at CALL time (see `watchlist.py`'s
 RFC-005 Deviation #1), so anything that redirects the watchlist redirects
 the layout too.
 
-Membership stays in `watchlist.json`; every read reconciles the stored
-grouping against it. A read never writes. An unreadable file reads as the
+Membership stays with each section's source (`watchlist.json` for crypto,
+`equities.json` for equities, S9B); every read reconciles the stored
+grouping against it, so the two sections' members never mix. A read never writes. An unreadable file reads as the
 default with `source="recovered"` and is moved to `layout.json.bad` by the
 next write. Writes are atomic (temp file in the same directory, fsync,
 `os.replace`) and serialized by one process lock; nothing is cached.
@@ -23,7 +24,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-from api.data import freshness
+from api.data import equities_store, freshness
 from api.data import watchlist as watchlist_store
 from api.models.layout import MAX_GROUP_NAME, MAX_GROUPS, Layout, LayoutGroup, LayoutUpdate
 
@@ -31,11 +32,17 @@ logger = logging.getLogger(__name__)
 
 _LAYOUT_ENV = "SCREENER_LAYOUT_PATH"
 LAYOUT_VERSION = 1
-# Sections are a registry; any other name is refused.
-SECTIONS: tuple[str, ...] = ("crypto",)
 # Spaghetti reference lines: they may stay hidden whether or not they are
 # on the watchlist.
 REFERENCE_SYMBOLS: tuple[str, ...] = ("BTC", "HYPE")
+# Sections are a registry; any other name is refused. Each source is looked
+# up at call time, so a redirected or patched store is honoured.
+_SECTION_SOURCES = {
+    "crypto": lambda: watchlist_store.read_watchlist(),
+    "equities": lambda: equities_store.load_tickers(),
+}
+_SECTION_REFERENCES: dict[str, tuple[str, ...]] = {"crypto": REFERENCE_SYMBOLS, "equities": ()}
+SECTIONS: tuple[str, ...] = tuple(_SECTION_SOURCES)
 DEFAULT_GROUP_ID = "main"
 DEFAULT_GROUP_NAME = "Main"
 GROUP_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
@@ -73,6 +80,10 @@ def _bad_path(path: Path) -> Path:
 def _check_section(section: str) -> None:
     if section not in SECTIONS:
         raise UnknownSectionError(section)
+
+
+def _members(section: str) -> list[str]:
+    return _SECTION_SOURCES[section]()
 
 
 def _valid_section(raw) -> bool:
@@ -141,7 +152,9 @@ def _load_for_write(path: Path) -> dict:
     return data
 
 
-def _reconcile(groups: list[dict], hidden: list[str], coins: list[str]) -> tuple[list[dict], list[str]]:
+def _reconcile(
+    groups: list[dict], hidden: list[str], coins: list[str], references: tuple[str, ...] = REFERENCE_SYMBOLS
+) -> tuple[list[dict], list[str]]:
     members = set(coins)
     placed: set[str] = set()
     out = []
@@ -158,19 +171,20 @@ def _reconcile(groups: list[dict], hidden: list[str], coins: list[str]) -> tuple
     seen: set[str] = set()
     kept_hidden = []
     for symbol in hidden:
-        if (symbol in members or symbol in REFERENCE_SYMBOLS) and symbol not in seen:
+        if (symbol in members or symbol in references) and symbol not in seen:
             kept_hidden.append(symbol)
             seen.add(symbol)
     return out, kept_hidden
 
 
 def _layout(section: str, stored: dict | None, source: str) -> Layout:
-    coins = watchlist_store.read_watchlist()
+    coins = _members(section)
+    references = _SECTION_REFERENCES[section]
     if stored is None:
-        groups, hidden = _reconcile([], [], coins)
+        groups, hidden = _reconcile([], [], coins, references)
         revision, saved_at = 0, None
     else:
-        groups, hidden = _reconcile(stored["groups"], stored.get("hidden_lines", []), coins)
+        groups, hidden = _reconcile(stored["groups"], stored.get("hidden_lines", []), coins, references)
         revision, saved_at = stored["revision"], stored.get("saved_at")
     return Layout(
         version=LAYOUT_VERSION,
@@ -248,7 +262,7 @@ def save_layout(section: str, update: LayoutUpdate) -> Layout:
         if update.revision != current:
             raise StaleRevisionError(section)
         data = _load_for_write(path)
-        groups, hidden = _reconcile(groups, hidden, watchlist_store.read_watchlist())
+        groups, hidden = _reconcile(groups, hidden, _members(section), _SECTION_REFERENCES[section])
         stored = _store_section(path, data, section, groups, hidden)
     return _layout(section, stored, "file")
 
@@ -269,7 +283,7 @@ def reset_layout(section: str) -> Layout:
 
 
 def place_coin(section: str, symbol: str, group_id: str) -> bool:
-    """Move `symbol` (already on the watchlist) into group `group_id`, saving
+    """Move `symbol` (already a member of `section`) into group `group_id`, saving
     the default layout first when no file exists. False when no such group."""
     _check_section(section)
     path = layout_path()
@@ -301,7 +315,8 @@ def drop_coin(section: str, symbol: str) -> bool:
         groups = [
             {**g, "coins": [c for c in g["coins"] if c != symbol]} for g in stored["groups"]
         ]
-        hidden = [h for h in stored.get("hidden_lines", []) if h != symbol or h in REFERENCE_SYMBOLS]
-        groups, hidden = _reconcile(groups, hidden, watchlist_store.read_watchlist())
+        references = _SECTION_REFERENCES[section]
+        hidden = [h for h in stored.get("hidden_lines", []) if h != symbol or h in references]
+        groups, hidden = _reconcile(groups, hidden, _members(section), references)
         _store_section(path, data, section, groups, hidden)
     return True
