@@ -2,11 +2,13 @@ import { memo, type ReactNode } from "react";
 import { ChartFreshness } from "@/components/chart/ChartFreshness";
 import { MiniChart } from "@/components/chart/MiniChart";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
+import { useVariant } from "@/components/screener/VariantProvider";
 import { formatDateTimeZone } from "@/lib/brussels-time";
+import { dateOnlyChipTitle } from "@/lib/equities-freshness";
 import type { ChartRange } from "@/lib/island-loader";
 import { formatUnavailableReason } from "@/lib/format-unavailable-reason";
 import { formatRsi, rsiTitle } from "@/lib/rsi-format";
-import { TIMEFRAMES, type CoinPanel as CoinPanelData, type GainChip, type Timeframe } from "@/lib/types/screener";
+import { type CoinPanel as CoinPanelData, type GainChip, type Timeframe } from "@/lib/types/screener";
 
 export interface CoinPanelProps {
   panel: CoinPanelData;
@@ -26,9 +28,11 @@ function formatPercent(value: number | null): string {
   return `${sign}${value.toFixed(1)}%`;
 }
 
-function chipTitle(tf: Timeframe, chip: GainChip | undefined): string | undefined {
+function chipTitle(tf: Timeframe, chip: GainChip | undefined, dateOnly: boolean): string | undefined {
   if (!chip) return undefined;
   if (chip.pct === null) return chip.reason ? formatUnavailableReason(chip.reason, "timeframe") : undefined;
+  // T47 / S9C: daily and weekly equity bars carry a date only.
+  if (dateOnly) return dateOnlyChipTitle(tf, chip);
   // Current candle, open to latest (T34 / S2); the open in Brussels time (T42 / S11a).
   const open = chip.open_ts ? formatDateTimeZone(new Date(chip.open_ts)) : "?";
   return `${tf} candle from ${open}${chip.is_partial ? " (forming)" : ""}`;
@@ -44,6 +48,7 @@ export const CoinPanel = memo(function CoinPanel({
   onRangeChange,
   actions,
 }: CoinPanelProps) {
+  const variant = useVariant();
   const rsi = panel.rsi;
   return (
     <div data-testid={`coin-panel-${panel.symbol}`} className="coin-panel">
@@ -72,7 +77,7 @@ export const CoinPanel = memo(function CoinPanel({
             range={range}
             onRangeChange={onRangeChange}
           />
-          <ChartFreshness chart={panel.chart} />
+          <ChartFreshness chart={panel.chart} timeframe={timeframe} />
         </>
       ) : (
         <DeadDataNotice
@@ -101,7 +106,7 @@ export const CoinPanel = memo(function CoinPanel({
       {/* T34 / S2: each chip is the timeframe's current candle, open to
           latest price, read from `gain_by_timeframe`; N/A carries its reason. */}
       <div data-testid="gain-readout-row" className="coin-panel__gain-row">
-        {TIMEFRAMES.map((tf) => {
+        {variant.timeframes.map((tf) => {
           const chip = panel.gain_by_timeframe?.[tf];
           return (
             <span
@@ -109,7 +114,7 @@ export const CoinPanel = memo(function CoinPanel({
               data-testid={`gain-chip-${tf}`}
               className="coin-panel__gain-chip"
               data-reason={chip?.reason ?? undefined}
-              title={chipTitle(tf, chip)}
+              title={chipTitle(tf, chip, variant.dateOnlyBars)}
             >
               <span className="coin-panel__gain-chip-label">{tf}</span>
               <span className="coin-panel__gain-chip-value">{formatPercent(chip?.pct ?? null)}</span>

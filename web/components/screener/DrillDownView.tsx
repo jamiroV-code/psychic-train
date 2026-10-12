@@ -6,10 +6,11 @@ import { MiniChart } from "@/components/chart/MiniChart";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
 import { useLiveData } from "@/components/screener/LiveProvider";
 import { RsiChart } from "@/components/screener/RsiChart";
+import { useVariant } from "@/components/screener/VariantProvider";
 import { fetchChartView } from "@/lib/api/screener";
 import { formatRsi } from "@/lib/rsi-format";
 import { shareStructure, VOLATILE } from "@/lib/same-data";
-import { TIMEFRAMES, type ChartView, type Timeframe } from "@/lib/types/screener";
+import { type ChartView, type Timeframe } from "@/lib/types/screener";
 
 export interface DrillDownViewProps {
   symbol: string;
@@ -17,13 +18,14 @@ export interface DrillDownViewProps {
   fetchChart?: (symbol: string, timeframe: Timeframe) => Promise<ChartView>;
 }
 
-const DEFAULT_DRILLDOWN_TIMEFRAME: Timeframe = "4h"; // the drill-down opens on the 4h chart
-
 /**
  * On-demand, single-coin drill-down (AC-7) — never a main-board tile.
  * Amendment 2 (AC-18): carries its OWN timeframe control across the same
  * 15m/1h/4h/1D/1W range as the board, independent of whatever the board's
  * own toggle is currently set to.
+ *
+ * T47 / S9C: its timeframes and the one it opens on (crypto 4h, equities
+ * 1d) come from the variant.
  *
  * T43 / S11b: refetches its own timeframe on every live check (`tick`). A
  * failed refetch shows `drilldown-error` above the chart it already has; a
@@ -31,7 +33,8 @@ const DEFAULT_DRILLDOWN_TIMEFRAME: Timeframe = "4h"; // the drill-down opens on 
  * answer for a timeframe no longer selected is ignored.
  */
 export function DrillDownView({ symbol, onClose, fetchChart = fetchChartView }: DrillDownViewProps) {
-  const [timeframe, setTimeframe] = useState<Timeframe>(DEFAULT_DRILLDOWN_TIMEFRAME);
+  const variant = useVariant();
+  const [timeframe, setTimeframe] = useState<Timeframe>(variant.drillDownTimeframe);
   const [view, setView] = useState<ChartView | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,7 +68,7 @@ export function DrillDownView({ symbol, onClose, fetchChart = fetchChartView }: 
       </div>
 
       <div role="group" aria-label="Drill-down timeframe" data-testid="drilldown-timeframe-toggle">
-        {TIMEFRAMES.map((tf) => (
+        {variant.timeframes.map((tf) => (
           <button
             key={tf}
             type="button"
@@ -82,7 +85,7 @@ export function DrillDownView({ symbol, onClose, fetchChart = fetchChartView }: 
       {view?.chart.available ? (
         <>
           <MiniChart price={view.chart.price} sma={view.chart.sma} height={240} timeframe={view.timeframe} />
-          <ChartFreshness chart={view.chart} />
+          <ChartFreshness chart={view.chart} timeframe={view.timeframe} />
           {/* T41 / S5b: RSI 14 below the price, zoomed on its own. */}
           {(view.chart.rsi ?? []).length > 0 ? (
             <>
