@@ -22,6 +22,10 @@ T35 / S8: the `lifespan` starts the in-process OHLCV refresh worker
 (`api/data/refresh_worker.py`) and stops it on shutdown, unless
 `SCREENER_REFRESH_WORKER=0`. Lifespan runs under uvicorn and under
 `with TestClient(app)`; the test conftest defaults the variable to `0`.
+
+T50 / S9E: the equities market-hours worker (`api/data/equities_refresh.py`)
+starts after the crypto one and stops after it; it stays off with
+`SCREENER_REFRESH_WORKER=0` or without `LSE_API_KEY`.
 """
 from __future__ import annotations
 
@@ -34,7 +38,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 # NOTE (RFC-002/RFC-003 scope): routers/regime.py (item 42) and
 # routers/narrative.py (item 56) are now both wired in.
-from api.data import refresh_worker
+from api.data import equities_refresh, refresh_worker
 from api.routers import equities
 from api.routers import layout, narrative, onchain_activity, pairs, refresh, regime, screener, watchlist
 
@@ -42,10 +46,14 @@ from api.routers import layout, narrative, onchain_activity, pairs, refresh, reg
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     refresh_worker.start_from_env()
+    equities_refresh.start_from_env()
     try:
         yield
     finally:
-        refresh_worker.stop_worker()
+        try:
+            refresh_worker.stop_worker()
+        finally:
+            equities_refresh.stop_worker()
 
 
 app = FastAPI(title="Momentum Screener API", lifespan=lifespan)

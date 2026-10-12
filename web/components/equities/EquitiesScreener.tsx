@@ -14,6 +14,7 @@ import {
   removeEquity,
   saveEquitiesLayout,
 } from "@/lib/api/equities";
+import { equitiesStripModel } from "@/lib/equities-strip";
 import { EQUITIES_VARIANT } from "@/lib/screener-variant";
 
 export const PRIVATE_USE_NOTE =
@@ -23,12 +24,15 @@ export const PRIVATE_USE_NOTE =
  * T47 / S9C: the equities board, the crypto board's components with the
  * equities variant and clients. One live poller re-reads the equities status
  * every 60 s; the strip says how fresh it is.
+ *
+ * T50 / S9E: the strip uses the equities words (latest daily bar, next
+ * expected market-close refresh).
  */
 export function EquitiesScreener() {
   return (
     <VariantProvider variant={EQUITIES_VARIANT}>
       <LiveProvider fetchStatus={fetchEquitiesStatus}>
-        <FreshnessStrip />
+        <FreshnessStrip model={equitiesStripModel} />
         <p data-testid="equities-note">{PRIVATE_USE_NOTE}</p>
         <ScreenerBoard
           fetchBoard={fetchEquitiesBoard}
