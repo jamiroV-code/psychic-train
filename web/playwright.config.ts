@@ -17,6 +17,9 @@ const E2E_PAIRS_UNIVERSE = path.join(E2E_CACHE_ROOT, "pairs_universe.json");
 // api/data/narratives.json here and refuses to run if this resolves to the
 // real file, so the AC-4 config-edit spec only ever edits this disposable copy.
 const E2E_NARRATIVES = path.join(E2E_CACHE_ROOT, "narratives.json");
+// T48 / S9D: the synthetic equities list. `seed_e2e_equities.py` writes it
+// and refuses to run if this resolves to the real api/data/equities.json.
+const E2E_EQUITIES = path.join(E2E_CACHE_ROOT, "equities.json");
 
 const CHROMIUM_PATH = process.env["PLAYWRIGHT_CHROMIUM_PATH"] || undefined;
 
@@ -29,6 +32,10 @@ const apiEnv = {
   SCREENER_WATCHLIST_PATH: E2E_WATCHLIST,
   PAIRS_UNIVERSE_PATH: E2E_PAIRS_UNIVERSE,
   NARRATIVES_PATH: E2E_NARRATIVES,
+  SCREENER_EQUITIES_PATH: E2E_EQUITIES,
+  // Empty, so the equities refresh can never reach the data vendor: an add
+  // reports a missing key and the board serves the seeded cache only.
+  LSE_API_KEY: "",
   // CORS in api/main.py is origin-exact and hardcoded to localhost:3000. The
   // E2E runs the web server on another port, so the allowed origin has to be
   // widened for this process only — never in main.py itself.
@@ -83,6 +90,7 @@ export default defineConfig({
       // versions; chaining makes the dependency explicit and version-proof.
       command:
         `uv run --project api python api/scripts/seed_e2e_cache.py && ` +
+        `uv run --project api python api/scripts/seed_e2e_equities.py && ` +
         `uv run --project api uvicorn api.main:app --host 127.0.0.1 --port ${API_PORT}`,
       cwd: REPO_ROOT,
       url: `${API_BASE_URL}/api/health`,
