@@ -35,6 +35,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 # NOTE (RFC-002/RFC-003 scope): routers/regime.py (item 42) and
 # routers/narrative.py (item 56) are now both wired in.
 from api.data import refresh_worker
+from api.routers import equities
 from api.routers import layout, narrative, onchain_activity, pairs, refresh, regime, screener, watchlist
 
 
@@ -96,6 +97,7 @@ app.include_router(narrative.router)
 app.include_router(onchain_activity.router)
 app.include_router(pairs.router)
 app.include_router(refresh.router)
+app.include_router(equities.router)
 
 
 @app.get("/api/health")

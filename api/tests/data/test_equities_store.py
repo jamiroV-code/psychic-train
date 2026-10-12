@@ -47,11 +47,36 @@ def test_invalid_ticker_rejected(store_path, bad):
     assert not store_path.exists()
 
 
-def test_more_than_thirty_accepted(store_path):
-    tickers = [f"T{i:03d}" for i in range(45)]
+def test_thirty_first_refused(store_path):
+    tickers = [f"T{i:03d}" for i in range(30)]
     for t in tickers:
         equities_store.add_ticker(t)
+    with pytest.raises(equities_store.TickerLimitError):
+        equities_store.add_ticker("LATE")
     assert equities_store.load_tickers() == tickers
+    assert equities_store.MAX_TICKERS == 30
+    assert equities_store.CAP_MESSAGE == (
+        "Equities list is full: 30 tickers maximum. Remove a ticker to add another."
+    )
+
+
+def test_over_cap_file_is_kept_new_refused_existing_readds(store_path):
+    tickers = [f"T{i:03d}" for i in range(31)]
+    store_path.write_text(json.dumps({"tickers": tickers}))
+    with pytest.raises(equities_store.TickerLimitError):
+        equities_store.add_ticker("NEW")
+    assert equities_store.add_ticker("t005") == tickers
+    assert equities_store.load_tickers() == tickers
+
+
+def test_at_thirty_new_refused_then_accepted_after_remove(store_path):
+    for i in range(30):
+        equities_store.add_ticker(f"T{i:03d}")
+    with pytest.raises(equities_store.TickerLimitError):
+        equities_store.add_ticker("NEW")
+    equities_store.remove_ticker("T000")
+    assert equities_store.add_ticker("NEW")[-1] == "NEW"
+    assert len(equities_store.load_tickers()) == 30
 
 
 def test_interrupted_write_keeps_old_file(store_path, monkeypatch):
