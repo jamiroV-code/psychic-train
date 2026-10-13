@@ -51,6 +51,11 @@ def _bar_due_at(d: date) -> pd.Timestamp:
     return session_close_utc(d) + pd.Timedelta(minutes=BAR_DUE_AFTER_MINUTES)
 
 
+def bar_due_at(d) -> pd.Timestamp:
+    """Public: the instant session `d`'s final daily bar is due (UTC)."""
+    return _bar_due_at(d)
+
+
 def _as_date(value) -> date | None:
     if value is None:
         return None
