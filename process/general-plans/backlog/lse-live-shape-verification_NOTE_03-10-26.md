@@ -1,7 +1,8 @@
 # Backlog: LSE live shape verification (S3 Known-Gap, AC-S3-5)
 
-**Status:** open. Blocks only live use of `api/data/lse_adapter.py`; the S3 gate stays
-CONDITIONAL (no vacuous green) until this closes.
+**Status:** CLOSED 12-10-26. The user ran the live probe (P-S9-1 / P-S3-1) and the shape was
+fixed in the adapter by T49 / S9F (PR #58, merge `2223e95`). The text below is kept as history;
+the ASSUMED list in "Why" is superseded by "Verified live shape" at the end.
 
 ## Why
 
@@ -31,3 +32,22 @@ these are ASSUMED and isolated as constants in `lse_adapter.py`:
 
 Never commit the raw probe output (`api/data/cache/equities/_probe/`, git-ignored) or any real
 LSE price: the repo is public and LSE prohibits redistribution.
+
+## Verified live shape (closed 12-10-26)
+
+Verified by the user's live probe on 12-10-26 and implemented in `api/data/lse_adapter.py` (T49):
+
+- Base `https://api.londonstrategicedge.com/vault`, path `/candles`.
+- Auth: header `x-api-key` carrying the bare key (no `Bearer`).
+- Query: `symbol`, `timeframe`, `order`, `limit` (at most 5000), `start`, `end`, `dataset`.
+- Reply: a bare JSON list of rows `{ts, symbol, open, high, low, close, volume}`; `ts` looks like `YYYY-MM-DD 00:00:00.000000` (date at 00:00, no time zone).
+- Unknown ticker: 404 with a JSON `detail`. Malformed key: 400 with an empty body. No or invalid key: 401. `/vault/usage` no longer exists.
+- The newest daily bar carries today's date and is still forming during the session. Weekly bars are Monday-anchored. Dotted tickers (for example `BRK.B`) work.
+- The old probe `s3-probe/lse_probe.py` used the wrong host and is superseded; do not rely on it.
+- Fixture `api/tests/data/fixtures/lse_candles_probe_shape.json` (symbol `TEST`, synthetic prices) is committed; the G-S3-6 test now runs instead of skipping.
+
+Not measured: when the final daily bar appears after the close (see `equities-known-gaps_NOTE_13-10-26.md`, item a).
+
+## Operating note: the API key
+
+The API reads `LSE_API_KEY` from its process environment when it starts; `deploy/start-api.ps1` does not pass it. The user sets it per PowerShell window before starting the API (clipboard method; check the length is about 41 characters before starting). On 12-10-26 a first attempt stored only 1 character. Re-entering it by clipboard fixed it (lesson: check the length after setting it). A persistent, non-committed way to supply the key is proposed in `lse-api-key-deploy-handling_NOTE_13-10-26.md`. Never write the key into any file in the repo.

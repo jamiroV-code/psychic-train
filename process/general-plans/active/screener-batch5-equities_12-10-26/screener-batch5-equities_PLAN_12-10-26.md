@@ -8,7 +8,7 @@ feature: general-plans
 # Screener Batch 5: Equities Page at Parity (S9A-S9E)
 
 Date: 12-10-26
-Status: VALIDATED (12-10-26, main `881a2fd`, PVL cycle 3); no envelope or worker before the user's "ENTER EXECUTE MODE". Verified baselines (counted 12-10-26): pytest 1018 collected = 1016 passed, 2 skipped, 5 deselected; vitest 400 in 50 files; `playwright test --list` 79 in 9 files (screener 10, layout 7, live-refresh 4, contrast 7, brussels-time 3, narrative 17, onchain 16, pairs 9, regime 6).
+Status: EXECUTED 13-10-26, accepted WITH KNOWN GAPS (S9A-S9F merged, PRs #54-#60; see "Execution record" at the end); folder not archived, needs the user's explicit go. Was: VALIDATED (12-10-26, main `881a2fd`, PVL cycle 3). Verified baselines (counted 12-10-26): pytest 1018 collected = 1016 passed, 2 skipped, 5 deselected; vitest 400 in 50 files; `playwright test --list` 79 in 9 files (screener 10, layout 7, live-refresh 4, contrast 7, brussels-time 3, narrative 17, onchain 16, pairs 9, regime 6).
 Complexity: COMPLEX (five sequential slices; new public API surface, a layout section, shared board components parameterised, a background thread)
 
 **TL;DR:** The equities page gets every crypto-screener feature except intraday and reference lines: small charts with linked zoom, Brussels time, RSI, groups and layout edits, spaghetti, drill-down, Add button, private-use note, no verdicts. Reuse is by parameter (a `ScreenerVariant` context on the web, a section registry in `layout.py`), not by copying. Reads never fetch: the board is cache-only and a market-hours refresh job fills the cache after each US close. Estimate 21.5-34.0 USD [estimate] for all five slices against 30.6 USD left of the 100 USD ceiling; recommended cut is A-D (17.0-27.0), E only if the running total is at most 93.0 USD.
@@ -396,3 +396,13 @@ Line numbers refer to this file as saved. Every range ends before the Validate C
 | S9E | 11, 30-66, 67-80, 133-142, 242-250, 259-260, 261-269 | 14403 | 8154 |
 
 Every row leaves at least 8,000 B for the envelope, so an envelope may use its full cap (a realistic one is 2-3 KB). S9A and S9E have the least room (A1 in the Validate Contract).
+
+## Execution record (UPDATE PROCESS, 13-10-26)
+
+- Slices: S9A T45 PR #54 `6aee5e2` (3.62 USD); S9B T46 PR #55 `23d7e43` (1.72); S9C T47 PR #56 `4ec0cd0` (3.38); S9D T48 PR #57 `d7f3ee9` (3.38); S9F T49 PR #58 `2223e95` (1.01; LSE live-shape fix, added outside this plan after the user's probe); S9E T50 PR #59 `7de6dea` (3.59); T51 catch-up fix PR #60 `bfb7793` (fast lane, one execute agent in the planner session, cost not metered). Batch worker total 16.70 USD; program worker total 86.13 of the 100 USD ceiling.
+- Independent tester PASS: S9A, S9B, S9C, S9D, S9E. S9F and T51: CI plus the planner's diff read only, at the user's request (usage nearly out); no tester.
+- Final baselines: pytest 1134 passed, 1 skipped, 5 deselected; vitest 476 in 59 files; seeded e2e 92 in 11 files.
+- Probe P-S9-1 done: the live shape is recorded in `process/general-plans/backlog/lse-live-shape-verification_NOTE_03-10-26.md` (closed 12-10-26). Open: P-S9-2, P-S9-3.
+- Amendment to the editable-test table: `api/tests/routers/test_equities_router.py::test_layout_failure_is_logged_not_failed` was edited in S9B with planner approval (hidden break; count effect 0).
+- Known gaps (backlog `process/general-plans/backlog/equities-known-gaps_NOTE_13-10-26.md`): AC-S9E-1 constants are estimates, strip tests lack Good Friday/spring-DST, unknown `group_id` silently ignored, early-close days not modelled, worker needs `LSE_API_KEY` at API start, weekly bars asserted at least 60, chip meaning and caveat text open to the user.
+- SPEC amendments (outcome 18, AC-26, AC-15, constraint line, amendment row A6) applied to the realignment SPEC at UPDATE PROCESS.

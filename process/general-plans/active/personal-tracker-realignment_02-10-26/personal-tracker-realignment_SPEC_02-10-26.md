@@ -86,7 +86,7 @@ The original product goal was "turn separate signals into one confidence level t
 15. **MOVED** to the narrative-baskets SPEC (clean /narrative data).
 16. **MOVED** to the narrative-baskets SPEC (pytrends fix and nightly archive guarantees).
 17. **Scalp view removed (Locked).** Only the drill-down "Scalp PASS/FAIL" view is deleted (code, tests, docs). Drill-down price and RSI stay.
-18. **30-coin cap (Locked, A2).** Adding a 31st coin to the crypto screener is refused with a clear message (for example "Screener is full: 30 coins maximum. Remove a coin to add another."); nothing is added and the board is unchanged. The cap applies to the crypto screener only; the LSE equities section is not capped. (Narrative interaction on coin removal: see narrative-baskets SPEC outcome 22 / AC-32.)
+18. **30-coin cap (Locked, A2).** Adding a 31st coin to the crypto screener is refused with a clear message (for example "Screener is full: 30 coins maximum. Remove a coin to add another."); nothing is added and the board is unchanged. The 30 cap applies to the crypto screener and, counted separately, to the equities page (API-enforced 409) (A6, batch 5). (Narrative interaction on coin removal: see narrative-baskets SPEC outcome 22 / AC-32.)
 19. to 23. **MOVED** to the narrative-baskets SPEC.
 
 ## Flow / State Diagram
@@ -170,7 +170,7 @@ Strategy tags: FA = Fully-Automated, HY = Hybrid, AP = Agent-Probe. Scenarios co
 **AC-14 (Locked, A2: sized for 30 coins) Lean storage.** Per coin, 15m history is capped near 200 bars (~2 days); other timeframes retain only what RSI and the price line need; no cache file exists for data no page displays. History that cannot be re-fetched (nightly snapshots) is exempt.
 - proven by: pytest retention/trim tests; a repo-level check listing cache categories against displayed pages. strategy: FA
 
-**AC-15 (Locked) Equities page.** A separate equities page shows LSE data for tickers the user adds via an Add button; there is no preset ticker list; added tickers persist after reload; no equity appears in any crypto group; the page states the data is private-use.
+**AC-15 (Locked) Equities page.** A separate equities page shows LSE data for tickers the user adds via an Add button; there is no preset ticker list; added tickers persist after reload; no equity appears in any crypto group; the page states the data is private-use. (A6, batch 5: parity proof added - groups, spaghetti, drill-down, linked zoom and live polling work on the equities page, and the equities page holds at most 30 tickers, API-enforced 409; built in T45-T51, accepted with known gaps.)
 - proven by: pytest LSE adapter and ticker-persistence tests on fixtures; Playwright add-ticker flow and page test. Live LSE fetch: agent-probe on user PC (sandbox egress is blocked). strategy: HY
 
 **AC-16 (Locked) Other pages stay, verdict-free but data intact (label audit).** /regime, /pairs, /onchain, /narrative still load and render their data, including the /pairs significance banner and p-value ranking, the /regime composite index, and status/data-quality labels (onchain floor/ramp, pairs status banners); none of the removed verdict labels from outcome 1 appears on them. (Narrative page content beyond "loads and is verdict-free" is under the narrative-baskets SPEC.)
@@ -197,7 +197,7 @@ Strategy tags: FA = Fully-Automated, HY = Hybrid, AP = Agent-Probe. Scenarios co
 
 **AC-24 and AC-25 MOVED** to the narrative-baskets SPEC.
 
-**AC-26 (Locked, A2) Hard cap of 30 coins.** With 30 coins on the screener, attempting to add a 31st is refused with a clear, visible message; the coin is not added, the board, groups and spaghetti chart are unchanged, and the refusal is also enforced by the API (not only the UI). Removing a coin then allows an add again. The cap does not apply to the LSE equities page.
+**AC-26 (Locked, A2) Hard cap of 30 coins.** With 30 coins on the screener, attempting to add a 31st is refused with a clear, visible message; the coin is not added, the board, groups and spaghetti chart are unchanged, and the refusal is also enforced by the API (not only the UI). Removing a coin then allows an add again. The 30 cap applies to the crypto screener and, counted separately, to the equities page (API-enforced 409) (A6, batch 5).
 - proven by: pytest watchlist router test (30 accepted, 31st rejected with a clear error, count stays 30, remove-then-add succeeds); vitest message render; Playwright add-31st flow on a seeded 30-coin board. strategy: FA
 
 **AC-27 to AC-33 MOVED** to the narrative-baskets SPEC.
@@ -251,7 +251,7 @@ Names only, derived from reads. "Audit" = file likely carries verdict wording an
 - "Numbers are never silently wrong" stays: unavailable, partial or insufficient data shows an explicit state, never 0/NaN, never zero-filled.
 - One source of numerical truth stays: RSI, % change, spaghetti series and leg data are computed in Python and rendered by the web app.
 - Providers stay behind adapters under `api/data/`.
-- Hard cap: the crypto screener holds not more than 30 coins; a 31st add is refused. Design target: 30 coins; ~200 bars of 15m per coin. The cap does not apply to the LSE equities section.
+- Hard cap: the crypto screener holds not more than 30 coins; a 31st add is refused. Design target: 30 coins; ~200 bars of 15m per coin. The cap applies to the crypto screener and, counted separately, to the equities page (A6, batch 5).
 - Every requirement must remain testable; no verdict logic may be reintroduced under another name.
 - Nightly snapshot jobs for sources with no history (narrative, liqtide, chain-growth) stay on their current schedule.
 - RSI: Wilder smoothing, period 14.
@@ -292,6 +292,7 @@ Names only, derived from reads. "Audit" = file likely carries verdict wording an
 | 2 | Hard cap of 30 coins (US-14, outcome 18, AC-26); cap applies to crypto only. |
 | 3 and 4 | Narrative decisions: moved in full to the narrative-baskets SPEC. |
 | Split (02-10-26) | Narrative requirements moved out; documentation requirements moved to the housekeeping plan; AC-18 split; IDs kept stable. |
+| A6 (13-10-26, batch 5) | Equities page holds at most 30 tickers, counted apart from crypto (API 409): outcome 18, AC-26, constraint line; AC-15 gains parity proof. Equities page (P6, outcome 11, US-9, AC-15) built in T45-T51, accepted with known gaps (`equities-known-gaps_NOTE_13-10-26.md`); D9 (1d/1w only) kept. |
 
 ## Decisions 03-10-26 (after RESEARCH)
 
