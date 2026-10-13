@@ -98,7 +98,8 @@ def get_status() -> dict:
 
 @router.post("/refresh", status_code=202)
 def post_refresh() -> dict:
-    return equities_refresh.request_refresh_now()
+    # S9E: wakes the market-hours worker when it runs, else a background pass.
+    return equities_refresh.request_now()
 
 
 @router.get("/{ticker}/chart", response_model=ChartView)
