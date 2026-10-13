@@ -237,6 +237,17 @@ GUARD_HEADING = "## Restarting safely after a web change (R12 guards)"
 CREDENTIAL_WORDS = ("authorization", "bearer", "credential", "securestring", "password")
 
 
+def _securestring_allowed(path: Path) -> bool:
+    return path.name in ("set-lse-key.ps1", "_common.ps1")
+
+
+def test_securestring_still_forbidden_in_other_scripts():
+    others = [p for p in _ps1_files() if not _securestring_allowed(p)]
+    assert any(p.name == "start-web.ps1" for p in others)
+    for path in others:
+        assert "securestring" not in "\n".join(_code_lines(path.read_text(encoding="utf-8"))).lower()
+
+
 def test_start_web_runs_next_as_child_with_exit_code_passthrough():
     lines = _code_lines(_read("start-web.ps1"))
     code = "\n".join(lines)
@@ -321,6 +332,13 @@ def test_no_credentials_or_literal_remote_hosts_in_deploy_scripts():
         code = "\n".join(_code_lines(path.read_text(encoding="utf-8")))
         lower = code.lower()
         for word in CREDENTIAL_WORDS:
-            assert word not in lower, f"{path.name} mentions {word!r}"
+            assert word not in lower or (word == "securestring" and _securestring_allowed(path)), (
+                f"{path.name} mentions {word!r}"
+            )
+        # T52 (planner-approved): "securestring" is allowed only in set-lse-key.ps1 and the
+        # Import-LseApiKey function of _common.ps1 (DPAPI key file); nowhere else.
+        if path.name == "_common.ps1":
+            rest = code.replace(_function_body(path.read_text(encoding="utf-8"), "Import-LseApiKey"), "")
+            assert "securestring" not in rest.lower(), "_common.ps1 uses securestring outside Import-LseApiKey"
         for m in re.finditer(r"https?://", code):
             assert code[m.end():m.end() + 1] == "$", f"{path.name}: URL must take a variable host: {code[m.start():m.end() + 20]!r}"

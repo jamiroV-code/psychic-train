@@ -269,6 +269,21 @@ logged on, the app is down — that is expected for an intermittently available 
 
 Logs: `%LOCALAPPDATA%\my_site\logs\api.log` and `web.log`.
 
+## LSE API key (equities prices)
+
+The equities prices need `LSE_API_KEY`. Store it once; `start-api.ps1` loads it at every start
+(an `LSE_API_KEY` already set in the window wins):
+
+1. Copy the key, then run
+   `powershell -NoProfile -ExecutionPolicy Bypass -File deploy\set-lse-key.ps1 -FromClipboard`
+   (it checks the key, stores it and clears the clipboard; `-Prompt` types it at a hidden prompt instead).
+2. Restart the API: `Stop-ScheduledTask mysite-api; Start-ScheduledTask mysite-api`.
+3. Check: `deploy\set-lse-key.ps1 -Status` (present/absent and length, never the value);
+   `api.log` shows `LSE key: from key file`. Remove: `deploy\set-lse-key.ps1 -Remove`.
+
+The key is saved in `%LOCALAPPDATA%\my_site\lse-api-key.dat`, protected by Windows for this
+user on this PC only: set it again on a new PC. Never commit, paste or log the key.
+
 ## After downtime: pull, then optionally recompute
 
 The recovery sequence is: pull, then optionally recompute.

@@ -457,3 +457,43 @@ function Invoke-WebSmokeCheck {
     Write-MySiteLog "Smoke check FAILED: $reason after ${TimeoutSeconds}s."
     return $false
 }
+
+# LSE API key (equities prices). Stored once by deploy\set-lse-key.ps1 as a Windows DPAPI blob
+# (ConvertFrom-SecureString with no key): only this Windows user on this PC can decrypt it.
+# It lives outside the repo, under LOCALAPPDATA. The key value and its length are never logged.
+$script:LseKeyPath = Join-Path $script:MySiteHome 'lse-api-key.dat'
+
+function Get-LseKeySource {
+    # Where the key would come from, without decrypting anything: environment | key file | none.
+    if (-not [string]::IsNullOrEmpty($env:LSE_API_KEY)) { return 'environment' }
+    if (Test-Path -LiteralPath $script:LseKeyPath) { return 'key file' }
+    return 'none'
+}
+
+function Import-LseApiKey {
+    # Fill $env:LSE_API_KEY for THIS process only. An existing environment value wins. Any
+    # failure reading the key file is logged in one line without detail and is not fatal: the
+    # API starts without a key and the equities worker reports missing-key as designed.
+    $source = Get-LseKeySource
+    if ($source -eq 'environment') {
+        Write-MySiteLog 'LSE key: from environment'
+        return
+    }
+    if ($source -eq 'none') {
+        Write-MySiteLog 'LSE key: not set'
+        return
+    }
+    $bstr = [IntPtr]::Zero
+    try {
+        $blob = ([System.IO.File]::ReadAllText($script:LseKeyPath)).Trim()
+        $secure = ConvertTo-SecureString -String $blob
+        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+        $env:LSE_API_KEY = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+        Write-MySiteLog 'LSE key: from key file'
+    } catch {
+        $env:LSE_API_KEY = $null
+        Write-MySiteLog 'LSE key: could not read the LSE key file (re-run deploy\set-lse-key.ps1)'
+    } finally {
+        if ($bstr -ne [IntPtr]::Zero) { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+    }
+}
