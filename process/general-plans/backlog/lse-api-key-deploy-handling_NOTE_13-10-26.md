@@ -1,6 +1,7 @@
 # LSE API key: persistent, non-committed supply to the PC (decision needed)
 
-**Status:** open, decision proposal only. No change made.
+**Status:** IMPLEMENTED by T52 (13-10-26), branch `claude/t52-lse-key-persist`. Chosen: option 2 variant, a Windows DPAPI-protected key file outside the repo (`%LOCALAPPDATA%\my_site\lse-api-key.dat`), written by `deploy\set-lse-key.ps1` (ConvertFrom-SecureString) and loaded by `deploy\start-api.ps1` (an existing `LSE_API_KEY` wins). See `deploy\README.md` "LSE API key (equities prices)".
+**Unverified:** the PowerShell scripts could not be executed in CI (no PowerShell). The user must run `deploy\set-lse-key.ps1 -FromClipboard`, then `-Status`, restart the API (`mysite-api` task), check `api.log` shows `LSE key: from key file`, and confirm an `/api/equities` refresh works.
 **Origin:** equities batch 5 (T45-T51); `lse-live-shape-verification_NOTE_03-10-26.md` operating note.
 
 ## Problem
