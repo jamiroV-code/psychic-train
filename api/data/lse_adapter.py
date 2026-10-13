@@ -270,6 +270,11 @@ def _fetched_at(symbol: str, timeframe: str) -> pd.Timestamp | None:
         return None
 
 
+def cached_fetched_at(symbol: str, timeframe: str = "1d") -> pd.Timestamp | None:
+    """Public: when the cached `symbol`/`timeframe` was fetched (None: no or unreadable sidecar)."""
+    return _fetched_at(symbol, timeframe)
+
+
 def _is_fresh(symbol: str, timeframe: str, now: pd.Timestamp) -> bool:
     fetched = _fetched_at(symbol, timeframe)
     if fetched is None or not equity_parquet_path(symbol, timeframe).exists():

@@ -137,6 +137,15 @@ def _ticker_bar_date(ticker: str, now) -> date | None:
     return result.df["timestamp"].max().date()
 
 
+def _ticker_fetched_at(ticker: str, now) -> pd.Timestamp | None:
+    return lse_adapter.cached_fetched_at(ticker, "1d")
+
+
+def _fetched_at_unknown(ticker: str, now) -> pd.Timestamp | None:
+    """Default when only `bar_date` is injected: no fetch-time check."""
+    return pd.Timestamp.max.tz_localize("UTC")
+
+
 def _last_bar_date(now) -> str | None:
     dates = [d for d in (_ticker_bar_date(t, now) for t in equities_store.load_tickers()) if d is not None]
     return max(dates).isoformat() if dates else None
@@ -155,12 +164,21 @@ class EquitiesRefreshWorker:
         tickers: Callable[[], list[str]] | None = None,
         bar_date: Callable[[str, pd.Timestamp], date | None] | None = None,
         first_delay_seconds: float = FIRST_TICK_DELAY_SECONDS,
+        fetched_at: Callable[[str, pd.Timestamp], pd.Timestamp | None] | None = None,
     ) -> None:
         self._clock = clock or (lambda: lse_adapter._now())
         self._wake = wake if wake is not None else threading.Event()
         self._fetch = fetch
         self._tickers = tickers or equities_store.load_tickers
         self._bar_date = bar_date or _ticker_bar_date
+        # A cache fetched before its session's bar was due holds a forming bar.
+        # With an injected `bar_date` and no `fetched_at`, that check is off.
+        if fetched_at is not None:
+            self._fetched_at = fetched_at
+        elif bar_date is None:
+            self._fetched_at = _ticker_fetched_at
+        else:
+            self._fetched_at = _fetched_at_unknown
         self.first_delay_seconds = float(first_delay_seconds)
         self.interval_seconds = INTERVAL_SECONDS
 
@@ -211,8 +229,11 @@ class EquitiesRefreshWorker:
 
     # ------------------------------------------------------------- schedule
     def _behind(self, session: date, now: pd.Timestamp) -> list[str]:
-        """Tickers whose newest daily bar predates `session` (no bar: behind)."""
+        """Tickers whose newest daily bar predates `session`, or is dated
+        `session` but was fetched before that session's bar was due (a forming
+        bar). No bar, or no/unreadable fetch time: behind."""
         behind = []
+        due = equities_calendar.bar_due_at(session)
         for ticker in self._tickers():
             try:
                 bar = self._bar_date(ticker, now)
@@ -221,6 +242,15 @@ class EquitiesRefreshWorker:
                 bar = None
             if bar is None or bar < session:
                 behind.append(ticker)
+                continue
+            if bar == session:
+                try:
+                    fetched = self._fetched_at(ticker, now)
+                except Exception as exc:
+                    logger.warning("equities fetch time unreadable for %s: %s", ticker, type(exc).__name__)
+                    fetched = None
+                if fetched is None or pd.Timestamp(fetched) < due:
+                    behind.append(ticker)
         return behind
 
     def _schedule_next_close(self, now: pd.Timestamp) -> None:
