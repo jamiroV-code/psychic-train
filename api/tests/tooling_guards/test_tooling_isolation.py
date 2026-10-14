@@ -32,9 +32,27 @@ def test_api_wheel_packages_unchanged():
     assert data["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == ["analytics", "data", "models", "routers"]
 
 
+def mentions_tooling_dir(text: str) -> bool:
+    """Case-insensitive, slash-direction-insensitive match of the tooling path."""
+    return "tools/data-integration" in text.lower().replace("\\", "/")
+
+
+def test_tooling_dir_detector_catches_spellings():
+    for spelling in (
+        "tools/data-integration",
+        "tools\\data-integration",
+        "Tools/Data-Integration",
+        "TOOLS\\DATA-INTEGRATION\\src",
+        "run: uv sync --project tools/data-integration",
+    ):
+        assert mentions_tooling_dir(spelling), spelling
+    for clean in ("tools/other", "data-integration", "run: uv sync --project api"):
+        assert not mentions_tooling_dir(clean), clean
+
+
 def test_workflows_do_not_mention_tooling_dir():
     for wf in sorted(WORKFLOWS.glob("*.y*ml")):
-        assert "tools/data-integration" not in wf.read_text(encoding="utf-8"), wf.name
+        assert not mentions_tooling_dir(wf.read_text(encoding="utf-8")), wf.name
 
 
 def test_ignore_file_carries_approval_pattern():

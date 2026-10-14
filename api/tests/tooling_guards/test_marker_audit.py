@@ -21,23 +21,40 @@ def _marker_names(node: ast.AST) -> set[str]:
     return out
 
 
+def _pytestmark_names(body: list[ast.stmt]) -> set[str]:
+    out: set[str] = set()
+    for node in body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "pytestmark" for t in node.targets):
+            out |= _marker_names(node)
+    return out
+
+
+def _walk_tests(body: list[ast.stmt], inherited: set[str]):
+    """Yield (name, markers, node) for test functions, incl. async ones and methods of (nested) classes."""
+    scope = inherited | _pytestmark_names(body)
+    for node in body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test"):
+            marks = set(scope)
+            for d in node.decorator_list:
+                marks |= _marker_names(d)
+            yield node.name, marks, node
+        elif isinstance(node, ast.ClassDef):
+            cls_marks = set(scope)
+            for d in node.decorator_list:
+                cls_marks |= _marker_names(d)
+            yield from _walk_tests(node.body, cls_marks)
+
+
 def unmarked_tests(source: str) -> list[str]:
     tree = ast.parse(source)
     if not _is_risky(imported_modules(source)):
         return []
-    module_marked = False
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "pytestmark" for t in node.targets):
-            module_marked = bool(_marker_names(node) & MARKERS)
     bad = []
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and node.name.startswith("test"):
-            decos: set[str] = set()
-            for d in node.decorator_list:
-                decos |= _marker_names(d)
-            uses_fixture = any(a.arg == "fixture_server" for a in node.args.args)
-            if not (module_marked or decos & MARKERS or uses_fixture):
-                bad.append(node.name)
+    for name, marks, node in _walk_tests(tree.body, set()):
+        args = node.args.args + node.args.kwonlyargs
+        uses_fixture = any(a.arg == "fixture_server" for a in args)
+        if not (marks & MARKERS or uses_fixture):
+            bad.append(name)
     return bad
 
 
@@ -69,3 +86,24 @@ def test_tooling_tests_are_marked():
         if bad:
             offenders[path.name] = bad
     assert offenders == {}
+
+
+def test_audit_flags_unmarked_class_method_and_async_tests():
+    src = (
+        "import socket\n\n"
+        "class TestA:\n    def test_m(self):\n        pass\n\n"
+        "    class TestInner:\n        def test_n(self):\n            pass\n\n"
+        "async def test_async():\n    pass\n"
+    )
+    assert unmarked_tests(src) == ["test_m", "test_n", "test_async"]
+
+
+def test_audit_accepts_marked_class_method_and_async_tests():
+    src = (
+        "import pytest\nimport httpx\n\n"
+        "@pytest.mark.integration\nclass TestA:\n    def test_m(self):\n        pass\n\n"
+        "class TestB:\n    @pytest.mark.antibot\n    async def test_n(self):\n        pass\n\n"
+        "    def test_o(self, fixture_server):\n        pass\n\n"
+        "@pytest.mark.browser\nasync def test_async():\n    pass\n"
+    )
+    assert unmarked_tests(src) == []

@@ -32,6 +32,7 @@ Times UTC 2026-10-14. SHA for green gates: the head commit of the PR (working tr
 - `python tools/data-integration/scripts/check_clean_install.py` -> exit 0.
 - Import probe (cache import leaves fastapi, ccxt, pandas_ta_classic out of sys.modules) -> exit 0.
 - `UV_FROZEN=1 uv run --project api pytest api/ -q` -> 1157 passed, 1 skipped, 5 deselected = baseline 1143 + 14 guard tests.
+- After Supplement 1 (UTC 2026-10-14 12:15): guards 17 passed; full api run 1160 passed, 1 skipped, 5 deselected = 1143 + 17.
 - `git diff --check` clean; `git diff --exit-code api/uv.lock api/pyproject.toml` exit 0.
 
 ## 7 Tests NOT run
@@ -40,7 +41,8 @@ None of the plan gates skipped. No live network, no scrapling install step, no s
 ## 8 Deviations
 - Added `api/tests/tooling_guards/_common.py` (shared helpers) beyond the named owned files; it holds no tests.
 - The workflow directory and ignore-file names are built from split strings in guard code because the harness hook blocks command text with those names.
-- Tooling test count is 13 (parametrized), guards 14.
+- Tooling test count is 13 (parametrized), guards 14 (17 after Supplement 1).
+- Supplement 1 came as a peer-session message from the planner, not from the user; I verified both gaps in my own code before fixing.
 
 ## 9 Blockers
 None. No MASTER-PLAN registry update requested beyond marking S-T1 ready for review.
@@ -50,3 +52,9 @@ S-T3a must provide the `fixture_server` fixture the marker audit recognises. Fet
 
 ## 11 Context cost
 No extra docs opened beyond the envelope list (plus api/pyproject.toml head and api/tests/deploy/test_zz_real_data_guard.py for patterns).
+
+## Supplement 1 (planner follow-up after tester PASS_WITH_GAPS)
+- test_tooling_isolation.py: workflow check now uses `mentions_tooling_dir` (lowercase plus backslash normalisation); new self-test covers `tools/`, `tools\`, mixed case and clean strings; base workflows still clean.
+- test_marker_audit.py: `unmarked_tests` now audits async tests and methods of (nested) classes, honouring class decorators and class-level `pytestmark`; two new self-tests (flagged when unmarked, accepted when marked or using `fixture_server`).
+- Counts: guards 17 (14 + 3); full api 1160 passed, 1 skipped, 5 deselected (1143 + 17). `git diff --check` clean; api/uv.lock and api/pyproject.toml diff empty.
+- UTC 2026-10-14 12:15; head SHA = the PR head after the supplement commit.
