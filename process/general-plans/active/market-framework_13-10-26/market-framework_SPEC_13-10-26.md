@@ -14,6 +14,8 @@ metadata:
 
 **TL;DR:** The dashboard (route /) gets a compact strip of five classifications: LTF, MTF, HTF (Bullish/Neutral/Bearish), CYCLE (Bull/Bear) and PERP POSITIONING (Aggressive/Delta Neutral/Passive). You choose the inputs, you make every reading, and only your confirmed readings feed transparent weighted rules. Suggestions appear only where you enable them; a changed suggestion is flagged pending and never moves a classification. Conflicts and missing data are explicit states. History is append-only. PERP shows "insufficient data" (no source exists). Global M2, TOTAL and ETH/BTC are missing and show "unavailable" until the companion SPEC delivers them.
 
+Status: PAUSED by owner 14-10-26 until the owner decides which input fits which timeframe; do not move to INNOVATE.
+
 **Status:** Draft. Facts: VERIFIED (checked in repo) or FROM-RESEARCH.
 
 ## 1. Locked decisions (owner answers 13-10-26)
