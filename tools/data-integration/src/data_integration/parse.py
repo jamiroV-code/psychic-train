@@ -6,6 +6,9 @@ from scrapling.parser import Selector
 from data_integration.types import ParsedTable
 
 
+PARSER_VERSION = "dit-parse-1"
+
+
 class ParseError(ValueError):
     """The page did not contain the expected table."""
 

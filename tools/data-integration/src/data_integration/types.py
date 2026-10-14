@@ -12,6 +12,7 @@ class FetchOutcome:
     http_status: int | None = None
     body: bytes = b""
     detail: str = ""
+    body_sha256: str | None = None
 
 
 @dataclass(frozen=True)

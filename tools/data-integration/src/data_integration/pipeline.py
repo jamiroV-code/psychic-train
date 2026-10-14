@@ -4,6 +4,7 @@ Nothing is written until every check passed. Never imports a fetch tier.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -71,7 +72,8 @@ def run(
     except TargetNotEmpty as exc:
         return PipelineResult(status.REFUSED, str(exc))
     now = (clock or (lambda: datetime.now(timezone.utc)))()
-    provenance.append_record(symbol, timeframe, provenance.build_record(pass_, url, df, now))
+    provenance.append_record(symbol, timeframe, provenance.build_record(
+        pass_, url, df, now, outcome.body_sha256 or hashlib.sha256(outcome.body).hexdigest()))
     if first_run:
         adaptive.remember(outcome.body, selector, url=url, path=adaptive_path)
     return PipelineResult(status.OK, rows=len(df))

@@ -4,6 +4,7 @@ The gate is checked first (the pass and every redirect hop); the HTTP client is 
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 from urllib.parse import urlsplit, urljoin
@@ -24,6 +25,9 @@ logging.getLogger("scrapling").setLevel(logging.CRITICAL)
 _CLIENTS_BUILT = 0
 _CHALLENGE_MARKERS = (b"just a moment", b"cf-chl", b"captcha", b"checking your browser", b"attention required")
 _REDIRECTS = {301, 302, 303, 307, 308}
+# Page body cap. Limit: it is checked after Fetcher.get has returned the whole body, so it protects parsing and
+# caching but not the download itself; the client timeout bounds time.
+DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024
 
 
 def clients_built() -> int:
@@ -75,23 +79,29 @@ def _is_challenge(resp: RawResponse) -> bool:
 
 
 def _out(st: str, url: str, http_status: int | None = None, body: bytes = b"", detail: str = "") -> FetchOutcome:
-    return FetchOutcome(st, url, http_status, body, detail)
+    digest = hashlib.sha256(body).hexdigest() if st == status.OK else None
+    return FetchOutcome(st, url, http_status, body, detail, digest)
 
 
 def fetch(url: str, pass_: object, *, cache: ResponseCache | None = None, refresh: bool = False,
           politeness: Politeness | None = None, robots: RobotsChecker | None = None, proxy: str | None = None,
-          timeout: float = 10.0, max_redirects: int = 5, logger=None) -> FetchOutcome:
+          timeout: float = 10.0, max_redirects: int = 5, logger=None,
+          max_body_bytes: int = DEFAULT_MAX_BODY_BYTES) -> FetchOutcome:
     try:
-        return _fetch(url, pass_, cache, refresh, politeness, robots, proxy, timeout, max_redirects, logger)
+        return _fetch(url, pass_, cache, refresh, politeness, robots, proxy, timeout, max_redirects, logger,
+                      max_body_bytes)
     except Exception as exc:
         return _out(status.CONNECTION_FAILED, str(url), detail=f"unexpected {type(exc).__name__}")
 
 
-def _fetch(url, pass_, cache, refresh, politeness, robots, proxy, timeout, max_redirects, logger) -> FetchOutcome:
+def _fetch(url, pass_, cache, refresh, politeness, robots, proxy, timeout, max_redirects, logger,
+           max_body_bytes) -> FetchOutcome:
     if not isinstance(pass_, FetchPass):
         return _out(status.REFUSED, str(url), detail="a FetchPass from request_access is required")
     if not pass_.permits(url):
         return _out(status.REFUSED, url, detail="url not permitted by pass")
+    if cache is not None and cache.tier != pass_.tier:
+        return _out(status.REFUSED, url, detail="response cache tier does not match the pass tier")
     if cache is not None and not refresh:
         hit = cache.get(url)
         if hit is not None:
@@ -108,6 +118,8 @@ def _fetch(url, pass_, cache, refresh, politeness, robots, proxy, timeout, max_r
         except Exception as exc:
             st = status.TIMEOUT if _is_timeout(exc) else status.CONNECTION_FAILED
             return _out(st, current, detail=type(exc).__name__)
+        if len(resp.body) > max_body_bytes:
+            return _out(status.HTTP_ERROR, current, resp.status, detail=f"body too large (cap {max_body_bytes} bytes)")
         if resp.status in _REDIRECTS:
             target = resp.headers.get("location")
             if not target:
