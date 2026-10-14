@@ -10,7 +10,7 @@ metadata:
 
 # my_site — Master Plan (board and task registry)
 
-**Last verified:** 2026-10-14 UTC at `origin/main` `bb96e5e` (last code merges PR #69 T56, PR #70 T55; PR #60 `bfb7793`: T45-T51 merged; R12 accepted with known gaps; PR #63 market-framework SPEC, PR #65 plan docs) ; **built from:** revision 6 (`18ffd4f`). Gate reports: `process/general-plans/completed/master-planner-recovery_02-10-26/`.
+**Last verified:** 2026-10-14 UTC at `origin/main` `c2b9052` (waves 1-3 of P9 merged; PR #60: T45-T51; R12 accepted with known gaps; PR #63 market SPEC) ; **built from:** revision 6 (`18ffd4f`). Gate reports: `process/general-plans/completed/master-planner-recovery_02-10-26/`.
 
 **This file is the one board.** Each task has one row here; details live in its task folder. Revisions 1-6: `process/archive/master-plan-revisions_02-10-26.md`. Protocol: `process/development-protocols/master-planner.md`. Direction: north-star.md. State: current-state.md.
 
@@ -24,7 +24,7 @@ metadata:
 
 ## Active lanes
 
-No worker lane active. Merge token: free. Wave 3 of P9 (T57, T58) about to be dispatched; two wave 2 supplement PRs may be open.
+No worker lane active. Merge token: free. Wave 4 of P9 (T59, T60) about to be dispatched.
 
 ## Registry
 
@@ -75,7 +75,7 @@ Columns: ID · Objective · Prio · Status · Parent · Deps · Worker/session �
 | P6 | LSE equities page with Add button, private-use note | M | review | - | P4 | - | - | realignment SPEC | per SPEC | REALIGN SPEC | built: T45-T51, accepted with known gaps (PRs #54-#60); open: P-S9-2 (on-PC page, real-close timing), P-S9-3 (phone/iPad); gaps: `equities-known-gaps_NOTE_13-10-26.md` | `active/screener-batch5-equities_12-10-26/` (not archived, needs the user's go) |
 | P7 | protect pytrends partial-hour fix and nightly archive (guard tests) | M | proposed | P4 | — | — | — | BASKETS Decision 16, AC-25 | RT2 | BASKETS SPEC | — | — |
 | P8 | Human-confirmed market framework | M | proposed, PAUSED by owner 14-10-26 | - | - | - | - | owner must decide which input fits which timeframe before resume | per SPEC | SPEC `active/market-framework_13-10-26/`; PR #63 | paused; its proposed exception text (labelled D-15 in the SPEC) is renumbered on resume | `active/market-framework_13-10-26/` |
-| P9 | Data integration tooling: REA allow-listed wrapper + Scrapling tiers 1-3, separate uv project `tools/data-integration` | M | approved (owner 14-10-26) | - | - | workers per wave | `claude/t53..t61-*` | PLAN PASS (PVL 2). 9 slices T53 S-T0 SPEC, T54 S-T1 skeleton, T55 S-T2 approval gate, T56 S-T5a REA wrapper, T57 S-T3a tier-1, T58 S-T3b parse/store, T59 S-T4 tiers 2-3, T60 S-T5b docs, T61 S-T6 BTC-HIST. W1 DONE+merged: T53 PR #66; T54 PR #67 (tester PASS_WITH_GAPS). W2 DONE+merged: T55 PR #70, T56 PR #69; tester PASS_WITH_GAPS, no blocker (API 1169 passed, 1 skipped, 5 deselected at bb96e5e; guards 26; tooling 150). Supplement PRs in progress: T56 reject --update/--mcp in argument values + stronger REA guard; T55 cap expiry at 366 days + extend stdlib-only guard. Lapse: W2 envelopes had a stale API baseline (1143 not 1160), both workers stopped at needs_input, unblocked; rule: recompute the baseline from origin/main per envelope. W3 T57+T58 next; W4 T59+T60, W5 T61; max 2 workers | RT0-RT3; est 23.3-40.5 USD; ceiling 130 USD (owner, 14-10-26); worker spend 89.71 USD (88.09 + W2 1.62: T55 0.88, T56 0.74; est 5.0-8.0; supplements excluded); ask 7, cap 15 USD per slice; cost from idle sessions | plan `active/data-integration-tooling_13-10-26/` | limits: tiers 2/3 not proven live; scrapling tests outside CI; Windows/Py 3.12 unverified until owner probes AC-16/17; REA web modes unverified | - |
+| P9 | Data integration tooling: REA allow-listed wrapper + Scrapling tiers 1-3, separate uv project `tools/data-integration` | M | approved (owner 14-10-26) | - | - | workers per wave | `claude/t53..t61-*` | PLAN PASS (PVL 2). 9 slices T53 S-T0 SPEC, T54 S-T1 skeleton, T55 S-T2 approval gate, T56 S-T5a REA wrapper, T57 S-T3a tier-1, T58 S-T3b parse/store, T59 S-T4 tiers 2-3, T60 S-T5b docs+router, T61 S-T6 BTC-HIST. W1-W3 DONE+merged: T53 #66, T54 #67, T55 #70, T56 #69, W2 supplements #71 #72, T57 #75 (1.82 USD), T58 #74 (1.18 USD; merged by owner before the independent check); W3 tester running. W4 T59 + T60 about to be dispatched, then W5 T61; max 2 workers. Rule: recompute the API baseline from origin/main before writing envelopes (W2 stale-baseline lapse) | RT0-RT3; est 23.3-40.5 USD; ceiling 130 USD (owner); worker spend 93.30 USD (90.31 + 2.99); ask 7, cap 15 USD per slice | plan `active/data-integration-tooling_13-10-26/` | limits: tiers 2/3 not proven live; scrapling tests outside CI; Windows/Py 3.12 unverified until owner probes AC-16/17; REA web modes unverified | - |
 
 ### Recovery program (master-planner-recovery)
 
