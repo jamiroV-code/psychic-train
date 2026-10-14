@@ -1,0 +1,33 @@
+[project]
+name = "data-integration"
+version = "0.1.0"
+description = "Owner-run data-integration tooling (scraping tiers, approvals, provenance). Never imported by the API."
+requires-python = ">=3.12"
+dependencies = [
+    "scrapling[fetchers]==0.4.15",
+    "pandas==3.0.6",
+    "pyarrow==25.0.1",
+    "duckdb==1.5.5",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/data_integration"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["../..", "src"]
+addopts = "-m 'not integration and not browser and not antibot'"
+markers = [
+    "integration: opt-in real-network test (loopback fixture server excepted); deselected by default",
+    "browser: needs a browser install (scrapling install); deselected by default",
+    "antibot: exercises anti-bot tier behaviour; deselected by default",
+]
