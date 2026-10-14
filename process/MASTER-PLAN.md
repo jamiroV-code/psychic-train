@@ -10,7 +10,7 @@ metadata:
 
 # my_site — Master Plan (board and task registry)
 
-**Last verified:** 2026-10-14 UTC at `origin/main` `20b65a2` (last code merge PR #60 `bfb7793`: T45-T51 merged; T32-T44 and T41 before; R12 accepted with known gaps; PR #63 market-framework SPEC, PR #65 plan docs) ; **built from:** revision 6 (`18ffd4f`). Gate reports: `process/general-plans/completed/master-planner-recovery_02-10-26/`.
+**Last verified:** 2026-10-14 UTC at `origin/main` `c46fe1a` (last code merges PR #66 T53, PR #67 T54; PR #60 `bfb7793`: T45-T51 merged; T32-T44 and T41 before; R12 accepted with known gaps; PR #63 market-framework SPEC, PR #65 plan docs) ; **built from:** revision 6 (`18ffd4f`). Gate reports: `process/general-plans/completed/master-planner-recovery_02-10-26/`.
 
 **This file is the one board.** Each task has one row here; details live in its task folder. Revisions 1-6: `process/archive/master-plan-revisions_02-10-26.md`. Protocol: `process/development-protocols/master-planner.md`. Direction: north-star.md. State: current-state.md.
 
@@ -24,7 +24,7 @@ metadata:
 
 ## Active lanes
 
-No worker lane active. Merge token: free. Wave 1 of P9 (T53, T54) is about to be dispatched.
+No worker lane active. Merge token: free. Wave 2 of P9 (T55, T56) about to be dispatched.
 
 ## Registry
 
@@ -75,7 +75,7 @@ Columns: ID · Objective · Prio · Status · Parent · Deps · Worker/session �
 | P6 | LSE equities page with Add button, private-use note | M | review | - | P4 | - | - | realignment SPEC | per SPEC | REALIGN SPEC | built: T45-T51, accepted with known gaps (PRs #54-#60); open: P-S9-2 (on-PC page, real-close timing), P-S9-3 (phone/iPad); gaps: `equities-known-gaps_NOTE_13-10-26.md` | `active/screener-batch5-equities_12-10-26/` (not archived, needs the user's go) |
 | P7 | protect pytrends partial-hour fix and nightly archive (guard tests) | M | proposed | P4 | — | — | — | BASKETS Decision 16, AC-25 | RT2 | BASKETS SPEC | — | — |
 | P8 | Human-confirmed market framework | M | proposed, PAUSED by owner 14-10-26 | - | - | - | - | owner must decide which input fits which timeframe before resume | per SPEC | SPEC `active/market-framework_13-10-26/`; PR #63 | paused; its proposed exception text (labelled D-15 in the SPEC) is renumbered on resume | `active/market-framework_13-10-26/` |
-| P9 | Data integration tooling: REA allow-listed wrapper + Scrapling tiers 1-3, separate uv project `tools/data-integration` | M | approved (EXECUTE approved by owner 14-10-26) | - | - | workers per wave | `claude/t53..t61-*` | PLAN validated PASS after 1 fix cycle (PVL iteration 2). 9 slices = tasks T53 S-T0 SPEC amendments, T54 S-T1 skeleton+guards, T55 S-T2 approval gate, T56 S-T5a REA wrapper, T57 S-T3a tier-1 fetch, T58 S-T3b parse/store/provenance, T59 S-T4 tiers 2-3, T60 S-T5b docs+router, T61 S-T6 first dataset BTC-HIST. Waves: W1 T53+T54, W2 T55+T56, W3 T57+T58, W4 T59+T60, W5 T61; max 2 workers | RT0-RT3; estimate 23.3-40.5 USD (midpoint 31.9); ceiling raised by owner 100 -> 130 USD 14-10-26 (worker spend 86.13 before this programme); ask 7, cap 15 USD per slice; planner measures cost from the session record after idle | plan `active/data-integration-tooling_13-10-26/` | known limits: tiers 2/3 not proven live; scrapling tests outside CI; Windows/Python 3.12 unverified until owner probes AC-16/AC-17; REA web modes on a real page unverified | - |
+| P9 | Data integration tooling: REA allow-listed wrapper + Scrapling tiers 1-3, separate uv project `tools/data-integration` | M | approved (EXECUTE approved by owner 14-10-26) | - | - | workers per wave | `claude/t53..t61-*` | PLAN PASS (PVL 2). 9 slices T53 S-T0 SPEC, T54 S-T1 skeleton+guards, T55 S-T2 approval gate, T56 S-T5a REA wrapper, T57 S-T3a tier-1, T58 S-T3b parse/store, T59 S-T4 tiers 2-3, T60 S-T5b docs, T61 S-T6 BTC-HIST. W1 DONE+merged: T53 PR #66; T54 PR #67 incl. supplement 1 (hardened workflow-path and marker-audit guards; tester PASS_WITH_GAPS, two low gaps fixed). W2 T55 (S-T2 approval gate, local store, status cmd) + T56 (S-T5a REA wrapper); W3 T57+T58, W4 T59+T60, W5 T61; max 2 workers | RT0-RT3; est 23.3-40.5 USD; ceiling 130 USD (owner, 14-10-26); worker spend 88.09 USD (86.13 + W1 1.96: T53 0.35, T54 1.61; est 3.8-6.5); ask 7, cap 15 USD per slice; cost from session record after idle | plan `active/data-integration-tooling_13-10-26/` | known limits: tiers 2/3 not proven live; scrapling tests outside CI; Windows/Python 3.12 unverified until owner probes AC-16/AC-17; REA web modes on a real page unverified | - |
 
 ### Recovery program (master-planner-recovery)
 
