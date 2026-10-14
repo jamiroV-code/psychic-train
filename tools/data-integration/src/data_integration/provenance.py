@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import tempfile
+from importlib.metadata import version as _dist_version
 from datetime import datetime
 from pathlib import Path
 
@@ -12,6 +13,7 @@ import pandas as pd
 
 from data_integration import paths
 from data_integration.approvals import format_utc
+from data_integration.parse import PARSER_VERSION
 
 paths._repo_root()
 from api.data import cache  # noqa: E402
@@ -25,7 +27,7 @@ def content_hash(df: pd.DataFrame) -> str:
     return hashlib.sha256(df.to_csv(index=False).encode("utf-8")).hexdigest()
 
 
-def build_record(pass_, url: str, df: pd.DataFrame, now: datetime) -> dict:
+def build_record(pass_, url: str, df: pd.DataFrame, now: datetime, response_sha256: str | None = None) -> dict:
     return {
         "source": pass_.source,
         "tier": pass_.tier,
@@ -36,6 +38,13 @@ def build_record(pass_, url: str, df: pd.DataFrame, now: datetime) -> dict:
         "rows": len(df),
         "columns": list(df.columns),
         "content_sha256": content_hash(df),
+        "response_sha256": response_sha256,
+        "scrapling_version": _dist_version("scrapling"),
+        "parser_version": PARSER_VERSION,
+        "approved": pass_.approved,
+        "expires": pass_.expires,
+        "approval_id": pass_.approval_id,
+        "approval_revision": pass_.approval_revision,
     }
 
 
