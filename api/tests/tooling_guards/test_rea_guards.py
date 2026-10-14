@@ -56,3 +56,35 @@ def test_allowlist_has_no_forbidden_commands():
     strings = {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
     for banned in ("setup", "update", "uninstall", "mcp", "completions"):
         assert banned not in strings, banned
+
+
+SUBCOMMAND_RE = re.compile(r"rea-agents(@[\w.]+)?\s+(setup|update|uninstall|mcp|completions)\b", re.IGNORECASE)
+EXEMPT_WORDS = ("rejected", "superseded")
+
+
+def flagged_constants(source: str) -> list[str]:
+    """String constants naming `rea-agents <banned subcommand>`, unless the text says rejected or superseded."""
+    hits = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            text = node.value
+            if SUBCOMMAND_RE.search(text) and not any(w in text.lower() for w in EXEMPT_WORDS):
+                hits.append(text)
+    return hits
+
+
+def test_no_rea_py_constant_names_a_banned_subcommand():
+    bad = {f.name: flagged_constants(f.read_text(encoding="utf-8")) for f in REA_DIR.glob("*.py")}
+    assert REA_DIR.joinpath("wrapper.py").exists()
+    assert not any(bad.values()), bad
+
+
+def test_subcommand_scan_flags_a_temp_file(tmp_path):
+    for sub in ("setup", "update", "uninstall", "mcp", "completions", "SETUP"):
+        f = tmp_path / "bad.py"
+        f.write_text(f'X = "rea-agents {sub}"\n', encoding="utf-8")
+        assert flagged_constants(f.read_text(encoding="utf-8")), sub
+    f.write_text('X = "npx -y rea-agents@6.4.0 setup"\n', encoding="utf-8")
+    assert flagged_constants(f.read_text(encoding="utf-8"))
+    f.write_text('X = "rea-agents setup is rejected"\nY = "rea-agents compare"\n', encoding="utf-8")
+    assert flagged_constants(f.read_text(encoding="utf-8")) == []

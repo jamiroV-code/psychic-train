@@ -37,3 +37,13 @@ Developer to run the single real npx check later (Hybrid). Findings file format 
 
 ## 11 Context cost
 No extra docs opened beyond the envelope list.
+
+## Supplement 1 (branch claude/t56-dit-s-t5a-supplement-1)
+
+What changed:
+- wrapper.py and allowlist.py: any argv token (flag, flag value or positional) containing `--update` or `--mcp`, case-insensitive, is refused with reason bad_flag and zero runner calls (FORBIDDEN_SUBSTRINGS). Tests cover `x=--update`, `a=--mcp`, `--update=1`, flag values and harmless dash tokens.
+- test_rea_guards.py: every string constant in all rea/*.py is scanned for `rea-agents` followed by setup, update, uninstall, mcp or completions (case-insensitive), unless the text says rejected or superseded. Self-test flags a temp file with X = "rea-agents setup"; the current tree is clean.
+- Acknowledged: tools/data-integration/tests/_helpers.py is a shared test helper outside this slice's owned glob list; this supplement does not touch it.
+- Input-path handling unchanged (known limit: ../ and absolute positionals accepted).
+
+Counts: tooling pytest 165 passed (baseline 150); guards 28 passed (baseline 26); API full 1171 passed, 1 skipped, 5 deselected (baseline 1169 + 2). uv.lock and pyproject.toml unchanged. UTC 2026-10-14T15:18Z.

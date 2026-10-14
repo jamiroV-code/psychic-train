@@ -39,3 +39,5 @@ ALLOWED_FLAGS: dict[str, frozenset[str]] = {cmd: _BASE_FLAGS for cmd in ALLOWED_
 
 ARG_RE = re.compile(r"^[A-Za-z0-9._/:@=-]{1,200}$")
 FORBIDDEN_CHARS = frozenset('"%^&|<>')
+# Any argv token containing one of these is refused, wherever it appears (e.g. "x=--update").
+FORBIDDEN_SUBSTRINGS: tuple[str, ...] = ("--update", "--mcp")

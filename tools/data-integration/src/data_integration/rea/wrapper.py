@@ -120,6 +120,8 @@ def run_rea(
     i = 0
     while i < len(items):
         tok = items[i]
+        if any(bad in tok.lower() for bad in allowlist.FORBIDDEN_SUBSTRINGS):
+            return Refusal("bad_flag", "token contains a forbidden option name")
         if tok.startswith("-"):
             if tok not in flags:
                 return Refusal("bad_flag", "flag is not allowed for this command")
@@ -129,6 +131,8 @@ def run_rea(
             if i + 1 >= len(items):
                 return Refusal("bad_argument", f"{tok} needs a value")
             val = normalize_path_arg(items[i + 1])
+            if any(bad in val.lower() for bad in allowlist.FORBIDDEN_SUBSTRINGS):
+                return Refusal("bad_flag", "token contains a forbidden option name")
             if not _valid_arg(val) or val.startswith("-"):
                 return Refusal("bad_argument", f"invalid value for {tok}")
             if tok == "--output":
