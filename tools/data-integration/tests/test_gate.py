@@ -179,3 +179,27 @@ def test_gate_module_stdlib_only():
             names = [node.module]
         for n in names:
             assert n.split(".")[0] in sys.stdlib_module_names or n.split(".")[0] == "data_integration", n
+
+
+def test_far_future_expiry_refused_as_store_corrupt(tmp_path, client_counter):
+    # a hand-edited record (expiry 9999-12-31) violates the 366-day cap: store_corrupt, never a pass
+    import json
+
+    s = ApprovalStore(tmp_path)
+    s.write(make_record())
+    p = s.path_for("example-src")
+    data = json.loads(p.read_text(encoding="utf-8"))
+    data["expiry"] = "9999-12-31T00:00:00Z"
+    p.write_text(json.dumps(data), encoding="utf-8")
+    r = request_access("example-src", 1, s, fixed_clock())
+    assert isinstance(r, Refused) and r.reason == "store_corrupt"
+    assert client_counter == []
+
+
+def test_expiry_cap_boundary(tmp_path):
+    s = ApprovalStore(tmp_path)
+    ap = NOW - timedelta(days=1)
+    s.write(make_record(approved=ap, expiry=ap + timedelta(days=366)))
+    assert isinstance(request_access("example-src", 1, s, fixed_clock()), FetchPass)
+    with pytest.raises(ValueError):
+        s.write(make_record("src-b", approved=ap, expiry=ap + timedelta(days=366, seconds=1)))

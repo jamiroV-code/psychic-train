@@ -97,3 +97,20 @@ def test_add_bad_source_and_tier(env, capsys):
     bad = ["9" if a == "2" else a for a in ADD]
     assert run(bad, capsys, isatty=True, input_fn=lambda p: "src-a")[0] != 0
     assert not env.exists()
+
+
+def test_add_days_cap(env, capsys):
+    ok = ADD + ["--days", "366"]
+    assert run(ok, capsys, isatty=True, input_fn=lambda p: "src-a")[0] == 0
+    assert ApprovalStore(env).read("src-a").expiry == "2027-01-11T12:00:00Z"
+    env2 = ["--days", "367"]
+    code, out = run(ADD[:2] + ["src-b"] + ADD[3:] + env2, capsys, isatty=True, input_fn=lambda p: "src-b")
+    assert code != 0 and "between 1 and 366" in out
+    assert "src-b" not in ApprovalStore(env).list_sources()
+
+
+def test_add_days_below_one_refused(env, capsys):
+    for d in ("0", "-5"):
+        code, out = run(ADD + ["--days", d], capsys, isatty=True, input_fn=lambda p: "src-a")
+        assert code != 0 and "between 1 and 366" in out
+    assert not env.exists()

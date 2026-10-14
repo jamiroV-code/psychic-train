@@ -6,13 +6,14 @@ import os
 import re
 import tempfile
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 SOURCE_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _RESERVED = {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10)), *(f"lpt{i}" for i in range(1, 10))}
 SUFFIX = ".approval.json"
 DEFAULT_TTL_DAYS = 90
+MAX_TTL_DAYS = 366  # a record whose expiry is further out than this is never honoured
 
 
 class StoreError(Exception):
@@ -94,7 +95,8 @@ def _from_dict(data: object, source: str) -> ApprovalRecord:
         allowed_tier=tier, hosts=hosts, pages=pages, alternatives_checked=_str_tuple(data.get("alternatives_checked")),
         revision=rev, **texts,
     )
-    rec.approved_dt, rec.expiry_dt  # noqa: B018 - validates both timestamps
+    if rec.expiry_dt > rec.approved_dt + timedelta(days=MAX_TTL_DAYS):
+        raise ValueError("expiry outside the allowed window")  # loaded as StoreCorrupt
     return rec
 
 

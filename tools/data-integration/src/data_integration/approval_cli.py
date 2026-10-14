@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from data_integration import paths
 from data_integration.approvals import (
-    DEFAULT_TTL_DAYS, ApprovalRecord, ApprovalStore, StoreCorrupt, StoreError, format_utc, valid_source,
+    DEFAULT_TTL_DAYS, MAX_TTL_DAYS, ApprovalRecord, ApprovalStore, StoreCorrupt, StoreError, format_utc, valid_source,
 )
 
 PLACEHOLDER = "%LOCALAPPDATA%\\my_site\\approvals"
@@ -48,6 +48,9 @@ def _add(args, clock, isatty, input_fn) -> int:
         return 2
     if not valid_source(args.source) or args.tier not in (1, 2, 3):
         print("refused: invalid source name or tier")
+        return 2
+    if not 1 <= args.days <= MAX_TTL_DAYS:
+        print(f"refused: --days must be between 1 and {MAX_TTL_DAYS}")
         return 2
     typed = input_fn(f"Type the source name ({args.source}) to confirm: ")
     if typed != args.source:
