@@ -41,3 +41,14 @@ Decision request: none. Optional: FetchPass currently allows only default ports;
 
 ## 11 Context cost
 No extra docs opened beyond the envelope list plus .gitignore and test_marker_audit.py (to fix the audit failure).
+
+## Supplement 1
+Branch claude/t55-dit-s-t2-supplement-1, from origin/main bb96e5e. Feature commit 625a7c2 (2026-10-14T15:18Z).
+
+What changed:
+1. Expiry cap. approvals.MAX_TTL_DAYS = 366. The record loader rejects any record whose expiry is more than 366 days after its approval date; it raises StoreCorrupt, so the gate returns Refused(store_corrupt) (documented choice: expired and bad_clock do not fit). A record loaded this way is renamed .bad. Writes are validated the same way. approval_cli add refuses --days below 1 or above 366 with a plain message; default stays 90. Tests: 366 accepted and 367 refused on add; 0 and -5 refused; a hand-written 9999-12-31 record is refused by the gate with a zero socket counter; the write boundary (366 days ok, 366 days + 1 s refused).
+2. Import guard in api/tests/tooling_guards/test_approval_store_guard.py now covers gate, approvals, approval_cli, paths, types, status, with a shared helper non_stdlib_imports and a self-test showing a temporary module importing a third-party name (and socket) is flagged.
+
+Counts: tooling suite 154 passed (baseline 150, +4). tooling_guards 27 passed (baseline 26, +1). Full API 1170 passed, 1 skipped, 5 deselected (baseline 1169, +1). api/uv.lock and api/pyproject.toml unchanged; git diff --check clean.
+
+Acknowledgement: tools/data-integration/tests/_helpers.py was created by this worker in the original S-T2 slice; it is outside the owned glob list (already noted in Deviations).
