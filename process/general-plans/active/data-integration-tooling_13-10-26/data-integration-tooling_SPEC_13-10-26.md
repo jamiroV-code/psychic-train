@@ -26,7 +26,7 @@ Companion SPEC `market-framework_13-10-26` is PAUSED by the owner (14-10-26) unt
 |---|---|---|
 | L1 | Scrapling scope = all three tiers: (1) HTTP fetch/parser/crawler; (2) headless browser; (3) anti-bot. Gating (owner answer 14-10-26): a per-source approval record naming the site and listing the allowed tier is enough; the extra per-use owner go for tier 3 is REMOVED. The record stays mandatory per source (robots/terms check, allowed pages, rate policy, allowed tier, owner approval date, expiry). Browser tiers install as a separate opt-in step on the owner's PC. | Locked |
 | L2 | Scraping starts only from an explicit developer command: no scheduler, worker, Actions job, API-handler import or startup call in the NEW tooling (owner answer 13-10-26). The AC-2 guard covers the new tooling's entry points only (see L6). | Locked |
-| L3 | REA stays version-pinned and developer-run, not an API runtime dependency. Owner answer 14-10-26: `npx rea-agents setup` MAY register REA as a helper callable by Claude Code, if: a scratch-directory dry run first records exactly which files setup would change (UNKNOWN, untested); the owner reviews the diff before it lands; scope is project and Claude Code only unless the owner says otherwise; the pinned version is kept; the capability is registered in the context router. | Locked |
+| L3 | REA stays version-pinned and developer-run, not an API runtime dependency. Wrapper-only (DIT-6): an allow-listed wrapper runs web/static commands only; `npx rea-agents setup` is rejected (superseded owner answer of 14-10-26), no MCP, no `.mcp.json`, no agent-config change. | Locked |
 | L4 | Companion SPEC `market-framework_13-10-26` is separate and PAUSED (14-10-26); this SPEC only supplies tooling. | Locked (unchanged, pause noted) |
 | L5 | Approval records are kept ONLY on the owner's PC, never committed (gitignored local store). Owner answer 14-10-26. Consequences: (i) real scrapes run on the owner's PC, started by the owner or guided by the planner, not in the cloud sandbox (it only builds and tests with fixture records); (ii) each stored scrape copies the approval facts (source, tier, approval date, expiry, id) into its provenance; (iii) a guard test fails if a record is tracked or staged; (iv) step 1-2 notes stay in the public repo (source names appear, as for Farside and LiqTide), raw snapshots stay untracked; (v) the owner is told how to back up the store. Expiry default 90 days, renewable. | Locked; expiry default and public notes Flagged (OQ-8, OQ-11) |
 | L6 | Farside adapter STAYS UNTOUCHED (owner declined to move it, 14-10-26). Farside refreshes on demand by API request (`api/analytics/regime/components.py:484` via `api/routers/regime.py:57`; once per UTC day, cache-first). The AC-2 guard must NOT cover it: neither broken nor extended. | Locked |
@@ -91,28 +91,28 @@ Extend `process/context/data-sources/all-data-sources.md` and existing skills; r
 FA = Fully-Automated, HY = Hybrid, AP = Agent-Probe. Existing pytest (`api/tests/data`). Raised from 20 to 23 on 14-10-26.
 
 - **AC-1** A scrape with no matching, unexpired local approval record is refused with a reason, no network call. proven by: pytest, fixture store. FA
-- **AC-2** No scheduler, workflow, API handler or startup code can invoke the NEW scraping tooling; the guard covers the new tooling's entry points only; the Farside on-demand path (L6) is documented as outside it. proven by: guard test plus doc grep. FA
+- **AC-2** No scheduler, workflow, API handler or startup code can invoke the NEW scraping tooling; the guard lives in `api/tests/tooling_guards/`, is a file-only import scan, and covers the new tooling's entry points only; the Farside on-demand path (L6) is documented as outside it. proven by: guard test plus doc grep. FA
 - **AC-3** Any tier above the record's allowed tier is refused; tier 3 runs only when the record lists tier 3 (no separate per-use go). proven by: pytest, approval fixtures. FA
-- **AC-4** Default `uv sync --project api` resolves with no Scrapling, browser or REA package. proven by: lockfile, workflow grep. FA
-- **AC-5** The tooling installs on demand in a clean environment without altering the API environment. proven by: scripted install check. HY
-- **AC-6** A page disallowed by a fixture robots file is refused on every tier. proven by: pytest, fixture server. FA
+- **AC-4** Default `uv sync --project api` resolves with no Scrapling, browser or REA package: exact package names are absent from `api/pyproject.toml` and `api/uv.lock`, and workflows contain no `tools/data-integration`. proven by: lockfile and workflow grep. FA
+- **AC-5** The tooling installs on demand in a clean environment without altering the API environment. proven by: Hybrid scripted install check. HY
+- **AC-6** A page disallowed by a fixture robots file is refused on every tier, including tiers 2 and 3 (robots check before navigation). proven by: pytest, fixture server. FA
 - **AC-7** Configured delay, concurrency and per-host limits hold under a burst. proven by: pytest, fake clock. FA
 - **AC-8** A changed fixture page gives an explicit "changed" or "uncertain" status with a reason, and nothing is stored. proven by: pytest fixtures. FA
 - **AC-9** Missing columns, wrong types, out-of-range values or too few rows give an explicit failure and no stored file. proven by: pytest fixtures. FA
-- **AC-10** Every stored scrape carries source URL, fetch time, response hash, library version, parser version and approval id. proven by: pytest reading the sidecar. FA
-- **AC-11** Output reads through the existing cache/freshness code unchanged. proven by: pytest round trip. FA
+- **AC-10** Every stored scrape carries source URL, fetch time, response hash, library version, parser version and approval id. proven by: pytest reading the provenance file. FA
+- **AC-11** Output reads through the existing cache/freshness code unchanged: round trip through the cache read functions. proven by: pytest round trip. FA
 - **AC-12** A second run makes no request and leaves identical data; a forced refresh makes only allowed requests. proven by: pytest, call counter. FA
 - **AC-13** Timeouts, refused connections, challenge pages and HTTP errors map to the closed status set; no exception escapes. proven by: pytest fixtures. FA
 - **AC-14** Each request logs one structured line with outcome; no secret, key or IP appears. proven by: pytest on captured logs. FA
-- **AC-15** CI makes no live network call; live tests sit behind the `integration` marker. proven by: marker audit. FA
-- **AC-16** Tier-1 fetch, parse and store passes on the owner's Windows PC under Python 3.12. proven by: owner-run probe . AP
-- **AC-17** Tier 2 renders a local fixture page on the owner's PC. proven by: owner-run probe. AP
+- **AC-15** CI makes no live network call; live tests sit behind the `integration`, `browser` and `antibot` markers; CI runs only the API job. proven by: static marker audit. FA
+- **AC-16** Tier-1 fetch, parse and store passes on the owner's Windows PC under Python 3.12. proven by: owner-run script. AP
+- **AC-17** Tier 2 renders a local fixture page on the owner's PC. proven by: owner-run script after the opt-in browser install. AP
 - **AC-18** Workflow, evidence artefacts, approval fields and local-store backup guidance are documented once in the data-sources doc, reachable from the context router. proven by: router validator, grep gate. FA
-- **AC-19** A pinned REA version, evidence template (VERIFIED/ASSUMED) and "what REA cannot establish" statement exist; the API does not import REA; agent-config changes are limited to the dry-run-recorded, owner-reviewed diff of the REA setup. proven by: grep gate, diff check against the dry run. FA
-- **AC-20** The end-to-end dataset is long BTC price history, completing all four steps (approval record only if scraping) with stored data and provenance; an API or dataset found in step 2 counts. proven by: owner review. HY
-- **AC-21** The approval store path is gitignored; a guard test fails if any record is tracked or staged in git. proven by: pytest on git index. FA
-- **AC-22** Provenance copies source name, allowed tier, approval date, expiry and approval id, so a stored scrape is explainable without the local file. proven by: pytest reading the sidecar. FA
-- **AC-23** A dry-run record of `npx rea-agents setup` (files it would change, REA modes enabled) exists before any agent-config change. proven by: record present, diff check (ties to AC-19). HY
+- **AC-19** A pinned REA version, an evidence template (VERIFIED/ASSUMED) and "what REA cannot establish" statement exist; the API does not import REA; an allow-listed wrapper exists; no agent-config file is changed by this work (worker gate: `git diff origin/main...HEAD` on `.claude/`, `CLAUDE.md`, `AGENTS.md`, `.mcp.json` is empty; NOT a CI check). proven by: grep gate, worker diff check. FA
+- **AC-20** The end-to-end dataset is long BTC price history (DIT-9, new cache key `BTC-HIST`, existing BTC series not replaced), completing all four steps (approval record only if scraping) with stored data and provenance; an API or dataset found in step 2 counts. proven by: owner review. HY
+- **AC-21** The approval store path and the approvals folder pattern are gitignored; a guard test fails if any record is tracked or staged in git. proven by: pytest on git index. FA
+- **AC-22** Provenance copies source name, allowed tier, approval date, expiry and approval id, so a stored scrape is explainable without the local file. proven by: pytest reading the provenance file. FA
+- **AC-23** The wrapper rejects `setup`, `update`, `uninstall`, `mcp` and every non-allow-listed command. proven by: pytest on the wrapper. FA
 
 ## Out Of Scope
 
@@ -144,19 +144,19 @@ Single-maintainer pre-1.0 Scrapling (pin); browser size and Windows antivirus un
 | OQ-9 | Raw snapshots by default? | Off; per approval record; untracked. | SAFE-DEFAULT |
 | OQ-10 | Farside adapter untouched? | CLOSED: yes (L6). | Closed |
 | OQ-11 | Step 1-2 notes (with source names) stay in the public repo? | Yes unless the owner decides otherwise. | SAFE-DEFAULT |
-| OQ-12 | Where does the local approval store live and how is it backed up? | Proposed: a path under the local data folder, like other gitignored files; owner confirms path and backup. | NEEDS-OWNER |
-| OQ-13 | Which REA modes are enabled after the dry run? | Owner decides after reading the dry-run diff. | NEEDS-OWNER |
+| OQ-12 | Where does the local approval store live and how is it backed up? | CLOSED 14-10-26 (DIT-8): one `<source>.approval.json` per source under `%LOCALAPPDATA%\my_site\approvals\` (env `DIT_APPROVALS_DIR` for tests). | CLOSED |
+| OQ-13 | Which REA modes are enabled after the dry run? | CLOSED 14-10-26: no dry run; `setup` rejected; web/static commands only via the wrapper. | CLOSED |
 
 ## Questions for INNOVATE
 
-1. Package layout; heavy dependencies out of the default API install.
-2. How approval is enforced.
-3. How REA is invoked and its output captured.
-4. Where the adaptive-tracking store lives.
-5. Provenance format (extend sidecar or separate record).
-6. Testing browser tiers locally without live sites.
-7. Protecting the local approval store from accidental commit and loss.
-8. Capturing and reviewing the dry-run record of `rea-agents setup`.
+1. Package layout; heavy dependencies out of the default API install. [ANSWERED DIT-1]
+2. How approval is enforced. [ANSWERED DIT-2, DIT-8]
+3. How REA is invoked and its output captured. [ANSWERED DIT-6]
+4. Where the adaptive-tracking store lives. [ANSWERED DIT-4]
+5. Provenance format (extend sidecar or separate record). [ANSWERED DIT-3]
+6. Testing browser tiers locally without live sites. [ANSWERED DIT-5]
+7. Protecting the local approval store from accidental commit and loss. [ANSWERED DIT-8]
+8. Capturing and reviewing the dry-run record of `rea-agents setup`. [ANSWERED DIT-6; `rea-agents setup` rejected, no dry run]
 
 ## Background / Research Findings
 
@@ -171,3 +171,4 @@ Single-maintainer pre-1.0 Scrapling (pin); browser size and Windows antivirus un
 - OQ-1, 2, 3, 4, 10 closed; OQ-8 now SAFE-DEFAULT; OQ-11, 12, 13 added; INNOVATE questions 7-8 added.
 - Risks added (REA capture, unproven live tiers, local-only records); companion mentions note the pause.
 - Wording trimmed to fit size; tables merged; no AC dropped.
+- Amendment 14-10-26 (T53 S-T0): AC-2, 4, 5, 6, 10, 11, 15, 16, 17, 19, 20, 21, 22, 23 reworded to match DIT-1..9; AC numbering kept; L3 rewritten wrapper-only; OQ-12, OQ-13 closed; INNOVATE questions 1-8 answered; `rea-agents setup` rejected.
