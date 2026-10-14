@@ -9,6 +9,7 @@ from urllib.robotparser import RobotFileParser
 from data_integration.gate import FetchPass
 from data_integration.politeness import USER_AGENT
 
+ROBOTS_MAX_BYTES = 512 * 1024
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 _DIRECTIVES = ("user-agent", "disallow", "allow", "crawl-delay", "sitemap", "host")
 
@@ -58,6 +59,8 @@ class RobotsChecker:
             return allow_all, "no robots.txt"
         if resp.status != 200:
             return None, f"robots returned {resp.status}"
+        if len(resp.body) > ROBOTS_MAX_BYTES:
+            return None, "robots too large"
         parser = _parse(resp.body)
         return (parser, "") if parser else (None, "robots unparsable")
 
