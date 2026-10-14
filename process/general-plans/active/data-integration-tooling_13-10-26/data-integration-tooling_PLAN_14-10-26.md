@@ -281,4 +281,45 @@ Owner probes: AC-16, AC-17, AC-20 review, REA wrapper on Windows. Known-Gap resi
 
 ## Validate contract
 
-pending VALIDATE
+Status: PASS
+Date: 14-10-26
+date: 2026-10-14
+generated-by: outer-pvl
+Parallel strategy: parallel-subagents (2 opus worker sessions per wave, planner merges between waves; validators/testers sonnet)
+Rationale: score 3/7 (S4, S6, S7); dominant S7; owned globs disjoint inside every wave.
+
+A = `UV_FROZEN=1 uv run --project api pytest`. T = `UV_PROJECT_ENVIRONMENT=$HOME/.cache/dit-env uv run --project tools/data-integration pytest tools/data-integration/tests -q`. API baseline at 20b65a2 (14-10-26): 1143 passed, 1 skipped, 5 deselected. Each slice logs its own baseline first; afterwards passed = baseline + its new guard tests, skipped/deselected unchanged, no existing test edited; another count stops at needs_input. Tooling default run: passed = sum of new tests; browser/antibot/integration deselected.
+
+| criterion id | behavior | strategy | proving test | gap-resolution |
+|---|---|---|---|---|
+| S-T0 AC-19,23 | SPEC wording | Fully-Automated | RT0: `git diff --stat origin/main...HEAD` = SPEC only; each `grep -n "rea-agents setup"` line says rejected/superseded | B |
+| S-T1 AC-2,4,15,21 | CI guards | Fully-Automated | RT2: `A api/tests/tooling_guards -q` red-first, green on base for unchanged parts; `A api/ -q` | B |
+| S-T1 AC-5 | clean install | Hybrid | `uv lock --project tools/data-integration`, T, `python tools/data-integration/scripts/check_clean_install.py`, import probe | B |
+| S-T2 AC-1,3,21,22 | gate, host-bound pass | Fully-Automated | RT2: T + `A api/tests/tooling_guards -q` | B |
+| S-T5a AC-19,23 | allow-list wrapper | Fully-Automated | RT2: T + A guards + `git diff origin/main...HEAD -- .claude CLAUDE.md AGENTS.md .mcp.json` empty | B |
+| S-T3a AC-6(t1),7,12-14 | tier 1 fetch | Fully-Automated | RT2: T (loopback, fake clock) | B |
+| S-T3b AC-8-12,22 | pipeline, provenance | Fully-Automated | RT2: T incl. api.data.cache round trip | B |
+| S-T4 AC-6(t2,t3),3,13 | tiers 2-3 gated | Fully-Automated | RT2: T default run (stub navigator); `-m browser`/`-m antibot` only where Chromium exists (Hybrid) | B |
+| S-T5b AC-18 | docs, router row | Fully-Automated | RT0: `node .claude/skills/vc-context-discovery/scripts/discover-context.mjs --check-routing`; `node .claude/skills/vc-generate-context/scripts/validate-all-context.mjs`; PLANNER-BUDGET block (base rc=1 pre-existing, headroom 2,960 B, record only); section `wc -c` <= 3,500 | B |
+| S-T6 AC-20 | first dataset notes | Hybrid | notes with VERIFIED/ASSUMED lines; adapter if any: its test + `A api/ -q`; owner review | C |
+| AC-16, AC-17 | Windows tier 1; tier 2 render | Agent-Probe | owner runs probe_tier1.py, probe_tier2.py | C |
+
+Failing stub (each Fully-Automated row): `def test_<scenario>(): raise AssertionError("NOT IMPLEMENTED - TDD stub: <scenario>")`.
+
+EVL (independent vc-tester, after the last merge): (1) `A api/ -q` = baseline + guard tests, 0 failed; (2) T, then T with `-m browser` and `-m antibot` where a browser exists; (3) `A api/tests/tooling_guards -q`; (4) `git diff --name-only origin/main...HEAD` lists none of CLAUDE.md, AGENTS.md, .claude/, .mcp.json, .github/, deploy/, api/uv.lock, api/pyproject.toml, existing api/data adapter or cache code (S-T6: one approved new adapter + test); (5) `git diff --exit-code api/uv.lock`, `git diff --check origin/main...HEAD`, `git ls-files` has no approval.json; (6) check_clean_install.py.
+
+Owner probes: AC-16, AC-17, AC-20 review, wrapper on Windows, BTC-HIST key, S-T6 adapter names at needs_input, new spend ceiling before EXECUTE (86.13 of 100 USD used; plan 23.3-40.5).
+
+Envelope additions (binding; plan body untouched so line ranges hold): E1 S-T1: test_skeleton asserts the pandas/pyarrow/duckdb pins equal api/uv.lock (3.0.6, 25.0.1, 1.5.5); tree scans skip .venv. E2 S-T2: permits() cases for userinfo host, non-http scheme, port; bad source name gives Refused, no exception. E3 S-T3b: also read cache.py line 36. E4 S-T4: tier 2/3 gating and robots tests use fixture_server so they run in the default suite. E5 S-T5a: test a drive-letter path (backslash fails the argument regex; convert). E6 S-T5b: also read evidence_template.md, approval fields (grep approvals.py), wrapper usage; docs say approval records are plain files. E7 S-T6: worker never runs npx or live REA; use owner-supplied artefacts, else ASSUMED or needs_input. E8 planner: P9 row at dispatch; vc-risk-evidence-pack in harness/ for S-T2, S-T5a.
+
+Dimension findings:
+- Infra fit: PASS - recipe verified, 36 packages resolve with exact pins
+- Test coverage: PASS - 23 ACs mapped to slice and runnable check; no behavior rests on Known-Gap alone
+- Breaking changes: PASS - no existing test, validator, glob or CI filter touched
+- Security surface: PASS - host-bound pass, exact allow-list, TTY add, UTC expiry
+- Section feasibility S-T0..S-T6: PASS - ranges match headings; read 29.5-31.7 KB of 36 KB
+
+Open gaps: none blocking. Residuals (D, backlog stubs at EXECUTE; see Known limits): tiers 2-3 on real sites; REA web modes on a real page; cloud browser test if Chromium stays unverified.
+What this coverage does NOT prove: tiers 2-3 on real sites; Windows, Python 3.12, antivirus, browser download size; wrapper on Windows; REA command names on a live npx call; tooling tests in CI (EVL only); that approval records cannot be written by other means.
+Gate: PASS
+Accepted by: n/a (PASS; E1-E8 are binding envelope additions)
