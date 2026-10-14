@@ -166,3 +166,42 @@ def test_cache_key_separates_tiers(tmp_path, fixture_server):
     assert t1.get(URL).body == b"tier-one" and t2.get(URL).body == b"tier-two"
     assert t1._key(URL, 1) != t1._key(URL, 2)
     assert t1._key(URL, 1) != t1._key(URL + "x", 1)
+
+
+# ---- follow-up 1
+def test_cache_tier_must_match_pass_tier(fixture_server, real_pass, tmp_path):
+    before = fetch_tier1.clients_built()
+    out = _go(fixture_server, real_pass, cache=ResponseCache(tmp_path / "rc", tier=2))
+    assert out.status == st.REFUSED and "tier" in out.detail
+    assert fetch_tier1.clients_built() == before and fixture_server.seen == []
+
+
+def test_tier2_pass_never_reads_tier1_entries(fixture_server, tmp_path):
+    s = ApprovalStore(tmp_path / "ap2")
+    s.write(make_record(tier=2, hosts=HOSTS, pages=("/data/",)))
+    p2 = request_access("example-src", 2, s, fixed_clock())
+    assert isinstance(p2, FetchPass) and p2.tier == 2
+    root = tmp_path / "rc"
+    ResponseCache(root, tier=1).put(URL, 200, b"tier-one-body")
+    assert _go(fixture_server, p2, cache=ResponseCache(root, tier=1)).status == st.REFUSED
+    out = _go(fixture_server, p2, cache=ResponseCache(root, tier=2))
+    assert out.status == st.OK and out.body == OK_BODY
+
+
+def test_legacy_cache_key_is_a_miss(tmp_path, fixture_server):
+    root = tmp_path / "rc"
+    root.mkdir()
+    old = hashlib.sha256(URL.encode("utf-8")).hexdigest()
+    (root / f"{old}.body").write_bytes(b"legacy")
+    (root / f"{old}.json").write_text(json.dumps({"url": URL, "http_status": 200}), encoding="utf-8")
+    assert ResponseCache(root, tier=1).get(URL) is None
+
+
+def test_robots_cap_boundary(fixture_server, real_pass):
+    head = b"User-agent: *\nAllow: /\n"
+    fixture_server.robots = head + b"#" * (ROBOTS_MAX_BYTES - len(head))
+    assert len(fixture_server.robots) == ROBOTS_MAX_BYTES
+    assert _go(fixture_server, real_pass).status == st.OK
+    fixture_server.robots += b"#"
+    out = _go(fixture_server, real_pass, politeness=Politeness(min_delay=0, sleeper=lambda s: None))
+    assert out.status == st.ROBOTS_BLOCKED and "too large" in out.detail
