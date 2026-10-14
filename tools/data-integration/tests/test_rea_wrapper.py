@@ -236,3 +236,24 @@ def test_evidence_inside_repo_refused(monkeypatch):
     assert isinstance(res, wrapper.Refusal) and res.reason == "evidence_in_repo"
     assert r.calls == []
     assert not (paths._repo_root() / "scratch-evidence").exists()
+
+
+@pytest.mark.parametrize("tok", ["x=--update", "a=--mcp", "--update=1", "--mcp=1", "pre--updatepost", "a/--mcp/b", "X=--UPDATE", "--Mcp"])
+def test_tokens_containing_forbidden_options_rejected(tok):
+    r = FakeRunner()
+    res = wrapper.run_rea("compare", [tok], runner=r)
+    assert isinstance(res, wrapper.Refusal) and res.reason == "bad_flag"
+    assert r.calls == []
+
+
+def test_forbidden_substring_rejected_as_flag_value():
+    r = FakeRunner()
+    res = wrapper.run_rea("compare", ["--source", "x=--update"], runner=r)
+    assert isinstance(res, wrapper.Refusal) and r.calls == []
+
+
+@pytest.mark.parametrize("tok", ["a-b", "my-app.js", "x=1-2", "up-date", "mc-p", "a--b"])
+def test_harmless_dash_tokens_accepted(tok):
+    r = FakeRunner()
+    assert wrapper.run_rea("compare", [tok], runner=r).status == status.OK
+    assert len(r.calls) == 1
