@@ -53,3 +53,9 @@ web/public/islands/
 api/data/layout.json
 api/data/layout.json.bad
 api/data/.layout.json.*.tmp
+
+# Data-integration tooling (tools/data-integration/): approvals and machine-local state
+*.approval.json
+**/approvals/
+**/scrape/*.sqlite*
+tools/data-integration/.venv/
