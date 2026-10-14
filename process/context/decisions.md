@@ -28,6 +28,7 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 | D-11 | Gate 3 live token probes by headless `claude -p` (route A), cap 1 USD per run | 03-10-26 | active |
 | D-12 | Pinned planner budget, per-file ceilings and the same-failure stop | 03-10-26 | active |
 | D-13 | Gate 4 test counts measured by installing frozen dependencies and running each suite once (G4-K1 = A) | 03-10-26 | active |
+| D-15 | Data integration tooling: separate uv project, one approval gate, REA wrapper only (DIT-1..DIT-9) | 14-10-26 | active |
 | D-0 | Original goal: one confidence level that sizes positions | 17-09-26 | superseded by D-1, D-2 |
 
 ## Entries
@@ -131,3 +132,19 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 
 ### D-14 Narrow exception: estimated leg label on the BTC chart only
 - **Decision:** 03-10-26 the user allows a computed estimated leg label (with its numbers visible) on the screener BTC leg chart only; no other page or coin box; the no-verdicts principle is unchanged. **Source:** REALIGN SPEC `## Defect findings and decisions 03-10-26`, F5. **Status:** active.
+
+### D-15 Data integration tooling
+- **Decision:** the owner accepted (14-10-26) developer-run data integration tooling: allow-listed REA wrapper plus Scrapling tiers 1-3. Sub-decisions (plan `process/general-plans/active/data-integration-tooling_13-10-26/data-integration-tooling_PLAN_14-10-26.md`, Common rules):
+  - DIT-1 separate uv project `tools/data-integration/` (pinned `scrapling[fetchers]==0.4.15`, pandas/pyarrow/duckdb equal to `api/uv.lock`), never imported by the API, not in CI. Rejected: dependencies in `api/pyproject.toml`.
+  - DIT-2 one gate `request_access(...) -> FetchPass | Refused`, host- and page-bound, refusal before any HTTP client exists. Rejected: per-fetcher checks.
+  - DIT-3 `<dataset>.provenance.json` beside the data; `cache.py` and `.meta.json` untouched. Rejected: extending `.meta.json`.
+  - DIT-4 adaptive SQLite store machine-local, outside repo and site-packages, written only after validation. Rejected: store inside the repo.
+  - DIT-5 mocks plus a loopback fixture server; markers `browser`, `antibot`; tier 3 not proven on any real site. Rejected: tests against real sites.
+  - DIT-6 REA wrapper only: `setup` never run, no MCP, no `.mcp.json`, no agent-config change. Rejected: `rea-agents setup`.
+  - DIT-7 docs: one section in `all-data-sources.md`, one row in the Task Routing Table of `all-context.md`. Rejected: a new context group.
+  - DIT-8 approvals: one `<source>.approval.json` per source under the local app-data folder (env `DIT_APPROVALS_DIR` for tests). Rejected: approvals in the repo.
+  - DIT-9 first dataset: long BTC history under new cache key `BTC-HIST`, never replacing the existing BTC series. Rejected: overwriting the BTC key.
+- **Owner-level:** Scrapling tiers 1-3 are all built, gated per source by a local approval record only (no per-use go for tier 3); approval records live on the owner's PC only; REA is wrapper-only because setup writes user-scope config and exposes 127 commands; Farside is untouched; the first dataset is long BTC history. Spend ceiling raised 100 -> 130 USD (14-10-26).
+- **Date:** 14-10-26. **Reason:** new data sources need a safe, repeatable, approval-bound path. **Alternatives:** see each DIT line.
+- **Consequences:** tiers 2-3 and REA web modes are unproven live; Windows/Python 3.12 unverified until the owner probes AC-16/AC-17. The paused market-framework SPEC's proposed exception text (labelled D-15 inside that SPEC) will be renumbered when it resumes.
+- **Status:** active.
