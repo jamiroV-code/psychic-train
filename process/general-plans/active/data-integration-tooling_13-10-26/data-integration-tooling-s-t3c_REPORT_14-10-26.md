@@ -42,3 +42,14 @@ Streamed capped read if a tier ever needs hard memory bound; add too_large to st
 
 ## 11 Context cost (extra docs opened)
 None beyond the listed set (also read tests/test_fetch_tier1.py, test_provenance.py, fixture_server.py, conftest.py heads, status.py, and the marker-audit guard for the failure).
+
+## Follow-up 1
+Note: PR #76 (head f89642d) was already merged by the owner at 16:31:32Z, before this follow-up arrived. Per the merged-PR rule the branch was restarted from origin/main (2dc383d) and the follow-up is a new PR, not #76.
+
+Changes:
+- F-B: fetch_tier1 refuses (status refused, "response cache tier does not match the pass tier") when cache.tier != pass_.tier, before any cache read or client build. Cache reads and writes therefore always use the pass tier.
+- F-C: tests added for a legacy old-format cache key (miss, no error), robots body exactly at 512 KiB accepted and cap+1 failing closed, tier-1 pass with tier-2 cache refused with zero clients and zero requests, and a tier-2 pass (via request_access) never reading tier-1 entries.
+- F-A (docs only): comments on DEFAULT_MAX_BODY_BYTES and ROBOTS_MAX_BYTES. Known limit for the docs slice: "The size caps are checked after the client has returned the whole body, so they protect parsing and caching but not the download itself; the client timeout bounds time."
+- F-D untouched.
+
+Tests (UTC 2026-10-14T16:42Z, base 2dc383d): red-first, the 2 tier tests failed on pre-change source (others pass because they pin existing behaviour). tooling 266 passed (262 + 4); tooling_guards 41; api/ 1184 passed, 1 skipped, 5 deselected; lock/pyproject diff clean. Head SHA: see PR.

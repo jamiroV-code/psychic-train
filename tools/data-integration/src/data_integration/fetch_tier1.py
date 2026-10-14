@@ -25,6 +25,8 @@ logging.getLogger("scrapling").setLevel(logging.CRITICAL)
 _CLIENTS_BUILT = 0
 _CHALLENGE_MARKERS = (b"just a moment", b"cf-chl", b"captcha", b"checking your browser", b"attention required")
 _REDIRECTS = {301, 302, 303, 307, 308}
+# Page body cap. Limit: it is checked after Fetcher.get has returned the whole body, so it protects parsing and
+# caching but not the download itself; the client timeout bounds time.
 DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024
 
 
@@ -98,6 +100,8 @@ def _fetch(url, pass_, cache, refresh, politeness, robots, proxy, timeout, max_r
         return _out(status.REFUSED, str(url), detail="a FetchPass from request_access is required")
     if not pass_.permits(url):
         return _out(status.REFUSED, url, detail="url not permitted by pass")
+    if cache is not None and cache.tier != pass_.tier:
+        return _out(status.REFUSED, url, detail="response cache tier does not match the pass tier")
     if cache is not None and not refresh:
         hit = cache.get(url)
         if hit is not None:
