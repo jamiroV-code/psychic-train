@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import threading
 import time
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
@@ -20,6 +21,8 @@ import pytest
 OK_BODY = b"<html><body><table><tr><th>d</th><th>v</th></tr><tr><td>2026-01-01</td><td>1</td></tr></table></body></html>"
 CHALLENGE_BODY = b"<html><head><title>Just a moment...</title></head><body>Checking your browser before accessing. cf-chl-bypass</body></html>"
 SLOW_SECONDS = 2.0
+JS_PAGE_BODY = (Path(__file__).parent / "fixtures" / "js_page" / "js_table.html").read_bytes()
+CAPTCHA_BODY = b"<html><body><div class=\"g-recaptcha\">captcha required</div></body></html>"
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -66,6 +69,17 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(302, b"", {"Location": "http://unlisted.test/data/ok"})
         if path == "/data/redirect-loop":
             return self._send(302, b"", {"Location": f"http://{host}/data/redirect-loop"})
+        # S-T4 additions (tiers 2/3): a JS-rendered page and block-style pages.
+        if path == "/js/table":
+            return self._send(200, JS_PAGE_BODY)
+        if path == "/block/challenge":
+            return self._send(200, CHALLENGE_BODY)
+        if path == "/block/challenge-403":
+            return self._send(403, CHALLENGE_BODY)
+        if path == "/block/403":
+            return self._send(403, b"forbidden")
+        if path == "/block/captcha":
+            return self._send(200, CAPTCHA_BODY)
         return self._send(404, b"nope")
 
     def _robots(self, host):

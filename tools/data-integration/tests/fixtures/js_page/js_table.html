@@ -1,0 +1,7 @@
+<html><head><title>js table</title></head><body><div id="out">loading</div>
+<script>
+var rows = [["2026-01-01", "1"], ["2026-01-02", "2"]];
+var html = "<table><tr><th>d</th><th>v</th></tr>";
+rows.forEach(function (r) { html += "<tr><td>" + r[0] + "</td><td>" + r[1] + "</td></tr>"; });
+document.getElementById("out").innerHTML = html + "</table>";
+</script></body></html>
