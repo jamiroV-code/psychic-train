@@ -13,7 +13,7 @@ Done. All gates green. (First dispatch stopped at needs_input because A2 was not
 - Known limits: a statement cannot prove a human wrote it; the owner's chat message quoted in the envelope is the only control; no real record or scrape was made; the CLI-quoting of the owner message and time is the planner's job.
 
 ## 4 Files changed
-approval_cli.py, approvals.py, paths.py; tests test_approval_cli_cloud.py (14), test_paths_private.py (5), api/tests/tooling_guards/test_cloud_guard.py (4); all-data-sources.md lines 415, 420, 427, 439.
+approval_cli.py, approvals.py, paths.py; tests test_approval_cli_cloud.py (16 incl. parametrized), test_paths_private.py (5), api/tests/tooling_guards/test_cloud_guard.py (4); all-data-sources.md lines 415, 420, 427, 439.
 
 ## 5 Commits
 One commit on the task branch (see PR).
