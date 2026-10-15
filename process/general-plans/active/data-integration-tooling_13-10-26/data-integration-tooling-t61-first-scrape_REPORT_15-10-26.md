@@ -54,3 +54,12 @@ Owner/planner decide whether to retry once, or to inspect the page in a browser.
 
 ## 11 Context cost
 Small: about 12 tool calls. Approximate cost under 1 USD.
+
+## Supplement 2 (tier 2, 15-10-26)
+The owner confirmed in this session: "Yes, try tier 2 with the new approval". The planner message that proposed it was not itself treated as authority.
+- Statement used for the new approval (revision 2, btc-hist-bitbo-20261015, tier 2, expires 2027-01-13T19:20:21Z): "Owner 15 Oct 2026: new approval tier 2 for source btc-hist-bitbo, host charts.bitbo.io, page /halving-progress/, 90 days, one request per run; one browser preview; robots checked by tool; terms not read; stop on challenge or block". Owner message time: 15 Oct 2026, planner-relayed.
+- Browser: cloud Chromium via DIT_BROWSER_EXECUTABLE. `scrapling install` and `playwright install` were not run.
+- Recipe changed to tier 2.
+- `--dry-run` (19:20:21Z): exit 0, `permitted: yes`, `rate: one request per run`, `baseline: none`.
+- `--preview` (19:20:24Z), one attempt: `result: refused - the request was refused, nothing was stored`, `detail: browser request outside the pass was aborted`, exit 7. Nothing stored.
+- Stopped per instructions: no retry, no tier 3, no workaround. The exit code, 7, is the tool's own refusal of a browser request outside the approved pass (the table in the owner guide describes 7 as "refused to protect existing data"). Whether the page itself loads other-origin resources that the tool blocks is not established; no page content was seen.
