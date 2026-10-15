@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "btc-hist-bitbo",
-  "tier": 1,
+  "tier": 2,
   "url": "https://charts.bitbo.io/halving-progress/",
   "selector": "table",
   "dataset": {"symbol": "BTC-HIST", "timeframe": "1d"},
