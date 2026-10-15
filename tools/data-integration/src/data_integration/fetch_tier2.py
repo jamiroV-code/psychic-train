@@ -24,6 +24,7 @@ from data_integration.gate import FetchPass
 from data_integration.logging_setup import get_logger, log_request
 from data_integration.politeness import Politeness
 from data_integration.response_cache import ResponseCache
+from data_integration.route_guard import describe, make_handler, summarise
 from data_integration.robots import RawResponse, RobotsChecker
 from data_integration.types import FetchOutcome
 
@@ -48,26 +49,13 @@ class BrowserResponse:
     body: bytes = b""
     headers: dict = field(default_factory=dict)
     final_url: str | None = None  # where the browser ended up, when known
-    blocked_url: str | None = None  # a request the navigator aborted because the pass did not allow it
+    blocked_url: str | None = None  # host label of the first request the navigator aborted (never a full URL)
+    blocked_hosts: tuple[str, ...] = ()  # distinct sorted host labels of every aborted request
 
 
 def _browser_kwargs(pass_: FetchPass, timeout: float, proxy: str | None, blocked: list[str]) -> dict:
-    allowed_hosts = set(pass_.hosts)
-
     def page_setup(page) -> None:
-        def guard(route) -> None:
-            request = route.request
-            try:
-                host = (urlsplit(request.url).hostname or "").lower()
-            except ValueError:
-                host = ""
-            ok = host in allowed_hosts and (not request.is_navigation_request() or pass_.permits(request.url))
-            if ok:
-                route.continue_()
-            else:
-                blocked.append(request.url)
-                route.abort()
-
+        guard = make_handler(pass_, blocked)
         page.route("**/*", guard)
 
     kwargs: dict = {"headless": True, "timeout": int(timeout * 1000), "google_search": False, "page_setup": page_setup}
@@ -92,10 +80,11 @@ def make_navigator(fetcher, extra: dict | None = None):
             resp = fetcher.fetch(url, **kwargs)
         except Exception:
             if blocked:
-                return BrowserResponse(0, blocked_url=blocked[0])
+                return BrowserResponse(0, blocked_url=blocked[0], blocked_hosts=summarise(blocked))
             raise
         headers = {str(k).lower(): str(v) for k, v in dict(resp.headers).items()}
-        return BrowserResponse(int(resp.status), bytes(resp.body or b""), headers, str(resp.url), blocked[0] if blocked else None)
+        return BrowserResponse(int(resp.status), bytes(resp.body or b""), headers, str(resp.url), blocked[0] if blocked else None,
+                               summarise(blocked))
 
     return navigate
 
@@ -157,7 +146,9 @@ def _run(tier, url, pass_, navigator, options, cache, refresh, politeness, robot
     finally:
         log_request(host, parts.path, code, time.monotonic() - started, tier, log)
     if resp.blocked_url is not None:
-        return _out(status.REFUSED, url, detail="browser request outside the pass was aborted")
+        detail = describe(resp.blocked_hosts)
+        log.info(detail)
+        return _out(status.REFUSED, url, detail=detail)
     final = resp.final_url or url
     if final != url:
         if not pass_.permits(final):

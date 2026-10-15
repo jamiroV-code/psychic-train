@@ -63,6 +63,7 @@ class ApprovalRecord:
     expiry: str
     revision: int = 1
     owner_statement: str = ""
+    resource_hosts: tuple[str, ...] = ()
 
     @property
     def approved_dt(self) -> datetime:
@@ -79,6 +80,27 @@ def _str_tuple(value: object) -> tuple[str, ...]:
     return tuple(value)
 
 
+MAX_RESOURCE_HOSTS = 8
+_LABEL_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
+
+
+def check_resource_hosts(hosts: object, tier: object) -> None:
+    """Raise ValueError unless hosts is a valid resource-host list for this tier (https implied, exact names)."""
+    if not isinstance(hosts, (list, tuple)) or not all(isinstance(h, str) for h in hosts):
+        raise ValueError("resource_hosts must be a list of strings")
+    if not hosts:
+        return
+    if tier not in (2, 3):
+        raise ValueError("resource hosts need tier 2 or 3")
+    if len(hosts) > MAX_RESOURCE_HOSTS or len(set(hosts)) != len(hosts):
+        raise ValueError(f"at most {MAX_RESOURCE_HOSTS} distinct resource hosts")
+    for host in hosts:
+        labels = host.split(".")
+        if (len(host) > 253 or len(labels) < 2 or not all(_LABEL_RE.match(x) for x in labels)
+                or not labels[-1][0].isalpha()):
+            raise ValueError("resource host must be an exact lowercase hostname")
+
+
 def _from_dict(data: object, source: str) -> ApprovalRecord:
     if not isinstance(data, dict):
         raise ValueError("not an object")
@@ -93,11 +115,13 @@ def _from_dict(data: object, source: str) -> ApprovalRecord:
     if not isinstance(statement, str):
         raise ValueError("bad owner_statement")
     hosts, pages = _str_tuple(data.get("hosts")), _str_tuple(data.get("pages"))
+    resource_hosts = _str_tuple(data.get("resource_hosts", []))
+    check_resource_hosts(resource_hosts, tier)
     if not hosts or not pages:
         raise ValueError("no hosts or pages")
     rec = ApprovalRecord(
         allowed_tier=tier, hosts=hosts, pages=pages, alternatives_checked=_str_tuple(data.get("alternatives_checked")),
-        revision=rev, owner_statement=statement, **texts,
+        revision=rev, owner_statement=statement, resource_hosts=resource_hosts, **texts,
     )
     if rec.expiry_dt > rec.approved_dt + timedelta(days=MAX_TTL_DAYS):
         raise ValueError("expiry outside the allowed window")  # loaded as StoreCorrupt
