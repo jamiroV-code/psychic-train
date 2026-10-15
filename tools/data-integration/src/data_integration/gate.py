@@ -25,10 +25,11 @@ class Refused:
 class FetchPass:
     """Proof of approval, bound to hosts and pages. Only request_access can build one."""
 
-    __slots__ = ("source", "tier", "hosts", "pages", "approval_id", "approval_revision", "approved", "expires")
+    __slots__ = ("source", "tier", "hosts", "pages", "approval_id", "approval_revision", "approved", "expires",
+                 "resource_hosts")
 
     def __init__(self, token=None, *, source=None, tier=None, hosts=(), pages=(), approval_id=None,
-                 approval_revision=None, approved=None, expires=None):
+                 approval_revision=None, approved=None, expires=None, resource_hosts=()):
         if token is not _TOKEN:
             raise TypeError("FetchPass can only be created by request_access")
         object.__setattr__(self, "source", source)
@@ -39,6 +40,7 @@ class FetchPass:
         object.__setattr__(self, "approval_revision", approval_revision)
         object.__setattr__(self, "approved", approved)
         object.__setattr__(self, "expires", expires)
+        object.__setattr__(self, "resource_hosts", tuple(h.lower() for h in resource_hosts))
 
     def __setattr__(self, name, value):
         raise AttributeError("FetchPass is immutable")
@@ -93,4 +95,5 @@ def request_access(source, tier, store: ApprovalStore, clock) -> FetchPass | Ref
     if type(tier) is not int or tier < 1 or tier > rec.allowed_tier:
         return _refuse("tier_too_low", source, tier, rec)
     return FetchPass(_TOKEN, source=source, tier=tier, hosts=rec.hosts, pages=rec.pages, approval_id=rec.id,
-                     approval_revision=rec.revision, approved=rec.approved, expires=rec.expiry)
+                     approval_revision=rec.revision, approved=rec.approved, expires=rec.expiry,
+                     resource_hosts=rec.resource_hosts if tier >= 2 else ())

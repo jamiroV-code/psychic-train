@@ -45,6 +45,7 @@ def build_record(pass_, url: str, df: pd.DataFrame, now: datetime, response_sha2
         "expires": pass_.expires,
         "approval_id": pass_.approval_id,
         "approval_revision": pass_.approval_revision,
+        "resource_hosts": list(getattr(pass_, "resource_hosts", ())),
     }
 
 
