@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "source": "example-src",
+  "tier": 1,
+  "url": "https://example.test/data/prices.html",
+  "selector": "table.prices",
+  "dataset": {"symbol": "BTC-HIST", "timeframe": "1d"},
+  "min_rows": 2,
+  "politeness": {"min_delay": 2.0, "max_concurrent": 1, "max_per_host": 1}
+}
