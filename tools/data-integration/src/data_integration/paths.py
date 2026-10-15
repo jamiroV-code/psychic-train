@@ -14,6 +14,21 @@ def _repo_root() -> Path:
     return root
 
 
+class PathInRepo(Exception):
+    """A private folder resolves inside the checkout (message never names a path)."""
+
+
+def _checkout_root() -> Path:
+    """Side-effect-free repo root (unlike _repo_root it never edits sys.path)."""
+    return Path(__file__).resolve().parents[4]
+
+
+def _private(path: Path) -> Path:
+    if path.resolve().is_relative_to(_checkout_root()):
+        raise PathInRepo("folder must be outside the repository checkout")
+    return path
+
+
 def _local_base() -> Path:
     base = os.environ.get("LOCALAPPDATA")
     if base:
@@ -27,11 +42,11 @@ def _dir(env: str, leaf: str) -> Path:
 
 
 def approvals_dir() -> Path:
-    return _dir("DIT_APPROVALS_DIR", "approvals")
+    return _private(_dir("DIT_APPROVALS_DIR", "approvals"))
 
 
 def scrape_dir() -> Path:
-    return _dir("DIT_SCRAPE_DIR", "scrape")
+    return _private(_dir("DIT_SCRAPE_DIR", "scrape"))
 
 
 def evidence_dir() -> Path:

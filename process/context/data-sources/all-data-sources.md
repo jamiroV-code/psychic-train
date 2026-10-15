@@ -412,19 +412,19 @@ to be stale, correct it here rather than in a plan file.
 
 ## New dataset workflow
 
-Tooling lives in `tools/data-integration` (owner-run, outside the API and CI). Run from the repo root as `python -m data_integration`. Workers never run live commands.
+Tooling lives in `tools/data-integration` (owner-run, outside the API and CI). Run from the repo root as `python -m data_integration`. Cloud runs need the four conditions under Rules.
 
 1. **REA findings.** Run `rea <command> [--confirm-source N] [--findings F] -- args`. The evidence note tags each finding VERIFIED or ASSUMED; REA cannot see server-side methodology.
 2. **Alternatives.** List other sources (keyless API, file, existing adapter) before any scrape.
 3. **Integrate the normal way.** One adapter in `api/data/`, cached, redistribution checked (Standing Rules).
-4. **Scrapling only with a per-source approval record.** `approvals status`; `approvals add --source --tier --host --page --owner --rate --robots-checked [--alternative] [--days]`. Then `run <recipe> [--dry-run] [--preview] [--refresh] [--replace] [--accept-baseline]` (see `recipes/example.recipe.json`).
+4. **Scrapling only with a per-source approval record.** `approvals status`; `approvals add --source --tier --host --page --owner --rate --robots-checked [--alternative] [--days]`; non-interactive cloud runs add `--owner-statement TEXT` (the owner's chat approval, 20-500 ASCII chars naming the source and every host; needs `DIT_APPROVALS_DIR`). Browser: `/opt/pw-browsers` Chromium first (`DIT_BROWSER_EXECUTABLE`); `scrapling install` only if absent and the owner asked for that tier 2/3 run; never `playwright install`. A blocked host shows as `connection_failed` (exit 4): tell the owner which host to allow; retry once on their word. Output goes to gitignored `api/data/cache/ohlcv/` and is lost when the session ends. Then `run <recipe> [--dry-run] [--preview] [--refresh] [--replace] [--accept-baseline]` (see `recipes/example.recipe.json`).
 
 Exit codes: 0 ok, 2 usage, 3 gate refused, 4 fetch failed, 5 validation failed, 6 changed or uncertain, 7 cache protection refused.
 
 ### Rules
 
 - Explicit developer-initiated scraping only; no background scraping.
-- Approval records stay on the owner's PC (`DIT_APPROVALS_DIR`, default under local app data), never committed; default expiry 90 days.
+- Approval records live in a private store outside the repo (`DIT_APPROVALS_DIR`, default under local app data), never committed; default expiry 90 days. Cloud runs need all four: the owner names the recipe, approved the site in chat, records outside the checkout, and widened network access.
 - Back up approvals, the scrape store and the evidence folder.
 - Install on demand: `uv sync --project tools/data-integration`; never in CI.
 - REA only through the pinned `rea-agents@6.4.0` wrapper; never `rea-agents setup`; no MCP.
@@ -436,7 +436,7 @@ Exit codes: 0 ok, 2 usage, 3 gate refused, 4 fetch failed, 5 validation failed, 
 - Tiers 2 and 3 are not proven on a real protected site.
 - Size caps are checked after the body is read.
 - Redirects: each hop goes through `permits()`; robots is checked only on the requested and final URL (tier 2).
-- The approval file is forgeable by anyone who can write the owner's PC.
+- The approval file is forgeable by anyone who can write the store, and a statement cannot prove a human wrote it.
 - Scrapling tests run outside CI.
 - Windows and Python 3.12 are unverified until the owner runs the probes (AC-16/17/20: `scripts/probe_tier1.py`, `scripts/probe_tier2.py`).
 - REA failures map to exit 5.
