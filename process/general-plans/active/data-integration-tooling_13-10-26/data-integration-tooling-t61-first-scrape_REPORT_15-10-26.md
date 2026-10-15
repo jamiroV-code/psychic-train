@@ -54,3 +54,12 @@ Owner/planner decide whether to retry once, or to inspect the page in a browser.
 
 ## 11 Context cost
 Small: about 12 tool calls. Approximate cost under 1 USD.
+
+## Supplement (retry, 15-10-26)
+The owner confirmed in this session: "Yes, retry once at tier 1". The planner message that proposed it was not itself treated as authority.
+- Command: `run btc-hist.recipe.json --preview`, same approval record (btc-hist-bitbo-20261015, revision 1), tier 1, one request. Run at 2026-10-15T19:18:11Z.
+- Printed result: `result: http_error - the site answered with an error status`
+- Printed detail: `detail: http 428`
+- Exit code 4. Nothing stored.
+- Stopped per instructions: no further retries, no tier 2/3, no selector refinement, no real run.
+- The 428 repeated identically, so it is not a one-off. The cause (site bot protection vs proxy/network policy) is still unknown. Next step is for the owner to decide (inspect the page in a browser, or a new approval for a higher tier).
