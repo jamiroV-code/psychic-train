@@ -63,3 +63,13 @@ The owner confirmed in this session: "Yes, retry once at tier 1". The planner me
 - Exit code 4. Nothing stored.
 - Stopped per instructions: no further retries, no tier 2/3, no selector refinement, no real run.
 - The 428 repeated identically, so it is not a one-off. The cause (site bot protection vs proxy/network policy) is still unknown. Next step is for the owner to decide (inspect the page in a browser, or a new approval for a higher tier).
+
+## Supplement 3 (tier-2 diagnostic, 15-10-26)
+The owner confirmed in this session: "Yes, run the one diagnostic preview". Base: origin/main with T65 (PR #88) merged. Recipe tier was set to 2 locally for the run only and reverted (not part of this PR; PR #86 carries the recipe change).
+- Approval: the tier-2 record from Supplement 2 was still present (revision 2, expires 2027-01-13T19:20:21Z), so nothing was re-created. No resource hosts added.
+- One `--preview` (tier 2, cloud Chromium, no installs) at 2026-10-15T19:53:07Z, exit 7, nothing stored:
+  - `result: refused - the request was refused, nothing was stored`
+  - `detail: browser request outside the pass was aborted; blocked hosts: cdnjs.cloudflare.com, challenges.cloudflare.com, static.cloudflareinsights.com`
+- Blocked host names: cdnjs.cloudflare.com, challenges.cloudflare.com, static.cloudflareinsights.com.
+- Reading: ASSUMED, not verified: `challenges.cloudflare.com` is a Cloudflare bot-challenge host, which fits the earlier HTTP 428 at tier 1 and suggests the page is behind a challenge. The tier-2 instruction says to stop on a challenge or block; no workaround attempted. Whether allowing these hosts would only load page assets or would amount to getting around a challenge is the owner's call.
+- No retry, no tier 3.
