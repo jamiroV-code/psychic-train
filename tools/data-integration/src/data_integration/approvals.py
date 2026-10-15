@@ -62,6 +62,7 @@ class ApprovalRecord:
     approved: str
     expiry: str
     revision: int = 1
+    owner_statement: str = ""
 
     @property
     def approved_dt(self) -> datetime:
@@ -88,12 +89,15 @@ def _from_dict(data: object, source: str) -> ApprovalRecord:
     texts = {k: data.get(k) for k in ("id", "source", "rate_policy", "robots_checked", "owner", "approved", "expiry")}
     if not all(isinstance(v, str) for v in texts.values()) or texts["source"] != source:
         raise ValueError("bad fields")
+    statement = data.get("owner_statement", "")
+    if not isinstance(statement, str):
+        raise ValueError("bad owner_statement")
     hosts, pages = _str_tuple(data.get("hosts")), _str_tuple(data.get("pages"))
     if not hosts or not pages:
         raise ValueError("no hosts or pages")
     rec = ApprovalRecord(
         allowed_tier=tier, hosts=hosts, pages=pages, alternatives_checked=_str_tuple(data.get("alternatives_checked")),
-        revision=rev, **texts,
+        revision=rev, owner_statement=statement, **texts,
     )
     if rec.expiry_dt > rec.approved_dt + timedelta(days=MAX_TTL_DAYS):
         raise ValueError("expiry outside the allowed window")  # loaded as StoreCorrupt
