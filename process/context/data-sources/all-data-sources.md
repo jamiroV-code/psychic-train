@@ -1,7 +1,7 @@
 ---
 name: context:data-sources
 description: "Market-data providers, free-tier limits, licensing, and analytics library choices"
-keywords: provider, data source, adapter, fred, liqtide, defillama, ccxt, farside, etf, coingecko, pytrends, reddit, api key, rate limit, licence, license, redistribution
+keywords: provider, data source, adapter, fred, liqtide, defillama, ccxt, farside, etf, coingecko, pytrends, reddit, api key, rate limit, licence, license, redistribution, REA, scrapling, scrape, approval
 date: 24-09-26
 ---
 
@@ -409,3 +409,35 @@ Update this group when:
 Provider facts age quickly — limits and tiers on this page were checked in September 2026 and
 should be re-verified before any decision that depends on an exact number. When one turns out
 to be stale, correct it here rather than in a plan file.
+
+## New dataset workflow
+
+Tooling lives in `tools/data-integration` (owner-run, outside the API and CI). Run from the repo root as `python -m data_integration`. Workers never run live commands.
+
+1. **REA findings.** Run `rea <command> [--confirm-source N] [--findings F] -- args`. The evidence note tags each finding VERIFIED or ASSUMED; REA cannot see server-side methodology.
+2. **Alternatives.** List other sources (keyless API, file, existing adapter) before any scrape.
+3. **Integrate the normal way.** One adapter in `api/data/`, cached, redistribution checked (Standing Rules).
+4. **Scrapling only with a per-source approval record.** `approvals status`; `approvals add --source --tier --host --page --owner --rate --robots-checked [--alternative] [--days]`. Then `run <recipe> [--dry-run] [--preview] [--refresh] [--replace] [--accept-baseline]` (see `recipes/example.recipe.json`).
+
+Exit codes: 0 ok, 2 usage, 3 gate refused, 4 fetch failed, 5 validation failed, 6 changed or uncertain, 7 cache protection refused.
+
+### Rules
+
+- Explicit developer-initiated scraping only; no background scraping.
+- Approval records stay on the owner's PC (`DIT_APPROVALS_DIR`, default under local app data), never committed; default expiry 90 days.
+- Back up approvals, the scrape store and the evidence folder.
+- Install on demand: `uv sync --project tools/data-integration`; never in CI.
+- REA only through the pinned `rea-agents@6.4.0` wrapper; never `rea-agents setup`; no MCP.
+- No scraped data in git-tracked directories without a recorded redistribution check.
+- The Farside on-demand refresh stays outside this tooling.
+
+### Known limits
+
+- Tiers 2 and 3 are not proven on a real protected site.
+- Size caps are checked after the body is read.
+- Redirects: each hop goes through `permits()`; robots is checked only on the requested and final URL (tier 2).
+- The approval file is forgeable by anyone who can write the owner's PC.
+- Scrapling tests run outside CI.
+- Windows and Python 3.12 are unverified until the owner runs the probes (AC-16/17/20: `scripts/probe_tier1.py`, `scripts/probe_tier2.py`).
+- REA failures map to exit 5.
+- `--refresh` does nothing in `--dry-run` and `--preview`.

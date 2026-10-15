@@ -77,6 +77,7 @@ context-changelog.md (history).
 | why something was decided | `all-context.md` | decisions.md |
 | architecture, layout, stack, runtimes or data flow | `all-context.md` | architecture.md |
 | commands, test tiers, worktree/branch/merge rules | `all-context.md` | operating-instructions.md |
+| sourcing a new dataset: REA findings, scrapling, scrape approval | `all-context.md`, `data-sources/all-data-sources.md` | the section 'New dataset workflow' there |
 | picking or changing a market-data provider | `all-context.md`, `data-sources/all-data-sources.md` | the provider's own docs |
 | adding or changing an indicator / statistical method | `all-context.md`, architecture.md | `data-sources/all-data-sources.md`, the feature `_GUIDE.md` |
 | charting work | `all-context.md`, architecture.md | `process/features/charting-indicators/_GUIDE.md` |
