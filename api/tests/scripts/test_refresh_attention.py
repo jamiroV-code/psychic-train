@@ -96,3 +96,9 @@ def test_rerun_first_wins(isolated_cache):
         return httpx.Response(200, json=p)
     _run(["--sources", "wikipedia", "--symbols", "BTC"], h)
     assert store.read_points("wikipedia", "BTC") == first
+
+
+def test_default_sources_exclude_opt_in_volume_and_trends(isolated_cache):
+    # default run must stay wikipedia + coingecko: no ccxt or pytrends (live) call
+    assert refresh_attention.DEFAULT_SOURCES == ("wikipedia", "coingecko")
+    assert {"exchange_volume", "hyperliquid_volume", "trends"} <= set(refresh_attention.RUNNERS)
