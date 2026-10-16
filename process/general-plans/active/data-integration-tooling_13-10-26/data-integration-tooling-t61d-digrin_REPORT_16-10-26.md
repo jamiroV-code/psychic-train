@@ -69,3 +69,6 @@ Small: about 8 tool calls, under 1 USD. The t61c zorinaq report named in the bri
 - Meaning: the page offers one table with a date and two price columns (adjusted and real), no open/high/low/volume. It is not OHLCV. Per the stop rule I did not map columns, resample or retry, and did not run the real run. Recommendation: drop digrin as the BTC-HIST source.
 - Nothing stored; no --replace; no approvals, evidence or scraped data committed.
 - Commands: `uv sync` exit 0; `approvals status` exit 0; `run --dry-run` exit 0; `run --preview` exit 5.
+
+## Decision (16-10-26)
+The owner said in this session: "Drop digrin and mark the PR ready". Digrin is dropped as a BTC-HIST source. The recipe btc-hist-digrin.recipe.json was removed from the PR, so the final change is this report only (heading 4 above lists the recipe as it was before removal). The private approval record (btc-hist-digrin, expires 2027-01-14) stays in the private store, outside the repo; the owner can revoke it by deleting that record.
