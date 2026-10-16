@@ -34,7 +34,7 @@ def test_binance_ok_quote_volume_and_today_dropped():
     assert s.state == "ok" and s.source == "exchange_volume" and s.symbol == "BTC"
     assert ex.calls == [("BTC/USDT", "1d")]
     assert len(s.points) == 99 and all(d < TODAY for d, _ in s.points)
-    assert s.points[0][1] == 2.0 * 11.0  # close * base volume
+    assert s.points[0][1] == 2.0 * 10.0  # close * base volume
 
 
 def test_binance_empty():

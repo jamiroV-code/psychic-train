@@ -19,10 +19,12 @@ if __package__ in (None, ""):  # direct invocation
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from api.data import cache  # noqa: E402
-from api.data.attention import coingecko_attention, registry, store, wikipedia  # noqa: E402
+from api.data.attention import coingecko_attention, exchange_volume, registry, store, trends, wikipedia  # noqa: E402
 
 WIKI_ARTICLES_PATH = Path(__file__).resolve().parents[1] / "data" / "wiki_articles.json"
 DEFAULT_SYMBOLS = ("BTC", "ETH")
+# Volume and Trends are opt-in (--sources): they reach ccxt/pytrends, and are not-probed until G.
+DEFAULT_SOURCES = ("wikipedia", "coingecko")
 
 
 def _symbols(arg: str | None) -> list[str]:
@@ -56,18 +58,35 @@ def _run_coingecko(symbols, client, today, sleep):
     return out
 
 
-RUNNERS = {"wikipedia": _run_wikipedia, "coingecko": _run_coingecko}
+def _run_exchange_volume(symbols, client, today, sleep):
+    ex = exchange_volume.make_binance()
+    return [exchange_volume.fetch_binance_series(s, exchange=ex, today=today) for s in symbols]
+
+
+def _run_hyperliquid_volume(symbols, client, today, sleep):
+    from api.data import ccxt_adapter
+    ex = ccxt_adapter._exchange()
+    return [exchange_volume.fetch_hyperliquid_series(s, exchange=ex, today=today) for s in symbols]
+
+
+def _run_trends(symbols, client, today, sleep):
+    return [trends.fetch_series(s, s.lower(), today=today) for s in symbols]
+
+
+RUNNERS = {"wikipedia": _run_wikipedia, "coingecko": _run_coingecko,
+           "exchange_volume": _run_exchange_volume, "hyperliquid_volume": _run_hyperliquid_volume,
+           "trends": _run_trends}
 
 
 def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
          today: date | None = None, sleep=time.sleep) -> int:
     parser = argparse.ArgumentParser(description="Refresh the attention store.")
     parser.add_argument("--dry-run", action="store_true", help="fetch and report, write nothing")
-    parser.add_argument("--sources", help="comma list; default all")
+    parser.add_argument("--sources", help="comma list; default wikipedia,coingecko")
     parser.add_argument("--symbols", help="comma list; default wiki_articles.json")
     args = parser.parse_args(argv)
 
-    names = [s.strip() for s in args.sources.split(",")] if args.sources else list(registry.FETCHERS)
+    names = [s.strip() for s in args.sources.split(",")] if args.sources else list(DEFAULT_SOURCES)
     unknown = [n for n in names if n not in RUNNERS]
     if unknown:
         print(f"unknown source: {', '.join(unknown)}", file=sys.stderr)

@@ -5,12 +5,15 @@ import json
 from datetime import date
 from pathlib import Path
 
-from api.data.attention import coingecko_attention, store, wikipedia
+from api.data.attention import coingecko_attention, exchange_volume, store, trends, wikipedia
 from api.data.attention.types import MIN_HISTORY_DAYS, SourceSeries
 
 FETCHERS = {
     "wikipedia": wikipedia.fetch_series,
     "coingecko": coingecko_attention.fetch_series,
+    "exchange_volume": exchange_volume.fetch_binance_series,
+    "hyperliquid_volume": exchange_volume.fetch_hyperliquid_series,
+    "trends": trends.fetch_series,
 }
 
 PROBE_RECORDS_PATH = Path(__file__).with_name("probe_records.json")
