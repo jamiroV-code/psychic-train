@@ -19,12 +19,13 @@ if __package__ in (None, ""):  # direct invocation
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from api.data import cache  # noqa: E402
-from api.data.attention import coingecko_attention, exchange_volume, registry, store, trends, wikipedia  # noqa: E402
+from api.data.attention import (  # noqa: E402
+    coingecko_attention, exchange_volume, registry, store, trends, universe_store, wikipedia)
 
 WIKI_ARTICLES_PATH = Path(__file__).resolve().parents[1] / "data" / "wiki_articles.json"
 DEFAULT_SYMBOLS = ("BTC", "ETH")
 # Volume and Trends are opt-in (--sources): they reach ccxt/pytrends, and are not-probed until G.
-DEFAULT_SOURCES = ("wikipedia", "coingecko")
+DEFAULT_SOURCES = ("wikipedia", "coingecko", "universe")
 
 
 def _symbols(arg: str | None) -> list[str]:
@@ -73,7 +74,16 @@ def _run_trends(symbols, client, today, sleep):
     return [trends.fetch_series(s, s.lower(), today=today) for s in symbols]
 
 
-RUNNERS = {"wikipedia": _run_wikipedia, "coingecko": _run_coingecko,
+def _run_universe(symbols, client, today, sleep):
+    """Write today's top-100 snapshot; a failed fetch raises, leaving the old file untouched."""
+    rows = coingecko_attention.fetch_top100_markets(client=client, sleep=sleep)
+    if not rows:
+        raise RuntimeError("markets unavailable")
+    universe_store.write_snapshot(today.isoformat(), rows)
+    return []
+
+
+RUNNERS = {"universe": _run_universe, "wikipedia": _run_wikipedia, "coingecko": _run_coingecko,
            "exchange_volume": _run_exchange_volume, "hyperliquid_volume": _run_hyperliquid_volume,
            "trends": _run_trends}
 
@@ -82,7 +92,7 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
          today: date | None = None, sleep=time.sleep) -> int:
     parser = argparse.ArgumentParser(description="Refresh the attention store.")
     parser.add_argument("--dry-run", action="store_true", help="print the planned fetches; no network call, write nothing")
-    parser.add_argument("--sources", help="comma list; default wikipedia,coingecko")
+    parser.add_argument("--sources", help="comma list; default wikipedia,coingecko,universe")
     parser.add_argument("--symbols", help="comma list; default wiki_articles.json")
     args = parser.parse_args(argv)
 
@@ -104,6 +114,10 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
         for name in names:
             try:
                 series = RUNNERS[name](symbols, client, today, sleep)
+                if name == "universe":
+                    results[name] = "ok"
+                    print("universe: snapshot written")
+                    continue
                 written = 0
                 if not args.dry_run:
                     for s in series:

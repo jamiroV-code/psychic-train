@@ -1,5 +1,6 @@
 {
   "reference": [],
   "stablecoins": ["USDT", "USDC", "DAI", "USDE", "FDUSD", "TUSD", "USDD", "PYUSD", "USDS", "USD1"],
-  "wrapped": ["WBTC", "WETH", "STETH", "WSTETH", "WEETH", "CBBTC", "WBETH", "BSC-USD", "WBNB"]
+  "wrapped": ["WBTC", "WETH", "STETH", "WSTETH", "WEETH", "CBBTC", "WBETH", "BSC-USD", "WBNB"],
+  "exchange_tokens": ["BNB", "LEO", "OKB", "CRO", "GT", "KCS", "BGB", "MX"]
 }
