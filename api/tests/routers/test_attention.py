@@ -32,8 +32,8 @@ def wired(isolated_cache, tmp_path, monkeypatch):
 
     def boom(*a, **k):
         raise AssertionError("handler must not reach the network")
-    monkeypatch.setattr(httpx.Client, "send", boom)
-    monkeypatch.setattr(httpx.AsyncClient, "send", boom)
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", boom)
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", boom)
     monkeypatch.setattr(socket.socket, "connect", boom)
     return TestClient(app)
 
@@ -51,7 +51,9 @@ def test_default_window_30_reads_store_only(wired):
 
 @pytest.mark.parametrize("w", [7, 30, 90])
 def test_valid_windows(wired, w):
-    assert wired.get(URL, params={"window": w}).json()["window"] == w
+    r = wired.get(URL, params={"window": w})
+    assert r.status_code == 200, r.text
+    assert r.json()["window"] == w
 
 
 @pytest.mark.parametrize("w", ["14", "0", "abc"])
