@@ -69,3 +69,15 @@ def test_wiki_articles_json_valid():
     from pathlib import Path
     m = json.loads((Path(wikipedia.__file__).parents[1] / "wiki_articles.json").read_text())
     assert m["BTC"] == "Bitcoin" and all(v is None or isinstance(v, str) for v in m.values())
+
+
+def test_wiki_articles_json_complete_and_clean():
+    import json
+    from collections import Counter
+    from pathlib import Path
+    m = json.loads((Path(wikipedia.__file__).parents[1] / "wiki_articles.json").read_text())
+    titles = [v for v in m.values() if v is not None]
+    assert len(m) >= 100
+    assert all(k == k.upper() and k.strip() for k in m)
+    assert all(t.strip() and t == t.strip() and " " not in t for t in titles)
+    assert [t for t, n in Counter(titles).items() if n > 1] == []
