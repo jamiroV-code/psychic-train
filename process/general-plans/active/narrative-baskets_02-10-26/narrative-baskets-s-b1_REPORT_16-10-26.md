@@ -50,3 +50,9 @@ Complete wiki_articles.json for top 100 plus screener coins; verify provider sha
 
 ## 11 Context cost
 Read: CLAUDE.md (13,443 B), plan ranges (about 4,000 B), coingecko_adapter.py (3,804 B), and small ranges of cache.py, refresh_cache.py and conftest.py. Within the 36,000 B cap. No other docs opened.
+
+## 12 Addendum (2026-10-16, tester finding F5): real-cache snapshot
+Taken on origin/main after PRs #98 to #101 and #103, by a separate session, as the before/after proof heading 6 lacked. It is a fresh check, not a reconstruction of the original run.
+- `api/data/cache`: 108 files, all tracked in git. For each file, path, size, mtime and sha256 were listed and sorted before and after the run.
+- Run: `UV_FROZEN=1 uv run --project api pytest api/tests/data/attention api/tests/scripts/test_refresh_attention.py -q` = 64 passed.
+- Result: before and after listings are byte-identical (digest of the listing starts 14f76fbfd93eaf5c); `git status` clean; `api/data/watchlist.json` and `layout.json` do not exist, so nothing to hash.
