@@ -29,31 +29,31 @@ def _run(argv, handler, **kw):
     return refresh_attention.main(argv, client=c, today=TODAY, sleep=lambda x: None, **kw)
 
 
-def test_run_writes_store_and_exit_0(attention_cache):
+def test_run_writes_store_and_exit_0(isolated_cache):
     assert _run(["--symbols", "BTC,ETH"], _handler()) == 0
     assert len(store.read_points("wikipedia", "BTC")) == 100
     assert len(store.read_points("coingecko", "ETH")) == 99
     assert all(d < TODAY for d, _ in store.read_points("wikipedia", "BTC"))
 
 
-def test_dry_run_writes_nothing(attention_cache):
+def test_dry_run_writes_nothing(isolated_cache):
     assert _run(["--dry-run", "--symbols", "BTC"], _handler()) == 0
-    assert not (attention_cache / "attention").exists()
+    assert not (isolated_cache / "attention").exists()
 
 
-def test_sources_filter(attention_cache):
+def test_sources_filter(isolated_cache):
     assert _run(["--sources", "wikipedia", "--symbols", "BTC"], _handler()) == 0
     assert store.read_points("coingecko", "BTC") == []
     assert store.read_points("wikipedia", "BTC")
 
 
-def test_all_error_exit_1(attention_cache):
+def test_all_error_exit_1(isolated_cache):
     def h(r):
         raise httpx.ConnectError("x")
     assert _run(["--symbols", "BTC"], h) == 1
 
 
-def test_no_ok_but_not_all_error_exit_2(attention_cache):
+def test_no_ok_but_not_all_error_exit_2(isolated_cache):
     def h(r):
         if "wikimedia" in str(r.url):
             return httpx.Response(200, json={"items": []})
@@ -61,17 +61,17 @@ def test_no_ok_but_not_all_error_exit_2(attention_cache):
     assert _run(["--symbols", "BTC"], h) == 2
 
 
-def test_per_source_isolation(attention_cache):
+def test_per_source_isolation(isolated_cache):
     assert _run(["--symbols", "BTC"], _handler(cg_status=500)) == 0
     assert store.read_points("wikipedia", "BTC")
     assert store.read_points("coingecko", "BTC") == []
 
 
-def test_unknown_source_exit_1(attention_cache):
+def test_unknown_source_exit_1(isolated_cache):
     assert _run(["--sources", "nope"], _handler()) == 1
 
 
-def test_tmp_path_isolation_real_cache_untouched(attention_cache):
+def test_tmp_path_isolation_real_cache_untouched(isolated_cache):
     real = Path(refresh_attention.cache.DEFAULT_CACHE_ROOT)
     before = sorted(real.rglob("*")) if real.exists() else []
     _run(["--symbols", "BTC"], _handler())
@@ -79,7 +79,7 @@ def test_tmp_path_isolation_real_cache_untouched(attention_cache):
     assert before == after
 
 
-def test_rerun_first_wins(attention_cache):
+def test_rerun_first_wins(isolated_cache):
     _run(["--sources", "wikipedia", "--symbols", "BTC"], _handler())
     first = store.read_points("wikipedia", "BTC")
     def h(r):
