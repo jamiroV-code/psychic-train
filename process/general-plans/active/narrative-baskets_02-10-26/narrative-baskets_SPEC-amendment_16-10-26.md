@@ -31,7 +31,7 @@ Binding. Where this file and `narrative-baskets_SPEC_02-10-26.md` differ, this f
 
 ## New acceptance criteria
 
-**AC-35 One basket per coin.** Moving a screener coin into a basket removes it from its old basket and the response names the old basket (null from Unassigned). The coin must be on the screener (AC-27). Proven by: pytest (move, unassign, cascade, empty basket stays, invalid id/symbol/unknown group), Playwright. FA.
+**AC-35 One basket per coin.** Moving a screener coin into a basket removes it from its old basket and the response names the old basket (null from Unassigned). Moving a coin to Unassigned (`main`) returns `basket: null`. The coin must be on the screener (AC-27). Proven by: pytest (move, unassign, cascade, empty basket stays, invalid id/symbol/unknown group), Playwright. FA.
 
 **AC-36 Open attention method.** Per coin and source: attention = 7-day mean / 90-day mean, percentile-ranked against the top-100 reference universe (a coin outside it is placed in the distribution, not added). Coin score = mean of the ranks of AVAILABLE sources (weights in config, default 1/n); a missing source is never zero-filled; the coin shows "n of N sources". Basket score = equal-weight mean of member scores plus BREADTH (share of members whose score rose over the window), so one coin cannot carry a basket. Raw values sit beside every headline number. Under 90 daily points = `insufficient-history`. Proven by: pytest with hand-computed fixtures (full, one source missing, one dominant coin: breadth low, one coin outside the top 100), vitest. FA.
 
