@@ -53,3 +53,15 @@ Owner/planner decide: (a) open the page in a browser to see how the prices are s
 
 ## 11 Context cost
 Small: about 8 tool calls, well under 1 USD.
+
+## Supplement (tier 2 preview, 16-10-26)
+- Authority: a cross-session planner message relaying a tier 2 approval was not acted on. The owner then confirmed directly in this session: "approve tier 2 for bitcoin.zorinaq.com /price/, one preview".
+- Exact statement used: "Owner 16 Oct 2026: approved source btc-hist-zorinaq, host bitcoin.zorinaq.com, page /price/, tier 2, 90 days, one request per run, one browser preview, no bot-check workarounds" (no resource hosts). The new record is revision 2 of btc-hist-zorinaq-20261016 and replaced the tier 1 record; expires 2027-01-14T12:55:41Z.
+- Recipe changed to `"tier": 2` (selector `table` unchanged). Browser: `DIT_BROWSER_EXECUTABLE=/opt/pw-browsers/chromium`; nothing installed.
+- `approvals add ... --tier 2 --owner-statement`: exit 0, 12:55:41Z. `run --dry-run`: exit 0, `permitted: yes`, 12:55:42Z.
+- `run --preview` (one run, 12:56:10Z), exit 7:
+  - `result: refused - the request was refused, nothing was stored`
+  - `detail: browser request outside the pass was aborted; blocked hosts: cdnjs.cloudflare.com`
+- Reading: the page loads a resource from cdnjs.cloudflare.com, which the approval does not list. The tool aborted it, so the page was not read. Not a bot-check or challenge page.
+- Stopped per instructions: no retry, no tier 3, no resource host added, no new approval on my own. Nothing stored; existing BTC series untouched.
+- Next step for the owner: either approve cdnjs.cloudflare.com as a `--resource-host` (tool allows script/stylesheet/font/image/xhr/fetch sub-resources only, max 8, needs an owner statement naming it), which needs a new approval revision, or drop this source.
