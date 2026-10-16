@@ -378,7 +378,7 @@ describe("ScreenerBoard layout (T41 / S5b)", () => {
     fireEvent.change(screen.getByTestId("move-to-group-SOL"), { target: { value: created.id } });
     await advance(0);
     fireEvent.click(screen.getByRole("button", { name: "Delete group Later" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("will move to Main");
+    expect(screen.getByTestId(`delete-group-warning-${created.id}`)).toHaveTextContent("will move to Main");
     fireEvent.click(screen.getByRole("button", { name: "Cancel deleting group Later" }));
     expect(region("Later")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Delete group Later" }));
