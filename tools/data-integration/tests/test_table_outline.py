@@ -43,3 +43,15 @@ def test_no_match_and_garbage_never_raise():
     assert render_table_outline(table_outline(b"<p>x</p>", "table")) == ("tables matched: 0",)
     assert table_outline(object(), "[[[").ok is False
     assert render_table_outline(table_outline(None, "table")) in ((), ("tables matched: 0",))
+
+
+def test_ten_thousand_cells_and_5000_char_header_stay_bounded():
+    from data_integration.parse import parse_table
+
+    cells = "".join(f"<th>H{i}</th>" for i in range(10000))
+    page = f"<table><tr>{cells}</tr><tr>{'<td>1</td>' * 10000}</tr></table>".encode()
+    o = table_outline(page, "table", parse_table(page, "table"))
+    assert (o.cols, len(o.headers), o.extra) == (10000, 12, 9988)
+    long = f"<table><tr><th>{'Z' * 5000}</th><th>ok</th></tr><tr><td>1</td><td>2</td></tr></table>".encode()
+    lines = render_table_outline(table_outline(long, "table", parse_table(long, "table")))
+    assert all(len(x) < 100 for x in lines) and "Z" * 24 in "".join(lines) and "Z" * 25 not in "".join(lines)

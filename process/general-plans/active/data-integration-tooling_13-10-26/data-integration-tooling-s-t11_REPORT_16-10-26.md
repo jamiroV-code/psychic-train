@@ -12,12 +12,13 @@
 
 4. Files changed: parse.py, pipeline.py, cli.py (tools/data-integration/src/data_integration); tests test_table_outline.py, test_cli_table_outline.py, fixtures_table_outline/*.html; api/tests/tooling_guards/test_table_outline_guard.py; all-data-sources.md (one sentence); this report.
 
-5. Commits: one commit on the branch (see PR).
+5. Commits: two commits on the branch (see PR).
 
 6. Tests run (UTC 2026-10-16, base abd78e8)
 - Baseline on untouched main: tooling 635 passed; guards 59; API 1202 passed / 1 skipped / 5 deselected.
 - Red first: test_table_outline collection error (import), test_cli_table_outline 9 failed / 2 passed, guard 2 failed.
 - After (14:46Z): tooling `pytest tools/data-integration/tests` 651 passed / 3 deselected; guards 61 passed; API 1204 passed / 1 skipped / 5 deselected. New: 16 tooling tests, 2 guard tests.
+- Follow-up commit (planner clarifications: headers from parsed columns, 200-char pre-filter cut, O(n) stop at 12, 10,000-cell and 5,000-char tests): tooling 652 passed, guards 61 passed; full API suite not re-run (1204 passed before it; the change is tooling-only).
 - `git diff --exit-code api/uv.lock api/pyproject.toml` clean; `git diff --check` clean.
 
 7. Tests NOT run: any real fetch, scrape, browser or REA (forbidden).
