@@ -79,3 +79,6 @@ Small: about 8 tool calls, well under 1 USD.
 
 ## Decision (16-10-26)
 The owner said in this session: "drop this source". btc-hist-zorinaq is dropped; no further requests to bitcoin.zorinaq.com. The tooling has no revoke command; the approval record (revision 3) sits only in this session's private store outside the checkout, was never committed, and expires 2027-01-14 and with the container. The recipe stays in the PR as the record of the attempt; remove it before merge if the planner prefers.
+
+## Recipe removed (16-10-26)
+The owner asked in this session to remove the recipe from the PR. `tools/data-integration/recipes/btc-hist-zorinaq.recipe.json` is deleted in the final commit; it remains in earlier commits of the branch history. The recipe content: schema_version 1, source btc-hist-zorinaq, tier 2 (tier 1 in the first commit), url https://bitcoin.zorinaq.com/price/, selector `table`, dataset BTC-HIST 1d, min_rows 30. Section 4 (Files changed) now reads: this report only.
