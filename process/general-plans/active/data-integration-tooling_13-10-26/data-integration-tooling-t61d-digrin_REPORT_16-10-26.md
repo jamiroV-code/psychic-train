@@ -11,7 +11,7 @@ feature: data-integration-tooling
 T61d, branch claude/t61d-digrin-scrape.
 
 ## 2 Outcome
-STOPPED (blocked) at the preview. Result `robots_blocked`, detail `robots returned 301`, exit 4. Nothing was fetched from the page, nothing was stored, no real run.
+STOPPED at the preview, twice. Attempt 1 (digrin.com): `robots_blocked`, `robots returned 301`, exit 4. Attempt 2 (www.digrin.com, owner-approved retry): fetch OK, but `result: invalid`, `detail: missing columns: open, high, low, close, volume`, exit 5. Nothing stored, no real run.
 
 ## 3 Summary
 - Setup: `uv sync` only. Approvals, scrape and evidence dirs are under a private folder outside the checkout (not committed). REA skipped as instructed.
@@ -50,3 +50,12 @@ Owner decides whether to approve host www.digrin.com (new card), then re-run dry
 
 ## 11 Context cost
 Small: about 8 tool calls, under 1 USD. The t61c zorinaq report named in the brief is not on origin/main, so it was not read.
+
+## Supplement (retry, 16-10-26)
+- The owner confirmed in this session: "Yes, retry once with www.digrin.com". New approval record for the same source, host www.digrin.com, page /stocks/detail/BTC-USD/price, tier 1, 90 days (revision 2, expires 2027-01-14T14:12:11Z).
+- Exact statement: "Owner 16 Oct 2026: retry approved for source btc-hist-digrin, host www.digrin.com, page /stocks/detail/BTC-USD/price, tier 1, 90 days, one request per run"
+- Recipe URL changed to https://www.digrin.com/stocks/detail/BTC-USD/price (selector `table`).
+- Dry-run: `permitted: yes`. Preview (14:12:15Z): robots passed and the page was fetched (www host is the right one), but `result: invalid - the page or table failed the checks, nothing was stored`, `detail: missing columns: open, high, low, close, volume`, exit 5.
+- Meaning: the first `table` on the page lacks OHLCV columns (the tool needs date, open, high, low, close, volume). The preview printed no outline or column list, so what the page offers is unknown. Not guessed, no resampling. Another selector needs another request, which needs a further owner OK.
+- Commands: `approvals add` exit 0 14:12:11; `run --dry-run` exit 0; `run --preview` exit 5 14:12:15.
+- Next: the owner can inspect the page in a browser and give a selector for a daily OHLC table (if any), or drop digrin as a source.

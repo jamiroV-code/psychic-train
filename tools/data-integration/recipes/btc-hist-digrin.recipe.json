@@ -2,7 +2,7 @@
   "schema_version": 1,
   "source": "btc-hist-digrin",
   "tier": 1,
-  "url": "https://digrin.com/stocks/detail/BTC-USD/price",
+  "url": "https://www.digrin.com/stocks/detail/BTC-USD/price",
   "selector": "table",
   "dataset": {"symbol": "BTC-HIST", "timeframe": "1d"},
   "min_rows": 30,
