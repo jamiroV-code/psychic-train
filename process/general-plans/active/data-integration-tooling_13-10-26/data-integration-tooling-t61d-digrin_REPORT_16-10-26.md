@@ -59,3 +59,13 @@ Small: about 8 tool calls, under 1 USD. The t61c zorinaq report named in the bri
 - Meaning: the first `table` on the page lacks OHLCV columns (the tool needs date, open, high, low, close, volume). The preview printed no outline or column list, so what the page offers is unknown. Not guessed, no resampling. Another selector needs another request, which needs a further owner OK.
 - Commands: `approvals add` exit 0 14:12:11; `run --dry-run` exit 0; `run --preview` exit 5 14:12:15.
 - Next: the owner can inspect the page in a browser and give a selector for a daily OHLC table (if any), or drop digrin as a source.
+
+## Supplement 2 (third preview, table outline, 16-10-26)
+- The owner confirmed in this session: "Yes, one more preview on www.digrin.com". The planner message quoting the same owner choice was not itself treated as authority. Same approval record (btc-hist-digrin, www.digrin.com, tier 1, revision 2), one request. Branch merged with origin/main (includes the table-header outline, PR #95).
+- Dry-run: `permitted: yes`. Preview at 2026-10-16T17:11:23Z, exit 5:
+  - `result: invalid - the page or table failed the checks, nothing was stored`
+  - `detail: missing columns: open, high, low, close, volume`
+  - tables matched: 1; columns: 3; rows: 196; headers: Date, Adjusted price, Real price
+- Meaning: the page offers one table with a date and two price columns (adjusted and real), no open/high/low/volume. It is not OHLCV. Per the stop rule I did not map columns, resample or retry, and did not run the real run. Recommendation: drop digrin as the BTC-HIST source.
+- Nothing stored; no --replace; no approvals, evidence or scraped data committed.
+- Commands: `uv sync` exit 0; `approvals status` exit 0; `run --dry-run` exit 0; `run --preview` exit 5.
