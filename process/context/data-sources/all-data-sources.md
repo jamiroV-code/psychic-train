@@ -421,7 +421,7 @@ Tooling lives in `tools/data-integration` (owner-run, outside the API and CI). R
 
 Exit codes: 0 ok, 2 usage, 3 gate refused, 4 fetch failed, 5 validation failed, 6 changed or uncertain, 7 cache protection refused.
 
-A selector miss prints a page outline (counts, hosts, paths, tokens; no text).
+A selector miss prints a page outline, missing columns a table outline (no text).
 
 ### Rules
 
