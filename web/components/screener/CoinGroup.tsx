@@ -130,7 +130,10 @@ export function CoinGroup({
   const [renameError, setRenameError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const renameRef = useRef<HTMLButtonElement>(null);
+  const deleteRef = useRef<HTMLButtonElement>(null);
   const backToRename = useRef(false);
+  // F4: deleting a group that holds coins moves them to a neighbour; ask first.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
     if (renaming) inputRef.current?.focus();
@@ -207,16 +210,51 @@ export function CoinGroup({
           >
             Down
           </button>
-          <button
-            type="button"
-            className="board-button"
-            data-testid={`delete-group-${group.id}`}
-            aria-label={`Delete group ${group.name}`}
-            aria-disabled={off(total <= 1)}
-            onClick={() => editable && total > 1 && onDeleteGroup(group.id)}
-          >
-            Delete
-          </button>
+          {confirmingDelete ? (
+            <span className="coin-group__confirm" role="alert" data-testid={`delete-group-warning-${group.id}`}>
+              {`Its ${countText(variant, count)} will move to ${groupOptions[position === 0 ? 1 : position - 1]?.name ?? "another group"}.`}
+              <button
+                type="button"
+                className="board-button"
+                data-testid={`confirm-delete-group-${group.id}`}
+                aria-label={`Confirm deleting group ${group.name}`}
+                onClick={() => {
+                  setConfirmingDelete(false);
+                  onDeleteGroup(group.id);
+                }}
+              >
+                Confirm
+              </button>
+              <button
+                type="button"
+                className="board-button"
+                data-testid={`cancel-delete-group-${group.id}`}
+                aria-label={`Cancel deleting group ${group.name}`}
+                onClick={() => {
+                  setConfirmingDelete(false);
+                  requestAnimationFrame(() => deleteRef.current?.focus());
+                }}
+              >
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              ref={deleteRef}
+              className="board-button"
+              data-testid={`delete-group-${group.id}`}
+              aria-label={`Delete group ${group.name}`}
+              aria-disabled={off(total <= 1)}
+              onClick={() => {
+                if (!editable || total <= 1) return;
+                if (count > 0) setConfirmingDelete(true);
+                else onDeleteGroup(group.id);
+              }}
+            >
+              Delete
+            </button>
+          )}
         </div>
       </div>
 

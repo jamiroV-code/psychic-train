@@ -170,6 +170,8 @@ test("create, rename, move a coin by the menu, reload, delete the group: the coi
 
   saved = layoutSaved(page);
   await page.getByRole("button", { name: "Delete group Later" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "will move to Main" })).toBeVisible();
+  await page.getByRole("button", { name: "Confirm deleting group Later" }).click();
   await saved;
   await expect(group(page, "Later")).toHaveCount(0);
   await expect(group(page, "Main").getByTestId("coin-panel-ETH")).toBeVisible();
