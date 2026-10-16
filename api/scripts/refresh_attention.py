@@ -81,7 +81,7 @@ RUNNERS = {"wikipedia": _run_wikipedia, "coingecko": _run_coingecko,
 def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
          today: date | None = None, sleep=time.sleep) -> int:
     parser = argparse.ArgumentParser(description="Refresh the attention store.")
-    parser.add_argument("--dry-run", action="store_true", help="fetch and report, write nothing")
+    parser.add_argument("--dry-run", action="store_true", help="print the planned fetches; no network call, write nothing")
     parser.add_argument("--sources", help="comma list; default wikipedia,coingecko")
     parser.add_argument("--symbols", help="comma list; default wiki_articles.json")
     args = parser.parse_args(argv)
@@ -93,6 +93,10 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
         return 1
     today = today or datetime.now(timezone.utc).date()
     symbols = _symbols(args.symbols)
+    if args.dry_run:
+        for name in names:
+            print(f"{name}: dry run, would fetch {len(symbols)} symbols (no network call, nothing written)")
+        return 0
     own = client is None
     client = client or httpx.Client(follow_redirects=True)
     results: dict[str, str] = {}

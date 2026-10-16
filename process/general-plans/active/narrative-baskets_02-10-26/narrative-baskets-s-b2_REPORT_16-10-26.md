@@ -21,7 +21,7 @@ cf73fd2 red tests; 3232a8d implementation.
 ## 6 Tests run
 - Baseline origin/main: UV_FROZEN=1 uv run --project api pytest api/ -q: 1282 passed, 1 skipped, 5 deselected.
 - Red (cf73fd2): 2 collection errors (17 new tests uncollected) + 2 failing (registry set, refresh default sources) = red count 4.
-- After: full suite 1298 passed + 1 failed (test arithmetic), fixed; targeted rerun attention + scripts + test_pytrends_adapter: 291 passed. Expected full: 1299 passed. Full suite not rerun after the one-line test fix.
+- After merging main (conflict in refresh_attention.py resolved): full suite 1300 passed, 1 skipped, 5 deselected.
 - git diff --check origin/main: clean. web and protected pytrends test and adapter diff: empty. Date 2026-10-16 UTC, SHA 3232a8d. Spend: under 1 USD.
 
 ## 7 Tests NOT run
