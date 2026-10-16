@@ -65,3 +65,14 @@ Small: about 8 tool calls, well under 1 USD.
 - Reading: the page loads a resource from cdnjs.cloudflare.com, which the approval does not list. The tool aborted it, so the page was not read. Not a bot-check or challenge page.
 - Stopped per instructions: no retry, no tier 3, no resource host added, no new approval on my own. Nothing stored; existing BTC series untouched.
 - Next step for the owner: either approve cdnjs.cloudflare.com as a `--resource-host` (tool allows script/stylesheet/font/image/xhr/fetch sub-resources only, max 8, needs an owner statement naming it), which needs a new approval revision, or drop this source.
+
+## Supplement 2 (tier 2 preview with resource host, 16-10-26)
+- Authority: the owner said directly in this session: "approve cdnjs.cloudflare.com as resource host for one tier 2 preview".
+- Exact statement used: "Owner 16 Oct 2026: approved source btc-hist-zorinaq, host bitcoin.zorinaq.com, page /price/, tier 2, resource host cdnjs.cloudflare.com, 90 days, one request per run, one browser preview, no bot-check workarounds". Record is revision 3 of btc-hist-zorinaq-20261016 (tier 2, resource host cdnjs.cloudflare.com), expires 2027-01-14T13:01:05Z.
+- `approvals add ... --resource-host cdnjs.cloudflare.com --owner-statement`: exit 0, 13:01:05Z. `run --dry-run`: exit 0, `permitted: yes`.
+- `run --preview` (one run, ended 13:01:24Z), exit 5:
+  - `result: invalid - the page or table failed the checks, nothing was stored`
+  - `detail: selector matched nothing: table`
+- Reading: this time the browser loaded the page (no refusal, no challenge page), but the rendered page still has no `<table>` element. The prices are most likely drawn as a chart or shown in another element, so the tool's table input cannot read them. The tool does not show the page body on this failure.
+- Stopped per instructions: no selector guess, no retry, no real run, no tier 3, nothing stored; existing BTC series untouched.
+- Next step for the owner: look at the page in a browser. If the numbers sit in a non-table element or a downloadable CSV/JSON link, name it. Otherwise this page cannot feed BTC-HIST and the source should be dropped.
