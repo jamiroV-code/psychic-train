@@ -48,7 +48,7 @@ def test_remove_coin(client):
     client.post("/api/watchlist", json={"symbol": "BTC"})
     resp = client.delete("/api/watchlist/BTC")
     assert resp.status_code == 200
-    assert resp.json() == {"coins": []}
+    assert resp.json() == {"coins": [], "affected_baskets": []}
 
 
 def test_remove_missing_coin_returns_404_not_silent_noop(client):
