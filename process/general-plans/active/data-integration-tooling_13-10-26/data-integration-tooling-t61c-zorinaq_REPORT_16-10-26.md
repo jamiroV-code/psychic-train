@@ -76,3 +76,6 @@ Small: about 8 tool calls, well under 1 USD.
 - Reading: this time the browser loaded the page (no refusal, no challenge page), but the rendered page still has no `<table>` element. The prices are most likely drawn as a chart or shown in another element, so the tool's table input cannot read them. The tool does not show the page body on this failure.
 - Stopped per instructions: no selector guess, no retry, no real run, no tier 3, nothing stored; existing BTC series untouched.
 - Next step for the owner: look at the page in a browser. If the numbers sit in a non-table element or a downloadable CSV/JSON link, name it. Otherwise this page cannot feed BTC-HIST and the source should be dropped.
+
+## Decision (16-10-26)
+The owner said in this session: "drop this source". btc-hist-zorinaq is dropped; no further requests to bitcoin.zorinaq.com. The tooling has no revoke command; the approval record (revision 3) sits only in this session's private store outside the checkout, was never committed, and expires 2027-01-14 and with the container. The recipe stays in the PR as the record of the attempt; remove it before merge if the planner prefers.
