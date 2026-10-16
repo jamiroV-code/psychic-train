@@ -40,7 +40,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 # routers/narrative.py (item 56) are now both wired in.
 from api.data import equities_refresh, refresh_worker
 from api.routers import equities
-from api.routers import layout, narrative, onchain_activity, pairs, refresh, regime, screener, watchlist
+from api.routers import baskets, layout, narrative, onchain_activity, pairs, refresh, regime, screener, watchlist
 
 
 @asynccontextmanager
@@ -100,6 +100,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.include_router(screener.router)
 app.include_router(watchlist.router)
 app.include_router(layout.router)
+app.include_router(baskets.router)
 app.include_router(regime.router)
 app.include_router(narrative.router)
 app.include_router(onchain_activity.router)
