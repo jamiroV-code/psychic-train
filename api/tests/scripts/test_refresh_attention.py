@@ -1,0 +1,91 @@
+import hashlib
+from datetime import timedelta
+from pathlib import Path
+
+import httpx
+
+from api.data.attention import store
+from api.scripts import refresh_attention
+from api.tests.data.attention.conftest import TODAY, chart_payload, wiki_payload
+
+MARKETS = [{"id": "bitcoin", "symbol": "btc", "market_cap": 1}, {"id": "ethereum", "symbol": "eth", "market_cap": 2}]
+
+
+def _handler(wiki_status=200, cg_status=200):
+    def h(r: httpx.Request):
+        u = str(r.url)
+        if "wikimedia" in u:
+            return httpx.Response(wiki_status, json=wiki_payload(100))
+        if "coins/markets" in u:
+            return httpx.Response(cg_status, json=MARKETS)
+        if "market_chart" in u:
+            return httpx.Response(cg_status, json=chart_payload(100))
+        return httpx.Response(404)
+    return h
+
+
+def _run(argv, handler, **kw):
+    c = httpx.Client(transport=httpx.MockTransport(handler))
+    return refresh_attention.main(argv, client=c, today=TODAY, sleep=lambda x: None, **kw)
+
+
+def test_run_writes_store_and_exit_0(attention_cache):
+    assert _run(["--symbols", "BTC,ETH"], _handler()) == 0
+    assert len(store.read_points("wikipedia", "BTC")) == 100
+    assert len(store.read_points("coingecko", "ETH")) == 99
+    assert all(d < TODAY for d, _ in store.read_points("wikipedia", "BTC"))
+
+
+def test_dry_run_writes_nothing(attention_cache):
+    assert _run(["--dry-run", "--symbols", "BTC"], _handler()) == 0
+    assert not (attention_cache / "attention").exists()
+
+
+def test_sources_filter(attention_cache):
+    assert _run(["--sources", "wikipedia", "--symbols", "BTC"], _handler()) == 0
+    assert store.read_points("coingecko", "BTC") == []
+    assert store.read_points("wikipedia", "BTC")
+
+
+def test_all_error_exit_1(attention_cache):
+    def h(r):
+        raise httpx.ConnectError("x")
+    assert _run(["--symbols", "BTC"], h) == 1
+
+
+def test_no_ok_but_not_all_error_exit_2(attention_cache):
+    def h(r):
+        if "wikimedia" in str(r.url):
+            return httpx.Response(200, json={"items": []})
+        return httpx.Response(429)
+    assert _run(["--symbols", "BTC"], h) == 2
+
+
+def test_per_source_isolation(attention_cache):
+    assert _run(["--symbols", "BTC"], _handler(cg_status=500)) == 0
+    assert store.read_points("wikipedia", "BTC")
+    assert store.read_points("coingecko", "BTC") == []
+
+
+def test_unknown_source_exit_1(attention_cache):
+    assert _run(["--sources", "nope"], _handler()) == 1
+
+
+def test_tmp_path_isolation_real_cache_untouched(attention_cache):
+    real = Path(refresh_attention.cache.DEFAULT_CACHE_ROOT)
+    before = sorted(real.rglob("*")) if real.exists() else []
+    _run(["--symbols", "BTC"], _handler())
+    after = sorted(real.rglob("*")) if real.exists() else []
+    assert before == after
+
+
+def test_rerun_first_wins(attention_cache):
+    _run(["--sources", "wikipedia", "--symbols", "BTC"], _handler())
+    first = store.read_points("wikipedia", "BTC")
+    def h(r):
+        p = wiki_payload(100)
+        for it in p["items"]:
+            it["views"] = 1
+        return httpx.Response(200, json=p)
+    _run(["--sources", "wikipedia", "--symbols", "BTC"], h)
+    assert store.read_points("wikipedia", "BTC") == first
