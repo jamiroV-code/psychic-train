@@ -36,8 +36,15 @@ def test_run_writes_store_and_exit_0(isolated_cache):
     assert all(d < TODAY for d, _ in store.read_points("wikipedia", "BTC"))
 
 
-def test_dry_run_writes_nothing(isolated_cache):
-    assert _run(["--dry-run", "--symbols", "BTC"], _handler()) == 0
+def test_dry_run_writes_nothing_and_makes_no_network_call(isolated_cache):
+    calls = []
+
+    def fail_if_called(r: httpx.Request):
+        calls.append(str(r.url))
+        raise AssertionError("dry run must not call the network")
+
+    assert _run(["--dry-run", "--symbols", "BTC"], fail_if_called) == 0
+    assert calls == []
     assert not (isolated_cache / "attention").exists()
 
 
