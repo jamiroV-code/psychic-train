@@ -47,3 +47,18 @@ def test_series_rate_limit_capped():
     c = client_for(lambda r: httpx.Response(429))
     s = cg.fetch_series("BTC", "bitcoin", client=c, today=TODAY, sleep=lambda x: None)
     assert s.state == "capped"
+
+
+def test_top100_markets_unfiltered_with_volume(markets_json):
+    c = client_for(lambda r: httpx.Response(200, json=markets_json))
+    rows = cg.fetch_top100_markets(client=c)
+    assert len(rows) == len(markets_json)
+    assert set(rows[0]) == {"id", "symbol", "market_cap", "volume_24h"}
+    assert rows[0]["symbol"] == "BTC"
+    assert {"USDT"} <= {r["symbol"] for r in rows} or len(rows) == len(markets_json)
+
+
+def test_top100_markets_failure_returns_none():
+    assert cg.fetch_top100_markets(client=client_for(lambda r: httpx.Response(500))) is None
+    assert cg.fetch_top100_markets(client=client_for(lambda r: httpx.Response(429)),
+                                   sleep=lambda x: None) is None

@@ -102,3 +102,34 @@ def test_default_sources_exclude_opt_in_volume_and_trends(isolated_cache):
     # default run must stay wikipedia + coingecko: no ccxt or pytrends (live) call
     assert refresh_attention.DEFAULT_SOURCES == ("wikipedia", "coingecko")
     assert {"exchange_volume", "hyperliquid_volume", "trends"} <= set(refresh_attention.RUNNERS)
+
+
+def _universe_file(cache_root):
+    return cache_root / "attention" / "universe.json"
+
+
+def test_universe_source_writes_snapshot(isolated_cache):
+    assert _run(["--sources", "universe"], _handler()) == 0
+    from api.data.attention import universe_store
+    snap = universe_store.read_latest()
+    assert snap["date"] == TODAY.isoformat()
+    assert [c["symbol"] for c in snap["coins"]] == ["BTC", "ETH"]
+
+
+def test_universe_in_default_sources():
+    assert "universe" in refresh_attention.DEFAULT_SOURCES
+
+
+def test_universe_dry_run_writes_nothing(isolated_cache):
+    def boom(r):
+        raise AssertionError("no network in dry run")
+    assert _run(["--dry-run", "--sources", "universe"], boom) == 0
+    assert not _universe_file(isolated_cache).exists()
+
+
+def test_universe_failure_keeps_old_file_and_counts_error(isolated_cache, capsys):
+    from api.data.attention import universe_store
+    universe_store.write_snapshot("2026-09-01", [{"id": "x", "symbol": "X", "market_cap": 1, "volume_24h": 1}])
+    before = _universe_file(isolated_cache).read_bytes()
+    assert _run(["--sources", "universe"], _handler(cg_status=500)) == 1
+    assert _universe_file(isolated_cache).read_bytes() == before
