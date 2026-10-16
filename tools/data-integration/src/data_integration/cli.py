@@ -115,12 +115,15 @@ def _approval_line(pass_) -> str:
     return f"approval: id={pass_.approval_id} revision={pass_.approval_revision} expires={pass_.expires}"
 
 
-def _result(st: str, detail: str = "", outline: tuple = ()) -> int:
+def _result(st: str, detail: str = "", outline: tuple = (), table_lines: bool = False) -> int:
     _say(f"result: {st} - {STATUS_MESSAGES.get(st, 'unknown status')}")
     if detail:
         _say(f"detail: {detail}")
     if outline:
-        _say("page outline (nothing stored, page text is not shown):")
+        if table_lines:
+            _say("table outline (nothing stored, only header names are shown):")
+        else:
+            _say("page outline (nothing stored, page text is not shown):")
         for line in outline:
             _say(f"  {line}")
     return EXIT_CODES.get(st, 5)
@@ -165,7 +168,13 @@ def _preview(rec, pass_, fn, politeness) -> int:
         return _result(status.INVALID, str(exc), lines)
     problems = validate_table(table, rec.min_rows)
     if problems:
-        return _result(status.INVALID, "; ".join(problems[:5]))
+        lines = ()
+        if problems[0].startswith("missing columns:"):
+            try:
+                lines = parse_mod.render_table_outline(parse_mod.table_outline(outcome.body, rec.selector, table))
+            except Exception:
+                lines = ()
+        return _result(status.INVALID, "; ".join(problems[:5]), lines, table_lines=True)
     _result(status.OK)
     _show_rows(table)
     _say(f"response_sha256: {outcome.body_sha256 or hashlib.sha256(outcome.body).hexdigest()}")
@@ -225,7 +234,8 @@ def _run(args, clock, registry) -> int:
         adapter, pass_, url=rec.url, selector=rec.selector, symbol=rec.symbol, timeframe=rec.timeframe,
         min_rows=rec.min_rows, replace=args.replace, accept_baseline=args.accept_baseline, clock=clock,
     )
-    code = _result(result.status, result.detail, result.outline)
+    code = _result(result.status, result.detail, result.outline,
+                   table_lines=result.detail.startswith("missing columns:"))
     if result.rows:
         _say(f"rows: {result.rows}")
     _say(_approval_line(pass_))

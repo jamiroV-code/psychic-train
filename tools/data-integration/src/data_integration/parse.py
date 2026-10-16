@@ -174,3 +174,53 @@ def render_outline(o: PageOutline) -> tuple:
     if o.candidates:
         out.append("numeric-heavy elements: " + ", ".join(f"{t}{tok} ({n})" for t, tok, n in o.candidates))
     return tuple(out)
+
+
+# ---- table outline: header names of the selected table, never its data rows ----------------------------------------
+
+_HEADER_OK = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 _./%()-")
+_MAX_HEADERS, _MAX_HEADER_CHARS, _MAX_CELL_RAW = 12, 24, 400
+
+
+@dataclass(frozen=True)
+class TableOutline:
+    ok: bool = False
+    matched: int = 0
+    headers: tuple = ()
+    extra: int = 0
+    rows: int = 0
+    cols: int = 0
+
+
+def _header_text(cell) -> str:
+    raw = " ".join(str(cell.get_all_text()).split())[:_MAX_CELL_RAW]
+    return " ".join("".join(ch for ch in raw if ch in _HEADER_OK).split())[:_MAX_HEADER_CHARS].strip()
+
+
+def table_outline(content, selector, table=None) -> TableOutline:
+    """Header names and counts of the first table matching `selector`. Pure; never raises; never returns data rows."""
+    try:
+        body = content if isinstance(content, (bytes, bytearray)) else str(content).encode("utf-8", "replace")
+        found = Selector(bytes(body[:_MAX_BYTES])).css(selector)
+        if not found:
+            return TableOutline(ok=True)
+        trs = [tr for tr in found[0].css("tr") if len(tr.css("th, td"))]
+        if not trs:
+            return TableOutline(ok=True, matched=len(found))
+        cells = trs[0].css("th, td")
+        names = tuple(n for n in (_header_text(c) for c in cells) if n)
+        return TableOutline(ok=True, matched=len(found), headers=names[:_MAX_HEADERS],
+                            extra=max(0, len(names) - _MAX_HEADERS), rows=len(trs) - 1, cols=len(cells))
+    except Exception:
+        return TableOutline()
+
+
+def render_table_outline(o: TableOutline) -> tuple:
+    if not o.ok:
+        return ()
+    out = [f"tables matched: {o.matched}"]
+    if o.cols:
+        out += [f"columns: {o.cols}", f"rows: {o.rows}"]
+    if o.headers:
+        out.append("headers: " + ", ".join(o.headers) + (f" (+{o.extra} more)" if o.extra else ""))
+    return tuple(out)

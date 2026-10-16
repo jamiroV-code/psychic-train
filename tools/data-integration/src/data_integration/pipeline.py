@@ -67,7 +67,13 @@ def run(
         return PipelineResult(status.INVALID, str(exc), outline=lines)
     problems = validate_table(table, min_rows)
     if problems:
-        return PipelineResult(status.INVALID, "; ".join(problems[:5]))
+        lines = ()
+        if problems[0].startswith("missing columns:"):
+            try:
+                lines = _parse.render_table_outline(_parse.table_outline(outcome.body, selector, table))
+            except Exception:
+                lines = ()
+        return PipelineResult(status.INVALID, "; ".join(problems[:5]), outline=lines)
     verdict = adaptive.assess(outcome.body, selector, url=url, path=adaptive_path)
     first_run = verdict.status == status.UNCERTAIN and accept_baseline
     if verdict.status != status.OK and not first_run:
