@@ -20,7 +20,8 @@ if __package__ in (None, ""):  # direct invocation
 
 from api.data import cache  # noqa: E402
 from api.data.attention import (  # noqa: E402
-    coingecko_attention, exchange_volume, registry, store, trends, universe_store, wikipedia)
+    coingecko_attention, exchange_volume, reddit, registry, store, trends, universe_store, wikipedia,
+    xsearch)
 
 WIKI_ARTICLES_PATH = Path(__file__).resolve().parents[1] / "data" / "wiki_articles.json"
 DEFAULT_SYMBOLS = ("BTC", "ETH")
@@ -83,9 +84,21 @@ def _run_universe(symbols, client, today, sleep):
     return []
 
 
+def _run_reddit(symbols, client, today, sleep):
+    return [reddit.fetch_series(s, client=client, today=today) for s in symbols]
+
+
+def _run_xsearch(symbols, client, today, sleep):
+    if not xsearch.limits().live:
+        e = xsearch.estimate(symbols, today=today)
+        print(f"xsearch dry run: {e.planned_reads} reads, {e.usd:.2f} USD planned (X_LIVE off)")
+    run = xsearch.RunBudget()
+    return [xsearch.fetch_series(s, client=client, today=today, run=run) for s in symbols]
+
+
 RUNNERS = {"universe": _run_universe, "wikipedia": _run_wikipedia, "coingecko": _run_coingecko,
            "exchange_volume": _run_exchange_volume, "hyperliquid_volume": _run_hyperliquid_volume,
-           "trends": _run_trends}
+           "trends": _run_trends, "reddit": _run_reddit, "xsearch": _run_xsearch}
 
 
 def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
