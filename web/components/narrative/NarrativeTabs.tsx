@@ -3,11 +3,14 @@
 import { useEffect, useState } from "react";
 import { BasketAttentionChart } from "@/components/narrative/BasketAttentionChart";
 import { BasketTable } from "@/components/narrative/BasketTable";
+import { DiscoveryTab } from "@/components/narrative/DiscoveryTab";
 import { fetchBasketAttention } from "@/lib/api/attention";
 import type { AttentionResponse, AttentionWindow } from "@/lib/types/attention";
+import type { DiscoveryResponse, DiscoveryWindow } from "@/lib/types/discovery";
 
 export interface NarrativeTabsProps {
   fetchAttention?: (window: AttentionWindow) => Promise<AttentionResponse>;
+  fetchDiscovery?: (window: DiscoveryWindow) => Promise<DiscoveryResponse>;
 }
 
 type TabId = "baskets" | "discovery";
@@ -17,8 +20,8 @@ const TABS: readonly { id: TabId; label: string }[] = [
   { id: "discovery", label: "Discovery" },
 ];
 
-/** /narrative body: My baskets (chart, then ranked table) and Discovery (placeholder until F2). */
-export function NarrativeTabs({ fetchAttention = fetchBasketAttention }: NarrativeTabsProps) {
+/** /narrative body: My baskets (chart, then ranked table) and Discovery (ranked categories). */
+export function NarrativeTabs({ fetchAttention = fetchBasketAttention, fetchDiscovery }: NarrativeTabsProps) {
   const [tab, setTab] = useState<TabId>("baskets");
   const [window, setWindow] = useState<AttentionWindow>(30);
   const [data, setData] = useState<AttentionResponse | null>(null);
@@ -67,9 +70,7 @@ export function NarrativeTabs({ fetchAttention = fetchBasketAttention }: Narrati
         </div>
       ) : (
         <div role="tabpanel" id="narrative-panel-discovery" aria-labelledby="narrative-tab-discovery">
-          <p data-testid="discovery-placeholder" className="basket-note">
-            Discovery of new narratives is coming.
-          </p>
+          <DiscoveryTab fetchDiscovery={fetchDiscovery} />
         </div>
       )}
     </div>

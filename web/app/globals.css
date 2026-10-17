@@ -1313,6 +1313,28 @@
 .basket-coins__none {
   color: var(--ink-3);
 }
+.discovery-window {
+  display: flex;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0;
+}
+.app-main .discovery-window button.discovery-window__option {
+  all: unset;
+  appearance: none;
+  cursor: pointer;
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--sh-rule);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+.app-main .discovery-window button.discovery-window__option[aria-pressed="true"] {
+  color: var(--ink-1);
+  border-color: var(--accent);
+}
+.app-main .discovery-window button.discovery-window__option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 @media (max-width: 640px) {
   .basket-table th,
   .basket-table td {

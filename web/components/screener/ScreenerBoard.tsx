@@ -413,6 +413,9 @@ export function ScreenerBoard({
         <p className="board-alert" data-testid="layout-save-error" role="alert">
           {saveError}
         </p>
+        <p className="board-notice" data-testid="board-announcement-visible" role="status">
+          {announcement}
+        </p>
         <p className="visually-hidden" data-testid="board-announcer" aria-live="polite">
           {announcement}
         </p>
