@@ -1,46 +1,23 @@
-# T76 screens, 17-10-26
+# T85 screens, 17-10-26
 
-Seeded fixture (routed attention JSON, baskets created through the real API). Widths 375, 768, 1280. Regenerate: `E2E_SHOT_DIR=<dir> pnpm test:e2e e2e/narrative.spec.ts`, then compress.
+Before = untouched origin/main (`before/`), after = this branch (this folder). Same states and widths (375, 768, 1280), compressed, each <= 150 KB.
+Seeded fixture (routed JSON, baskets created through the real API); `as-shipped` uses the real API with no route mock. Before shots used the older Discovery fixture (no empty categories). Regenerate: `E2E_SHOT_DIR=<dir> pnpm test:e2e e2e/narrative.spec.ts`, then compress.
+Known, not narrative-owned: on a page shorter than the viewport the 375 px shell rail stretches (`.app-shell` grid rows; measured 353 px vs 38 px with `grid-template-rows: auto 1fr`). Visible in the as-shipped, error and discovery shots; see the report.
 
-- `ok-375.png`: two lines, signed change, breadth %, 'covers N of N', membership line, no horizontal scroll; legend is one strip with no divider
-- `ok-768.png`: two lines, signed change, breadth %, 'covers N of N', membership line, no horizontal scroll; legend is one strip with no divider
-- `ok-1280.png`: two lines, signed change, breadth %, 'covers N of N', membership line, no horizontal scroll; legend is one strip with no divider
-- `loading-375.png`: one muted 'Loading' line under the header; selector stays aligned right
-- `loading-768.png`: one muted 'Loading' line under the header; selector stays aligned right
-- `loading-1280.png`: one muted 'Loading' line under the header; selector stays aligned right
-- `error-375.png`: one red line; wraps without clipping at 375
-- `error-768.png`: one red line; wraps without clipping at 375
-- `error-1280.png`: one red line; wraps without clipping at 375
-- `empty-375.png`: ONE line ('No baskets yet' + screener link); no second 'No baskets to rank' line
-- `empty-768.png`: ONE line ('No baskets yet' + screener link); no second 'No baskets to rank' line
-- `empty-1280.png`: ONE line ('No baskets yet' + screener link); no second 'No baskets to rank' line
-- `partial-375.png`: 'no data: Layer2' note; the no-data row shows 'no data' in score, change and breadth (never 0)
-- `partial-768.png`: 'no data: Layer2' note; the no-data row shows 'no data' in score, change and breadth (never 0)
-- `partial-1280.png`: 'no data: Layer2' note; the no-data row shows 'no data' in score, change and breadth (never 0)
-- `ranking-off-375.png`: 'Ranking is off' note; score column reads 'no data'; change and breadth still shown
-- `ranking-off-768.png`: 'Ranking is off' note; score column reads 'no data'; change and breadth still shown
-- `ranking-off-1280.png`: 'Ranking is off' note; score column reads 'no data'; change and breadth still shown
-- `coin-expand-375.png`: coins behind Majors: score, 'n of N sources', raw value right-aligned per source, 'no data' + state when missing
-- `coin-expand-768.png`: coins behind Majors: score, 'n of N sources', raw value right-aligned per source, 'no data' + state when missing
-- `coin-expand-1280.png`: coins behind Majors: score, 'n of N sources', raw value right-aligned per source, 'no data' + state when missing
-- `removal-notice-375.png`: screener after removing ETH; viewport scrolled to the board (T78: the notice is now visible above the board)
-- `removal-notice-768.png`: screener after removing ETH; viewport scrolled to the board (T78: the notice is now visible above the board)
-- `removal-notice-1280.png`: screener after removing ETH; viewport scrolled to the board (T78: the notice is now visible above the board)
-- `discovery-error-1280.png`: Discovery tab state (error), route-mocked
-- `discovery-error-375.png`: Discovery tab state (error), route-mocked
-- `discovery-error-768.png`: Discovery tab state (error), route-mocked
-- `discovery-loading-1280.png`: Discovery tab state (loading), route-mocked
-- `discovery-loading-375.png`: Discovery tab state (loading), route-mocked
-- `discovery-loading-768.png`: Discovery tab state (loading), route-mocked
-- `discovery-nodata-categories-missing-1280.png`: Discovery tab state (nodata-categories-missing), route-mocked
-- `discovery-nodata-categories-missing-375.png`: Discovery tab state (nodata-categories-missing), route-mocked
-- `discovery-nodata-categories-missing-768.png`: Discovery tab state (nodata-categories-missing), route-mocked
-- `discovery-nodata-no-attention-data-1280.png`: Discovery tab state (nodata-no-attention-data), route-mocked
-- `discovery-nodata-no-attention-data-375.png`: Discovery tab state (nodata-no-attention-data), route-mocked
-- `discovery-nodata-no-attention-data-768.png`: Discovery tab state (nodata-no-attention-data), route-mocked
-- `discovery-nodata-reference-missing-1280.png`: Discovery tab state (nodata-reference-missing), route-mocked
-- `discovery-nodata-reference-missing-375.png`: Discovery tab state (nodata-reference-missing), route-mocked
-- `discovery-nodata-reference-missing-768.png`: Discovery tab state (nodata-reference-missing), route-mocked
-- `discovery-ok-1280.png`: Discovery tab state (ok), route-mocked
-- `discovery-ok-375.png`: Discovery tab state (ok), route-mocked
-- `discovery-ok-768.png`: Discovery tab state (ok), route-mocked
+| state | 375 | 768 | 1280 | what changed |
+|---|---|---|---|---|
+| as-shipped | [before](before/as-shipped-375.png) / [after](as-shipped-375.png) | [before](before/as-shipped-768.png) / [after](as-shipped-768.png) | [before](before/as-shipped-1280.png) / [after](as-shipped-1280.png) | real API, no probe records: ONE calm line, no orphan legend (F-5); before = same state on main |
+| coin-expand | [before](before/coin-expand-375.png) / [after](coin-expand-375.png) | [before](before/coin-expand-768.png) / [after](coin-expand-768.png) | [before](before/coin-expand-1280.png) / [after](coin-expand-1280.png) | human source names, compact numbers, state word in a fixed column |
+| discovery-error | [before](before/discovery-error-375.png) / [after](discovery-error-375.png) | [before](before/discovery-error-768.png) / [after](discovery-error-768.png) | [before](before/discovery-error-1280.png) / [after](discovery-error-1280.png) | plain line + Retry under the shared header |
+| discovery-loading | [before](before/discovery-loading-375.png) / [after](discovery-loading-375.png) | [before](before/discovery-loading-768.png) / [after](discovery-loading-768.png) | [before](before/discovery-loading-1280.png) / [after](discovery-loading-1280.png) | one muted line under the shared header |
+| discovery-nodata-categories-missing | [before](before/discovery-nodata-categories-missing-375.png) / [after](discovery-nodata-categories-missing-375.png) | [before](before/discovery-nodata-categories-missing-768.png) / [after](discovery-nodata-categories-missing-768.png) | [before](before/discovery-nodata-categories-missing-1280.png) / [after](discovery-nodata-categories-missing-1280.png) | one plain line under the shared header |
+| discovery-nodata-no-attention-data | [before](before/discovery-nodata-no-attention-data-375.png) / [after](discovery-nodata-no-attention-data-375.png) | [before](before/discovery-nodata-no-attention-data-768.png) / [after](discovery-nodata-no-attention-data-768.png) | [before](before/discovery-nodata-no-attention-data-1280.png) / [after](discovery-nodata-no-attention-data-1280.png) | one plain line under the shared header |
+| discovery-nodata-reference-missing | [before](before/discovery-nodata-reference-missing-375.png) / [after](discovery-nodata-reference-missing-375.png) | [before](before/discovery-nodata-reference-missing-768.png) / [after](discovery-nodata-reference-missing-768.png) | [before](before/discovery-nodata-reference-missing-1280.png) / [after](discovery-nodata-reference-missing-1280.png) | one plain line under the shared header |
+| discovery-ok | [before](before/discovery-ok-375.png) / [after](discovery-ok-375.png) | [before](before/discovery-ok-768.png) / [after](discovery-ok-768.png) | [before](before/discovery-ok-1280.png) / [after](discovery-ok-1280.png) | title, joined control, as-of, (%) headers, coin columns, '2 categories without data' folded (F-12) |
+| empty | [before](before/empty-375.png) / [after](empty-375.png) | [before](before/empty-768.png) / [after](empty-768.png) | [before](before/empty-1280.png) / [after](empty-1280.png) | one line + screener link |
+| error | [before](before/error-375.png) / [after](error-375.png) | [before](before/error-768.png) / [after](error-768.png) | [before](before/error-1280.png) / [after](error-1280.png) | friendly line + Retry, no API path (F-11) |
+| loading | [before](before/loading-375.png) / [after](loading-375.png) | [before](before/loading-768.png) / [after](loading-768.png) | [before](before/loading-1280.png) / [after](loading-1280.png) | one muted line |
+| ok | [before](before/ok-375.png) / [after](ok-375.png) | [before](before/ok-768.png) / [after](ok-768.png) | [before](before/ok-1280.png) / [after](ok-1280.png) | dark chart panel and legend, y label + 100 baseline, chevrons on rows |
+| partial | [before](before/partial-375.png) / [after](partial-375.png) | [before](before/partial-768.png) / [after](partial-768.png) | [before](before/partial-1280.png) / [after](partial-1280.png) | 'no data: Layer2' note under the dark chart |
+| ranking-off | [before](before/ranking-off-375.png) / [after](ranking-off-375.png) | [before](before/ranking-off-768.png) / [after](ranking-off-768.png) | [before](before/ranking-off-1280.png) / [after](ranking-off-1280.png) | 'Ranking is off' note under the chart (mocked series) |
+| removal-notice | [before](before/removal-notice-375.png) / [after](removal-notice-375.png) | [before](before/removal-notice-768.png) / [after](removal-notice-768.png) | [before](before/removal-notice-1280.png) / [after](removal-notice-1280.png) | unchanged (screener) |

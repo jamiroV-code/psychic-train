@@ -47,8 +47,21 @@ describe("NarrativeTabs", () => {
   it("shows loading, then error, with no table", async () => {
     render(<NarrativeTabs fetchAttention={() => Promise.reject(new Error("boom"))} />);
     expect(screen.getByTestId("attention-loading")).toBeTruthy();
-    await waitFor(() => expect(screen.getByTestId("attention-error").textContent).toContain("boom"));
+    await waitFor(() => expect(screen.getByTestId("attention-error").textContent).toContain("could not be loaded"));
+    expect(screen.getByTestId("attention-error").textContent).not.toContain("boom");
     expect(screen.queryByTestId("attention-table")).toBeNull();
+  });
+
+  it("retries after an error", async () => {
+    const fetchAttention = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValue(resp([basket("a")]));
+    render(<NarrativeTabs fetchAttention={fetchAttention} />);
+    await waitFor(() => expect(screen.getByTestId("attention-retry")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("attention-retry"));
+    await waitFor(() => expect(screen.getByTestId("attention-table")).toBeTruthy());
+    expect(fetchAttention).toHaveBeenCalledTimes(2);
   });
 
   it("shows the empty state with a screener link", async () => {

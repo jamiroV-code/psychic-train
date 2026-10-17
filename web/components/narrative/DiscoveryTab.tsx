@@ -69,22 +69,28 @@ export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault }: Discove
   }
 
   return (
-    <div data-testid="discovery-tab">
-      <div role="group" aria-label="Window" className="discovery-window">
-        {WINDOWS.map((w) => (
-          <button
-            key={w}
-            type="button"
-            className="discovery-window__option"
-            data-testid={`discovery-window-${w}`}
-            aria-pressed={window === w}
-            onClick={() => setWindow(w)}
-          >
-            {`${w}d`}
-          </button>
-        ))}
-      </div>
+    <section data-testid="discovery-tab" aria-label="Category discovery" className="basket-chart">
+      <header className="basket-chart__head">
+        <h2 className="basket-chart__title">Attention by category</h2>
+        <span className="basket-seg" role="group" aria-label="Window">
+          {WINDOWS.map((w) => (
+            <button
+              key={w}
+              type="button"
+              className="basket-seg__btn"
+              data-testid={`discovery-window-${w}`}
+              aria-pressed={window === w}
+              onClick={() => setWindow(w)}
+            >
+              {`${w}d`}
+            </button>
+          ))}
+        </span>
+      </header>
+      {data && data.status === "ok" && (
+        <p data-testid="discovery-as-of" className="basket-note">{`as of ${data.as_of.slice(0, 10)}`}</p>
+      )}
       {body}
-    </div>
+    </section>
   );
 }

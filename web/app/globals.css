@@ -1221,12 +1221,62 @@
   gap: var(--sp-1) var(--sp-3);
   margin: 0 0 var(--sp-3);
 }
+/* T85: the chart and its legend sit on the page's own dark surface. The shared
+   light plot is a documented contrast decision for the other charts; here the
+   series use the dark-validated slots in lib/attention-lines.ts (>= 3:1 on
+   --sh-1) and every word is shell ink (--ink-2 / --ink-1 clear 4.5:1 on it). */
+.app-main .basket-legend,
+.app-main .basket-legend.plot-legend {
+  display: flex;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+  background: none;
+  padding: 0;
+  margin: 0 0 var(--sp-3);
+  color: var(--ink-2);
+}
+.app-main .basket-legend .plot-legend__label {
+  color: var(--ink-1);
+  font-weight: 500;
+}
 .app-main .basket-legend .spaghetti-chart__toggle {
   margin-right: 0;
   border: 0;
-  padding: 0;
-  color: var(--an-ink-1);
+  padding: var(--sp-1) 0;
+  background: none;
+  color: var(--ink-1);
   font-size: var(--fs-sm);
+  font-weight: 400;
+}
+.basket-chart .analytic-plot {
+  background: var(--sh-1);
+  color: var(--ink-2);
+  border: 1px solid var(--sh-rule);
+  box-shadow: none;
+}
+.basket-chart .simple-lines text {
+  fill: var(--ink-2);
+  stroke: none;
+  font-weight: 400;
+}
+.basket-chart .simple-lines .tick line,
+.basket-chart .simple-lines .tick-mark,
+.basket-chart .simple-lines .grid line {
+  stroke: var(--sh-rule-soft);
+}
+.basket-chart .simple-lines .rule {
+  stroke: var(--sh-rule);
+}
+.basket-chart .simple-lines__reset {
+  color: var(--ink-1);
+  background: var(--sh-2);
+  border-color: var(--sh-rule);
+}
+.basket-chart__axis {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
 }
 .basket-note {
   margin: var(--sp-2) 0;
@@ -1266,9 +1316,39 @@
   cursor: pointer;
   color: var(--ink-1);
   font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
 }
 .app-main .basket-table button.basket-table__name[aria-expanded="true"] {
   color: var(--accent);
+}
+.basket-table__chev {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  color: var(--ink-3);
+}
+.app-main .basket-table button.basket-table__name:hover .basket-table__chev,
+.app-main .basket-table button.basket-table__name[aria-expanded="true"] .basket-table__chev {
+  color: currentColor;
+}
+.app-main .basket-table button.basket-table__name[aria-expanded="true"] .basket-table__chev {
+  transform: rotate(45deg);
+}
+.basket-table .basket-table__row:hover > td {
+  background: var(--sh-1);
+}
+.basket-empty-cats {
+  margin-top: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.basket-empty-cats > summary {
+  cursor: pointer;
 }
 .basket-table__coins > td {
   background: var(--sh-1);
@@ -1279,6 +1359,10 @@
   margin: 0;
   padding: 0;
 }
+/* A wide table must not pull a source's label and its value apart. */
+.basket-coins {
+  max-width: 34em;
+}
 .basket-coins__coin {
   padding: var(--sp-2) 0;
 }
@@ -1286,17 +1370,24 @@
   border-top: 1px solid var(--sh-rule-soft);
 }
 .basket-coins__head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1) var(--sp-4);
+  display: grid;
+  grid-template-columns: minmax(3.5em, 5em) 4.5em 1fr;
+  gap: var(--sp-1) var(--sp-3);
   margin: 0 0 var(--sp-1);
+}
+.basket-coins__head > span:nth-child(2) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .basket-coins__symbol {
   font-weight: 600;
 }
+.basket-coins__sources {
+  padding-left: var(--sp-3);
+}
 .basket-coins__sources li {
   display: grid;
-  grid-template-columns: minmax(5em, 8em) 5em 1fr;
+  grid-template-columns: minmax(7em, 1fr) 5em 8em;
   gap: var(--sp-1) var(--sp-3);
   font-size: var(--fs-sm);
   color: var(--ink-2);
@@ -1312,28 +1403,6 @@
 .basket-coins__muted,
 .basket-coins__none {
   color: var(--ink-3);
-}
-.discovery-window {
-  display: flex;
-  gap: var(--sp-2);
-  margin: var(--sp-3) 0;
-}
-.app-main .discovery-window button.discovery-window__option {
-  all: unset;
-  appearance: none;
-  cursor: pointer;
-  padding: var(--sp-1) var(--sp-3);
-  border: 1px solid var(--sh-rule);
-  color: var(--ink-2);
-  font-size: var(--fs-sm);
-}
-.app-main .discovery-window button.discovery-window__option[aria-pressed="true"] {
-  color: var(--ink-1);
-  border-color: var(--accent);
-}
-.app-main .discovery-window button.discovery-window__option:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 @media (max-width: 640px) {
   .basket-table th,

@@ -1,4 +1,4 @@
-import { formatScore, NO_DATA } from "@/lib/attention-lines";
+import { formatCompact, formatScore, NO_DATA, sourceLabel } from "@/lib/attention-lines";
 import type { CoinAttention } from "@/lib/types/attention";
 
 export interface BasketCoinsProps {
@@ -26,9 +26,9 @@ export function BasketCoins({ coins }: BasketCoinsProps) {
           <ul className="basket-coins__sources">
             {c.sources.map((s) => (
               <li key={s.source} data-testid={`coin-source-${c.symbol}-${s.source}`}>
-                <span>{s.source}</span>
-                <span className={s.raw === null ? "basket-coins__muted" : undefined}>{s.raw === null ? NO_DATA : s.raw}</span>
-                {s.state !== "ok" && <span className="basket-coins__muted">{s.state}</span>}
+                <span>{sourceLabel(s.source)}</span>
+                <span className={s.raw === null ? "basket-coins__muted" : undefined}>{formatCompact(s.raw)}</span>
+                <span className="basket-coins__muted">{s.state === "ok" ? "" : s.state.replace(/-/g, " ")}</span>
               </li>
             ))}
           </ul>

@@ -99,4 +99,28 @@ describe("DiscoveryTab", () => {
     await waitFor(() => expect(fetchDiscovery).toHaveBeenLastCalledWith(90));
     expect(screen.getByTestId("discovery-window-90")).toHaveAttribute("aria-pressed", "true");
   });
+
+  it("matches My baskets: title, joined control, as-of date, unit labels", async () => {
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp())} />);
+    await screen.findByTestId("discovery-table");
+    expect(screen.getByRole("heading", { name: "Attention by category" })).toBeInTheDocument();
+    expect(screen.getByTestId("discovery-window-30").className).toBe("basket-seg__btn");
+    expect(screen.getByTestId("discovery-as-of")).toHaveTextContent("as of 2026-10-16");
+    expect(screen.getByRole("columnheader", { name: "Score (%)" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Median (%)" })).toBeInTheDocument();
+  });
+
+  it("folds categories with zero coins used into one collapsed line", async () => {
+    const categories = [
+      category("high", { score: 40 }),
+      category("e1", { score: null, median: null, coins_used: 0, coins: [] }),
+      category("e2", { score: null, median: null, coins_used: 0, coins: [] }),
+    ];
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ categories }))} />);
+    await screen.findByTestId("discovery-table");
+    expect(screen.queryByTestId("discovery-row-e1")).toBeNull();
+    const folded = screen.getByTestId("discovery-empty-categories");
+    expect(folded).toHaveTextContent("2 categories without data");
+    expect(folded).not.toHaveAttribute("open");
+  });
 });

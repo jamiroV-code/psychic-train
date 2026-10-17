@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { buildAttentionLines, basketColor } from "@/lib/attention-lines";
+import { baselineSeries, buildAttentionLines, basketColor } from "@/lib/attention-lines";
 import { useSimpleLines } from "@/lib/use-simple-lines";
 import type { SimpleLinesProps } from "@/lib/island-loader";
 import type { AttentionResponse, AttentionWindow } from "@/lib/types/attention";
@@ -16,22 +16,25 @@ export interface BasketAttentionChartProps {
   window: AttentionWindow;
   onWindowChange: (window: AttentionWindow) => void;
   error?: string | null;
+  onRetry?: () => void;
 }
 
 /**
  * Mindshare momentum (attention, never price): a short header with the
  * 7d/30d/90d selector, then one line per basket. The legend is the filter.
  */
-export function BasketAttentionChart({ data, window, onWindowChange, error = null }: BasketAttentionChartProps) {
+export function BasketAttentionChart({ data, window, onWindowChange, error = null, onRetry }: BasketAttentionChartProps) {
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
   const containerRef = useRef<HTMLDivElement>(null);
   const baskets = data?.baskets ?? [];
 
   const lines = useMemo(() => buildAttentionLines(baskets, hidden), [baskets, hidden]);
-  const props = useMemo<SimpleLinesProps | null>(
-    () => (lines.length > 0 ? { series: lines, height: CHART_HEIGHT, label: "Attention score by basket" } : null),
-    [lines],
-  );
+  const props = useMemo<SimpleLinesProps | null>(() => {
+    const baseline = baselineSeries(lines);
+    return baseline ? { series: [baseline, ...lines], height: CHART_HEIGHT, label: "Attention score by basket" } : null;
+  }, [lines]);
+  // Nothing to draw for any basket (ranking off, nothing stored yet): no legend, no chart.
+  const hasSeries = useMemo(() => buildAttentionLines(baskets, new Set()).length > 0, [baskets]);
   useSimpleLines(containerRef, props, `attention-${window}`);
 
   const toggle = (id: string) =>
@@ -65,7 +68,16 @@ export function BasketAttentionChart({ data, window, onWindowChange, error = nul
         </span>
       </header>
 
-      {error && <p data-testid="attention-error" className="basket-note basket-note--error" role="alert">{error}</p>}
+      {error && (
+        <div data-testid="attention-error" role="alert">
+          <p className="basket-note basket-note--error">Attention could not be loaded.</p>
+          {onRetry && (
+            <button type="button" className="board-button" data-testid="attention-retry" onClick={onRetry}>
+              Retry
+            </button>
+          )}
+        </div>
+      )}
       {!data && !error && <p data-testid="attention-loading" className="basket-note" role="status">Loading</p>}
       {data && baskets.length === 0 && (
         <p data-testid="attention-empty" className="basket-note">
@@ -73,7 +85,13 @@ export function BasketAttentionChart({ data, window, onWindowChange, error = nul
         </p>
       )}
 
-      {baskets.length > 0 && (
+      {baskets.length > 0 && !hasSeries && (
+        <p data-testid="attention-nodata" className="basket-note">
+          {rankingOff ? "No attention data yet. Ranking is off: the reference is missing." : "No attention data yet."}
+        </p>
+      )}
+
+      {baskets.length > 0 && hasSeries && (
         <>
           <div className="plot-legend basket-legend" role="group" aria-label="Baskets shown">
             {baskets.map((b, i) => (
@@ -92,6 +110,7 @@ export function BasketAttentionChart({ data, window, onWindowChange, error = nul
               </button>
             ))}
           </div>
+          <p className="basket-chart__axis" aria-hidden="true">Attention score, start = 100</p>
           <div ref={containerRef} data-testid="attention-chart-container" />
           <p data-testid="attention-membership" className="basket-note">
             {`membership as of ${data?.membership_as_of.slice(0, 10)}`}

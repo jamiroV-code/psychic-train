@@ -165,11 +165,20 @@ test.describe("narrative: My baskets", () => {
       await expect(page.getByTestId("attention-loading")).toBeVisible();
       await shot(page, "loading", width);
       await expect(page.getByTestId("attention-error")).toBeVisible();
+      await expect(page.getByTestId("attention-error")).not.toContainText("/api");
+      await expect(page.getByTestId("attention-retry")).toBeVisible();
       await noHorizontalScroll(page);
       await shot(page, "error", width);
 
-      // empty: no baskets, one line and a screener link.
+      // as shipped: the real API, no probe records, so no scores and no series (F-5).
       await page.unroute("**/baskets/attention*");
+      await page.goto("/narrative");
+      await expect(page.getByTestId("attention-nodata")).toBeVisible();
+      await expect(page.getByRole("group", { name: "Baskets shown" })).toHaveCount(0);
+      await noHorizontalScroll(page);
+      await shot(page, "as-shipped", width);
+
+      // empty: no baskets, one line and a screener link.
       await request.delete(`${API_BASE_URL}/api/layout/crypto`);
       await page.goto("/narrative");
       await expect(page.getByTestId("attention-empty")).toBeVisible();
@@ -203,10 +212,14 @@ function discoveryBody(over: object = {}) {
     id, name, score, median: score - 1.5, coins_used: 2, gaining_count: 1,
     coins: [coin("AAA", score + 4, true), coin("BBB", score - 4, false)],
   });
+  const idle = (id: string, name: string) => ({ id, name, score: null, median: null, coins_used: 0, gaining_count: 0, coins: [] });
   return {
     window: 30, as_of: "2026-10-16", categories_as_of: "2026-10-10", status: "ok", reason: "",
     universe_size: 90, eligible_size: 60,
-    categories: [cat("ai", "Artificial Intelligence", 31.2), cat("defi", "Decentralized Finance", 14.8)],
+    categories: [
+      cat("ai", "Artificial Intelligence", 31.2), cat("defi", "Decentralized Finance", 14.8),
+      idle("gaming", "Gaming"), idle("rwa", "Real World Assets"),
+    ],
     ...over,
   };
 }
@@ -227,6 +240,8 @@ test.describe("narrative: Discovery", () => {
       await expect(page.getByTestId("discovery-row-ai")).toBeVisible();
       await page.getByTestId("discovery-row-ai").getByRole("button").click();
       await expect(page.getByTestId("discovery-coins-ai")).toContainText("AAA");
+      await expect(page.getByTestId("discovery-empty-categories")).toContainText("2 categories without data");
+      await expect(page.getByTestId("discovery-as-of")).toContainText("as of 2026-10-16");
       await noHorizontalScroll(page);
       await shot(page, "discovery-ok", width);
 
