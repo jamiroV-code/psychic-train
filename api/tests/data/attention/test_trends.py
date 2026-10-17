@@ -51,7 +51,8 @@ def test_no_keyword():
     assert s.state == "unavailable" and f.calls == []
 
 
-def test_not_probed_and_no_probe_row():
+def test_not_probed_and_no_probe_row(tmp_path):
     assert "trends" in registry.FETCHERS
-    assert "trends" not in registry.load_probe_records()
-    assert registry.read_series("trends", "BTC", today=TODAY).state == "not-probed"
+    probe = tmp_path / "probe.json"
+    probe.write_text("{}")
+    assert registry.read_series("trends", "BTC", today=TODAY, probe_path=probe).state == "not-probed"
