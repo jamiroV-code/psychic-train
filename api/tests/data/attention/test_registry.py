@@ -12,7 +12,7 @@ def _store(n, source="wikipedia"):
 
 
 def test_registry_maps_sources():
-    assert set(registry.FETCHERS) == {"wikipedia", "coingecko", "exchange_volume", "hyperliquid_volume", "trends"}
+    assert set(registry.FETCHERS) == {"wikipedia", "coingecko", "exchange_volume", "hyperliquid_volume", "trends", "reddit", "xsearch"}
 
 
 def test_not_probed_without_record(attention_cache, tmp_path):

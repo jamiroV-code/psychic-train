@@ -133,3 +133,24 @@ def test_universe_failure_keeps_old_file_and_counts_error(isolated_cache, capsys
     before = _universe_file(isolated_cache).read_bytes()
     assert _run(["--sources", "universe"], _handler(cg_status=500)) == 1
     assert _universe_file(isolated_cache).read_bytes() == before
+
+
+def test_default_sources_and_runners_are_pinned():
+    assert refresh_attention.DEFAULT_SOURCES == ("wikipedia", "coingecko", "universe")
+    assert set(refresh_attention.RUNNERS) == {
+        "universe", "wikipedia", "coingecko", "exchange_volume", "hyperliquid_volume",
+        "trends", "reddit", "xsearch"}
+    for key, fn in refresh_attention.RUNNERS.items():
+        assert fn.__name__ == "_run_" + key
+
+
+def test_default_run_hits_only_wikipedia_coingecko_universe(isolated_cache):
+    urls = []
+
+    def h(r: httpx.Request):
+        urls.append(str(r.url))
+        return _handler()(r)
+
+    _run(["--symbols", "BTC"], h)
+    assert urls
+    assert all("wikimedia" in u or "coingecko" in u for u in urls)
