@@ -1150,23 +1150,33 @@
   border-bottom: 1px solid var(--sh-rule);
   margin-bottom: var(--sp-4);
 }
-.narrative-tabs__tab {
+.app-main .narrative-tabs button.narrative-tabs__tab {
   all: unset;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 0;
   cursor: pointer;
   padding: var(--sp-2) 0;
   color: var(--ink-2);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
+  box-sizing: border-box;
 }
-.narrative-tabs__tab[aria-selected="true"] {
+.app-main .narrative-tabs button.narrative-tabs__tab[aria-selected="true"] {
   color: var(--ink-1);
   border-bottom-color: var(--accent);
 }
-.narrative-tabs__tab:focus-visible,
-.basket-seg__btn:focus-visible,
-.basket-table__name:focus-visible {
+.app-main .narrative-tabs button.narrative-tabs__tab:focus-visible,
+.app-main .basket-seg .basket-seg__btn:focus-visible,
+.app-main .basket-table button.basket-table__name:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+.app-main .narrative-tabs button.narrative-tabs__tab:hover,
+.app-main .basket-table button.basket-table__name:hover {
+  background: none;
+  color: var(--ink-1);
 }
 .basket-chart {
   margin-top: 0;
@@ -1191,17 +1201,17 @@
   border-radius: var(--radius-sm);
   overflow: hidden;
 }
-.basket-seg__btn {
+.app-main .basket-seg .basket-seg__btn {
   all: unset;
   cursor: pointer;
   padding: var(--sp-1) var(--sp-3);
   font-size: var(--fs-sm);
   color: var(--ink-2);
 }
-.basket-seg__btn + .basket-seg__btn {
+.app-main .basket-seg .basket-seg__btn + .basket-seg .basket-seg__btn {
   border-left: 1px solid var(--sh-rule);
 }
-.basket-seg__btn[aria-pressed="true"] {
+.app-main .basket-seg .basket-seg__btn[aria-pressed="true"] {
   background: var(--sh-3);
   color: var(--ink-1);
 }
@@ -1213,6 +1223,7 @@
 }
 .basket-legend .spaghetti-chart__toggle {
   margin-right: 0;
+  color: var(--an-ink-1);
   font-size: var(--fs-sm);
 }
 .basket-note {
@@ -1245,13 +1256,16 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.basket-table__name {
+.app-main .basket-table button.basket-table__name {
   all: unset;
+  appearance: none;
+  background: none;
+  border: 0;
   cursor: pointer;
   color: var(--ink-1);
   font-weight: 600;
 }
-.basket-table__name[aria-expanded="true"] {
+.app-main .basket-table button.basket-table__name[aria-expanded="true"] {
   color: var(--accent);
 }
 .basket-table__coins > td {

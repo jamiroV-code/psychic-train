@@ -94,7 +94,7 @@ export function BasketAttentionChart({ data, window, onWindowChange, error = nul
           </div>
           <div ref={containerRef} data-testid="attention-chart-container" />
           <p data-testid="attention-membership" className="basket-note">
-            {`membership as of ${data?.membership_as_of}`}
+            {`membership as of ${data?.membership_as_of.slice(0, 10)}`}
           </p>
           {rankingOff && (
             <p data-testid="attention-ranking-off" className="basket-note">
