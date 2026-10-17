@@ -1,0 +1,155 @@
+name: Attention daily refresh
+
+# Refreshes the narrative attention store (Wikipedia, CoinGecko, top-100
+# universe, then the category snapshot) once a day, so the My baskets and
+# Discovery tabs do not go stale between owner-PC runs (narrative baskets T84).
+# Scheduled for 07:23 UTC, off the hour and clear of the other snapshot
+# workflows (11:17-13:17 UTC) so the pushes to main do not overlap.
+#
+# FAILS LOUDLY: the job exits non-zero if any default source reports an
+# error or 0 ok series, or if a series source stored no new completed UTC day,
+# and prints one summary line per source. Stale data must never look fresh.
+# Whatever did refresh is still committed (the commit step runs after a
+# failure) so a partial outage does not lose good days.
+#
+# Not run here: X (insufficient-history until 90 own days) and record_probe.py
+# (it writes the owner's probe records; the owner records those by hand).
+# The optional X step runs only when the repo secret X_BEARER_TOKEN exists AND
+# the repo variable ATTENTION_X_LIVE is 1. The token is never echoed.
+on:
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+    inputs:
+      categories:
+        description: "Also run --sources categories (10 slow CoinGecko calls)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: attention-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    env:
+      RUN_CATEGORIES: ${{ github.event_name == 'schedule' || inputs.categories }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install api/ dependencies
+        run: uv sync --project api
+
+      - name: Record the store state before the refresh
+        run: |
+          uv run --project api python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import pandas as pd
+          out = {}
+          for src in ("wikipedia", "coingecko"):
+              days = [pd.read_parquet(p)["date"].max()
+                      for p in Path("api/data/cache/attention", src).glob("*.parquet")]
+              out[src] = max(days).date().isoformat() if days else None
+          Path(os.environ["RUNNER_TEMP"], "attention-before.json").write_text(json.dumps(out))
+          PY
+
+      - name: Refresh default sources
+        run: |
+          set -o pipefail
+          uv run --project api python api/scripts/refresh_attention.py 2>&1 | tee "$RUNNER_TEMP/default.log"
+
+      - name: Refresh category snapshot
+        if: ${{ !cancelled() && env.RUN_CATEGORIES == 'true' }}
+        run: |
+          set -o pipefail
+          uv run --project api python api/scripts/refresh_attention.py --sources categories 2>&1 | tee "$RUNNER_TEMP/categories.log"
+
+      - name: Check whether the optional X step is enabled
+        id: xgate
+        if: ${{ !cancelled() }}
+        env:
+          HAS_X_TOKEN: ${{ secrets.X_BEARER_TOKEN != '' }}
+          X_LIVE_VAR: ${{ vars.ATTENTION_X_LIVE }}
+        run: |
+          if [ "$HAS_X_TOKEN" = "true" ] && [ "$X_LIVE_VAR" = "1" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Refresh X (optional, off unless the secret and variable exist)
+        if: ${{ !cancelled() && steps.xgate.outputs.enabled == 'true' }}
+        continue-on-error: true
+        env:
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          X_LIVE: "1"
+        run: |
+          uv run --project api python api/scripts/refresh_attention.py --sources xsearch
+
+      - name: Verify every source refreshed and the store gained a completed day
+        if: ${{ !cancelled() }}
+        run: |
+          uv run --project api python - <<'PY'
+          import json, os, re, sys
+          from pathlib import Path
+          import pandas as pd
+          tmp = Path(os.environ["RUNNER_TEMP"])
+          log = (tmp / "default.log").read_text() if (tmp / "default.log").exists() else ""
+          if (tmp / "categories.log").exists():
+              log += "\n" + (tmp / "categories.log").read_text()
+          sources = ["wikipedia", "coingecko", "universe"]
+          if (tmp / "categories.log").exists():
+              sources.append("categories")
+          before = json.loads((tmp / "attention-before.json").read_text())
+          bad = []
+          for src in sources:
+              lines = [ln for ln in log.splitlines() if ln.startswith(src + ":")]
+              line = lines[-1] if lines else f"{src}: no result line"
+              status = "ok"
+              if not lines or " error " in line + " ":
+                  status = "FAILED"
+              elif src in ("wikipedia", "coingecko"):
+                  m = re.match(rf"{src}: (\d+)/(\d+) ok", line)
+                  if not m or int(m.group(1)) == 0:
+                      status = "FAILED"
+                  else:
+                      days = [pd.read_parquet(p)["date"].max()
+                              for p in Path("api/data/cache/attention", src).glob("*.parquet")]
+                      after = max(days).date().isoformat() if days else None
+                      if after is None or (before.get(src) and after <= before[src]):
+                          status = "FAILED (no new completed day)"
+                      line += f", latest day {after}, was {before.get(src)}"
+              if status != "ok":
+                  bad.append(src)
+              print(f"summary {src}: {status} - {line}")
+          if bad:
+              print(f"::error::attention refresh failed for: {', '.join(bad)}")
+              sys.exit(1)
+          PY
+
+      - name: Commit refreshed attention data
+        if: ${{ !cancelled() }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # api/data/cache/* is gitignored, so force-add the one store dir.
+          [ -d api/data/cache/attention ] || { echo "nothing new to commit"; exit 0; }
+          git add -f api/data/cache/attention/
+          if git diff --staged --quiet; then
+            echo "nothing new to commit"
+            exit 0
+          fi
+          git commit -m "chore: attention refresh $(date -u +%Y-%m-%d)"
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
+            echo "push attempt $attempt failed; retrying"
+            sleep $((attempt * 10))
+          done
+          exit 1
