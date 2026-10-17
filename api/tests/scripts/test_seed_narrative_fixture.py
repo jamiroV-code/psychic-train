@@ -6,7 +6,9 @@ and pin the hand-derived facts the Playwright spec asserts against.
 """
 from __future__ import annotations
 
+import ast
 from datetime import date
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -93,3 +95,17 @@ def test_history_endpoint_serialises_the_seeded_cache(isolated_cache):
     listings = next(s for s in ai["series"] if s["source"] == "exchange_new_listings")
     assert [p["reason"] for p in listings["points"]] == ["no-baseline-yet", None]
     assert [e["rank"] for e in body["comparison"]["entries"]] == [e["rank"] for e in facts["comparison"]]
+
+
+def test_seed_script_imports_no_old_verdict_module():
+    """T79 S-D1: the seeder reads narrative_categories.json itself."""
+    import api.scripts.seed_e2e_cache as seeder
+
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(Path(seeder.__file__).read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            names.update(part for a in node.names for part in a.name.split("."))
+        elif isinstance(node, ast.ImportFrom):
+            names.update((node.module or "").split("."))
+            names.update(a.name for a in node.names)
+    assert not (names & {"trigger", "momentum"})

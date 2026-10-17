@@ -5,6 +5,7 @@ Every test goes through the real cache writers/readers under `isolated_cache`
 """
 from __future__ import annotations
 
+import ast
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -328,3 +329,50 @@ class TestSufficiencyGating:
         cat = _cat(history.build_narrative_history(["ai"], today=TODAY), "ai")
         assert _series(cat, "reddit").sufficiency == "provisional"
         assert len(cat.composite) == 2
+
+
+OLD_VERDICT_MODULES = {"trigger", "momentum"}
+
+
+def _imported_names(path: Path) -> set[str]:
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            names.update(part for a in node.names for part in a.name.split("."))
+        elif isinstance(node, ast.ImportFrom):
+            names.update((node.module or "").split("."))
+            names.update(a.name for a in node.names)
+    return names
+
+
+class TestDecoupledFromOldVerdictCode:
+    """T79 S-D1: history owns its constants and imports neither old module."""
+
+    def test_history_imports_no_old_verdict_module(self):
+        assert not (_imported_names(Path(history.__file__)) & OLD_VERDICT_MODULES)
+
+    def test_history_owns_its_constants(self):
+        assert history.MIN_AVAILABLE_SOURCES == 2
+        assert history.BASE_TRUST_WEIGHT == 0.6
+        assert history.REDUCED_SOURCE_TRUST_CAP == 0.4
+
+    def test_history_composite_point_field_set_is_pinned(self, isolated_cache):
+        """/history composite points keep every field, trust_weight included."""
+        from fastapi.testclient import TestClient
+
+        from api.main import app
+
+        today = datetime.now(timezone.utc).date()
+        for off in (-1, 0):
+            day = (today + timedelta(days=off)).isoformat()
+            cache.write_narrative_point("pytrends", AI_KW, day, 5.0 + off)
+            cache.write_narrative_point("reddit", AI_KW, day, 7.0 + off)
+        body = TestClient(app).get("/api/narrative/history").json()
+        ai = next(c for c in body["categories"] if c["category_id"] == "ai")
+        points = ai["composite"]["points"]
+        assert points
+        for point in points:
+            assert set(point) == {
+                "date", "value", "coverage", "sources_present", "trust_weight", "mixed_scale", "gap_before",
+            }
+        assert points[-1]["trust_weight"] == history.BASE_TRUST_WEIGHT
