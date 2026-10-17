@@ -92,9 +92,15 @@ Reddit needs two repository secrets (exact names):
 Without both secrets the Reddit step is skipped ("reddit: not-probed
 no credentials").
 
-Yellow warnings: a source says "unavailable" with a reason (HTTP 451, 403,
-429). The provider blocked the GitHub server; nothing is faked or recorded,
-and the job stays green. A red job means a real code error: send the log.
+Yellow warnings: a source says "unavailable" with a reason. Binance, Trends
+and Hyperliquid usually name an HTTP code (451, 403, 429) or a timeout.
+Reddit names no code: its reason reads "token unavailable" or "search
+failed". The provider blocked the GitHub server; nothing is faked or
+recorded, and the job stays green. After 5 blocks in a row, or 6 minutes,
+a source stops asking, keeps what it already fetched and says why.
+A red job means a code error or a missing result line: most reasons are not
+HTTP or provider errors (for example TypeError), a source crashed, or it
+stored data that is too old. Send the log.
 
 Binance usually stays unavailable (451) from GitHub. Then run the same
 refresh on your PC (section 2 style):

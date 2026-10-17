@@ -73,3 +73,30 @@ def test_verify_fails_on_code_error_and_stale_ok(tmp_path):
             "hyperliquid_volume": "hyperliquid_volume: 1/1 ok, 0 rows written [ok 1]"}
     out, probe, failed = x.verify(logs, tmp_path, TODAY)
     assert probe == [] and "exchange_volume" in failed and "hyperliquid_volume" in failed and "trends" in failed
+
+
+def _line(reasons, src="trends"):
+    return f"{src}: 0/103 ok, 0 rows written [other 103] reasons: {reasons}"
+
+
+def test_all_code_class_reasons_fail():
+    assert x.classify("exchange_volume", _line("fetch-failed: TypeError x103", "exchange_volume")).status == "failed"
+    assert x.classify("exchange_volume", _line("fetch-failed: TypeError x60; fetch-failed: KeyError x43", "exchange_volume")).status == "failed"
+
+
+def test_http_or_provider_class_reasons_stay_unavailable():
+    assert x.classify("exchange_volume", _line("fetch-failed: ExchangeNotAvailable HTTP 451 x103", "exchange_volume")).status == "unavailable"
+    assert x.classify("exchange_volume", _line("fetch-failed: TypeError HTTP 451 x103", "exchange_volume")).status == "unavailable"
+    assert x.classify("trends", _line("fetch-failed: ReadTimeout x100")).status == "unavailable"
+    assert x.classify("trends", _line("unavailable x98; skipped after repeated provider failures x5")).status == "unavailable"
+    assert x.classify("reddit", _line("token unavailable x103", "reddit")).status == "unavailable"
+
+
+def test_mixed_reasons_unavailable_only_with_provider_majority():
+    assert x.classify("trends", _line("fetch-failed: TypeError x20; fetch-failed: ReadTimeout x80")).status == "unavailable"
+    assert x.classify("trends", _line("fetch-failed: TypeError x80; fetch-failed: ReadTimeout x20")).status == "failed"
+    assert x.classify("trends", _line("fetch-failed: TypeError x50; fetch-failed: ReadTimeout x50")).status == "failed"
+
+
+def test_line_without_reasons_unchanged():
+    assert x.classify("trends", "trends: 0/10 ok, 0 rows written [other 10]").status == "unavailable"

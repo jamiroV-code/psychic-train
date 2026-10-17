@@ -67,7 +67,8 @@ def _get_access_token(client: httpx.Client) -> str | None:
         return None
 
 
-def _fetch_with_backoff(client: httpx.Client, subreddit: str, query: str, token: str) -> dict | None:
+def _fetch_with_backoff(client: httpx.Client, subreddit: str, query: str, token: str,
+                        status_out: dict | None = None) -> dict | None:
     url = REDDIT_SEARCH_URL.format(subreddit=subreddit)
     for attempt in range(MAX_RETRIES):
         try:
@@ -86,7 +87,9 @@ def _fetch_with_backoff(client: httpx.Client, subreddit: str, query: str, token:
             return resp.json()
         except httpx.TimeoutException:
             return None
-        except httpx.HTTPStatusError:
+        except httpx.HTTPStatusError as exc:
+            if status_out is not None:
+                status_out["status"] = exc.response.status_code
             return None
         except httpx.NetworkError:
             return None
