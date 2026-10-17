@@ -42,3 +42,11 @@ def markets_json():
 @pytest.fixture
 def attention_cache(isolated_cache):
     return isolated_cache
+
+
+@pytest.fixture(autouse=True)
+def _no_real_pacing(monkeypatch):
+    """Per-host pacing would really sleep in tests that use the default `sleep`."""
+    from api.data.attention import coingecko_attention, http_retry, wikipedia
+    monkeypatch.setattr(coingecko_attention, "PACER", http_retry.Pacer(0))
+    monkeypatch.setattr(wikipedia, "PACER", http_retry.Pacer(0))

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 from datetime import date, datetime, timezone
@@ -19,6 +20,7 @@ if __package__ in (None, ""):  # direct invocation
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from api.data import cache  # noqa: E402
+from api.data.attention.http_retry import describe_exc  # noqa: E402
 from api.data.attention import (  # noqa: E402
     coingecko_attention, exchange_volume, reddit, registry, store, trends, universe_store, categories_store, wikipedia,
     xsearch)
@@ -27,6 +29,43 @@ WIKI_ARTICLES_PATH = Path(__file__).resolve().parents[1] / "data" / "wiki_articl
 DEFAULT_SYMBOLS = ("BTC", "ETH")
 # Volume and Trends are opt-in (--sources): they reach ccxt/pytrends, and are not-probed until G.
 DEFAULT_SOURCES = ("wikipedia", "coingecko", "universe")
+# Consecutive rate-limited series after which the rest of a source is skipped (no more requests).
+CIRCUIT_BREAKER_AFTER = 5
+OUTCOME_ORDER = ("ok", "no-article", "rate-limited", "http-error", "insufficient-history", "other")
+
+
+def _outcome(s) -> str:
+    if s.state == "capped":
+        return "rate-limited"
+    if s.state == "unavailable":
+        m = re.fullmatch(r"HTTP (\d{3})", s.reason or "")
+        return f"http-error({m.group(1)})" if m else "other"
+    return s.state if s.state in ("ok", "no-article", "insufficient-history") else "other"
+
+
+def outcome_summary(series) -> str:
+    """'ok 20, no-article 45, rate-limited 38': counts by outcome so 'N/M ok' explains the rest."""
+    counts: dict[str, int] = {}
+    for s in series:
+        counts[_outcome(s)] = counts.get(_outcome(s), 0) + 1
+    rank = lambda k: (OUTCOME_ORDER.index(k.split("(")[0]), k)  # noqa: E731
+    return ", ".join(f"{k} {counts[k]}" for k in sorted(counts, key=rank))
+
+
+def _collect(symbols, fetch):
+    """Run fetch(symbol) per symbol; after CIRCUIT_BREAKER_AFTER rate-limited in a row, skip the rest."""
+    from api.data.attention.types import SourceSeries
+    out, streak = [], 0
+    for s in symbols:
+        if streak >= CIRCUIT_BREAKER_AFTER:
+            out.append(SourceSeries(out[-1].source, s.upper(), [], "capped", "skipped after repeated HTTP 429"))
+            continue
+        item = fetch(s)
+        if item is None:
+            continue
+        streak = streak + 1 if item.state == "capped" else 0
+        out.append(item)
+    return out
 
 
 def _symbols(arg: str | None) -> list[str]:
@@ -43,21 +82,17 @@ def _run_wikipedia(symbols, client, today, sleep):
         articles = json.loads(WIKI_ARTICLES_PATH.read_text())
     except (OSError, ValueError):
         articles = {}
-    return [wikipedia.fetch_series(s, articles.get(s), client=client, today=today, sleep=sleep)
-            for s in symbols]
+    return _collect(symbols, lambda s: wikipedia.fetch_series(
+        s, articles.get(s), client=client, today=today, sleep=sleep))
 
 
 def _run_coingecko(symbols, client, today, sleep):
     top = coingecko_attention.fetch_top100(client=client, sleep=sleep)
     if top is None:
-        raise RuntimeError("top100 unavailable")
+        raise RuntimeError(f"top100 unavailable: {coingecko_attention.LAST_FAILURE}")
     ids = {r["symbol"]: r["id"] for r in top}
-    out = []
-    for s in symbols:
-        if s not in ids:
-            continue
-        out.append(coingecko_attention.fetch_series(s, ids[s], client=client, today=today, sleep=sleep))
-    return out
+    return _collect(symbols, lambda s: coingecko_attention.fetch_series(
+        s, ids[s], client=client, today=today, sleep=sleep) if s in ids else None)
 
 
 def _run_exchange_volume(symbols, client, today, sleep):
@@ -79,7 +114,7 @@ def _run_universe(symbols, client, today, sleep):
     """Write today's top-100 snapshot; a failed fetch raises, leaving the old file untouched."""
     rows = coingecko_attention.fetch_top100_markets(client=client, sleep=sleep)
     if not rows:
-        raise RuntimeError("markets unavailable")
+        raise RuntimeError(f"markets unavailable: {coingecko_attention.LAST_FAILURE}")
     universe_store.write_snapshot(today.isoformat(), rows)
     return []
 
@@ -104,7 +139,7 @@ def _run_categories(symbols, client, today, sleep):
     names = {c["id"]: c["name"] for c in cfg["categories"]}
     got = coingecko_attention.fetch_categories(ids, client=client, sleep=sleep)
     if not got:
-        raise RuntimeError("categories unavailable")
+        raise RuntimeError(f"categories unavailable: {coingecko_attention.LAST_FAILURE}")
     categories_store.write_snapshot(today.isoformat(), [
         {"id": k, "name": names.get(k, k), "symbols": v} for k, v in got.items()])
     return []
@@ -156,10 +191,10 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
                     s.state == "unavailable" and s.reason != "empty response" for s in series)
                 results[name] = "ok" if ok else ("error" if failed else "empty")
                 print(f"{name}: {ok}/{len(series)} ok, {written} rows written"
-                      f"{' (dry run)' if args.dry_run else ''}")
+                      f"{' (dry run)' if args.dry_run else ''} [{outcome_summary(series)}]")
             except Exception as exc:  # per-source isolation
                 results[name] = "error"
-                print(f"{name}: error {type(exc).__name__}", file=sys.stderr)
+                print(f"{name}: error {describe_exc(exc)}", file=sys.stderr)
     finally:
         if own:
             client.close()
@@ -172,5 +207,5 @@ if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv[1:]))
     except Exception as exc:
-        print(f"fatal: {type(exc).__name__}", file=sys.stderr)
+        print(f"fatal: {describe_exc(exc)}", file=sys.stderr)
         sys.exit(1)
