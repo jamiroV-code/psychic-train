@@ -52,6 +52,16 @@ def outcome_summary(series) -> str:
     return ", ".join(f"{k} {counts[k]}" for k in sorted(counts, key=rank))
 
 
+def reason_summary(series, limit: int = 3) -> str:
+    """Top distinct reasons of the failed series (class and HTTP status only), so a block is diagnosable."""
+    counts: dict[str, int] = {}
+    for s in series:
+        if s.state != "ok" and s.reason:
+            counts[s.reason] = counts.get(s.reason, 0) + 1
+    top = sorted(counts, key=lambda k: (-counts[k], k))[:limit]
+    return "; ".join(f"{k} x{counts[k]}" for k in top)
+
+
 def _collect(symbols, fetch):
     """Run fetch(symbol) per symbol; after CIRCUIT_BREAKER_AFTER rate-limited in a row, skip the rest."""
     from api.data.attention.types import SourceSeries
@@ -191,7 +201,8 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
                     s.state == "unavailable" and s.reason != "empty response" for s in series)
                 results[name] = "ok" if ok else ("error" if failed else "empty")
                 print(f"{name}: {ok}/{len(series)} ok, {written} rows written"
-                      f"{' (dry run)' if args.dry_run else ''} [{outcome_summary(series)}]")
+                      f"{' (dry run)' if args.dry_run else ''} [{outcome_summary(series)}]"
+                      f"{' reasons: ' + reason_summary(series) if not ok and series else ''}")
             except Exception as exc:  # per-source isolation
                 results[name] = "error"
                 print(f"{name}: error {describe_exc(exc)}", file=sys.stderr)

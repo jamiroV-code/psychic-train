@@ -8,7 +8,8 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import NamedTuple
 
-MAX_LAG_DAYS = {"wikipedia": 3, "coingecko": 2}  # Wikipedia pageviews lag 1-2 days
+MAX_LAG_DAYS = {"wikipedia": 3, "coingecko": 2,  # Wikipedia pageviews lag 1-2 days
+                "exchange_volume": 2, "hyperliquid_volume": 2, "reddit": 2, "trends": 3}
 
 
 class Verdict(NamedTuple):

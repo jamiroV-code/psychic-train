@@ -194,3 +194,13 @@ def test_categories_failure_keeps_old_file(isolated_cache):
     before = _categories_file(isolated_cache).read_bytes()
     assert _run(["--sources", "categories"], _cat_handler(status=500)) == 1
     assert _categories_file(isolated_cache).read_bytes() == before
+
+
+def test_reason_summary_counts_distinct_reasons_and_skips_ok():
+    from api.data.attention.types import SourceSeries
+    from api.scripts.refresh_attention import reason_summary
+    series = [SourceSeries("x", "A", [], "unavailable", "fetch-failed: E HTTP 451"),
+              SourceSeries("x", "B", [], "unavailable", "fetch-failed: E HTTP 451"),
+              SourceSeries("x", "C", [], "unavailable", "empty response"),
+              SourceSeries("x", "D", [], "ok", "")]
+    assert reason_summary(series) == "fetch-failed: E HTTP 451 x2; empty response x1"

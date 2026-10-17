@@ -38,3 +38,12 @@ def test_threshold_reported() -> None:
 def test_unknown_source_rejected() -> None:
     with pytest.raises(KeyError):
         f.judge("universe", "2026-10-15", TODAY)
+
+
+@pytest.mark.parametrize("src,latest,ok", [
+    ("exchange_volume", "2026-10-15", True), ("exchange_volume", "2026-10-14", False),
+    ("hyperliquid_volume", "2026-10-15", True), ("reddit", "2026-10-14", False),
+    ("trends", "2026-10-14", True), ("trends", "2026-10-13", False),
+])
+def test_extra_source_boundaries(src: str, latest: str, ok: bool) -> None:
+    assert f.judge(src, latest, TODAY).ok is ok

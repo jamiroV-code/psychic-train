@@ -77,6 +77,30 @@ Check the plan first (no call): `uv run --project api python api/scripts/refresh
 Caps (defaults): 10 reads per run (`X_MAX_READS_PER_RUN`), 50 per day (`X_MAX_READS_PER_DAY`), 1.00 USD per day (`X_MAX_USD_PER_DAY`), 0.01 USD per read (`X_USD_PER_READ`). Lower them the same way before a first real run.
 Close the terminal when done; the variables disappear.
 
+## 6b. Reddit and the rest in the daily run
+
+The daily GitHub run has a second job, "refresh-extra". It adds Binance and
+Hyperliquid volume, Google Trends and Reddit after the main job.
+
+Reddit needs two repository secrets (exact names):
+`REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET`.
+1. Open reddit.com/prefs/apps, click "create another app".
+2. Pick type "script", any name, redirect uri `http://localhost`.
+3. Copy the client id (under the app name) and the secret.
+4. GitHub repo: Settings -> Secrets and variables -> Actions ->
+   New repository secret. Add both names with those values.
+Without both secrets the Reddit step is skipped ("reddit: not-probed
+no credentials").
+
+Yellow warnings: a source says "unavailable" with a reason (HTTP 451, 403,
+429). The provider blocked the GitHub server; nothing is faked or recorded,
+and the job stays green. A red job means a real code error: send the log.
+
+Binance usually stays unavailable (451) from GitHub. Then run the same
+refresh on your PC (section 2 style):
+`uv run --project api python api/scripts/refresh_attention.py --sources exchange_volume`
+then `uv run --project api python api/scripts/record_probe.py --sources exchange_volume`.
+
 ## 7. What to send back to the planner
 
 Only the printed summary lines from steps 2 and 3 (for example `wikipedia: ok (40/47 coins ...)`) and one sentence on how the two tabs looked.
