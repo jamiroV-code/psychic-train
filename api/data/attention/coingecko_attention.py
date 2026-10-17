@@ -19,6 +19,7 @@ CHART_URL = "https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
 MAX_RETRIES = 3
 BACKOFF_BASE_SECONDS = 1.0
 TIMEOUT_SECONDS = 10.0
+CATEGORY_PAUSE_SECONDS = 2.0
 
 # Excluded from the D-3 reference universe (stablecoins, wrapped/staked wrappers).
 STABLECOIN_SYMBOLS = frozenset({"USDT", "USDC", "DAI", "USDE", "FDUSD", "TUSD", "USDD", "PYUSD", "USDS", "USD1"})
@@ -66,6 +67,28 @@ def fetch_top100_markets(*, client: httpx.Client, sleep=time.sleep) -> list[dict
             return None
         return [{"id": r["id"], "symbol": str(r["symbol"]).upper(), "market_cap": r.get("market_cap"),
                  "volume_24h": r.get("total_volume")} for r in resp.json()]
+    except Exception:
+        return None
+
+
+def fetch_categories(category_ids: list[str], *, client: httpx.Client,
+                     sleep=time.sleep) -> dict[str, list[str]] | None:
+    """{category id: [SYMBOL]} from the markets endpoint's `category` filter (no key).
+
+    The markets snapshot carries no tags, so membership is fetched per public category.
+    All or nothing: one failed category returns None so the caller keeps its old file.
+    """
+    out: dict[str, list[str]] = {}
+    try:
+        for i, cid in enumerate(category_ids):
+            if i:
+                sleep(CATEGORY_PAUSE_SECONDS)
+            resp = _get(client, MARKETS_URL, {"vs_currency": "usd", "category": cid, "order": "market_cap_desc",
+                                              "per_page": 100, "page": 1}, sleep)
+            if resp is None or resp.status_code >= 400:
+                return None
+            out[cid] = [str(r["symbol"]).upper() for r in resp.json()]
+        return out
     except Exception:
         return None
 

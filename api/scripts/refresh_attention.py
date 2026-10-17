@@ -20,7 +20,7 @@ if __package__ in (None, ""):  # direct invocation
 
 from api.data import cache  # noqa: E402
 from api.data.attention import (  # noqa: E402
-    coingecko_attention, exchange_volume, reddit, registry, store, trends, universe_store, wikipedia,
+    coingecko_attention, exchange_volume, reddit, registry, store, trends, universe_store, categories_store, wikipedia,
     xsearch)
 
 WIKI_ARTICLES_PATH = Path(__file__).resolve().parents[1] / "data" / "wiki_articles.json"
@@ -96,9 +96,24 @@ def _run_xsearch(symbols, client, today, sleep):
     return [xsearch.fetch_series(s, client=client, today=today, run=run) for s in symbols]
 
 
+def _run_categories(symbols, client, today, sleep):
+    """Write today's category snapshot (opt-in: --sources categories); a failed fetch raises."""
+    from api.analytics.attention import discovery
+    cfg = discovery.load_config()
+    ids = [c["id"] for c in cfg["categories"]] + [i for i in cfg["exclude_category_ids"]]
+    names = {c["id"]: c["name"] for c in cfg["categories"]}
+    got = coingecko_attention.fetch_categories(ids, client=client, sleep=sleep)
+    if not got:
+        raise RuntimeError("categories unavailable")
+    categories_store.write_snapshot(today.isoformat(), [
+        {"id": k, "name": names.get(k, k), "symbols": v} for k, v in got.items()])
+    return []
+
+
 RUNNERS = {"universe": _run_universe, "wikipedia": _run_wikipedia, "coingecko": _run_coingecko,
            "exchange_volume": _run_exchange_volume, "hyperliquid_volume": _run_hyperliquid_volume,
-           "trends": _run_trends, "reddit": _run_reddit, "xsearch": _run_xsearch}
+           "trends": _run_trends, "reddit": _run_reddit, "xsearch": _run_xsearch,
+           "categories": _run_categories}
 
 
 def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
@@ -127,9 +142,9 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
         for name in names:
             try:
                 series = RUNNERS[name](symbols, client, today, sleep)
-                if name == "universe":
+                if name in ("universe", "categories"):
                     results[name] = "ok"
-                    print("universe: snapshot written")
+                    print(f"{name}: snapshot written")
                     continue
                 written = 0
                 if not args.dry_run:
