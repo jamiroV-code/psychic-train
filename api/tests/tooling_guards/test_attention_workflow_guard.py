@@ -95,7 +95,11 @@ def test_runs_default_sources_then_categories_and_never_x_by_default() -> None:
     assert "refresh_attention.py" in joined
     assert "--sources categories" in joined
     assert joined.index("refresh_attention.py") < joined.index("--sources categories")
-    assert "record_probe" not in joined
+    probe = [s for s in _steps() if "record_probe" in s.get("run", "")]
+    assert len(probe) == 1
+    assert "--state" not in probe[0]["run"]  # only observed state, never hand-set
+    assert joined.index("attention_freshness") < joined.index("record_probe")
+    assert "attention-ok.txt" in probe[0]["run"]  # only sources the verifier passed
 
 
 def test_failure_propagates() -> None:
@@ -106,15 +110,17 @@ def test_failure_propagates() -> None:
     for s in refresh:
         assert "pipefail" in s["run"] and "set +e" not in s["run"]
         assert "continue-on-error" not in s
-    verify = [s for s in _steps() if "completed day" in s.get("run", "")]
+    verify = [s for s in _steps() if "attention_freshness" in s.get("run", "")]
     assert len(verify) == 1 and "sys.exit(1)" in verify[0]["run"]
+    assert "<= before" not in verify[0]["run"]
     commit = [s for s in _steps() if "git commit" in s.get("run", "")]
     assert commit and "cancelled()" in str(commit[0]["if"])
 
 
-def test_commit_stages_only_the_attention_store() -> None:
+def test_commit_stages_only_the_attention_store_and_probe_records() -> None:
     adds = re.findall(r"^\s*git add\b.*$", _text(), re.M)
-    assert [a.strip() for a in adds] == ["git add -f api/data/cache/attention/"]
+    assert [a.strip() for a in adds] == ["git add -f api/data/cache/attention/",
+                                         "git add -f api/data/attention/probe_records.json"]
 
 
 def test_git_diff_over_github_is_only_the_new_file() -> None:
