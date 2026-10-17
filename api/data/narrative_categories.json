@@ -1,5 +1,5 @@
 {
-  "_comment": "DEPRECATED for /history, /narrative, the nightly snapshot and the pytrends backfill: edit api/data/narratives.json instead (narrative-v2 RFC-2). This file still drives /api/narrative/categories and /screener via trigger.py and must stay unchanged for them.",
+  "_comment": "DEPRECATED for /history, /narrative, the nightly snapshot and the pytrends backfill: edit api/data/narratives.json instead (narrative-v2 RFC-2). The old /api/narrative/categories endpoint and trigger.py are removed; /screener still reads this file, so keep it unchanged.",
   "seed_categories": [
     {"id": "ai", "label": "AI", "keywords": ["AI crypto", "artificial intelligence crypto"]},
     {"id": "rwa", "label": "Real World Assets", "keywords": ["RWA crypto", "tokenized real world assets"]},

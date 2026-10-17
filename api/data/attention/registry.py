@@ -19,7 +19,8 @@ FETCHERS = {
     "xsearch": xsearch.fetch_series,
 }
 
-SOURCE_WEIGHTS = {"xsearch": xsearch.WEIGHT}  # unlisted sources weigh 1.0
+# Fetchers with no weight on purpose: same volume group as exchange_volume, so it adds no independent signal.
+EXCLUDED_SOURCES = {"hyperliquid_volume": "same volume group as exchange_volume"}
 
 PROBE_RECORDS_PATH = Path(__file__).with_name("probe_records.json")
 
@@ -37,7 +38,10 @@ def read_series(source: str, symbol: str, today: date | None = None,
     """Read one series from the store. A source without a probe record is not-probed."""
     if source not in load_probe_records(probe_path):
         return SourceSeries(source, symbol, [], "not-probed", "no probe record")
-    pts = store.read_points(source, symbol)
+    try:
+        pts = store.read_points(source, symbol)
+    except store.StoreReadError as exc:
+        return SourceSeries(source, symbol, [], "unavailable", str(exc))
     if today is not None:
         pts = [p for p in pts if p[0] < today]
     if not pts:

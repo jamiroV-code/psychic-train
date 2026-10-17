@@ -23,12 +23,19 @@ def _utc_today() -> date:
     return datetime.now(timezone.utc).date()
 
 
+class StoreReadError(Exception):
+    """A stored file exists but cannot be read (truncated, copied half-way, not parquet)."""
+
+
 def read_points(source: str, symbol: str) -> list[tuple[date, float]]:
     path = store_path(source, symbol)
     if not path.exists():
         return []
-    df = pd.read_parquet(path)
-    return [(pd.Timestamp(d).date(), float(v)) for d, v in zip(df["date"], df["value"])]
+    try:
+        df = pd.read_parquet(path)
+        return [(pd.Timestamp(d).date(), float(v)) for d, v in zip(df["date"], df["value"])]
+    except Exception as exc:  # unreadable file: callers report `unavailable`, never a 500
+        raise StoreReadError(f"unreadable store file {path.name}") from exc
 
 
 def write_series(series: SourceSeries, today: date | None = None) -> int:

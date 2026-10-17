@@ -24,7 +24,6 @@ from api.data import cache
 from api.data.attention.types import SourceSeries
 
 SOURCE = "xsearch"
-WEIGHT = 0.25  # below the other sources
 COUNTS_URL = "https://api.x.com/2/tweets/counts/recent"
 TIMEOUT_SECONDS = 10.0
 SPAM_SPIKE_RATIO = 10.0
