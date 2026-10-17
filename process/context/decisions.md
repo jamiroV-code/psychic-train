@@ -158,3 +158,26 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 - **Date:** 16-10-26. **Reason:** live cloud runs needed to prove the tiers on real pages without weakening the gate. **Alternatives:** see each DIT line.
 - **Consequences:** live runs (owner-approved per site, cloud): bitbo.io page stopped at a Cloudflare bot check (tier 1 HTTP 428; tier 2 needed outside hosts incl. a challenge host), not bypassed; zorinaq.com/price fetched at tiers 1 and 2 (with resource host cdnjs.cloudflare.com) but has no table, dropped; digrin.com needed the www host and has one table (Date, Adjusted price, Real price, 196 rows) without OHLCV, dropped. No dataset stored; BTC-HIST stays open (options: public data via the normal adapter, or close-only scrape support, which needs design). Owner-run probes AC-16/17/20 still outstanding.
 - **Status:** active.
+
+### D-17 Narrative baskets: groups are baskets, percentile attention score
+- **Decision:** (P5, 16-17 Oct 2026) groups ARE baskets: one coin per basket, cap 12, renaming a group renames the basket (D-1). A coin's attention is ranked by percentile against a top-100 market-cap reference that excludes stablecoins, wrapped and staked tokens (D-3); ratio = mean(last 7)/mean(last 90) daily.
+- **Date:** 17-10-26. **Reason:** one simple, explainable score; no verdict labels. **Alternatives:** separate basket objects, raw z-scores (rejected).
+- **Consequences:** missing data is a state (not-probed, unavailable, insufficient-history), never 0. Trigger and momentum code was deleted (T80).
+- **Status:** active.
+
+### D-18 Narrative baskets: sources and Discovery outlier rules
+- **Decision:** core sources Wikipedia, CoinGecko, exchange volume (incl. Hyperliquid), Google Trends; plus Reddit and X. X is low-trust (weight 0.25), reads insufficient-history until 90 own days, key only in a private environment variable. Discovery: top 100, minimum 24h volume 20M USD, a category counts as gaining only if >= 2 independent source groups agree, 7d vs window baseline, winsorize at the 95th percentile, median shown beside the mean.
+- **Date:** 17-10-26. **Reason:** resist single-source spikes and thin coins. **Alternatives:** mean only, no volume floor (rejected).
+- **Consequences:** provider shapes are fixture-tested only until the owner runs the probe guide.
+- **Status:** active.
+
+### D-19 Narrative baskets: daily refresh workflow; trust_weight kept
+- **Decision:** the attention store refreshes through a scheduled GitHub workflow (owner choice 17-10-26) that fails loudly on dark sources. `trust_weight` stays in the `/history` composite (D1/D2 decision) although plan AC-11 text says it should go; removal needs router, models and web checks.
+- **Date:** 17-10-26. **Reason:** keep `/history` JSON byte-identical. **Alternatives:** drop the field now (rejected).
+- **Consequences:** the workflow was never run live; `record_probe.py` is owner-run, not automated.
+- **Status:** active.
+
+### D-20 Exchange-token exclusion list (PROPOSAL)
+- **Decision:** the reference excludes BNB, LEO, OKB, CRO, GT, KCS, BGB, MX (editable in `attention_universe.json`). This is a planner PROPOSAL awaiting owner confirmation.
+- **Date:** 17-10-26. **Reason:** exchange tokens track their venue, not a narrative. **Alternatives:** keep them in (open).
+- **Status:** proposed.

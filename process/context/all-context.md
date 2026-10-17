@@ -180,12 +180,17 @@ Still open, one line each (history and resolved items: context-changelog.md):
   0.0 as `fresh` (registry T26).
 - Whether the five snapshot crons fire on time at their 11:17-13:17 UTC slots (registry T27).
 - `web/e2e/screener.spec.ts:103` flake, not yet reproduced against a clean base.
-- `mapping.py` tripwire test is weaker than `trigger.py`'s.
+- `mapping.py` tripwire test is weak (`trigger.py`, which had a stronger one, was deleted in P5).
 - Hyperliquid's apparent daily-history floor (~2020-08-19) and its data terms are unverified.
 - No adapter-level failure counting or circuit breaker exists (needs INNOVATE before any code).
 - The 2017 leg-boundary backtest window has no usable composite coverage before 2018-01-11.
 - The full-vs-reduced liquidity composite comparison waits on the LiqTide archive growing.
 - One of six regime components still differs from LiqTide's published value; not root-caused.
+
+## Narrative baskets (P5)
+
+- /narrative has two tabs: My baskets (groups are baskets; attention chart and table) and Discovery (categories gaining attention).
+- Attention store: `cache/attention/` (one row per completed UTC day per source); daily refresh by `.github/workflows/attention-refresh.yml`; `api/scripts/record_probe.py` writes `probe_records.json` from the store.
 
 ## References
 

@@ -276,6 +276,10 @@ Practical rules that follow:
   rather than a single boilerplate disclaimer copy-pasted everywhere. See backlog note
   `sandbox-note-reconciliation_19-09-26.md`.
 
+## Narrative baskets tests (P5)
+
+API: attention store, sources, scoring, discovery, `test_record_probe.py`, `test_no_narrative_verdict_fields.py`. Web: `NarrativeTabs`, basket and Discovery vitest; e2e `narrative.spec.ts`, `contrast.spec.ts`. Check-run at `e3e6b63`: API 1377 passed, vitest 481, e2e 86.
+
 ## Update Triggers
 
 Update this file when:
