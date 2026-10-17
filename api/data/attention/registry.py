@@ -5,7 +5,8 @@ import json
 from datetime import date
 from pathlib import Path
 
-from api.data.attention import coingecko_attention, exchange_volume, store, trends, wikipedia
+from api.data.attention import (coingecko_attention, exchange_volume, reddit, store, trends, wikipedia,
+                                 xsearch)
 from api.data.attention.types import MIN_HISTORY_DAYS, SourceSeries
 
 FETCHERS = {
@@ -14,7 +15,11 @@ FETCHERS = {
     "exchange_volume": exchange_volume.fetch_binance_series,
     "hyperliquid_volume": exchange_volume.fetch_hyperliquid_series,
     "trends": trends.fetch_series,
+    "reddit": reddit.fetch_series,
+    "xsearch": xsearch.fetch_series,
 }
+
+SOURCE_WEIGHTS = {"xsearch": xsearch.WEIGHT}  # unlisted sources weigh 1.0
 
 PROBE_RECORDS_PATH = Path(__file__).with_name("probe_records.json")
 

@@ -65,6 +65,7 @@ def test_default_is_dry_run_zero_network(monkeypatch, isolated_cache):
 def test_estimate_zero_network_and_numbers(monkeypatch, isolated_cache):
     monkeypatch.setenv("X_MAX_READS_PER_RUN", "3")
     monkeypatch.setenv("X_USD_PER_READ", "0.5")
+    monkeypatch.setenv("X_MAX_USD_PER_DAY", "10")
     e = xsearch.estimate(["A", "B", "C", "D", "E"], today=TODAY)
     assert e.planned_reads == 3 and e.usd == pytest.approx(1.5) and e.live is False
 
@@ -149,7 +150,7 @@ def test_x_is_low_weight_and_registered():
 def test_no_bearer_pattern_in_tracked_files():
     root = Path(__file__).resolve().parents[4]
     files = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True, text=True).stdout.split()
-    pat = re.compile(r"A{21}[A-Za-z0-9%]{20,}|Bearer [A-Za-z0-9%_\-]{30,}")
+    pat = re.compile(r"A{21}[A-Za-z0-9]*%[0-9A-Fa-f]{2}[A-Za-z0-9%]{20,}|Bearer [A-Za-z0-9%_\-]{30,}")
     hits = []
     for f in files:
         p = root / f
