@@ -13,15 +13,16 @@ END = TODAY - timedelta(days=1)
 CATS = [{"id": "ai", "name": "AI"}, {"id": "defi", "name": "DeFi"}]
 
 
-def put_change(source, symbol, recent, base, days=130):
-    """Completed days ending yesterday: `base` before the last 7 days, `recent` in them."""
-    pts = [(END - timedelta(days=days - 1 - i), recent if i >= days - 7 else base) for i in range(days)]
+def put_change(source, symbol, recent, base, days=130, lag=0):
+    """Completed days ending `lag` days before yesterday: `base` before the last 7 days, `recent` in them."""
+    pts = [(END - timedelta(days=lag + days - 1 - i), recent if i >= days - 7 else base) for i in range(days)]
     store.write_series(SourceSeries(source, symbol, pts, "ok"), today=TODAY)
 
 
 def cfg(tmp_path, **over):
     base = {"min_volume_24h_usd": 20_000_000, "exclude": ["BNB"], "exclude_category_ids": ["cex"],
             "min_independent_sources": 2, "winsor_percentile": 95, "recent_days": 7,
+            "max_source_lag_days": 3,
             "source_groups": {}, "categories": CATS}
     base.update(over)
     p = tmp_path / "discovery.json"
@@ -216,3 +217,39 @@ def test_bnb_eligible_despite_exchange_category_but_leo_excluded(isolated_cache,
         gain(s)
     res = disc.build_discovery(30, today=TODAY)
     assert [c.symbol for c in cat(res, "ai").coins] == ["BNB"]
+
+
+def test_lagging_sources_are_anchored_to_their_own_newest_day(isolated_cache, tmp_path, monkeypatch):
+    world(tmp_path, monkeypatch, {"A": 5e7}, cats={"ai": ["A"]})
+    put_change("wikipedia", "A", 2.0, 1.0, lag=2)
+    put_change("coingecko", "A", 2.0, 1.0, lag=1)
+    res = disc.build_discovery(30, today=TODAY)
+    assert res.status == "ok"
+    c = coin(res, "ai", "A")
+    assert c.sources_used == 2 and c.gaining is True and round(c.raw_change, 2) == 100.0
+
+
+def test_source_lagging_beyond_limit_is_not_used(isolated_cache, tmp_path, monkeypatch):
+    world(tmp_path, monkeypatch, {"A": 5e7}, cats={"ai": ["A"]})
+    put_change("wikipedia", "A", 2.0, 1.0, lag=4)
+    put_change("coingecko", "A", 2.0, 1.0, lag=1)
+    res = disc.build_discovery(30, today=TODAY)
+    assert (res.status, res.reason) == ("no-data", "no-attention-data")
+
+
+def test_source_lagging_exactly_at_limit_is_used(isolated_cache, tmp_path, monkeypatch):
+    world(tmp_path, monkeypatch, {"A": 5e7}, cats={"ai": ["A"]})
+    put_change("wikipedia", "A", 2.0, 1.0, lag=3)
+    put_change("coingecko", "A", 2.0, 1.0)
+    assert coin(disc.build_discovery(30, today=TODAY), "ai", "A").sources_used == 2
+
+
+def test_lag_limit_comes_from_config(isolated_cache, tmp_path, monkeypatch):
+    world(tmp_path, monkeypatch, {"A": 5e7}, cats={"ai": ["A"]}, max_source_lag_days=1)
+    put_change("wikipedia", "A", 2.0, 1.0, lag=2)
+    put_change("coingecko", "A", 2.0, 1.0)
+    assert disc.build_discovery(30, today=TODAY).status == "no-data"
+
+
+def test_shipped_config_lag_limit_is_sane():
+    assert 1 <= json.loads(disc.CONFIG_PATH.read_text())["max_source_lag_days"] <= 7
