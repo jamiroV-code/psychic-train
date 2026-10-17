@@ -69,10 +69,10 @@ describe("NarrativeTabs", () => {
     await waitFor(() => expect(screen.getByTestId("attention-ranking-off")).toBeTruthy());
   });
 
-  it("Discovery is a one-line placeholder", async () => {
-    render(<NarrativeTabs fetchAttention={() => Promise.resolve(resp([]))} />);
+  it("Discovery tab shows the discovery panel, not the baskets chart", async () => {
+    render(<NarrativeTabs fetchAttention={() => Promise.resolve(resp([]))} fetchDiscovery={() => new Promise(() => undefined)} />);
     fireEvent.click(screen.getByRole("tab", { name: "Discovery" }));
-    expect(screen.getByTestId("discovery-placeholder")).toBeTruthy();
+    expect(screen.getByTestId("discovery-loading")).toBeTruthy();
     expect(screen.queryByTestId("attention-chart")).toBeNull();
   });
 
