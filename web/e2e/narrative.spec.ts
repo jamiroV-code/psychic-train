@@ -106,12 +106,6 @@ test.describe("narrative: My baskets", () => {
     await shot(page, "coin-expand", 1280);
   });
 
-  test("Discovery is a one-line placeholder", async ({ page }) => {
-    await page.goto("/narrative");
-    await page.getByRole("tab", { name: "Discovery" }).click();
-    await expect(page.getByTestId("discovery-placeholder")).toBeVisible();
-  });
-
   for (const width of WIDTHS) {
     test(`seeded states at ${width}px: no horizontal scroll, screenshots`, async ({ page, request }) => {
       await page.setViewportSize({ width, height: 900 });
@@ -191,11 +185,77 @@ test.describe("narrative: My baskets", () => {
       await page.goto("/screener");
       await page.getByRole("button", { name: /remove ETH/i }).first().click();
       await page.getByRole("button", { name: /confirm/i }).first().click();
-      const notice = page.getByText(/Basket Majors no longer counts it/);
+      const notice = page.getByTestId("board-announcement-visible");
       await expect(notice).toBeVisible();
+      await expect(notice).toContainText(/Basket Majors no longer counts it/);
       await notice.scrollIntoViewIfNeeded();
       await noHorizontalScroll(page);
       await shot(page, "removal-notice", width, false);
+    });
+  }
+});
+
+function discoveryBody(over: object = {}) {
+  const coin = (symbol: string, change: number, gaining: boolean) => ({
+    symbol, change, raw_change: change + 3, gaining, sources_used: 3, sources_gaining: gaining ? 2 : 1,
+  });
+  const cat = (id: string, name: string, score: number) => ({
+    id, name, score, median: score - 1.5, coins_used: 2, gaining_count: 1,
+    coins: [coin("AAA", score + 4, true), coin("BBB", score - 4, false)],
+  });
+  return {
+    window: 30, as_of: "2026-10-16", categories_as_of: "2026-10-10", status: "ok", reason: "",
+    universe_size: 90, eligible_size: 60,
+    categories: [cat("ai", "Artificial Intelligence", 31.2), cat("defi", "Decentralized Finance", 14.8)],
+    ...over,
+  };
+}
+
+test.describe("narrative: Discovery", () => {
+  const noData = (reason: string) => discoveryBody({ status: "no-data", reason, categories: [] });
+  for (const width of WIDTHS) {
+    test(`every state at ${width}px: no horizontal scroll, screenshots`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.route("**/baskets/attention*", (route) => route.fulfill({ json: seededBody() }));
+      const open = async () => {
+        await page.goto("/narrative");
+        await page.getByRole("tab", { name: "Discovery" }).click();
+      };
+
+      await page.route("**/api/narrative/discovery*", (route) => route.fulfill({ json: discoveryBody() }));
+      await open();
+      await expect(page.getByTestId("discovery-row-ai")).toBeVisible();
+      await page.getByTestId("discovery-row-ai").getByRole("button").click();
+      await expect(page.getByTestId("discovery-coins-ai")).toContainText("AAA");
+      await noHorizontalScroll(page);
+      await shot(page, "discovery-ok", width);
+
+      await page.getByTestId("discovery-window-7").click();
+      await expect(page.getByTestId("discovery-window-7")).toHaveAttribute("aria-pressed", "true");
+
+      for (const reason of ["categories-missing", "reference-missing", "no-attention-data"]) {
+        await page.unroute("**/api/narrative/discovery*");
+        await page.route("**/api/narrative/discovery*", (route) => route.fulfill({ json: noData(reason) }));
+        await open();
+        await expect(page.getByTestId(`discovery-nodata-${reason}`)).toBeVisible();
+        await noHorizontalScroll(page);
+        await shot(page, `discovery-nodata-${reason}`, width);
+      }
+
+      await page.unroute("**/api/narrative/discovery*");
+      await page.route("**/api/narrative/discovery*", () => new Promise(() => undefined));
+      await open();
+      await expect(page.getByTestId("discovery-loading")).toBeVisible();
+      await noHorizontalScroll(page);
+      await shot(page, "discovery-loading", width);
+
+      await page.unroute("**/api/narrative/discovery*");
+      await page.route("**/api/narrative/discovery*", (route) => route.fulfill({ status: 500, body: "x" }));
+      await open();
+      await expect(page.getByTestId("discovery-error")).toBeVisible();
+      await expect(page.getByTestId("discovery-retry")).toBeVisible();
+      await noHorizontalScroll(page);
+      await shot(page, "discovery-error", width);
     });
   }
 });

@@ -23,6 +23,24 @@ Seeded fixture (routed attention JSON, baskets created through the real API). Wi
 - `coin-expand-375.png`: coins behind Majors: score, 'n of N sources', raw value right-aligned per source, 'no data' + state when missing
 - `coin-expand-768.png`: coins behind Majors: score, 'n of N sources', raw value right-aligned per source, 'no data' + state when missing
 - `coin-expand-1280.png`: coins behind Majors: score, 'n of N sources', raw value right-aligned per source, 'no data' + state when missing
-- `removal-notice-375.png`: screener after removing ETH; viewport scrolled to the board (the notice itself is visually hidden, see report heading 3)
-- `removal-notice-768.png`: screener after removing ETH; viewport scrolled to the board (the notice itself is visually hidden, see report heading 3)
-- `removal-notice-1280.png`: screener after removing ETH; viewport scrolled to the board (the notice itself is visually hidden, see report heading 3)
+- `removal-notice-375.png`: screener after removing ETH; viewport scrolled to the board (T78: the notice is now visible above the board)
+- `removal-notice-768.png`: screener after removing ETH; viewport scrolled to the board (T78: the notice is now visible above the board)
+- `removal-notice-1280.png`: screener after removing ETH; viewport scrolled to the board (T78: the notice is now visible above the board)
+- `discovery-error-1280.png`: Discovery tab state (error), route-mocked
+- `discovery-error-375.png`: Discovery tab state (error), route-mocked
+- `discovery-error-768.png`: Discovery tab state (error), route-mocked
+- `discovery-loading-1280.png`: Discovery tab state (loading), route-mocked
+- `discovery-loading-375.png`: Discovery tab state (loading), route-mocked
+- `discovery-loading-768.png`: Discovery tab state (loading), route-mocked
+- `discovery-nodata-categories-missing-1280.png`: Discovery tab state (nodata-categories-missing), route-mocked
+- `discovery-nodata-categories-missing-375.png`: Discovery tab state (nodata-categories-missing), route-mocked
+- `discovery-nodata-categories-missing-768.png`: Discovery tab state (nodata-categories-missing), route-mocked
+- `discovery-nodata-no-attention-data-1280.png`: Discovery tab state (nodata-no-attention-data), route-mocked
+- `discovery-nodata-no-attention-data-375.png`: Discovery tab state (nodata-no-attention-data), route-mocked
+- `discovery-nodata-no-attention-data-768.png`: Discovery tab state (nodata-no-attention-data), route-mocked
+- `discovery-nodata-reference-missing-1280.png`: Discovery tab state (nodata-reference-missing), route-mocked
+- `discovery-nodata-reference-missing-375.png`: Discovery tab state (nodata-reference-missing), route-mocked
+- `discovery-nodata-reference-missing-768.png`: Discovery tab state (nodata-reference-missing), route-mocked
+- `discovery-ok-1280.png`: Discovery tab state (ok), route-mocked
+- `discovery-ok-375.png`: Discovery tab state (ok), route-mocked
+- `discovery-ok-768.png`: Discovery tab state (ok), route-mocked
