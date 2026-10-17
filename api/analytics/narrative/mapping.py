@@ -20,8 +20,8 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # FROZEN legacy map (narrative-dashboard RFC-1, option B, user-approved
-# 2026-09-24). This is what `/api/narrative/categories` (the trigger's
-# CoinGecko trending count) and `/screener`'s `narrative_state` use, and it
+# 2026-09-24). This is what `/screener`'s `narrative_state` uses (the old
+# `/api/narrative/categories` endpoint and its trigger are removed), and it
 # must NOT be widened: AC-1 requires both stay byte-identical, proven by
 # api/tests/routers/test_narrative_categories_contract.py. To change the
 # narrative map shown on /history and /narrative, edit

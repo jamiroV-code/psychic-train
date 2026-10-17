@@ -144,7 +144,8 @@ def test_spam_flag_on_spike(monkeypatch, isolated_cache):
 
 def test_x_is_low_weight_and_registered():
     assert "xsearch" in registry.FETCHERS and "reddit" in registry.FETCHERS
-    assert 0 < xsearch.WEIGHT < 1
+    from api.analytics.attention.score import load_weights
+    assert 0 < load_weights()["xsearch"] < 1
 
 
 def test_no_bearer_pattern_in_tracked_files():

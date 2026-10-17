@@ -13,8 +13,6 @@ from api.models.attention import (
 )
 from api.models.layout import Layout
 
-BREADTH_LAG_DAYS = 7
-
 
 def _mean(vals: list[float | None]) -> float | None:
     got = [v for v in vals if v is not None]
@@ -49,7 +47,7 @@ def _basket(group, window, sources, weights, data, reference, universe_size, end
                            value=None if per_day[d] is None or not base else per_day[d] / base * 100.0)
                for d in days]
     change = None if score is None or base is None else score - base
-    lag = end - timedelta(days=BREADTH_LAG_DAYS)
+    lag = end - timedelta(days=window)
     pairs = []
     for c in group.coins:
         now = ser.coin_score_at(c, sources, weights, data, reference, end)
