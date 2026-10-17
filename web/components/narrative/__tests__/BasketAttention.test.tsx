@@ -64,8 +64,28 @@ describe("BasketAttentionChart", () => {
     expect(screen.getByTestId("attention-loading")).toBeTruthy();
   });
   it("renders error", () => {
-    chart({ data: null, error: "boom" });
-    expect(screen.getByTestId("attention-error").textContent).toContain("boom");
+    chart({ data: null, error: "API request failed: /api/x -> 500", onRetry: () => {} });
+    const text = screen.getByTestId("attention-error").textContent ?? "";
+    expect(text).toContain("could not be loaded");
+    expect(text).not.toMatch(/\/api|500/);
+  });
+  it("retries from the error line", () => {
+    const retry = vi.fn();
+    chart({ data: null, error: "x", onRetry: retry });
+    fireEvent.click(screen.getByTestId("attention-retry"));
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+  it("shows one calm line and no legend when no basket has a series", () => {
+    const none = (id: string) => mk(id, { status: "no-data", reason: "reference-missing", score: null, series: [{ date: "2026-10-01", value: null }] });
+    chart({ data: data([none("a"), none("b")]) });
+    expect(screen.getByTestId("attention-nodata").textContent).toMatch(/Ranking is off/);
+    expect(screen.queryByRole("group", { name: "Baskets shown" })).toBeNull();
+    expect(screen.queryByTestId("attention-chart-container")).toBeNull();
+  });
+  it("labels the y axis and keeps one legend when there is a series", () => {
+    chart({ data: data([mk("a")]) });
+    expect(screen.getByText("Attention score, start = 100")).toBeTruthy();
+    expect(screen.getAllByRole("group", { name: "Baskets shown" })).toHaveLength(1);
   });
   it("renders empty with a screener link", () => {
     chart({ data: data([]) });
@@ -100,8 +120,13 @@ describe("BasketTable", () => {
     fireEvent.click(screen.getByRole("button", { name: /Basket a/ }));
     expect(screen.getByText("ETH")).toBeTruthy();
     expect(screen.getByText("2 of 3 sources")).toBeTruthy();
-    expect(screen.getByText(/wiki/)).toBeTruthy();
-    expect(screen.getByText(/120/)).toBeTruthy();
+    expect(screen.getByText("Wikipedia")).toBeTruthy();
+    expect(screen.getByText("120")).toBeTruthy();
+  });
+  it("marks the name button expandable", () => {
+    const { container } = render(<BasketTable baskets={[mk("a")]} />);
+    expect(container.querySelector(".basket-table__chev")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Basket a/ }).getAttribute("aria-expanded")).toBe("false");
   });
   it("uses no badge class", () => {
     const { container } = render(<BasketTable baskets={[mk("a")]} />);

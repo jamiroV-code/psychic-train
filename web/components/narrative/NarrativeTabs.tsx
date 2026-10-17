@@ -26,6 +26,7 @@ export function NarrativeTabs({ fetchAttention = fetchBasketAttention, fetchDisc
   const [window, setWindow] = useState<AttentionWindow>(30);
   const [data, setData] = useState<AttentionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,7 +43,7 @@ export function NarrativeTabs({ fetchAttention = fetchBasketAttention, fetchDisc
       cancelled = true;
     };
     // fetchAttention is a stable default or an injected test double.
-  }, [window]);
+  }, [window, attempt]);
 
   return (
     <div className="narrative-tabs">
@@ -65,7 +66,7 @@ export function NarrativeTabs({ fetchAttention = fetchBasketAttention, fetchDisc
       </div>
       {tab === "baskets" ? (
         <div role="tabpanel" id="narrative-panel-baskets" aria-labelledby="narrative-tab-baskets">
-          <BasketAttentionChart data={data} window={window} onWindowChange={setWindow} error={error} />
+          <BasketAttentionChart data={data} window={window} onWindowChange={setWindow} error={error} onRetry={() => setAttempt((n) => n + 1)} />
           {data && <BasketTable baskets={data.baskets} />}
         </div>
       ) : (

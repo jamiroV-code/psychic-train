@@ -41,9 +41,10 @@ export function BasketTable({ baskets }: BasketTableProps) {
         {ranked.flatMap((b) => {
           const expanded = open.has(b.id);
           const rows = [
-            <tr key={b.id} data-testid={`attention-row-${b.id}`}>
+            <tr key={b.id} className="basket-table__row" data-testid={`attention-row-${b.id}`}>
               <td>
                 <button type="button" className="basket-table__name" aria-expanded={expanded} onClick={() => toggle(b.id)}>
+                  <span className="basket-table__chev" aria-hidden="true" />
                   {b.name}
                 </button>
               </td>
