@@ -47,7 +47,7 @@ RANK_DECIMALS = 6
 # normalised values and never feeds the composite or a rank. Below
 # MATURE_POINTS_THRESHOLD it is "provisional" (thin, shown distinctly).
 MIN_SUFFICIENT_POINTS = 2
-MATURE_POINTS_THRESHOLD = 5  # user-confirmed at RFC-1 Stage 0
+MATURE_POINTS_THRESHOLD = 5  # user-approved at RFC-1 Stage 0
 
 # Redistribution flags. None of these sources is cleared for redistribution;
 # each is a one-line flip once its terms are checked.
