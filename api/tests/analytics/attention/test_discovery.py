@@ -197,3 +197,22 @@ def test_window_changes_baseline(isolated_cache, tmp_path, monkeypatch):
         put_change(s, "A", 2.0, 1.0)
     for w in (7, 30, 90):
         assert disc.build_discovery(w, today=TODAY).window == w
+
+
+def test_shipped_config_keeps_bnb_excludes_other_exchange_tokens():
+    cfg = json.loads(disc.CONFIG_PATH.read_text())
+    uni = json.loads(universe_mod.UNIVERSE_PATH.read_text())
+    assert "BNB" not in cfg["exclude"] and "BNB" not in uni["exchange_tokens"]
+    assert "BNB" in cfg["include_despite_category"]
+    for s in ("LEO", "OKB", "CRO", "GT", "KCS", "BGB", "MX"):
+        assert s in cfg["exclude"] and s in uni["exchange_tokens"]
+
+
+def test_bnb_eligible_despite_exchange_category_but_leo_excluded(isolated_cache, tmp_path, monkeypatch):
+    coins = {"BNB": 5e7, "LEO": 5e7}
+    world(tmp_path, monkeypatch, coins, cats={"ai": ["BNB", "LEO"], "cex": ["BNB", "LEO"]},
+          exclude=["LEO"], include_despite_category=["BNB"])
+    for s in coins:
+        gain(s)
+    res = disc.build_discovery(30, today=TODAY)
+    assert [c.symbol for c in cat(res, "ai").coins] == ["BNB"]

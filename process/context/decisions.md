@@ -177,7 +177,7 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 - **Consequences:** the workflow was never run live; `record_probe.py` is owner-run, not automated.
 - **Status:** active.
 
-### D-20 Exchange-token exclusion list (PROPOSAL)
-- **Decision:** the reference excludes BNB, LEO, OKB, CRO, GT, KCS, BGB, MX (editable in `attention_universe.json`). This is a planner PROPOSAL awaiting owner confirmation.
-- **Date:** 17-10-26. **Reason:** exchange tokens track their venue, not a narrative. **Alternatives:** keep them in (open).
-- **Status:** proposed.
+### D-20 Exchange-token exclusion list
+- **Decision:** owner confirmed 2026-10-17: BNB kept, LEO OKB CRO GT KCS BGB MX excluded (editable in `attention_universe.json` and `discovery.json`; BNB is allowed past the exchange-based-tokens category via `include_despite_category`).
+- **Date:** 17-10-26. **Reason:** exchange tokens track their venue, not a narrative. **Alternatives:** keep them all in (rejected for all but BNB).
+- **Status:** active.
