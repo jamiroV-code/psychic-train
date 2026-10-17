@@ -113,3 +113,25 @@ def test_no_reference_data_makes_ranking_unavailable(isolated_cache, tmp_path):
         put(s, "A1", 2.0)
     body = _build(tmp_path, make_layout({"main": [], "alpha": ["A1"]}))
     assert body.baskets[0].status == "no-data" and body.baskets[0].score is None
+
+
+def test_empty_reference_reason_is_reference_missing(isolated_cache, tmp_path):
+    for s in SOURCES:
+        put(s, "A1", 2.0)
+    body = _build(tmp_path, make_layout({"main": [], "alpha": ["A1"]}), reference=[])
+    b = body.baskets[0]
+    assert b.status == "no-data" and b.score is None and b.reason == "reference-missing"
+
+
+def test_snapshot_reference_ranks_when_config_reference_empty(isolated_cache, tmp_path):
+    from api.data.attention import universe_store
+    for s in SOURCES:
+        put(s, "A1", 2.0)
+        put(s, "R1", 1.0)
+        put(s, "R2", 1.5)
+    universe_store.write_snapshot("2026-10-01", [
+        {"id": "r1", "symbol": "R1", "market_cap": 2, "volume_24h": 1},
+        {"id": "r2", "symbol": "R2", "market_cap": 1, "volume_24h": 1}])
+    body = _build(tmp_path, make_layout({"main": [], "alpha": ["A1"]}), reference=[])
+    b = body.baskets[0]
+    assert b.status != "no-data" and b.score is not None and b.universe_size == 2

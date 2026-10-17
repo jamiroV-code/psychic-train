@@ -54,6 +54,22 @@ def fetch_top100(*, client: httpx.Client, sleep=time.sleep) -> list[dict] | None
         return None
 
 
+def fetch_top100_markets(*, client: httpx.Client, sleep=time.sleep) -> list[dict] | None:
+    """Top-100 by market cap, unfiltered: {id, symbol, market_cap, volume_24h}. None on failure.
+
+    The markets endpoint carries no category tags, so none are kept.
+    """
+    try:
+        resp = _get(client, MARKETS_URL, {"vs_currency": "usd", "order": "market_cap_desc",
+                                          "per_page": 100, "page": 1}, sleep)
+        if resp is None or resp.status_code >= 400:
+            return None
+        return [{"id": r["id"], "symbol": str(r["symbol"]).upper(), "market_cap": r.get("market_cap"),
+                 "volume_24h": r.get("total_volume")} for r in resp.json()]
+    except Exception:
+        return None
+
+
 def fetch_series(symbol: str, coin_id: str, *, client: httpx.Client,
                  today: date | None = None, sleep=time.sleep) -> SourceSeries:
     sym = symbol.upper()

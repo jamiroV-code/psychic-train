@@ -60,7 +60,8 @@ def _basket(group, window, sources, weights, data, reference, universe_size, end
     if not coins:
         status, reason = "empty", "basket has no coins"
     elif score is None:
-        status, reason = "no-data", "no usable source data for any coin"
+        status = "no-data"
+        reason = "no usable source data for any coin" if reference else "reference-missing"
     else:
         status, reason = "ok", ""
     return BasketAttention(id=group.id, name=group.name, score=score, change=change, breadth=breadth,
