@@ -49,8 +49,12 @@ def test_probed_no_data_unavailable(attention_cache, tmp_path):
     assert registry.read_series("wikipedia", "ZZZ", today=TODAY, probe_path=p).state == "unavailable"
 
 
-def test_shipped_probe_records_empty():
-    assert registry.load_probe_records() == {}
+def test_shipped_probe_records_are_well_formed():
+    """The committed file holds only observed records (the daily refresh writes it), never hand-made states."""
+    states = ("ok", "unavailable", "insufficient-history", "no-article", "capped")
+    for name, rec in registry.load_probe_records().items():
+        assert name in registry.FETCHERS, name
+        assert rec["state"] in states, (name, rec)
 
 
 def test_reader_makes_no_network(attention_cache, tmp_path, monkeypatch):

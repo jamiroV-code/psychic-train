@@ -7,6 +7,7 @@ builds forward one point per refresh. Fetchers never raise.
 """
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta, timezone
 
 from api.data import hyperliquid_narrative_adapter
@@ -15,6 +16,12 @@ from api.data.attention.types import MIN_HISTORY_DAYS, SourceSeries
 BINANCE_SOURCE = "exchange_volume"
 HYPERLIQUID_SOURCE = "hyperliquid_volume"
 LOOKBACK_DAYS = 100
+
+
+def _failure_reason(exc: Exception) -> str:
+    """`fetch-failed: Class[ HTTP n]`: the class and a 3-digit status found in the message, never the message."""
+    m = re.search(r"\b([45]\d\d)\b", str(exc))
+    return f"fetch-failed: {type(exc).__name__}" + (f" HTTP {m.group(1)}" if m else "")
 
 
 def make_binance():
@@ -40,7 +47,7 @@ def fetch_binance_series(symbol: str, *, exchange=None, today: date | None = Non
         except ccxt.RateLimitExceeded:
             return SourceSeries(BINANCE_SOURCE, sym, [], "unavailable", "rate-limited")
     except Exception as exc:
-        return SourceSeries(BINANCE_SOURCE, sym, [], "unavailable", f"fetch-failed: {type(exc).__name__}")
+        return SourceSeries(BINANCE_SOURCE, sym, [], "unavailable", _failure_reason(exc))
     pts: dict[date, float] = {}
     for bar in bars or []:
         try:
@@ -60,7 +67,7 @@ def fetch_hyperliquid_series(symbol: str, *, exchange=None, today: date | None =
     try:
         snap = snapshot(exchange)
     except Exception as exc:
-        return SourceSeries(HYPERLIQUID_SOURCE, sym, [], "unavailable", f"fetch-failed: {type(exc).__name__}")
+        return SourceSeries(HYPERLIQUID_SOURCE, sym, [], "unavailable", _failure_reason(exc))
     if snap.status != "ok":
         return SourceSeries(HYPERLIQUID_SOURCE, sym, [], "unavailable", snap.reason or "snapshot unavailable")
     for perp in snap.perps:

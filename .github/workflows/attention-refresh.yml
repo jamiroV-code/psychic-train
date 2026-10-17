@@ -17,6 +17,13 @@ name: Attention daily refresh
 # is fine. record_probe.py then records the probe only for sources that
 # refreshed ok, and the commit includes api/data/attention/probe_records.json.
 # Not run here: X (insufficient-history until 90 own days).
+# A second job, refresh-extra (needs: refresh, runs even if refresh is red), adds
+# Binance and Hyperliquid volume, Google Trends and Reddit as separate
+# continue-on-error steps after refresh has pushed, so the two never push at
+# once. Provider blocks (Binance 451, Reddit 403/429, Trends 429 from cloud IPs)
+# become `unavailable` with a yellow ::warning:: and no probe record; only code
+# errors or a missing result line turn that job red. Reddit runs only when the
+# repo secrets REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET exist; never echoed.
 # The optional X step runs only when the repo secret X_BEARER_TOKEN exists AND
 # the repo variable ATTENTION_X_LIVE is 1. The token is never echoed.
 on:
@@ -155,6 +162,101 @@ jobs:
             exit 0
           fi
           git commit -m "chore: attention refresh $(date -u +%Y-%m-%d)"
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
+            echo "push attempt $attempt failed; retrying"
+            sleep $((attempt * 10))
+          done
+          exit 1
+
+  refresh-extra:
+    needs: refresh
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # The branch head, not the trigger sha: it includes what `refresh` just pushed.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install api/ dependencies
+        run: uv sync --project api
+
+      - name: Refresh Binance volume (HTTP 451 from US runners is expected)
+        continue-on-error: true
+        timeout-minutes: 4
+        run: |
+          set -o pipefail
+          uv run --project api python api/scripts/refresh_attention.py --sources exchange_volume 2>&1 | tee "$RUNNER_TEMP/extra-exchange_volume.log"
+
+      - name: Refresh Hyperliquid volume
+        continue-on-error: true
+        timeout-minutes: 4
+        run: |
+          set -o pipefail
+          uv run --project api python api/scripts/refresh_attention.py --sources hyperliquid_volume 2>&1 | tee "$RUNNER_TEMP/extra-hyperliquid_volume.log"
+
+      - name: Refresh Google Trends (HTTP 429 from cloud IPs is common)
+        continue-on-error: true
+        timeout-minutes: 8
+        run: |
+          set -o pipefail
+          uv run --project api python api/scripts/refresh_attention.py --sources trends 2>&1 | tee "$RUNNER_TEMP/extra-trends.log"
+
+      - name: Check whether the Reddit credentials exist
+        id: redditgate
+        env:
+          HAS_REDDIT: ${{ secrets.REDDIT_CLIENT_ID != '' && secrets.REDDIT_CLIENT_SECRET != '' }}
+        run: |
+          if [ "$HAS_REDDIT" = "true" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "reddit: not-probed no credentials" > "$RUNNER_TEMP/extra-reddit.log"
+          fi
+
+      - name: Refresh Reddit (only when both secrets exist)
+        if: ${{ steps.redditgate.outputs.enabled == 'true' }}
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+        run: |
+          set -o pipefail
+          uv run --project api python api/scripts/refresh_attention.py --sources reddit 2>&1 | tee "$RUNNER_TEMP/extra-reddit.log"
+
+      - name: Verify the extra sources (provider blocks warn, code errors fail)
+        if: ${{ !cancelled() }}
+        run: uv run --project api python api/scripts/attention_extra.py
+
+      - name: Record the source probe for extra sources that refreshed ok
+        if: ${{ !cancelled() }}
+        run: |
+          ok=""
+          [ -f "$RUNNER_TEMP/attention-extra-ok.txt" ] && ok="$(cat "$RUNNER_TEMP/attention-extra-ok.txt")"
+          if [ -z "$ok" ]; then
+            echo "no extra source refreshed ok; no probe recorded"
+            exit 0
+          fi
+          uv run --project api python api/scripts/record_probe.py --sources "$ok"
+
+      - name: Commit refreshed attention data
+        if: ${{ !cancelled() }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          [ -d api/data/cache/attention ] || { echo "nothing new to commit"; exit 0; }
+          git add -f api/data/cache/attention/
+          git add -f api/data/attention/probe_records.json
+          if git diff --staged --quiet; then
+            echo "nothing new to commit"
+            exit 0
+          fi
+          git commit -m "chore: attention extra refresh $(date -u +%Y-%m-%d)"
           for attempt in 1 2 3; do
             git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
             echo "push attempt $attempt failed; retrying"

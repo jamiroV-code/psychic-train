@@ -93,3 +93,9 @@ def test_registered_and_not_probed_without_record(tmp_path):
     p.write_text("{}")
     for src in ("exchange_volume", "hyperliquid_volume"):
         assert registry.read_series(src, "BTC", today=TODAY, probe_path=p).state == "not-probed"
+
+
+def test_binance_451_reason_carries_class_and_status_only():
+    exc = ccxt.ExchangeNotAvailable("binance GET https://api.binance.com/x 451 {restricted location}")
+    s = exchange_volume.fetch_binance_series("BTC", exchange=FakeEx(exc=exc), today=TODAY)
+    assert s.state == "unavailable" and s.reason == "fetch-failed: ExchangeNotAvailable HTTP 451"
