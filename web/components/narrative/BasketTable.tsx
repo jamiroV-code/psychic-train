@@ -14,7 +14,7 @@ export function BasketTable({ baskets }: BasketTableProps) {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
 
   if (baskets.length === 0) {
-    return <p data-testid="attention-table-empty" className="basket-note">No baskets to rank.</p>;
+    return <p data-testid="attention-table-empty" className="basket-note basket-table-empty">No baskets to rank.</p>;
   }
 
   const ranked = [...baskets].sort((a, b) => (b.score ?? -Infinity) - (a.score ?? -Infinity));
