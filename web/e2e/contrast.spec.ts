@@ -141,3 +141,35 @@ for (const route of ROUTES) {
     ).toEqual([]);
   });
 }
+
+test("narrative with baskets and rows: all text is legible against what it is painted on", async ({ page, request }) => {
+  const api = process.env["NEXT_PUBLIC_API_BASE_URL"] ?? "http://127.0.0.1:8001";
+  await request.delete(`${api}/api/layout/crypto`);
+  await request.post(`${api}/api/watchlist`, { data: { symbol: "BTC" } });
+  const current = await (await request.get(`${api}/api/layout/crypto`)).json();
+  const main = current.groups[0];
+  await request.post(`${api}/api/layout/crypto`, {
+    data: {
+      revision: current.revision,
+      groups: [{ ...main, coins: main.coins.filter((c: string) => c !== "BTC") }, { id: "majors", name: "Majors", coins: ["BTC"] }],
+      hidden_lines: current.hidden_lines,
+    },
+  });
+  const series = Array.from({ length: 10 }, (_, k) => ({ date: `2026-10-${String(k + 1).padStart(2, "0")}`, value: 40 + k * 2 }));
+  const src = (source: string, raw: number | null) => ({ source, raw, ratio: raw === null ? null : 1, rank: raw === null ? null : 1, state: raw === null ? "unavailable" : "ok" });
+  const basket = {
+    id: "majors", name: "Majors", score: 72.4, change: 12.5, breadth: 0.8, coverage: "covers 1 of 1", series, status: "ok", reason: "", universe_size: 1,
+    coins: [{ symbol: "BTC", score: 80.2, sources_used: 1, sources_total: 2, sources: [src("trends", 61), src("wiki", null)] }],
+  };
+  await page.route("**/baskets/attention*", (route) =>
+    route.fulfill({ json: { window: 30, as_of: "2026-10-16", membership_as_of: "2026-10-10", baskets: [basket] } }),
+  );
+  await page.goto("/narrative");
+  await page.waitForSelector('[data-testid="attention-row-majors"]', { timeout: 30_000 });
+  await page.getByRole("button", { name: "Majors" }).last().click();
+  await page.waitForSelector('[data-testid="attention-coins-majors"]');
+  await page.waitForTimeout(1_500);
+  const offenders = await textContrastOffenders(page);
+  expect(offenders, `/narrative (rows) has text below its contrast requirement:\n${JSON.stringify(offenders, null, 2)}`).toEqual([]);
+  await request.delete(`${api}/api/layout/crypto`);
+});

@@ -41,6 +41,30 @@ async function resetBaskets(request: APIRequestContext, baskets: Record<string, 
   expect(saved.ok(), await saved.text()).toBeTruthy();
 }
 
+function seededBasket(name: string, over: object) {
+  const day = (n: number) => `2026-10-${String(n).padStart(2, "0")}`;
+  const mk = (base: number) => Array.from({ length: 10 }, (_, k) => ({ date: day(k + 1), value: base + k * 2 + (k % 3) }));
+  const src = (source: string, raw: number | null) => ({
+    source, raw, ratio: raw === null ? null : raw / 50, rank: raw === null ? null : 1,
+    state: raw === null ? ("unavailable" as const) : ("ok" as const),
+  });
+  return {
+    id: name.toLowerCase(), name, score: name === "Majors" ? 72.4 : 48.1, change: name === "Majors" ? 12.5 : -3.2,
+    breadth: name === "Majors" ? 0.8 : 0.5, coverage: "covers 2 of 2", series: mk(name === "Majors" ? 40 : 20),
+    coins: name === "Majors"
+      ? [
+          { symbol: "BTC", score: 80.2, sources_used: 1, sources_total: 2, sources: [src("trends", 61), src("wiki", null)] },
+          { symbol: "ETH", score: 64.6, sources_used: 2, sources_total: 2, sources: [src("trends", 44), src("wiki", 38)] },
+        ]
+      : [{ symbol: "THIN", score: 48.1, sources_used: 2, sources_total: 2, sources: [src("trends", 30), src("wiki", 22)] }],
+    status: "ok", reason: "", universe_size: 2, ...over,
+  };
+}
+
+function seededBody(baskets: object[] = [seededBasket("Majors", {}), seededBasket("Layer2", {})]) {
+  return { window: 30, as_of: "2026-10-16", membership_as_of: "2026-10-10", baskets };
+}
+
 async function noHorizontalScroll(page: Page): Promise<void> {
   const fits = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
   expect(fits).toBe(true);
@@ -88,63 +112,86 @@ test.describe("narrative: My baskets", () => {
     await expect(page.getByTestId("discovery-placeholder")).toBeVisible();
   });
 
-  test("empty: no baskets gives one line and a screener link", async ({ page, request }) => {
-    await request.delete(`${API_BASE_URL}/api/layout/crypto`);
-    await page.goto("/narrative");
-    await expect(page.getByTestId("attention-empty")).toBeVisible();
-    await expect(page.getByTestId("attention-empty").getByRole("link")).toHaveAttribute("href", "/screener");
-    await shot(page, "empty", 1280);
-  });
-
-  test("loading and error states (routed responses)", async ({ page }) => {
-    await page.route("**/baskets/attention*", async (route) => {
-      await new Promise((r) => setTimeout(r, 1500));
-      await route.fulfill({ status: 500, body: "{}" });
-    });
-    await page.goto("/narrative");
-    await expect(page.getByTestId("attention-loading")).toBeVisible();
-    await shot(page, "loading", 1280);
-    await expect(page.getByTestId("attention-error")).toBeVisible();
-    await shot(page, "error", 1280);
-  });
-
-  test("partial and ranking-off notes (routed responses)", async ({ page }) => {
-    const basket = (id: string, over: object) => ({
-      id, name: id, score: 40, change: 1, breadth: 0.5, coverage: "covers 2 of 3",
-      series: [{ date: "2026-10-01", value: 1 }, { date: "2026-10-02", value: 2 }], coins: [],
-      status: "ok", reason: "", universe_size: 3, ...over,
-    });
-    const body = (baskets: object[]) => ({ window: 30, as_of: "2026-10-16", membership_as_of: "2026-10-10", baskets });
-    await page.route("**/baskets/attention*", (route) =>
-      route.fulfill({ json: body([basket("A", {}), basket("B", { status: "no-data", score: null })]) }),
-    );
-    await page.goto("/narrative");
-    await expect(page.getByTestId("attention-partial")).toBeVisible();
-    await shot(page, "partial", 1280);
-    await page.unroute("**/baskets/attention*");
-    await page.route("**/baskets/attention*", (route) =>
-      route.fulfill({ json: body([basket("A", { status: "no-data", score: null, reason: "reference-missing" })]) }),
-    );
-    await page.goto("/narrative");
-    await expect(page.getByTestId("attention-ranking-off")).toBeVisible();
-    await shot(page, "ranking-off", 1280);
-  });
-
   for (const width of WIDTHS) {
-    test(`no horizontal scroll at ${width}px`, async ({ page }) => {
+    test(`seeded states at ${width}px: no horizontal scroll, screenshots`, async ({ page, request }) => {
       await page.setViewportSize({ width, height: 900 });
+
+      // ok with numbers: routed fixture, baskets still created through the real API.
+      await page.route("**/baskets/attention*", (route) => route.fulfill({ json: seededBody() }));
       await page.goto("/narrative");
       await expect(page.getByTestId("attention-row-majors")).toBeVisible();
-      await page.getByRole("button", { name: "Majors" }).last().click();
+      await expect(page.getByTestId("attention-row-majors")).toContainText("+12.5");
+      await expect(page.getByTestId("attention-row-majors")).toContainText("covers 2 of 2");
+      await expect(page.getByTestId("attention-row-majors")).toContainText("80%");
+      await expect(page.locator("[data-testid='attention-chart-container'] canvas").first()).toBeVisible();
+      await expect(page.getByTestId("attention-membership")).toContainText("membership as of 2026-10-10");
       await noHorizontalScroll(page);
       await shot(page, "ok", width);
+      await page.getByRole("button", { name: "Majors" }).last().click();
+      await expect(page.getByTestId("attention-coins-majors")).toContainText("BTC");
+      await expect(page.getByTestId("coin-source-BTC-trends")).toContainText("61");
+      await expect(page.getByTestId("coin-source-BTC-wiki")).toContainText("no data");
+      await noHorizontalScroll(page);
+      await shot(page, "coin-expand", width);
+
+      // partial: one basket without data.
+      await page.unroute("**/baskets/attention*");
+      await page.route("**/baskets/attention*", (route) =>
+        route.fulfill({ json: seededBody([seededBasket("Majors", {}), seededBasket("Layer2", { status: "no-data", score: null, change: null, breadth: null })]) }),
+      );
+      await page.goto("/narrative");
+      await expect(page.getByTestId("attention-partial")).toBeVisible();
+      await noHorizontalScroll(page);
+      await shot(page, "partial", width);
+
+      // ranking off: the reference is missing.
+      await page.unroute("**/baskets/attention*");
+      await page.route("**/baskets/attention*", (route) =>
+        route.fulfill({
+          json: seededBody([
+            seededBasket("Majors", { status: "no-data", score: null, reason: "reference-missing" }),
+            seededBasket("Layer2", { status: "no-data", score: null, reason: "reference-missing" }),
+          ]),
+        }),
+      );
+      await page.goto("/narrative");
+      await expect(page.getByTestId("attention-ranking-off")).toBeVisible();
+      await noHorizontalScroll(page);
+      await shot(page, "ranking-off", width);
+
+      // loading, then error (routed 500 after a delay).
+      await page.unroute("**/baskets/attention*");
+      await page.route("**/baskets/attention*", async (route) => {
+        await new Promise((r) => setTimeout(r, 1500));
+        await route.fulfill({ status: 500, body: "{}" });
+      });
+      await page.goto("/narrative");
+      await expect(page.getByTestId("attention-loading")).toBeVisible();
+      await shot(page, "loading", width);
+      await expect(page.getByTestId("attention-error")).toBeVisible();
+      await noHorizontalScroll(page);
+      await shot(page, "error", width);
+
+      // empty: no baskets, one line and a screener link.
+      await page.unroute("**/baskets/attention*");
+      await request.delete(`${API_BASE_URL}/api/layout/crypto`);
+      await page.goto("/narrative");
+      await expect(page.getByTestId("attention-empty")).toBeVisible();
+      await expect(page.getByTestId("attention-empty").getByRole("link")).toHaveAttribute("href", "/screener");
+      await noHorizontalScroll(page);
+      await shot(page, "empty", width);
     });
   }
 
-  test("removing a coin in the screener names the basket", async ({ page }) => {
-    await page.goto("/screener");
-    await page.getByRole("button", { name: /remove ETH/i }).first().click();
-    await page.getByRole("button", { name: /confirm/i }).first().click();
-    await expect(page.getByText(/Basket Majors no longer counts it/)).toBeVisible();
-  });
+  for (const width of WIDTHS) {
+    test(`removing a coin in the screener names the basket at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/screener");
+      await page.getByRole("button", { name: /remove ETH/i }).first().click();
+      await page.getByRole("button", { name: /confirm/i }).first().click();
+      await expect(page.getByText(/Basket Majors no longer counts it/)).toBeVisible();
+      await noHorizontalScroll(page);
+      await shot(page, "removal-notice", width);
+    });
+  }
 });
