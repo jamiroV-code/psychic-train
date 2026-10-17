@@ -152,8 +152,7 @@ def test_winsorized_at_p95(isolated_cache, tmp_path, monkeypatch):
     coins = {f"C{i:02d}": 5e7 for i in range(20)}
     world(tmp_path, monkeypatch, coins, cats={"ai": list(coins)})
     for i, s in enumerate(coins):
-        gain(s, factor=1.0 + 0.01 * (i + 1))
-    gain("C19", factor=51.0)  # raw change 5000 percent
+        gain(s, factor=51.0 if i == 19 else 1.0 + 0.01 * (i + 1))  # C19: raw change 5000 percent
     c = cat(disc.build_discovery(30, today=TODAY), "ai")
     top = coin(disc.build_discovery(30, today=TODAY), "ai", "C19")
     assert top.raw_change == 5000.0
