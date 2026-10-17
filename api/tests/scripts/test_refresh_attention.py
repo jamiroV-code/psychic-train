@@ -139,7 +139,7 @@ def test_default_sources_and_runners_are_pinned():
     assert refresh_attention.DEFAULT_SOURCES == ("wikipedia", "coingecko", "universe")
     assert set(refresh_attention.RUNNERS) == {
         "universe", "wikipedia", "coingecko", "exchange_volume", "hyperliquid_volume",
-        "trends", "reddit", "xsearch"}
+        "trends", "reddit", "xsearch", "categories"}
     for key, fn in refresh_attention.RUNNERS.items():
         assert fn.__name__ == "_run_" + key
 
@@ -154,3 +154,43 @@ def test_default_run_hits_only_wikipedia_coingecko_universe(isolated_cache):
     _run(["--symbols", "BTC"], h)
     assert urls
     assert all("wikimedia" in u or "coingecko" in u for u in urls)
+
+
+def _cat_handler(status=200):
+    def h(r: httpx.Request):
+        if "coins/markets" in str(r.url) and r.url.params.get("category"):
+            return httpx.Response(status, json=[{"symbol": "fet"}])
+        return httpx.Response(404)
+    return h
+
+
+def _categories_file(cache_root):
+    return cache_root / "attention" / "categories.json"
+
+
+def test_categories_source_writes_dated_snapshot(isolated_cache):
+    from api.data.attention import categories_store
+    assert _run(["--sources", "categories"], _cat_handler()) == 0
+    snap = categories_store.read_latest()
+    assert snap["date"] == TODAY.isoformat()
+    assert snap["categories"] and all(c["symbols"] == ["FET"] for c in snap["categories"])
+    assert all(set(c) == {"id", "name", "symbols"} for c in snap["categories"])
+
+
+def test_categories_not_in_default_sources():
+    assert "categories" not in refresh_attention.DEFAULT_SOURCES
+
+
+def test_categories_dry_run_writes_nothing(isolated_cache):
+    def boom(r):
+        raise AssertionError("no network in dry run")
+    assert _run(["--dry-run", "--sources", "categories"], boom) == 0
+    assert not _categories_file(isolated_cache).exists()
+
+
+def test_categories_failure_keeps_old_file(isolated_cache):
+    from api.data.attention import categories_store
+    categories_store.write_snapshot("2026-09-01", [{"id": "x", "name": "X", "symbols": ["X"]}])
+    before = _categories_file(isolated_cache).read_bytes()
+    assert _run(["--sources", "categories"], _cat_handler(status=500)) == 1
+    assert _categories_file(isolated_cache).read_bytes() == before
