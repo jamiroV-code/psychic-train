@@ -117,8 +117,8 @@ the existing `ccxt_adapter._exchange()` singleton — no new provider identity, 
 only active, non-HIP-3 perps, and never raises. Two derived series: per-category volume share
 (denominator = all active non-HIP-3 perps + an explicit `unmapped` bucket, shares sum to 1) and a
 new-listing count from a day-over-day market-list diff (`no-baseline-yet` on day one, never a bare
-`0`). It is **display-only** — never wired into `trigger.compute_trigger` or
-`GET /api/narrative/categories`, feeds only `GET /api/narrative/history`.
+`0`). It is **display-only** and feeds only `GET /api/narrative/history`
+(`trigger.py`, `momentum.py` and `/api/narrative/categories|momentum` were deleted in P5).
 
 **Ticker keying:** meme perps use a `k`-prefixed base that ccxt upper-cases (`kPEPE` → `KPEPE`);
 the resolver checks `base == SYM` or `baseName == "k"+SYM`. Confirmed against the installed `ccxt`
@@ -443,3 +443,7 @@ A selector miss prints a page outline, missing columns a table outline (no text)
 - Windows and Python 3.12 are unverified until the owner runs the probes (AC-16/17/20: `scripts/probe_tier1.py`, `scripts/probe_tier2.py`).
 - REA failures map to exit 5.
 - `--refresh` does nothing in `--dry-run` and `--preview`.
+
+## Attention sources (P5)
+
+Wikipedia, CoinGecko, exchange volume (Binance, Hyperliquid), Google Trends, Reddit and X feed the attention store (`api/data/attention/`); X is low-trust and needs 90 own days. Ranking uses a top-100 market-cap reference (`universe`); Discovery reads `categories`. Daily refresh: `attention-refresh.yml`; probe states: `record_probe.py`.
