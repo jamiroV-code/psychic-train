@@ -380,12 +380,20 @@ def seed_narrative_v2(today: pd.Timestamp, n_narratives: int = NARRATIVE_V2_MAX)
     }
 
 
+def _load_seed_categories() -> list[dict]:
+    path = Path(__file__).resolve().parents[1] / "data" / "narrative_categories.json"
+    if not path.exists():
+        return []
+    with open(path) as f:
+        return json.load(f).get("seed_categories", [])
+
+
 def build_narrative_fixture(today: pd.Timestamp) -> dict:
     """Pure: the synthetic narrative rows for UTC `today` (tz-naive date) plus
     the facts the E2E asserts against. Writes nothing."""
-    from api.analytics.narrative import mapping, trigger
+    from api.analytics.narrative import mapping
 
-    seeds = {c["id"]: c for c in trigger.load_seed_categories()}
+    seeds = {c["id"]: c for c in _load_seed_categories()}
     kw = {cid: c["keywords"][0] for cid, c in seeds.items()}
     day = lambda k: (today - pd.Timedelta(days=k)).strftime("%Y-%m-%d")  # noqa: E731
 

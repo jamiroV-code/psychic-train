@@ -4,8 +4,8 @@ Standing Rule (`data-sources/all-data-sources.md`): normalize within-source
 only. pytrends' 0-100 relative-interest index, Reddit's raw mention count,
 and CoinGecko's trending-membership count are not on comparable scales —
 this function is only ever applied to one source's own series at a time;
-`trigger.py` combines the already-per-source-normalized results afterward,
-it never compares raw values across sources directly.
+callers combine the already-per-source-normalized results afterward,
+never comparing raw values across sources directly.
 """
 from __future__ import annotations
 
