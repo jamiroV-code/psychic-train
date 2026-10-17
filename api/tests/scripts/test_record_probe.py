@@ -19,7 +19,8 @@ def _fill(source, symbol, days, end=TODAY - timedelta(days=1)):
 
 @pytest.fixture
 def rec(tmp_path):
-    return tmp_path / "probe_records.json"
+    (tmp_path / "recs").mkdir()
+    return tmp_path / "recs" / "probe_records.json"
 
 
 def _run(rec, *args):
