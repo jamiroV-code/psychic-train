@@ -86,6 +86,8 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
     members = {c["id"]: {str(s).upper() for s in c.get("symbols", [])} for c in cats["categories"]}
     for cid in cfg.get("exclude_category_ids", []):
         excluded |= members.get(cid, set())
+    excluded -= {str(s).upper() for s in cfg.get("include_despite_category", [])} - {
+        str(s).upper() for s in cfg.get("exclude", [])}
     eligible = [s for s in symbols if s not in excluded
                 and isinstance(vols.get(s), (int, float)) and vols[s] >= floor]
 

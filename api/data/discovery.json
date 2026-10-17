@@ -1,7 +1,8 @@
 {
   "min_volume_24h_usd": 20000000,
-  "exclude": ["BNB", "LEO", "OKB", "CRO", "GT", "KCS", "BGB", "MX"],
+  "exclude": ["LEO", "OKB", "CRO", "GT", "KCS", "BGB", "MX"],
   "exclude_category_ids": ["exchange-based-tokens"],
+  "include_despite_category": ["BNB"],
   "min_independent_sources": 2,
   "winsor_percentile": 95,
   "recent_days": 7,

@@ -54,4 +54,4 @@ def test_load_reference_still_returns_list(isolated_cache, tmp_path):
 
 def test_shipped_config_has_exchange_tokens():
     cfg = json.loads(universe.UNIVERSE_PATH.read_text())
-    assert cfg["exchange_tokens"] == ["BNB", "LEO", "OKB", "CRO", "GT", "KCS", "BGB", "MX"]
+    assert cfg["exchange_tokens"] == ["LEO", "OKB", "CRO", "GT", "KCS", "BGB", "MX"]
