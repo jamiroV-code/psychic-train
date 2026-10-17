@@ -1142,6 +1142,181 @@
 }
 
 /* ---------------------------------------------------------------------------
+   T74 / S-E2: the My baskets tab. Shell tokens only; one muted ink for every
+   note, one quiet rule between table rows, no fills or badges. */
+.narrative-tabs__list {
+  display: flex;
+  gap: var(--sp-4);
+  border-bottom: 1px solid var(--sh-rule);
+  margin-bottom: var(--sp-4);
+}
+.app-main .narrative-tabs button.narrative-tabs__tab {
+  all: unset;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  padding: var(--sp-2) 0;
+  color: var(--ink-2);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  box-sizing: border-box;
+}
+.app-main .narrative-tabs button.narrative-tabs__tab[aria-selected="true"] {
+  color: var(--ink-1);
+  border-bottom-color: var(--accent);
+}
+.app-main .narrative-tabs button.narrative-tabs__tab:focus-visible,
+.app-main .basket-seg .basket-seg__btn:focus-visible,
+.app-main .basket-table button.basket-table__name:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.app-main .narrative-tabs button.narrative-tabs__tab:hover,
+.app-main .basket-table button.basket-table__name:hover {
+  background: none;
+  color: var(--ink-1);
+}
+.basket-chart {
+  margin-top: 0;
+}
+.basket-chart__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  margin-bottom: var(--sp-3);
+}
+.basket-chart__title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--ink-1);
+}
+.basket-seg {
+  display: inline-flex;
+  border: 1px solid var(--sh-rule);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.app-main .basket-seg .basket-seg__btn {
+  all: unset;
+  cursor: pointer;
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.app-main .basket-seg .basket-seg__btn + .basket-seg .basket-seg__btn {
+  border-left: 1px solid var(--sh-rule);
+}
+.app-main .basket-seg .basket-seg__btn[aria-pressed="true"] {
+  background: var(--sh-3);
+  color: var(--ink-1);
+}
+.basket-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0 0 var(--sp-3);
+}
+.basket-legend .spaghetti-chart__toggle {
+  margin-right: 0;
+  color: var(--an-ink-1);
+  font-size: var(--fs-sm);
+}
+.basket-note {
+  margin: var(--sp-2) 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.basket-note--error {
+  color: var(--sev-bad);
+}
+.basket-table {
+  width: 100%;
+  margin-top: var(--sp-5);
+  border-collapse: collapse;
+  font-size: var(--fs-md);
+}
+.basket-table th,
+.basket-table td {
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--sh-rule-soft);
+  text-align: left;
+}
+.basket-table th {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-3);
+  border-bottom-color: var(--sh-rule);
+}
+.basket-table .basket-table__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.app-main .basket-table button.basket-table__name {
+  all: unset;
+  appearance: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--ink-1);
+  font-weight: 600;
+}
+.app-main .basket-table button.basket-table__name[aria-expanded="true"] {
+  color: var(--accent);
+}
+.basket-table__coins > td {
+  background: var(--sh-1);
+}
+.basket-coins,
+.basket-coins__sources {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.basket-coins__coin {
+  padding: var(--sp-2) 0;
+}
+.basket-coins__coin + .basket-coins__coin {
+  border-top: 1px solid var(--sh-rule-soft);
+}
+.basket-coins__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+  margin: 0 0 var(--sp-1);
+}
+.basket-coins__symbol {
+  font-weight: 600;
+}
+.basket-coins__sources li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.basket-coins__sources li > span:first-child {
+  min-width: 8em;
+}
+.basket-coins__muted,
+.basket-coins__none {
+  color: var(--ink-3);
+}
+@media (max-width: 640px) {
+  .basket-table th,
+  .basket-table td {
+    padding: var(--sp-2) var(--sp-1);
+  }
+  .basket-table {
+    font-size: var(--fs-sm);
+  }
+}
+
+/* ---------------------------------------------------------------------------
    T43 / S11b: the freshness strip at the top of /screener. Shell ink on the
    shell surface; the height is reserved from the first render so the page
    below does not jump when the first answer arrives. Overdue is a border and

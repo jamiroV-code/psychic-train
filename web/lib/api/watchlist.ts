@@ -5,6 +5,16 @@ const TIMEOUT_MS = 10_000;
 
 export interface WatchlistResponse {
   coins: string[];
+  /** DELETE only: names of the baskets (groups) that held the coin. */
+  affected_baskets?: string[];
+}
+
+/** The line shown after a removal; names the baskets that stop counting the coin. */
+export function removalMessage(symbol: string, groupName: string | null, affected: readonly string[] | undefined): string {
+  const base = groupName ? `Removed ${symbol} from ${groupName}.` : `Removed ${symbol}.`;
+  if (!affected || affected.length === 0) return base;
+  const names = affected.join(", ");
+  return `${base} ${affected.length === 1 ? "Basket" : "Baskets"} ${names} no longer ${affected.length === 1 ? "counts" : "count"} it.`;
 }
 
 /** HTTP 409: the watchlist is at its cap; the message is the server's own text. */
