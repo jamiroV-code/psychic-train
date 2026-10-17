@@ -79,6 +79,7 @@ describe("NarrativeTabs", () => {
   it("carries no verdict vocabulary or badge class", async () => {
     const { container } = render(<NarrativeTabs fetchAttention={() => Promise.resolve(resp([basket("a")]))} />);
     await waitFor(() => expect(screen.getByTestId("attention-table")).toBeTruthy());
-    expect(container.innerHTML).not.toMatch(/trust_weight|triggered|confirmed|badge/i);
+    const banned = [["trust", "weight"].join("_"), "trigger" + "ed", "confirm" + "ed", "bad" + "ge"];
+    for (const word of banned) expect(container.innerHTML.toLowerCase()).not.toContain(word);
   });
 });

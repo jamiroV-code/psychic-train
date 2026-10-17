@@ -1,6 +1,6 @@
 import type { AttentionResponse, AttentionWindow } from "@/lib/types/attention";
 
-// Same getJson pattern as lib/api/narrative.ts.
+// Same getJson pattern as the other lib/api clients.
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 const DEFAULT_TIMEOUT_MS = 10_000;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { BasketCoins } from "@/components/narrative/BasketCoins";
 import { formatBreadth, formatScore, formatSigned, NO_DATA } from "@/lib/attention-lines";
 import type { BasketAttention } from "@/lib/types/attention";
 
@@ -13,7 +14,7 @@ export function BasketTable({ baskets }: BasketTableProps) {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
 
   if (baskets.length === 0) {
-    return <p data-testid="attention-table-empty">No baskets to rank.</p>;
+    return <p data-testid="attention-table-empty" className="basket-note">No baskets to rank.</p>;
   }
 
   const ranked = [...baskets].sort((a, b) => (b.score ?? -Infinity) - (a.score ?? -Infinity));
@@ -26,14 +27,14 @@ export function BasketTable({ baskets }: BasketTableProps) {
     });
 
   return (
-    <table data-testid="attention-table">
+    <table data-testid="attention-table" className="basket-table">
       <thead>
         <tr>
           <th scope="col">Basket</th>
-          <th scope="col">Score</th>
-          <th scope="col">Change</th>
-          <th scope="col">Breadth</th>
-          <th scope="col">Coverage</th>
+          <th scope="col" className="basket-table__num">Score</th>
+          <th scope="col" className="basket-table__num">Change</th>
+          <th scope="col" className="basket-table__num">Breadth</th>
+          <th scope="col" className="basket-table__num">Coverage</th>
         </tr>
       </thead>
       <tbody>
@@ -42,32 +43,21 @@ export function BasketTable({ baskets }: BasketTableProps) {
           const rows = [
             <tr key={b.id} data-testid={`attention-row-${b.id}`}>
               <td>
-                <button type="button" aria-expanded={expanded} onClick={() => toggle(b.id)}>
+                <button type="button" className="basket-table__name" aria-expanded={expanded} onClick={() => toggle(b.id)}>
                   {b.name}
                 </button>
               </td>
-              <td>{formatScore(b.score)}</td>
-              <td>{formatSigned(b.change)}</td>
-              <td>{formatBreadth(b.breadth)}</td>
-              <td>{b.coverage}</td>
+              <td className="basket-table__num">{formatScore(b.score)}</td>
+              <td className="basket-table__num">{formatSigned(b.change)}</td>
+              <td className="basket-table__num">{formatBreadth(b.breadth)}</td>
+              <td className="basket-table__num">{b.coverage}</td>
             </tr>,
           ];
           if (expanded) {
             rows.push(
-              <tr key={`${b.id}-coins`} data-testid={`attention-coins-${b.id}`}>
+              <tr key={`${b.id}-coins`} className="basket-table__coins" data-testid={`attention-coins-${b.id}`}>
                 <td colSpan={5}>
-                  {b.coins.length === 0 && <p>{NO_DATA}</p>}
-                  {b.coins.map((c) => (
-                    <div key={c.symbol}>
-                      <span>{c.symbol}</span> <span>{formatScore(c.score)}</span>{" "}
-                      <span>{`${c.sources_used} of ${c.sources_total} sources`}</span>
-                      <ul>
-                        {c.sources.map((s) => (
-                          <li key={s.source}>{`${s.source}: ${s.raw === null ? NO_DATA : s.raw}`}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
+                  <BasketCoins coins={b.coins} />
                 </td>
               </tr>,
             );

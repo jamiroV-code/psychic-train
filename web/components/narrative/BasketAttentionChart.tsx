@@ -46,14 +46,15 @@ export function BasketAttentionChart({ data, window, onWindowChange, error = nul
   const rankingOff = baskets.some((b) => b.reason === "reference-missing");
 
   return (
-    <section data-testid="attention-chart" aria-label="Basket attention" className="spaghetti-chart">
-      <header className="spaghetti-chart__span">
-        <span>Attention by basket</span>{" "}
-        <span role="group" aria-label="Window">
+    <section data-testid="attention-chart" aria-label="Basket attention" className="spaghetti-chart basket-chart">
+      <header className="basket-chart__head">
+        <h2 className="basket-chart__title">Attention by basket</h2>
+        <span className="basket-seg" role="group" aria-label="Window">
           {WINDOWS.map((w) => (
             <button
               key={w}
               type="button"
+              className="basket-seg__btn"
               aria-pressed={w === window}
               data-testid={`attention-window-${w}`}
               onClick={() => onWindowChange(w)}
@@ -64,17 +65,17 @@ export function BasketAttentionChart({ data, window, onWindowChange, error = nul
         </span>
       </header>
 
-      {error && <p data-testid="attention-error">{error}</p>}
-      {!data && !error && <p data-testid="attention-loading">Loading</p>}
+      {error && <p data-testid="attention-error" className="basket-note basket-note--error" role="alert">{error}</p>}
+      {!data && !error && <p data-testid="attention-loading" className="basket-note" role="status">Loading</p>}
       {data && baskets.length === 0 && (
-        <p data-testid="attention-empty">
+        <p data-testid="attention-empty" className="basket-note">
           No baskets yet. <Link href="/screener">Open the screener</Link>
         </p>
       )}
 
       {baskets.length > 0 && (
         <>
-          <div className="plot-legend" role="group" aria-label="Baskets shown">
+          <div className="plot-legend basket-legend" role="group" aria-label="Baskets shown">
             {baskets.map((b, i) => (
               <button
                 key={b.id}
@@ -92,16 +93,16 @@ export function BasketAttentionChart({ data, window, onWindowChange, error = nul
             ))}
           </div>
           <div ref={containerRef} data-testid="attention-chart-container" />
-          <p data-testid="attention-membership" className="plot-legend__note">
+          <p data-testid="attention-membership" className="basket-note">
             {`membership as of ${data?.membership_as_of}`}
           </p>
           {rankingOff && (
-            <p data-testid="attention-ranking-off" className="plot-legend__note">
+            <p data-testid="attention-ranking-off" className="basket-note">
               Ranking is off: the reference is missing.
             </p>
           )}
           {noData.length > 0 && !rankingOff && (
-            <p data-testid="attention-partial" className="plot-legend__note">
+            <p data-testid="attention-partial" className="basket-note">
               {`no data: ${noData.map((b) => b.name).join(", ")}`}
             </p>
           )}
