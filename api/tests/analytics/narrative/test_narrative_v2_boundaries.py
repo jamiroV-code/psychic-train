@@ -82,17 +82,6 @@ def test_ac8_every_view_covers_every_narrative(n, isolated_cache, tmp_path, monk
     assert sorted(e["category_id"] for e in hist["comparison"]["entries"]) == sorted(ids)
     assert sorted(e["category_id"] for e in hist["change_in_attention"]["entries"]) == sorted(ids)
 
-    mom = client.get("/api/narrative/momentum").json()
-    by_id = {e["category_id"]: e for e in mom["entries"]}
-    assert sorted(by_id) == sorted(ids)
-    for nid in v2["mature"]:
-        assert by_id[nid]["status"] == "ok" and by_id[nid]["momentum_basis"] == "pytrends-blended"
-        assert by_id[nid]["rank"] is not None
-    for nid in v2["thin"] + v2["no_data"]:
-        assert by_id[nid]["status"] == "insufficient" and by_id[nid]["rank"] is None and by_id[nid]["reason"]
-    ranks = sorted(e["rank"] for e in mom["entries"] if e["rank"] is not None)
-    assert ranks[0] == 1 and len(ranks) >= len(v2["mature"])
-
     ms = client.get("/api/narrative/mindshare").json()
     ms_ids = {e["category_id"]: e for e in ms["entries"]}
     assert sorted(ms_ids) == sorted(ids)

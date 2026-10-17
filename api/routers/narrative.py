@@ -1,14 +1,7 @@
-"""GET /api/narrative/categories (item 56).
+"""GET /api/narrative/history and /api/narrative/mindshare.
 
-Thin FastAPI wrapper — real orchestration lives in
-`api/analytics/narrative/trigger.py::compute_narrative_categories`, and the
-`TriggerResult` -> `NarrativeCategory` assembly (label/keywords/`seed`
-lookup) lives in that same module's `assemble_narrative_categories` (moved
-there at RFC-004 EXECUTE so `screener_board.py` can reuse it without a
-non-router module calling into this router — see that function's docstring)
-(Architecture Clarification: routers/ exposes HTTP only, no router calls a
-provider directly; mirrors `routers/regime.py`'s role for
-`leg_boundary.compute_current_leg_state`).
+Thin FastAPI wrappers over `api/analytics/narrative/{history,mindshare}.py`;
+routers/ exposes HTTP only and never calls a provider directly.
 """
 from __future__ import annotations
 
@@ -16,9 +9,8 @@ from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query
 
-from api.analytics.narrative import history, trigger
+from api.analytics.narrative import history
 from api.models.narrative import (
-    NarrativeCategory,
     NarrativeChange,
     NarrativeChangeEntry,
     NarrativeCoin,
@@ -33,16 +25,6 @@ from api.models.narrative import (
 )
 
 router = APIRouter(prefix="/api/narrative", tags=["narrative"])
-
-
-@router.get("/categories", response_model=list[NarrativeCategory])
-def get_categories() -> list[NarrativeCategory]:
-    return trigger.assemble_narrative_categories()
-
-
-# --- Narrative dashboard RFC-3 (ADR-4): separate function, separate models.
-# Shares nothing with `get_categories` above except, indirectly,
-# `trigger.load_seed_categories` (called inside `history`).
 
 
 @router.get("/history", response_model=NarrativeHistoryResponse)
@@ -90,7 +72,7 @@ def _history_response(result: history.NarrativeHistoryResult) -> NarrativeHistor
         ]
         composite = NarrativeComposite(
             status=c.composite_status, reason=c.composite_reason, sources=list(history.COMPOSITE_SLOTS),
-            min_sources=trigger.MIN_AVAILABLE_SOURCES, max_gap_days=history.NARRATIVE_MAX_GAP_DAYS,
+            min_sources=history.MIN_AVAILABLE_SOURCES, max_gap_days=history.NARRATIVE_MAX_GAP_DAYS,
             points=[
                 NarrativeCompositePoint(
                     date=r.date, value=r.value, coverage=r.coverage, sources_present=list(r.sources_present),
@@ -131,27 +113,8 @@ def pd_isna(v) -> bool:
     return v is None or (isinstance(v, float) and v != v)
 
 
-# --- Narrative-v2 RFC-4 (ADR-4): GET /api/narrative/momentum. Additive only;
-# shares nothing with `get_categories`/`get_history` above.
-from api.analytics.narrative import momentum  # noqa: E402
-from api.models.narrative import NarrativeMomentumEntry, NarrativeMomentumResponse  # noqa: E402
-
-
-@router.get("/momentum", response_model=NarrativeMomentumResponse)
-def get_momentum() -> NarrativeMomentumResponse:
-    """Cross-sectional momentum ranking of every enabled narrative. Read-only."""
-    result = momentum.build_momentum()
-    return NarrativeMomentumResponse(
-        generated_utc=result.generated_utc,
-        window_days=result.window_days,
-        acceleration_window_days=result.acceleration_window_days,
-        tolerance_days=result.tolerance_days,
-        entries=[NarrativeMomentumEntry(**vars(e)) for e in result.entries],
-    )
-
-
 # --- Narrative-v2 RFC-5 (ADR-5): GET /api/narrative/mindshare. Additive only;
-# shares nothing with the endpoints above.
+# shares nothing with /history.
 from api.analytics.narrative import mindshare  # noqa: E402
 from api.models.narrative import (  # noqa: E402
     NarrativeMindshareEntry,
