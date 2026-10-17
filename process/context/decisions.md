@@ -181,3 +181,11 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 - **Decision:** owner confirmed 2026-10-17: BNB kept, LEO OKB CRO GT KCS BGB MX excluded (editable in `attention_universe.json` and `discovery.json`; BNB is allowed past the exchange-based-tokens category via `include_despite_category`).
 - **Date:** 17-10-26. **Reason:** exchange tokens track their venue, not a narrative. **Alternatives:** keep them all in (rejected for all but BNB).
 - **Status:** active.
+
+### D-21 Planner session shell can break with E2BIG in long sessions
+- **Decision:** observed 2026-10-17. Every Bash call failed to start with `Could not start /bin/bash: ... exceed the OS exec argument limit (E2BIG)` (command line ~150-170 KB across 3 args), even for `git status`, for a whole long planner session (many compactions). The environment was ~8 KB, so the harness-built command line is the oversized part. Unconfirmed hypotheses: the shell wrapper/snapshot grows with session age, or the shell-init snapshot from the user profile.
+  - Effect: stop hook `stop-hook-git-check.sh` kept reporting "untracked files" (checkout not inspectable); they were already merged or on the remote.
+  - Workarounds: GitHub MCP tools for repo reads/writes; all edits and test runs in worker sessions from create_session (clean shells). Agent subagents inherit the broken shell and failed.
+  - Fix: start a fresh planner session (the repo holds all state). Mitigation: past ~6 hours, many compactions, or the first E2BIG, hand over instead of working around it.
+- **Date:** 17-10-26. **Reason:** owner asked to remember this; it will come back. **Alternatives:** keep working around it (rejected).
+- **Status:** active.
