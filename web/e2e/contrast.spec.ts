@@ -121,7 +121,7 @@ const ROUTES: { name: string; path: string; ready: string | null }[] = [
   { name: "screener", path: "/screener", ready: '[data-testid="spaghetti-legend"]' },
   { name: "equities", path: "/equities", ready: '[data-testid="spaghetti-legend"]' },
   { name: "regime", path: "/regime", ready: '[data-testid="regime-chart-net_liquidity"] canvas' },
-  { name: "narrative", path: "/narrative", ready: '[data-testid="narrative-chart-ai"] canvas' },
+  { name: "narrative", path: "/narrative", ready: '[data-testid="attention-chart"]' },
   { name: "pairs table", path: "/pairs", ready: '[data-testid="pairs-table"]' },
   { name: "pair detail", path: `/pairs/${pairA}/${pairB}`, ready: null },
   { name: "onchain", path: "/onchain", ready: '[data-testid="onchain-chart-ethereum"] canvas' },

@@ -1208,7 +1208,7 @@
   font-size: var(--fs-sm);
   color: var(--ink-2);
 }
-.app-main .basket-seg .basket-seg__btn + .basket-seg .basket-seg__btn {
+.app-main .basket-seg .basket-seg__btn + .basket-seg__btn {
   border-left: 1px solid var(--sh-rule);
 }
 .app-main .basket-seg .basket-seg__btn[aria-pressed="true"] {
@@ -1221,8 +1221,10 @@
   gap: var(--sp-1) var(--sp-3);
   margin: 0 0 var(--sp-3);
 }
-.basket-legend .spaghetti-chart__toggle {
+.app-main .basket-legend .spaghetti-chart__toggle {
   margin-right: 0;
+  border: 0;
+  padding: 0;
   color: var(--an-ink-1);
   font-size: var(--fs-sm);
 }
@@ -1293,14 +1295,19 @@
   font-weight: 600;
 }
 .basket-coins__sources li {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(5em, 8em) 5em 1fr;
   gap: var(--sp-1) var(--sp-3);
   font-size: var(--fs-sm);
   color: var(--ink-2);
 }
-.basket-coins__sources li > span:first-child {
-  min-width: 8em;
+.basket-coins__sources li > span:nth-child(2) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* The chart block already says there are no baskets; one line, not two. */
+.basket-table-empty {
+  display: none;
 }
 .basket-coins__muted,
 .basket-coins__none {

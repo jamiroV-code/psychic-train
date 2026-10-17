@@ -70,8 +70,8 @@ async function noHorizontalScroll(page: Page): Promise<void> {
   expect(fits).toBe(true);
 }
 
-async function shot(page: Page, name: string, width: number): Promise<void> {
-  if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/${name}-${width}.png`, fullPage: true });
+async function shot(page: Page, name: string, width: number, fullPage = true): Promise<void> {
+  if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/${name}-${width}.png`, fullPage });
 }
 
 test.describe("narrative: My baskets", () => {
@@ -141,6 +141,7 @@ test.describe("narrative: My baskets", () => {
       );
       await page.goto("/narrative");
       await expect(page.getByTestId("attention-partial")).toBeVisible();
+      await expect(page.locator("[data-testid='attention-chart-container'] canvas").first()).toBeVisible();
       await noHorizontalScroll(page);
       await shot(page, "partial", width);
 
@@ -156,6 +157,7 @@ test.describe("narrative: My baskets", () => {
       );
       await page.goto("/narrative");
       await expect(page.getByTestId("attention-ranking-off")).toBeVisible();
+      await expect(page.locator("[data-testid='attention-chart-container'] canvas").first()).toBeVisible();
       await noHorizontalScroll(page);
       await shot(page, "ranking-off", width);
 
@@ -189,9 +191,11 @@ test.describe("narrative: My baskets", () => {
       await page.goto("/screener");
       await page.getByRole("button", { name: /remove ETH/i }).first().click();
       await page.getByRole("button", { name: /confirm/i }).first().click();
-      await expect(page.getByText(/Basket Majors no longer counts it/)).toBeVisible();
+      const notice = page.getByText(/Basket Majors no longer counts it/);
+      await expect(notice).toBeVisible();
+      await notice.scrollIntoViewIfNeeded();
       await noHorizontalScroll(page);
-      await shot(page, "removal-notice", width);
+      await shot(page, "removal-notice", width, false);
     });
   }
 });
