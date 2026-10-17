@@ -173,7 +173,7 @@ jobs:
     needs: refresh
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       # The branch head, not the trigger sha: it includes what `refresh` just pushed.
       - uses: actions/checkout@v4

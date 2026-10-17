@@ -2,7 +2,8 @@
 
 Each extra source prints one `source: ...` line (refresh_attention.py). A provider block
 (HTTP 4xx/5xx, timeouts, rate limits) is `unavailable`: a yellow ::warning::, no probe record,
-no failure. A line that is not a provider failure (a code error) or a missing line is `failed`.
+no failure. A line whose reasons are mostly code errors (exception classes outside PROVIDER_CLASSES, no HTTP
+status), an `error` line that is not a provider failure, or a missing line is `failed`.
 """
 from __future__ import annotations
 
@@ -23,6 +24,44 @@ EXTRA_SOURCES = ("exchange_volume", "hyperliquid_volume", "trends", "reddit")
 PROVIDER_CLASSES = ("HTTPStatusError", "ConnectError", "ConnectTimeout", "ReadTimeout", "ReadError", "TimeoutException",
                     "RemoteProtocolError", "NetworkError", "RequestTimeout", "ExchangeNotAvailable",
                     "RateLimitExceeded", "DDoSProtection", "TooManyRequests")
+
+
+# Reasons that are data outcomes (nothing to fix in our code); never trip the breaker, never make a line red.
+DATA_REASONS = ("no keyword mapped", "bad date", "partial row dropped", "empty response", "presumed-dead",
+                "symbol not listed or no volume", "snapshot unavailable")
+DATA_CLASSES = ("BadSymbol",)
+_CODE_REASON = re.compile(r"(?:fetch|parse)-failed: (\w+)")
+
+
+def reason_kind(reason: str) -> str:
+    """'code' = an exception class outside PROVIDER_CLASSES with no HTTP status; 'data' = a plain data outcome;
+    'provider' = everything else (HTTP status, provider class, rate limit, token/search failure, skips)."""
+    r = reason.strip()
+    if r in DATA_REASONS:
+        return "data"
+    m = _CODE_REASON.fullmatch(r)
+    if m and m.group(1) in DATA_CLASSES:
+        return "data"
+    if m and m.group(1) not in PROVIDER_CLASSES:
+        return "code"
+    return "provider"
+
+
+def _reasons_failed(text: str) -> bool:
+    """True when the listed reasons are mostly code errors: code weight >= provider-or-data weight."""
+    code = other = 0
+    for part in text.split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        m = re.search(r"\s+x(\d+)$", part)
+        n = int(m.group(1)) if m else 1
+        part = part[:m.start()] if m else part
+        if reason_kind(part) == "code":
+            code += n
+        else:
+            other += n
+    return code > 0 and code >= other
 
 
 class Result(NamedTuple):
@@ -53,6 +92,8 @@ def classify(source: str, line: str | None) -> Result:
         return Result("failed", _clean(rest) or "unparseable result line")
     if int(m.group(1)) > 0 or int(m.group(3)) > 0:
         return Result("ok", _clean(rest))
+    if "reasons:" in rest and _reasons_failed(rest.split("reasons:", 1)[1]):
+        return Result("failed", _clean(rest))  # every/most reasons are code errors, not provider blocks
     return Result("unavailable", _clean(rest))  # every series was a provider/data outcome, nothing stored
 
 

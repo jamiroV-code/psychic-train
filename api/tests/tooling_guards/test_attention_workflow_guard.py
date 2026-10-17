@@ -118,7 +118,7 @@ def test_extra_job_runs_after_core_even_when_it_is_red() -> None:
     job = _doc()["jobs"]["refresh-extra"]
     assert job["needs"] == "refresh"
     assert job["if"] == "${{ !cancelled() }}"
-    assert job["timeout-minutes"] == 30
+    assert job["timeout-minutes"] == 40
     assert "needs" not in _doc()["jobs"]["refresh"]
     assert job["steps"][0]["with"]["ref"] == "${{ github.ref_name }}"  # latest main, with the core push
 

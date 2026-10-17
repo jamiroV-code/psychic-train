@@ -24,6 +24,7 @@ from api.data.attention.http_retry import describe_exc  # noqa: E402
 from api.data.attention import (  # noqa: E402
     coingecko_attention, exchange_volume, reddit, registry, store, trends, universe_store, categories_store, wikipedia,
     xsearch)
+from api.scripts.attention_extra import reason_kind  # noqa: E402
 
 WIKI_ARTICLES_PATH = Path(__file__).resolve().parents[1] / "data" / "wiki_articles.json"
 DEFAULT_SYMBOLS = ("BTC", "ETH")
@@ -31,6 +32,9 @@ DEFAULT_SYMBOLS = ("BTC", "ETH")
 DEFAULT_SOURCES = ("wikipedia", "coingecko", "universe")
 # Consecutive rate-limited series after which the rest of a source is skipped (no more requests).
 CIRCUIT_BREAKER_AFTER = 5
+# Soft wall-clock per opt-in source (workflow step timeout is 8 min): stop cleanly, keep what was fetched.
+SOURCE_TIME_BUDGET_S = 360
+_clock = time.monotonic
 OUTCOME_ORDER = ("ok", "no-article", "rate-limited", "http-error", "insufficient-history", "other")
 
 
@@ -78,6 +82,36 @@ def _collect(symbols, fetch):
     return out
 
 
+def _is_block(item) -> bool:
+    """A provider block (HTTP status, provider class, rate limit, token/search failure); not a code error or data outcome."""
+    return item.state == "unavailable" and reason_kind(item.reason or "") == "provider"
+
+
+def _collect_guarded(symbols, fetch, source: str, *, budget: float | None = None):
+    """Like _collect for the opt-in sources: after CIRCUIT_BREAKER_AFTER provider blocks in a row, or once the soft
+    time budget is spent, the rest are marked capped (rate-limited, never 0, never fetched); fetched series are kept."""
+    from api.data.attention.types import SourceSeries
+    budget = SOURCE_TIME_BUDGET_S if budget is None else budget
+    start, out, streak, why = _clock(), [], 0, None
+    for s in symbols:
+        if why is None and _clock() - start >= budget:
+            why = "time budget reached"
+        if why is None and streak >= CIRCUIT_BREAKER_AFTER:
+            why = "skipped after repeated provider failures"
+        if why:
+            out.append(SourceSeries(source, s.upper(), [], "capped", why))
+            continue
+        item = fetch(s)
+        if item is None:
+            continue
+        if _is_block(item):
+            streak += 1
+        elif item.state in ("ok", "insufficient-history"):
+            streak = 0
+        out.append(item)
+    return out
+
+
 def _symbols(arg: str | None) -> list[str]:
     if arg:
         return [s.strip().upper() for s in arg.split(",") if s.strip()]
@@ -112,12 +146,13 @@ def _run_exchange_volume(symbols, client, today, sleep):
 
 def _run_hyperliquid_volume(symbols, client, today, sleep):
     from api.data import ccxt_adapter
-    ex = ccxt_adapter._exchange()
-    return [exchange_volume.fetch_hyperliquid_series(s, exchange=ex, today=today) for s in symbols]
+    from api.data import hyperliquid_narrative_adapter as hl
+    snap = hl.fetch_daily_market_snapshot(ccxt_adapter._exchange())  # one fetch_tickers for every symbol
+    return [exchange_volume.fetch_hyperliquid_series(s, today=today, snapshot=lambda _ex: snap) for s in symbols]
 
 
 def _run_trends(symbols, client, today, sleep):
-    return [trends.fetch_series(s, s.lower(), today=today) for s in symbols]
+    return _collect_guarded(symbols, lambda s: trends.fetch_series(s, s.lower(), today=today), "trends")
 
 
 def _run_universe(symbols, client, today, sleep):
@@ -130,7 +165,9 @@ def _run_universe(symbols, client, today, sleep):
 
 
 def _run_reddit(symbols, client, today, sleep):
-    return [reddit.fetch_series(s, client=client, today=today) for s in symbols]
+    session = reddit.Session()  # one OAuth token per run
+    return _collect_guarded(
+        symbols, lambda s: reddit.fetch_series(s, client=client, today=today, session=session), "reddit")
 
 
 def _run_xsearch(symbols, client, today, sleep):
