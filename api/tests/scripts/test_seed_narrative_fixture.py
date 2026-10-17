@@ -7,15 +7,21 @@ and pin the hand-derived facts the Playwright spec asserts against.
 from __future__ import annotations
 
 import ast
+import json
 from datetime import date
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
-from api.analytics.narrative import history, trigger
+from api.analytics.narrative import history
 from api.data import cache
 from api.scripts.seed_e2e_cache import build_narrative_fixture, seed_narrative
+
+def _seed_categories() -> list[dict]:
+    path = Path(history.__file__).resolve().parents[2] / "data" / "narrative_categories.json"
+    return json.loads(path.read_text(encoding="utf-8"))["seed_categories"]
+
 
 TODAY = pd.Timestamp("2026-09-24")
 
@@ -29,7 +35,7 @@ def _fixture_narratives_path(tmp_path, monkeypatch):
 
 def test_fixture_is_pure_and_keys_pytrends_by_primary_keyword():
     fixture = build_narrative_fixture(TODAY)
-    seeds = {c["id"]: c["keywords"][0] for c in trigger.load_seed_categories()}
+    seeds = {c["id"]: c["keywords"][0] for c in _seed_categories()}
     assert fixture["facts"]["keywords"] == seeds
     pytrends_keys = {key for source, key, *_ in fixture["points"] if source == "pytrends"}
     assert pytrends_keys <= set(seeds.values())

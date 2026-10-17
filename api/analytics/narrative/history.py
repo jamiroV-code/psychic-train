@@ -2,14 +2,14 @@
 change-in-attention behind `GET /api/narrative/history` (ADR-4, ADR-5).
 
 A pure read of the narrative archive. Nothing here calls a provider adapter
-or `trigger.compute_narrative_categories` (those fetch live data and write
-the cache). Narratives (ids, labels, keywords, coins) come from
-`api/data/narratives.json` via `narrative_config` (narrative-v2 RFC-2); only
-trigger constants are shared with `/categories`, read not changed.
+any narrative orchestration (those fetch live data and write the cache).
+Narratives (ids, labels, keywords, coins) come from `api/data/narratives.json`
+via `narrative_config` (narrative-v2 RFC-2). The composite constants below are
+owned here.
 
 Series keying (RFC-2 report item 6): pytrends and reddit are stored under the
-seed's primary keyword (`keywords[0]`, what trigger.py passes to the
-adapters); coingecko, coingecko-narrative and exchange rows are stored under
+seed's primary keyword (`keywords[0]`, what the nightly snapshot passes
+to the adapters); coingecko, coingecko-narrative and exchange rows are stored under
 the category id.
 
 Numbers are never silently wrong:
@@ -17,7 +17,7 @@ Numbers are never silently wrong:
   and nightly vs backfilled pytrends are normalised separately (different
   Google windows, not the same scale);
 - null raw values are carried as null, never 0-filled;
-- a composite point exists only when at least `trigger.MIN_AVAILABLE_SOURCES`
+- a composite point exists only when at least `MIN_AVAILABLE_SOURCES`
   composite sources have a value that date — otherwise the date is absent;
 - a category missing from a ranking gets `rank=None` + a reason, never last place.
 """
@@ -28,13 +28,16 @@ from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 
-from api.analytics.narrative import narrative_config, scoring, trigger
+from api.analytics.narrative import narrative_config, scoring
 from api.data import cache
 from api.data.hyperliquid_narrative_adapter import HYPERLIQUID_REDISTRIBUTABLE
 from api.data.pytrends_adapter import PYTRENDS_DEAD_THRESHOLD_DAYS
 
 # One missed nightly run (2-day step) is tolerated; two are flagged.
 NARRATIVE_MAX_GAP_DAYS = 2
+MIN_AVAILABLE_SOURCES = 2  # composite sources needed on a date
+BASE_TRUST_WEIGHT = 0.6
+REDUCED_SOURCE_TRUST_CAP = 0.4  # no pytrends slot: never full confidence
 CHANGE_WINDOW_DAYS = 7  # ADR-5
 CHANGE_BASELINE_TOLERANCE_DAYS = 2  # baseline may sit 7..9 days back
 FRESH_MAX_AGE_DAYS = 1  # nightly archive: yesterday's point still counts as fresh
@@ -280,7 +283,7 @@ def build_composite(series: list[SeriesData]) -> pd.DataFrame:
     rows = []
     for d in sorted(by_date):
         slots = by_date[d]
-        if len(slots) < trigger.MIN_AVAILABLE_SOURCES:
+        if len(slots) < MIN_AVAILABLE_SOURCES:
             continue
         values = [v for v, _ in slots.values()]
         pytrends_present = "pytrends" in slots
@@ -289,7 +292,7 @@ def build_composite(series: list[SeriesData]) -> pd.DataFrame:
             "value": float(sum(values) / len(values)),
             "coverage": len(slots) / len(COMPOSITE_SLOTS),
             "sources_present": [k for k in COMPOSITE_SLOTS if k in slots],
-            "trust_weight": trigger.BASE_TRUST_WEIGHT if pytrends_present else trigger.REDUCED_SOURCE_TRUST_CAP,
+            "trust_weight": BASE_TRUST_WEIGHT if pytrends_present else REDUCED_SOURCE_TRUST_CAP,
             "mixed_scale": bool(pytrends_present and slots["pytrends"][1]),
         })
     cols = ["date", "value", "coverage", "sources_present", "trust_weight", "mixed_scale"]
@@ -414,7 +417,7 @@ def build_narrative_history(
         shown = _in_range(composite, start, end)
         grid.update(shown["date"])
         status, reason = ("ok", None) if not shown.empty else (
-            "unavailable", f"insufficient-coverage: fewer than {trigger.MIN_AVAILABLE_SOURCES} sources on every date")
+            "unavailable", f"insufficient-coverage: fewer than {MIN_AVAILABLE_SOURCES} sources on every date")
         histories.append(CategoryHistory(
             cid, seed.get("label", cid), list(seed.get("keywords", [])), _coins_for(cid),
             series, shown, status, reason,

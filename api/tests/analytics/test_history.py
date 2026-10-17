@@ -12,7 +12,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from api.analytics.narrative import history, trigger
+from api.analytics.narrative import history
 from api.data import cache
 
 TODAY = date(2026, 9, 24)
@@ -77,7 +77,7 @@ class TestComposite:
         last = cat.composite.iloc[-1]
         assert last["coverage"] == pytest.approx(3 / 4)
         assert last["sources_present"] == ["pytrends", "reddit", "exchange_volume_share"]
-        assert last["trust_weight"] == trigger.BASE_TRUST_WEIGHT
+        assert last["trust_weight"] == history.BASE_TRUST_WEIGHT
 
     def test_one_source_missing_still_computes_over_remaining(self, isolated_cache):
         for i in range(3):
@@ -103,7 +103,7 @@ class TestComposite:
             cache.write_narrative_point("reddit", AI_KW, _d(off), 5.0 + off)
             _exchange("ai", _d(off), 0.2 + off / 10)
         cat = _cat(history.build_narrative_history(["ai"], today=TODAY), "ai")
-        assert cat.composite.iloc[0]["trust_weight"] == trigger.REDUCED_SOURCE_TRUST_CAP
+        assert cat.composite.iloc[0]["trust_weight"] == history.REDUCED_SOURCE_TRUST_CAP
 
     def test_within_source_boundary_scale_invariant(self, isolated_cache, tmp_path, monkeypatch):
         """AC-10: multiplying one source's raw values by 1000 cannot change the
@@ -282,11 +282,10 @@ class TestBoundaries:
         assert coins["ETH"] is False and coins["HYPE"] is False
         assert coins["ARB"] is True
 
-    def test_trigger_and_screener_do_not_import_history(self):
+    def test_screener_does_not_import_history(self):
         root = Path(history.__file__).resolve().parents[1]
-        for rel in ("narrative/trigger.py", "screener_board.py"):
-            text = (root / rel).read_text(encoding="utf-8")
-            assert "narrative.history" not in text and "import history" not in text
+        text = (root / "screener_board.py").read_text(encoding="utf-8")
+        assert "narrative.history" not in text and "import history" not in text
 
 
 class TestSufficiencyGating:
