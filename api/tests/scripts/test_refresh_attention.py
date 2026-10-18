@@ -100,7 +100,7 @@ def test_rerun_first_wins(isolated_cache):
 
 def test_default_sources_exclude_opt_in_volume_and_trends(isolated_cache):
     # default run must stay wikipedia + coingecko: no ccxt or pytrends (live) call
-    assert refresh_attention.DEFAULT_SOURCES == ("wikipedia", "coingecko", "universe")
+    assert refresh_attention.DEFAULT_SOURCES == ("wikipedia", "coingecko", "universe", "signals")
     assert {"exchange_volume", "hyperliquid_volume", "trends"} <= set(refresh_attention.RUNNERS)
 
 
@@ -136,10 +136,10 @@ def test_universe_failure_keeps_old_file_and_counts_error(isolated_cache, capsys
 
 
 def test_default_sources_and_runners_are_pinned():
-    assert refresh_attention.DEFAULT_SOURCES == ("wikipedia", "coingecko", "universe")
+    assert refresh_attention.DEFAULT_SOURCES == ("wikipedia", "coingecko", "universe", "signals")
     assert set(refresh_attention.RUNNERS) == {
         "universe", "wikipedia", "coingecko", "exchange_volume", "hyperliquid_volume",
-        "trends", "reddit", "xsearch", "categories"}
+        "trends", "reddit", "xsearch", "categories", "signals"}
     for key, fn in refresh_attention.RUNNERS.items():
         assert fn.__name__ == "_run_" + key
 
@@ -204,3 +204,50 @@ def test_reason_summary_counts_distinct_reasons_and_skips_ok():
               SourceSeries("x", "C", [], "unavailable", "empty response"),
               SourceSeries("x", "D", [], "ok", "")]
     assert reason_summary(series) == "fetch-failed: E HTTP 451 x2; empty response x1"
+
+
+def _signals_world(tmp_path, monkeypatch):
+    from api.tests.analytics.attention.test_discovery import gain, world
+    world(tmp_path, monkeypatch, {"A": 5e7}, cats={"ai": ["A"]})
+    gain("A")
+
+
+def test_signals_option_writes_snapshot(isolated_cache, tmp_path, monkeypatch, capsys):
+    from api.analytics.attention import signal_snapshots
+    _signals_world(tmp_path, monkeypatch)
+    assert _run(["--sources", "signals"], lambda r: (_ for _ in ()).throw(AssertionError("no network"))) == 0
+    assert len(list((isolated_cache / "attention" / "signals").glob("*.json"))) == 3
+    assert signal_snapshots.read_snapshots(TODAY - timedelta(days=1), TODAY - timedelta(days=1), 7)
+    assert "signals: 3 written" in capsys.readouterr().out
+
+
+def test_signals_is_last_default_source():
+    assert refresh_attention.DEFAULT_SOURCES == ("wikipedia", "coingecko", "universe", "signals")
+
+
+def test_signals_dry_run_writes_nothing(isolated_cache, tmp_path, monkeypatch):
+    _signals_world(tmp_path, monkeypatch)
+    assert _run(["--dry-run", "--sources", "signals"], _handler()) == 0
+    assert not (isolated_cache / "attention" / "signals").exists()
+
+
+def test_signals_failure_never_changes_exit_code(isolated_cache, monkeypatch, capsys):
+    from api.analytics.attention import signal_snapshots
+
+    def boom(today):
+        raise RuntimeError("snapshot broke")
+    monkeypatch.setattr(signal_snapshots, "take_snapshot", boom)
+    assert _run(["--symbols", "BTC,ETH"], _handler()) == 0           # default run: same as without signals
+    assert _run(["--sources", "signals"], _handler()) == 0
+    cap = capsys.readouterr()
+    assert "signals: error" in cap.err
+    # all other sources failing still exits 1: signals is not counted as a success
+    assert _run(["--symbols", "BTC"], lambda r: (_ for _ in ()).throw(httpx.ConnectError("x"))) == 1
+
+
+def test_signals_line_is_ignored_by_the_verify_step_parse(isolated_cache, tmp_path, monkeypatch, capsys):
+    # the workflow verify step only looks at lines starting with a source it lists (wikipedia, coingecko, universe, categories)
+    _signals_world(tmp_path, monkeypatch)
+    _run(["--sources", "signals"], _handler())
+    lines = [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("signals:")]
+    assert len(lines) == 1 and not any(lines[0].startswith(s + ":") for s in ("wikipedia", "coingecko", "universe", "categories"))
