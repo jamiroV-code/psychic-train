@@ -170,7 +170,7 @@ describe("DiscoveryTab", () => {
   it("says how many of the top coins are shown and why the others are not", async () => {
     render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp())} />);
     const line = await screen.findByTestId("discovery-coverage");
-    expect(line).toHaveTextContent("50 of 90 top coins shown: the others are excluded (30 below the 20M volume floor, 7 exchange tokens and other exclusions, 2 in none of the categories, 1 no source data yet)");
+    expect(line).toHaveTextContent("50 of 90 top coins shown: the others are excluded (30 below the volume floor, 7 exchange tokens and other exclusions, 2 in none of the categories, 1 no source data yet)");
   });
 
   it("shows only the totals when nothing is excluded", async () => {

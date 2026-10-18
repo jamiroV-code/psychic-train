@@ -107,6 +107,11 @@ def test_helper_stores(live):
     assert (row(res, "categories").state, row(res, "categories").coins_with_data) == ("ok", 1)
 
 
+def test_helper_snapshot_without_date_is_not_a_500():
+    r = src._helper("universe", {"coins": ["A"]}, "coins", "top-100 snapshot")
+    assert (r.state, r.newest, r.coins_with_data) == ("ok", None, 1)
+
+
 def test_helper_stores_missing(isolated_cache, tmp_path):
     src.clear_cache()
     res = src.build_sources(TODAY)

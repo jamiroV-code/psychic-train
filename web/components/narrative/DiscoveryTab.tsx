@@ -35,7 +35,7 @@ function liveWeight(data: DiscoveryResponse): number {
 }
 
 const EXCLUDED_TEXT: [keyof DiscoveryResponse["excluded"], string][] = [
-  ["below_volume_floor", "below the 20M volume floor"],
+  ["below_volume_floor", "below the volume floor"],
   ["exclusion_list", "exchange tokens and other exclusions"],
   ["no_category", "in none of the categories"],
   ["no_source_data", "no source data yet"],

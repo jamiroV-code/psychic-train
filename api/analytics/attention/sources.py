@@ -85,7 +85,7 @@ def _helper(sid: str, snap: dict | None, key: str, what: str) -> DiscoverySource
     rows = (snap or {}).get(key, [])
     ok = bool(snap) and bool(rows)
     return DiscoverySourceRow(id=sid, label=LABELS[sid], kind="helper", weight=None,
-                              state="ok" if ok else "unavailable", newest=str(snap["date"]) if snap else None,
+                              state="ok" if ok else "unavailable", newest=str(snap["date"]) if snap and snap.get("date") else None,
                               history_days=0, coins_with_data=len(rows), eligible_size=0,
                               note="" if ok else f"{what} not downloaded yet")
 
