@@ -206,21 +206,47 @@ test.describe("narrative: My baskets", () => {
 
 function discoveryBody(over: object = {}) {
   const coin = (symbol: string, change: number, trigger: boolean) => ({
-    symbol, change, raw_change: change + 3, covered_weight: 35, rising_weight: trigger ? 25 : 0, trigger, sources: [],
+    symbol, change, raw_change: change + 3, covered_weight: 35, rising_weight: trigger ? 25 : 0, trigger,
+    sources: [
+      { source: "wikipedia", change: change + 20, as_of: "2026-10-15" },
+      { source: "exchange_activity", change: -12, as_of: "2026-10-15" },
+      { source: "trends", change: 4, as_of: "2026-10-14" },
+    ],
   });
   const cat = (id: string, name: string, score: number) => ({
-    id, name, score, median: score - 1.5, coins_used: 2, gaining_count: 1,
+    id, name, score, median: score - 1.5, coins_used: 2, gaining_count: 1, ranked: true,
     coins: [coin("AAA", score + 4, true), coin("BBB", score - 4, false)],
   });
-  const idle = (id: string, name: string) => ({ id, name, score: null, median: null, coins_used: 0, gaining_count: 0, coins: [] });
+  const idle = (id: string, name: string) => ({ id, name, score: null, median: null, coins_used: 0, gaining_count: 0, ranked: false, coins: [] });
+  const tiny = { ...cat("oracle", "Oracles", 50), coins_used: 1, ranked: false, coins: [coin("LINK", 54, true)] };
   return {
     window: 30, as_of: "2026-10-16", categories_as_of: "2026-10-10", status: "ok", reason: "",
-    universe_size: 90, eligible_size: 60,
+    universe_size: 90, eligible_size: 60, shown_size: 50,
+    excluded: { exclusion_list: 7, below_volume_floor: 30, no_category: 2, no_source_data: 1 },
+    min_category_coins: 3, rising_threshold_pct: 10, min_covered_weight: 30,
     categories: [
-      cat("ai", "Artificial Intelligence", 31.2), cat("defi", "Decentralized Finance", 14.8),
+      cat("ai", "Artificial Intelligence", 31.2), cat("defi", "Decentralized Finance", 14.8), tiny,
       idle("gaming", "Gaming"), idle("rwa", "Real World Assets"),
     ],
     ...over,
+  };
+}
+
+function sourcesBody() {
+  const row = (id: string, label: string, weight: number | null, state: string, over: object = {}) => ({
+    id, label, kind: "weighted", weight, state, newest: state === "ok" ? "2026-10-17" : null,
+    history_days: state === "ok" ? 99 : 0, coins_with_data: state === "ok" ? 38 : 0, eligible_size: 50, note: "", ...over,
+  });
+  return {
+    as_of: "2026-10-17", universe_size: 90, eligible_size: 50, live_sources: 2, total_sources: 7, live_weight: 35,
+    newest: "2026-10-17",
+    sources: [
+      row("wikipedia", "Wikipedia pageviews", 25, "ok"),
+      row("trends", "Google Trends", 25, "not-probed", { note: "not probed yet" }),
+      row("xsearch", "X search", 10, "off", { note: "X search is off (X_LIVE not set): dry run only" }),
+      row("exchange_activity", "Exchange activity", 10, "ok", { note: "12 of 38 coins use the CoinGecko volume fallback" }),
+      row("hyperliquid", "Hyperliquid volume", 20, "insufficient-history", { kind: "exchange-member", history_days: 1, note: "insufficient history 1/90" }),
+    ],
   };
 }
 
@@ -236,10 +262,22 @@ test.describe("narrative: Discovery", () => {
       };
 
       await page.route("**/api/narrative/discovery*", (route) => route.fulfill({ json: discoveryBody() }));
+      await page.route("**/api/narrative/sources", (route) => route.fulfill({ json: sourcesBody() }));
       await open();
       await expect(page.getByTestId("discovery-row-ai")).toBeVisible();
+      await expect(page.getByTestId("sources-summary")).toContainText("Sources: 2 of 7 live, 35 of 100 weight, newest data 2026-10-17");
+      await expect(page.getByTestId("discovery-coverage")).toContainText("50 of 90 top coins shown");
+      await expect(page.getByTestId("discovery-unranked")).toContainText("Too few coins to rank (need 3)");
+      await expect(page.getByTestId("discovery-row-oracle")).toHaveCount(0);
+      await page.getByTestId("sources-summary").click();
+      await expect(page.getByTestId("sources-row-trends")).toContainText("not probed");
+      await noHorizontalScroll(page);
+      await shot(page, "discovery-sources-open", width);
+      await page.getByTestId("sources-summary").click();
       await page.getByTestId("discovery-row-ai").getByRole("button").click();
       await expect(page.getByTestId("discovery-coins-ai")).toContainText("AAA");
+      await expect(page.getByTestId("discovery-coins-ai")).toContainText("Wiki +");
+      await expect(page.getByTestId("discovery-coins-ai")).toContainText("35 / 100");
       await expect(page.getByTestId("discovery-empty-categories")).toContainText("2 categories without data");
       await expect(page.getByTestId("discovery-as-of")).toContainText("as of 2026-10-16");
       await noHorizontalScroll(page);
@@ -296,6 +334,7 @@ test.describe("narrative: Discovery history chart", () => {
       await page.setViewportSize({ width, height: 1000 });
       await page.route("**/baskets/attention*", (route) => route.fulfill({ json: seededBody() }));
       await page.route("**/api/narrative/discovery?*", (route) => route.fulfill({ json: discoveryBody() }));
+      await page.route("**/api/narrative/sources", (route) => route.fulfill({ json: sourcesBody() }));
       const history: string[] = [];
       await page.route("**/api/narrative/discovery/history*", (route) => {
         const url = new URL(route.request().url());

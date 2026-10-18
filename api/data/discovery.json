@@ -22,6 +22,7 @@
   "trigger_pct": 60,
   "min_covered_weight": 30,
   "min_history_days": 30,
+  "min_category_coins": 3,
   "winsor_percentile": 95,
   "recent_days": 7,
   "max_source_lag_days": 3,

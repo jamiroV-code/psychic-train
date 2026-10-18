@@ -17,7 +17,7 @@ from statistics import mean, median
 
 from api.analytics.attention.universe import load_universe
 from api.data.attention import categories_store, registry, universe_store
-from api.models.discovery import DiscoveryCategory, DiscoveryCoin, DiscoveryResponse, DiscoverySource
+from api.models.discovery import DiscoveryCategory, DiscoveryCoin, DiscoveryExcluded, DiscoveryResponse, DiscoverySource
 
 CONFIG_PATH = Path(__file__).resolve().parents[2] / "data" / "discovery.json"
 
@@ -53,6 +53,9 @@ def validate_config(cfg: dict) -> dict:
         if isinstance(v, bool) or not isinstance(v, (int, float)) or (lo is not None and v < lo) or (
                 hi is not None and v > hi):
             raise ValueError(f"discovery config: {key} is missing or out of range")
+    v = cfg.get("min_category_coins")
+    if isinstance(v, bool) or not isinstance(v, int) or v < 1:
+        raise ValueError("discovery config: min_category_coins is missing or not an integer >= 1")
     return cfg
 
 
@@ -143,29 +146,62 @@ def _coin(symbol, cfg, data, end, recent, window, max_lag) -> tuple[float, float
     return sum(w * s.change for w, s in found) / covered, covered, rising, trigger, [s for _, s in found]
 
 
-def _empty(window, as_of, cats_asof, status, reason, usize=0, esize=0, cats=None) -> DiscoveryResponse:
+def _empty(window, as_of, cats_asof, status, reason, usize=0, esize=0, cats=None, **extra) -> DiscoveryResponse:
     return DiscoveryResponse(window=window, as_of=as_of, categories_as_of=cats_asof, status=status,
-                             reason=reason, universe_size=usize, eligible_size=esize, categories=cats or [])
+                             reason=reason, universe_size=usize, eligible_size=esize, categories=cats or [], **extra)
 
 
 def series_names(cfg: dict) -> set[str]:
     return {s for s in cfg["source_weights"] if s != SLOT} | set(EXCHANGE_SERIES.values()) | {FALLBACK_SERIES}
 
 
-def eligibility(cfg: dict, symbols: list[str], cats: dict) -> tuple[list[str], dict[str, set[str]]]:
-    """(eligible symbols in universe order, category id -> member symbols)."""
-    vols = {str(r.get("symbol", "")).upper(): r.get("volume_24h")
+def _volumes() -> dict:
+    return {str(r.get("symbol", "")).upper(): r.get("volume_24h")
             for r in (universe_store.read_latest() or {}).get("coins", []) if isinstance(r, dict)}
-    floor = float(cfg["min_volume_24h_usd"])
+
+
+def _excluded_symbols(cfg: dict, members: dict[str, set[str]]) -> set[str]:
     excluded = {str(s).upper() for s in cfg.get("exclude", [])}
-    members = {c["id"]: {str(s).upper() for s in c.get("symbols", [])} for c in cats["categories"]}
     for cid in cfg.get("exclude_category_ids", []):
         excluded |= members.get(cid, set())
-    excluded -= {str(s).upper() for s in cfg.get("include_despite_category", [])} - {
-        str(s).upper() for s in cfg.get("exclude", [])}
+    return excluded - ({str(s).upper() for s in cfg.get("include_despite_category", [])} - {
+        str(s).upper() for s in cfg.get("exclude", [])})
+
+
+def _members(cats: dict) -> dict[str, set[str]]:
+    return {c["id"]: {str(s).upper() for s in c.get("symbols", [])} for c in cats["categories"]}
+
+
+def eligibility(cfg: dict, symbols: list[str], cats: dict) -> tuple[list[str], dict[str, set[str]]]:
+    """(eligible symbols in universe order, category id -> member symbols)."""
+    vols = _volumes()
+    floor = float(cfg["min_volume_24h_usd"])
+    members = _members(cats)
+    excluded = _excluded_symbols(cfg, members)
     eligible = [s for s in symbols if s not in excluded
                 and isinstance(vols.get(s), (int, float)) and vols[s] >= floor]
     return eligible, members
+
+
+def _excluded_counts(cfg: dict, symbols: list[str], eligible: list[str], members: dict[str, set[str]],
+                     shown: set[str]) -> DiscoveryExcluded:
+    """Why each top-N coin is not shown; the first matching reason wins, so the counts are disjoint."""
+    excluded = _excluded_symbols(cfg, members)
+    listed = set().union(*(members.get(c["id"], set()) for c in cfg["categories"]))
+    ok = set(eligible)
+    out = {"exclusion_list": 0, "below_volume_floor": 0, "no_category": 0, "no_source_data": 0}
+    for s in symbols:
+        if s in shown:
+            continue
+        if s in excluded:
+            out["exclusion_list"] += 1
+        elif s not in ok:
+            out["below_volume_floor"] += 1
+        elif s not in listed:
+            out["no_category"] += 1
+        else:
+            out["no_source_data"] += 1
+    return DiscoveryExcluded(**out)
 
 
 def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
@@ -191,6 +227,7 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
     if not any(coins.values()):
         return _empty(window, as_of, cats_asof, "no-data", "no-attention-data", len(symbols), len(eligible))
 
+    min_coins = int(cfg["min_category_coins"])
     out = []
     for spec in cfg["categories"]:
         used = [(s, coins[s]) for s in eligible if s in members.get(spec["id"], set()) and coins[s]]
@@ -203,6 +240,10 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
         out.append(DiscoveryCategory(
             id=spec["id"], name=spec["name"], score=mean(changes) if changes else None,
             median=median(changes) if changes else None, coins_used=len(rows),
-            gaining_count=sum(r.trigger for r in rows), coins=rows))
-    out.sort(key=lambda c: (c.score is None, -(c.score or 0.0)))
-    return _empty(window, as_of, cats_asof, "ok", "", len(symbols), len(eligible), out)
+            gaining_count=sum(r.trigger for r in rows), ranked=len(rows) >= min_coins, coins=rows))
+    out.sort(key=lambda c: (not c.ranked, c.score is None, -(c.score or 0.0)))
+    shown = {r.symbol for c in out for r in c.coins}
+    return _empty(window, as_of, cats_asof, "ok", "", len(symbols), len(eligible), out, shown_size=len(shown),
+                  excluded=_excluded_counts(cfg, symbols, eligible, members, shown), min_category_coins=min_coins,
+                  rising_threshold_pct=float(cfg["rising_threshold_pct"]),
+                  min_covered_weight=float(cfg["min_covered_weight"]))

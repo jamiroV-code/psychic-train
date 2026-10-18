@@ -3,6 +3,7 @@ import type {
   DiscoveryCoinHistory,
   DiscoveryPrice,
   DiscoveryResponse,
+  DiscoverySourcesResponse,
   DiscoveryWindow,
 } from "@/lib/types/discovery";
 
@@ -50,4 +51,9 @@ export function fetchCategoryHistory(id: string, window: DiscoveryWindow = 30): 
 /** GET /api/narrative/discovery/price: daily closes from the local cache. */
 export function fetchDiscoveryPrice(symbol: string, window: DiscoveryWindow = 30): Promise<DiscoveryPrice> {
   return getJson<DiscoveryPrice>(`/api/narrative/discovery/price?symbol=${encodeURIComponent(symbol)}&window=${window}`);
+}
+
+/** GET /api/narrative/sources: what each Discovery input has stored. */
+export function fetchDiscoverySources(): Promise<DiscoverySourcesResponse> {
+  return getJson<DiscoverySourcesResponse>("/api/narrative/sources");
 }

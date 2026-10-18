@@ -30,7 +30,17 @@ export interface DiscoveryCategory {
   coins_used: number;
   /** Coins with trigger true. */
   gaining_count: number;
+  /** False when fewer than `min_category_coins` coins were used: the score is kept but not ranked. */
+  ranked: boolean;
   coins: DiscoveryCoin[];
+}
+
+/** Why top-N coins are not shown. Disjoint; with `shown_size` they add up to `universe_size`. */
+export interface DiscoveryExcluded {
+  exclusion_list: number;
+  below_volume_floor: number;
+  no_category: number;
+  no_source_data: number;
 }
 
 /** GET /api/narrative/discovery */
@@ -42,7 +52,42 @@ export interface DiscoveryResponse {
   reason: DiscoveryReason;
   universe_size: number;
   eligible_size: number;
+  /** Distinct coins listed in any category. */
+  shown_size: number;
+  excluded: DiscoveryExcluded;
+  min_category_coins: number;
+  /** A source change at or above this percent counts as rising. */
+  rising_threshold_pct: number;
+  /** Covered weight needed before a coin can trigger. */
+  min_covered_weight: number;
   categories: DiscoveryCategory[];
+}
+
+export type DiscoverySourceState = "ok" | "insufficient-history" | "unavailable" | "not-probed" | "off";
+
+/** One line of GET /api/narrative/sources */
+export interface DiscoverySourceRow {
+  id: string;
+  label: string;
+  kind: "weighted" | "exchange-member" | "fallback" | "helper";
+  weight: number | null;
+  state: DiscoverySourceState;
+  newest: string | null;
+  history_days: number;
+  coins_with_data: number;
+  eligible_size: number;
+  note: string;
+}
+
+export interface DiscoverySourcesResponse {
+  as_of: string;
+  universe_size: number;
+  eligible_size: number;
+  live_sources: number;
+  total_sources: number;
+  live_weight: number;
+  newest: string | null;
+  sources: DiscoverySourceRow[];
 }
 
 /** GET /api/narrative/discovery/history: shared by the coin and category payloads. */
