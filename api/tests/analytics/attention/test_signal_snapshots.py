@@ -200,3 +200,10 @@ def test_snapshot_reader_sends_unmapped_old_ids_to_retired(isolated_cache):
     (r,) = snaps.read_snapshots(date(2026, 10, 16), date(2026, 10, 16), 7)
     assert (r["narrative_ids"], r["retired_ids"]) == (["infrastructure", "memecoins"], ["gaming", "zzz"])
     assert dest.read_bytes() == before
+
+
+def test_snapshot_reader_skips_a_record_that_is_not_an_object(isolated_cache):
+    d = isolated_cache / "attention" / "signals"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "2026-10-16_w7.json").write_text("[1, 2]")
+    assert snaps.read_snapshots(date(2026, 10, 16), date(2026, 10, 16)) == []

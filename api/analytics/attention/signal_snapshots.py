@@ -158,7 +158,7 @@ def read_snapshots(start: date, end: date, window: int | None = None) -> list[di
             continue
         try:
             rows.extend(_with_narrative_ids(json.loads(p.read_text()), id_map))
-        except (OSError, ValueError, KeyError, TypeError):
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
             continue
     return rows
 
