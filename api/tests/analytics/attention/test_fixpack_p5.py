@@ -17,15 +17,16 @@ def test_shipped_files_use_registry_source_names():
     weights = json.loads(score_mod.WEIGHTS_PATH.read_text())
     cfg = json.loads(disc.CONFIG_PATH.read_text())
     assert set(weights) <= set(registry.FETCHERS)
-    assert set(cfg["source_groups"]) <= set(weights)
+    assert set(cfg["source_weights"]) <= set(disc.WEIGHTED_SOURCES)
     assert set(registry.FETCHERS) == set(weights) | set(registry.EXCLUDED_SOURCES)
     assert not set(weights) & set(registry.EXCLUDED_SOURCES)
     assert weights["xsearch"] < weights["wikipedia"]
 
 
-def test_volume_sources_stay_one_independence_group():
-    cfg = json.loads(disc.CONFIG_PATH.read_text())
-    assert cfg["source_groups"]["coingecko"] == cfg["source_groups"]["exchange_volume"]
+def test_exchange_members_and_fallback_use_registry_names_where_a_fetcher_exists():
+    # coinbase_volume / kraken_volume have no fetcher yet (W7); they read as not-probed and drop out.
+    assert {disc.EXCHANGE_SERIES["binance"], disc.EXCHANGE_SERIES["hyperliquid"], disc.FALLBACK_SERIES} <= set(
+        registry.FETCHERS)
 
 
 def test_breadth_uses_the_selected_window(isolated_cache, tmp_path, monkeypatch):

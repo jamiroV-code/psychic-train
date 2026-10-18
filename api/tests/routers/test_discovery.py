@@ -38,8 +38,9 @@ def test_ok_payload_shape(wired):
                          "universe_size", "eligible_size", "categories"}
     c = body["categories"][0]
     assert set(c) == {"id", "name", "score", "median", "coins_used", "gaining_count", "coins"}
-    assert set(c["coins"][0]) == {"symbol", "change", "raw_change", "gaining", "sources_used",
-                                  "sources_gaining"}
+    assert set(c["coins"][0]) == {"symbol", "change", "raw_change", "covered_weight", "rising_weight",
+                                  "trigger", "sources"}
+    assert set(c["coins"][0]["sources"][0]) == {"source", "change", "as_of", "members"}
     assert [x["symbol"] for x in c["coins"]] == ["B", "A"]
 
 

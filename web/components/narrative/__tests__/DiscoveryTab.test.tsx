@@ -16,8 +16,8 @@ const category = (id: string, over: Partial<DiscoveryCategory> = {}): DiscoveryC
   coins_used: 3,
   gaining_count: 2,
   coins: [
-    { symbol: "AAA", change: 20, raw_change: 31, gaining: true, sources_used: 3, sources_gaining: 2 },
-    { symbol: "BBB", change: 5, raw_change: 5, gaining: false, sources_used: 2, sources_gaining: 1 },
+    { symbol: "AAA", change: 20, raw_change: 31, covered_weight: 35, rising_weight: 25, trigger: true, sources: [] },
+    { symbol: "BBB", change: 5, raw_change: 5, covered_weight: 25, rising_weight: 0, trigger: false, sources: [] },
   ],
   ...over,
 });
@@ -108,6 +108,22 @@ describe("DiscoveryTab", () => {
     expect(screen.getByTestId("discovery-as-of")).toHaveTextContent("as of 2026-10-16");
     expect(screen.getByRole("columnheader", { name: "Score (%)" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Median (%)" })).toBeInTheDocument();
+  });
+
+  it("shows coverage, a trigger marker and the live weight", async () => {
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp())} />);
+    await screen.findByTestId("discovery-table");
+    expect(screen.getByTestId("discovery-live-weight")).toHaveTextContent("Live weight today: 35 of 100");
+    fireEvent.click(within(screen.getByTestId("discovery-row-high")).getByRole("button"));
+    const coins = screen.getByTestId("discovery-coins-high");
+    expect(within(coins).getByText("covers 35% of weight, 71% rising")).toBeInTheDocument();
+    expect(within(coins).getByText("covers 25% of weight, 0% rising")).toBeInTheDocument();
+    expect(within(coins).getAllByText("Trigger")).toHaveLength(1);
+  });
+
+  it("shows live weight 0 when no coin has data", async () => {
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ categories: [] }))} />);
+    expect(await screen.findByTestId("discovery-live-weight")).toHaveTextContent("Live weight today: 0 of 100");
   });
 
   it("folds categories with zero coins used into one collapsed line", async () => {

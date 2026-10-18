@@ -205,8 +205,8 @@ test.describe("narrative: My baskets", () => {
 });
 
 function discoveryBody(over: object = {}) {
-  const coin = (symbol: string, change: number, gaining: boolean) => ({
-    symbol, change, raw_change: change + 3, gaining, sources_used: 3, sources_gaining: gaining ? 2 : 1,
+  const coin = (symbol: string, change: number, trigger: boolean) => ({
+    symbol, change, raw_change: change + 3, covered_weight: 35, rising_weight: trigger ? 25 : 0, trigger, sources: [],
   });
   const cat = (id: string, name: string, score: number) => ({
     id, name, score, median: score - 1.5, coins_used: 2, gaining_count: 1,
