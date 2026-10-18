@@ -1,13 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DiscoverySourcesPanel } from "@/components/narrative/DiscoverySourcesPanel";
 import { DiscoveryTable } from "@/components/narrative/DiscoveryTable";
 import { fetchDiscovery as fetchDiscoveryDefault } from "@/lib/api/discovery";
 import { DiscoveryHistoryChart, type DiscoveryHistoryChartProps } from "@/components/narrative/DiscoveryHistoryChart";
-import type { DiscoveryReason, DiscoveryResponse, DiscoverySelection, DiscoveryWindow } from "@/lib/types/discovery";
+import type {
+  DiscoveryReason,
+  DiscoveryResponse,
+  DiscoverySelection,
+  DiscoverySourcesResponse,
+  DiscoveryWindow,
+} from "@/lib/types/discovery";
 
 export interface DiscoveryTabProps {
   fetchDiscovery?: (window: DiscoveryWindow) => Promise<DiscoveryResponse>;
+  fetchSources?: () => Promise<DiscoverySourcesResponse>;
   /** History chart fetchers, injected by tests. */
   history?: Pick<DiscoveryHistoryChartProps, "fetchCoinHistory" | "fetchCategoryHistory" | "fetchPrice">;
 }
@@ -26,8 +34,24 @@ function liveWeight(data: DiscoveryResponse): number {
   return all.length === 0 ? 0 : Math.round(Math.max(...all));
 }
 
+const EXCLUDED_TEXT: [keyof DiscoveryResponse["excluded"], string][] = [
+  ["below_volume_floor", "below the volume floor"],
+  ["exclusion_list", "exchange tokens and other exclusions"],
+  ["no_category", "in none of the categories"],
+  ["no_source_data", "no source data yet"],
+];
+
+/** "N of 100 top coins shown", with the biggest reasons the rest are not. */
+function coverageLine(data: DiscoveryResponse): string {
+  const reasons = EXCLUDED_TEXT.filter(([k]) => data.excluded[k] > 0)
+    .sort((a, b) => data.excluded[b[0]] - data.excluded[a[0]])
+    .map(([k, label]) => `${data.excluded[k]} ${label}`);
+  const rest = data.universe_size - data.shown_size;
+  return `${data.shown_size} of ${data.universe_size} top coins shown${rest > 0 && reasons.length > 0 ? `: the others are excluded (${reasons.join(", ")})` : ""}`;
+}
+
 /** Discovery tab: 7d/30d/90d selector, then a ranked category table or one plain state line. */
-export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault, history }: DiscoveryTabProps) {
+export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault, fetchSources, history }: DiscoveryTabProps) {
   const [window, setWindow] = useState<DiscoveryWindow>(30);
   const [attempt, setAttempt] = useState(0);
   const [data, setData] = useState<DiscoveryResponse | null>(null);
@@ -75,7 +99,16 @@ export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault, history }
       </p>
     );
   } else {
-    body = <DiscoveryTable categories={data.categories} selection={selection} onSelect={setSelection} />;
+    body = (
+      <DiscoveryTable
+        categories={data.categories}
+        selection={selection}
+        onSelect={setSelection}
+        minCategoryCoins={data.min_category_coins}
+        risingThresholdPct={data.rising_threshold_pct}
+        minCoveredWeight={data.min_covered_weight}
+      />
+    );
   }
 
   return (
@@ -97,6 +130,10 @@ export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault, history }
           ))}
         </span>
       </header>
+      <DiscoverySourcesPanel fetchSources={fetchSources} />
+      {data && data.status === "ok" && (
+        <p data-testid="discovery-coverage" className="basket-note">{coverageLine(data)}</p>
+      )}
       {data && data.status === "ok" && (
         <p data-testid="discovery-as-of" className="basket-note">{`as of ${data.as_of.slice(0, 10)}`}</p>
       )}
@@ -104,7 +141,12 @@ export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault, history }
         <p data-testid="discovery-live-weight" className="basket-note">{`Live weight today: ${liveWeight(data)} of 100`}</p>
       )}
       {body}
-      {selection && data && data.status === "ok" && (
+      {selection && selection.kind === "category" && data?.categories.some((c) => c.id === selection.id && !c.ranked) && (
+        <p data-testid="discovery-history-unranked" className="basket-note">
+          No history chart: this category has too few coins to rank.
+        </p>
+      )}
+      {selection && data && data.status === "ok" && !(selection.kind === "category" && data.categories.some((c) => c.id === selection.id && !c.ranked)) && (
         <DiscoveryHistoryChart
           selection={selection}
           window={window}

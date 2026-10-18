@@ -35,9 +35,11 @@ def test_ok_payload_shape(wired):
     body = r.json()
     assert body["window"] == 30 and body["status"] == "ok" and body["reason"] == ""
     assert set(body) == {"window", "as_of", "categories_as_of", "status", "reason",
-                         "universe_size", "eligible_size", "categories"}
+                         "universe_size", "eligible_size", "shown_size", "excluded", "min_category_coins",
+                         "rising_threshold_pct", "min_covered_weight", "categories"}
+    assert set(body["excluded"]) == {"exclusion_list", "below_volume_floor", "no_category", "no_source_data"}
     c = body["categories"][0]
-    assert set(c) == {"id", "name", "score", "median", "coins_used", "gaining_count", "coins"}
+    assert set(c) == {"id", "name", "score", "median", "coins_used", "gaining_count", "ranked", "coins"}
     assert set(c["coins"][0]) == {"symbol", "change", "raw_change", "covered_weight", "rising_weight",
                                   "trigger", "sources"}
     assert set(c["coins"][0]["sources"][0]) == {"source", "change", "as_of", "members"}
@@ -63,3 +65,14 @@ def test_categories_missing_over_http(isolated_cache, tmp_path, monkeypatch):
     world(tmp_path, monkeypatch, {"A": 5e7}, cats=None)
     body = TestClient(app).get(URL).json()
     assert (body["status"], body["reason"], body["categories"]) == ("no-data", "categories-missing", [])
+
+
+def test_sources_route_shape_and_no_network(wired):
+    r = wired.get("/api/narrative/sources")
+    assert r.status_code == 200
+    b = r.json()
+    assert set(b) == {"as_of", "universe_size", "eligible_size", "live_sources", "total_sources", "live_weight",
+                      "newest", "sources"}
+    assert set(b["sources"][0]) == {"id", "label", "kind", "weight", "state", "newest", "history_days",
+                                    "coins_with_data", "eligible_size", "note"}
+    assert b["total_sources"] == 7 and b["eligible_size"] == 2

@@ -32,7 +32,16 @@ class DiscoveryCategory(BaseModel):
     median: float | None
     coins_used: int
     gaining_count: int     # coins with trigger true
+    ranked: bool = True    # False when fewer than `min_category_coins` coins were used: score kept, not ranked
     coins: list[DiscoveryCoin]
+
+
+class DiscoveryExcluded(BaseModel):
+    """Why top-N coins are not shown. Disjoint, first matching reason wins; they add up to universe - shown."""
+    exclusion_list: int = 0       # on the `exclude` list or in an `exclude_category_ids` category
+    below_volume_floor: int = 0   # 24h volume under the floor, or unknown
+    no_category: int = 0          # eligible but in none of the configured categories
+    no_source_data: int = 0       # in a configured category but no source has usable data
 
 
 class DiscoveryResponse(BaseModel):
@@ -43,7 +52,40 @@ class DiscoveryResponse(BaseModel):
     reason: str
     universe_size: int
     eligible_size: int
+    shown_size: int = 0                  # distinct coins listed in any category
+    excluded: DiscoveryExcluded = DiscoveryExcluded()
+    min_category_coins: int = 3
+    rising_threshold_pct: float = 10.0
+    min_covered_weight: float = 30.0
     categories: list[DiscoveryCategory]
+
+
+SourceState = Literal["ok", "insufficient-history", "unavailable", "not-probed", "off"]
+
+
+class DiscoverySourceRow(BaseModel):
+    """One line of GET /api/narrative/sources."""
+    id: str
+    label: str
+    kind: Literal["weighted", "exchange-member", "fallback", "helper"]
+    weight: float | None   # points of 100; sub-weight for an exchange member; None when it carries none
+    state: SourceState
+    newest: str | None     # newest stored date (ISO)
+    history_days: int      # max stored days over coins
+    coins_with_data: int   # eligible coins whose series is usable (>= the history gate)
+    eligible_size: int
+    note: str = ""
+
+
+class DiscoverySourcesResponse(BaseModel):
+    as_of: str
+    universe_size: int
+    eligible_size: int
+    live_sources: int      # weighted sources in state ok
+    total_sources: int     # weighted sources configured
+    live_weight: float     # points of 100 whose source is ok
+    newest: str | None     # newest stored date over live sources
+    sources: list[DiscoverySourceRow]
 
 
 class DiscoveryHistoryDay(BaseModel):

@@ -30,7 +30,8 @@ def cfg(tmp_path, **over):
     base = {"min_volume_24h_usd": 20_000_000, "exclude": ["BNB"], "exclude_category_ids": ["cex"],
             "source_weights": WEIGHTS, "exchange_sub_weights": SUB, "rising_threshold_pct": 10,
             "trigger_pct": 60, "min_covered_weight": 30, "min_history_days": 90,
-            "winsor_percentile": 95, "recent_days": 7, "max_source_lag_days": 3, "categories": CATS}
+            "winsor_percentile": 95, "recent_days": 7, "max_source_lag_days": 3, "categories": CATS,
+            "min_category_coins": 1}
     base.update(over)
     p = tmp_path / "discovery.json"
     p.write_text(json.dumps(base))
@@ -240,7 +241,7 @@ def test_shipped_config_lag_limit_is_sane():
 
 def good(**over):
     return {"source_weights": dict(WEIGHTS), "exchange_sub_weights": dict(SUB), "rising_threshold_pct": 10,
-            "trigger_pct": 60, "min_covered_weight": 30, "min_history_days": 90, **over}
+            "trigger_pct": 60, "min_covered_weight": 30, "min_history_days": 90, "min_category_coins": 1, **over}
 
 
 def test_shipped_config_is_valid_and_sums_to_100():
@@ -270,6 +271,12 @@ def _sw(**kw):
     {"exchange_sub_weights": {**SUB, "okx": 0}},
     {"min_history_days": 0},
     {"trigger_pct": 101},
+    {"min_category_coins": 0},
+    {"min_category_coins": -2},
+    {"min_category_coins": 2.5},
+    {"min_category_coins": True},
+    {"min_category_coins": "3"},
+    {"min_category_coins": None},
 ])
 def test_invalid_config_is_rejected(tmp_path, over):
     p = tmp_path / "d.json"
@@ -462,3 +469,83 @@ def test_coingecko_not_used_when_any_exchange_has_data(isolated_cache, tmp_path,
     c = coin(disc.build_discovery(30, today=TODAY), "ai", "A")
     assert sorted(s.source for s in c.sources) == ["exchange_activity", "wikipedia"]
     assert c.covered_weight == 35 and c.raw_change == pytest.approx((25 * 100 + 10 * 0) / 35)
+
+
+# ---- T106: ranked-category rule and exclusion counts ---------------------------------------
+
+def test_shipped_min_category_coins_is_three():
+    assert disc.load_config()["min_category_coins"] == 3
+
+
+def test_missing_min_category_coins_is_rejected(tmp_path):
+    p = tmp_path / "d.json"
+    c = {**cfg_base(), **good()}
+    del c["min_category_coins"]
+    p.write_text(json.dumps(c))
+    with pytest.raises(ValueError, match="min_category_coins"):
+        disc.load_config(p)
+
+
+def test_category_below_minimum_is_unranked_but_keeps_its_score(isolated_cache, tmp_path, monkeypatch):
+    coins = {"A": 5e7, "B": 5e7, "C": 5e7}
+    world(tmp_path, monkeypatch, coins, cats={"ai": ["A", "B", "C"], "defi": ["A"]}, min_category_coins=3)
+    for s in coins:
+        gain(s, factor=1.2)
+    res = disc.build_discovery(30, today=TODAY)
+    assert res.min_category_coins == 3
+    assert (cat(res, "ai").ranked, cat(res, "ai").coins_used) == (True, 3)
+    d = cat(res, "defi")
+    assert (d.ranked, d.coins_used) == (False, 1) and d.score is not None
+
+
+def test_minimum_is_inclusive(isolated_cache, tmp_path, monkeypatch):
+    world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7}, cats={"ai": ["A", "B"]}, min_category_coins=2)
+    gain("A"), gain("B")
+    assert cat(disc.build_discovery(30, today=TODAY), "ai").ranked is True
+
+
+def test_coins_without_usable_data_do_not_count_toward_the_minimum(isolated_cache, tmp_path, monkeypatch):
+    world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7, "C": 5e7}, cats={"ai": ["A", "B", "C"]}, min_category_coins=3)
+    gain("A"), gain("B")
+    c = cat(disc.build_discovery(30, today=TODAY), "ai")
+    assert (c.coins_used, c.ranked) == (2, False)
+
+
+def test_unranked_sit_after_ranked_whatever_their_score(isolated_cache, tmp_path, monkeypatch):
+    coins = {"A": 5e7, "B": 5e7, "C": 5e7, "D": 5e7}
+    world(tmp_path, monkeypatch, coins, cats={"ai": ["A", "B", "C"], "defi": ["D"]}, min_category_coins=3)
+    for s in "ABC":
+        gain(s, factor=1.1)
+    gain("D", factor=5.0)
+    res = disc.build_discovery(30, today=TODAY)
+    assert [(c.id, c.ranked) for c in res.categories if c.id in ("ai", "defi")] == [("ai", True), ("defi", False)]
+    assert cat(res, "defi").score > cat(res, "ai").score
+
+
+def test_ranked_order_is_unchanged_by_the_rule(isolated_cache, tmp_path, monkeypatch):
+    coins = {s: 5e7 for s in "ABCDEF"}
+    world(tmp_path, monkeypatch, coins, cats={"ai": ["A", "B", "C"], "defi": ["D", "E", "F"]}, min_category_coins=3)
+    for s in "ABC":
+        gain(s, factor=1.2)
+    for s in "DEF":
+        gain(s, factor=3.0)
+    assert [c.id for c in disc.build_discovery(30, today=TODAY).categories if c.ranked] == ["defi", "ai"]
+
+
+def test_exclusion_counts_are_disjoint_and_add_up(isolated_cache, tmp_path, monkeypatch):
+    coins = {"BNB": 5e7, "T": 5e7, "LOW": 1e6, "NOCAT": 5e7, "NODATA": 5e7, "A": 5e7, "UNK": None}
+    world(tmp_path, monkeypatch, coins, cats={"ai": ["BNB", "T", "LOW", "NODATA", "A", "UNK"], "cex": ["T"]},
+          exclude=["BNB"])
+    gain("A")
+    res = disc.build_discovery(30, today=TODAY)
+    assert res.universe_size == 7 and res.shown_size == 1
+    assert res.excluded.model_dump() == {"exclusion_list": 2, "below_volume_floor": 2, "no_category": 1,
+                                         "no_source_data": 1}
+    assert res.shown_size + sum(res.excluded.model_dump().values()) == res.universe_size
+
+
+def test_response_carries_thresholds(isolated_cache, tmp_path, monkeypatch):
+    world(tmp_path, monkeypatch, {"A": 5e7}, cats={"ai": ["A"]})
+    gain("A")
+    res = disc.build_discovery(30, today=TODAY)
+    assert (res.rising_threshold_pct, res.min_covered_weight) == (10, 30)

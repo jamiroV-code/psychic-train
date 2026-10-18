@@ -6,11 +6,11 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Query
 
-from api.analytics.attention import discovery_history
+from api.analytics.attention import discovery_history, sources
 from api.analytics.attention.discovery import build_discovery
 from api.data import cache
 from api.models.discovery import (DiscoveryCategoryHistory, DiscoveryCoinHistory, DiscoveryPrice,
-                                  DiscoveryPriceDay, DiscoveryResponse)
+                                  DiscoveryPriceDay, DiscoveryResponse, DiscoverySourcesResponse)
 
 WINDOWS = (7, 30, 90)
 
@@ -26,6 +26,12 @@ def get_discovery(window: int = Query(default=30)) -> DiscoveryResponse:
     if window not in WINDOWS:
         raise HTTPException(status_code=422, detail="window must be 7, 30 or 90")
     return build_discovery(window, today=utc_today())
+
+
+@router.get("/sources", response_model=DiscoverySourcesResponse)
+def get_sources() -> DiscoverySourcesResponse:
+    """What each Discovery input has stored today. Files and config only; no provider is called."""
+    return sources.build_sources(utc_today())
 
 
 @router.get("/discovery/history", response_model=DiscoveryCoinHistory | DiscoveryCategoryHistory)
