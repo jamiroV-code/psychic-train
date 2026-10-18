@@ -30,23 +30,27 @@ Discovery today says a coin is "gaining" when 2 independent source groups rise (
 
 ## Locked decisions (owner, 18-10-26)
 
-1. **Weights.** Each source has a weight in percent in `api/data/discovery.json` (key `source_weights`), owner-editable. Starting (revised by the planner, 18-10-26): wikipedia 25, trends 25, reddit 15, xsearch 10, coingecko 10, github_dev 8, defillama 7 (sum 100). github_dev and defillama are new, unbuilt, inert until each has data. Binance `exchange_volume` and `hyperliquid_volume` carry no weight. `min_independent_sources` and `source_groups` are removed.
+1. **Weights.** Each source has a weight in percent in `api/data/discovery.json` (key `source_weights`), owner-editable. Starting (revised twice by the planner, 18-10-26): wikipedia 25, trends 25, reddit 15, xsearch 10, exchange_activity 10, github_dev 8, defillama 7 (sum 100). github_dev, defillama and exchange_activity are new, unbuilt (exchange_activity only partly), and inert until each has data. `coingecko` has no weight of its own: it stays for universe/eligibility and as the fallback volume source (decision 9). `min_independent_sources` and `source_groups` are removed.
 2. **Rescale.** A source with no usable value for a coin drops out; remaining weights are rescaled to that coin's available weight. Missing is never 0.
 3. **Rising.** Source change over the window >= `rising_threshold_pct` (10).
 4. **Trigger.** `rising_weight / covered_weight >= trigger_pct` (60) AND `covered_weight >= min_covered_weight` (30), where covered_weight is in points of the 100.
 5. **Score.** Coin score = weighted mean of per-source changes over covered weight. Winsorise per category as today.
 6. **Rows** expose `covered_weight`, `rising_weight`, `trigger`, and per source: `change`, `as_of`.
 7. **T96** `max_source_lag_days` stays.
-8. **History chart** for backtesting (below). **Detail columns** are a later web slice.
+9. **exchange_activity (composite).** ONE source, ONE weight (10), one source group, built from four exchanges: Binance, Coinbase, Kraken, Hyperliquid. Config `exchange_sub_weights` in `discovery.json`, owner-editable, sum 100. Starting sub-weights are a PROPOSAL, all UNVERIFIED: Binance 40, Coinbase 25, Kraken 15, Hyperliquid 20. Per coin: compute each exchange's own volume change over the window, then the sub-weighted average over exchanges that have data, sub-weights RESCALED over those present. Raw volumes are never summed across exchanges (an outage such as Binance HTTP 451 would fake a jump). Missing is never 0. Participation is meant to be derived from a published share of spot volume or CoinGecko exchange volume for the four; no figure was read in the repo, so none is claimed.
+10. **CoinGecko fallback.** If exchange_activity has no usable exchange for a coin, CoinGecko volume (the existing `coingecko` series) feeds that slot at exchange_activity's weight (10). The row's source label is `coingecko`, not `exchange_activity`, so the owner sees which fed it. This keeps Discovery working while Binance is blocked and the other exchanges' reachability from US runners is UNVERIFIED. Binance stays, inside the composite (Q7 closed).
+11. **History chart** for backtesting (below). **Detail columns** are a later web slice.
 
 ## Honest coverage today
 
-Live and weighted sources are Wikipedia (25) and CoinGecko (10) only: max covered_weight is **35**. The 30 floor therefore needs Wikipedia present. A coin without a Wikipedia article reaches at most 10 and **can never trigger** until reddit, trends, xsearch, github_dev or defillama have data. With both live, a trigger needs rising_weight/35 >= 60%, i.e. Wikipedia alone (25/35 = 71%) is enough; CoinGecko alone is not. The trigger is effectively "Wikipedia is rising" until more sources land. The UI must say so (AC-W12). reddit, trends, xsearch are in the registry but whether their stores hold enough history to reach `ok` is UNVERIFIED (no parquet reader in this session; stores for them are not in the local cache listing).
+Live today: Wikipedia (25) and volume (10, fed by the CoinGecko fallback until exchange_activity has data, since `exchange_volume` is blocked from US runners per the planner): max covered_weight is **35**. The 30 floor therefore needs Wikipedia present. A coin without a Wikipedia article reaches at most 10 (volume only) and **can never trigger** until reddit, trends, xsearch, github_dev or defillama have data. With both live, a trigger needs rising_weight/35 >= 60%, i.e. Wikipedia alone (25/35 = 71%) is enough; volume alone is not. The trigger is effectively "Wikipedia is rising" until more sources land. The UI must say so (AC-W12). reddit, trends, xsearch are in the registry but whether their stores hold enough history to reach `ok` is UNVERIFIED (no parquet reader in this session; stores for them are not in the local cache listing).
 
 ## Acceptance criteria
 
-- **AC-W1** `discovery.json` loads `source_weights`; load fails with a clear error if any weight < 0, the sum is outside 100 +/- 0.01, or a key is not a known source (known = `FETCHERS` keys minus `EXCLUDED_SOURCES`, plus `github_dev` and `defillama`).
-- **AC-W2** `exchange_volume` and `hyperliquid_volume` are rejected as weighted keys; their data is unused by scoring.
+- **AC-W1** `discovery.json` loads `source_weights`; load fails with a clear error if any weight < 0, the sum is outside 100 +/- 0.01, or a key is not a known source (known = `exchange_activity`, `wikipedia`, `trends`, `reddit`, `xsearch`, `github_dev`, `defillama`; `coingecko` is not a weighted key).
+- **AC-W2** `exchange_volume` and `hyperliquid_volume` are rejected as top-level weighted keys; they enter scoring only as exchange_activity members. `exchange_sub_weights` validates like AC-W1 (>= 0, sum 100 +/- 0.01, known exchanges only).
+- **AC-W2b** exchange_activity: per-exchange change then sub-weighted mean rescaled over exchanges with data; test that dropping Binance (HTTP 451) rescales rather than producing a jump, and that raw volumes are never summed. Per-exchange `as_of` appears in row details.
+- **AC-W2c** Fallback: no exchange has data for a coin, CoinGecko feeds the slot at weight 10 and the row source label is `coingecko`. When any exchange has data, CoinGecko is not used.
 - **AC-W3** A source whose series state is not `ok`, or whose change is `None`, is absent from that coin's covered_weight. A 0 value is never substituted.
 - **AC-W4** Rescaling: score = sum(w_i * c_i) / covered_weight over available sources. Test: weights 25/10 both present gives (25a+10b)/35; Wikipedia only gives a.
 - **AC-W5** A source is rising iff change >= 10.0 (boundary: 10.0 rising, 9.99 not). Constant comes from config, not code.
@@ -83,9 +87,17 @@ Both need: fetcher, `FETCHERS` entry (`registry.py:12-20`), probe record, histor
 - **defillama:** TVL and fees, free API. Key and rate limits: UNVERIFIED. Historical TVL is publicly charted by DefiLlama, so a one-call backfill per protocol is plausible: UNVERIFIED, no provider was called. Fees history, same.
 - **Daily fetch wiring:** `DEFAULT_SOURCES` in `api/scripts/refresh_attention.py:32` is `("wikipedia", "coingecko", "universe")`, and a test pins it (`api/tests/scripts/test_refresh_attention.py:103`). The workflow also hardcodes a source list for probe recording (`.github/workflows/attention-refresh.yml:106`). So adding a source likely touches `.github/`, which needs owner approval, beyond `DEFAULT_SOURCES`. Mark each slice's envelope accordingly.
 
+## exchange_activity facts (W7)
+
+- Binance already pulls `LOOKBACK_DAYS = 100` daily bars (`exchange_volume.py:18`, `fetch_ohlcv` at line 46) and stores quote volume as close * base volume (lines 55-56, an approximation). Source name `exchange_volume` (line 16).
+- Hyperliquid keeps only a rolling 24h snapshot stored as the previous UTC day (`exchange_volume.py:75`), so it is forward-only, one point per refresh. A ccxt OHLCV backfill may be possible: UNVERIFIED live.
+- Coinbase and Kraken have no adapter; ccxt is already the Binance client (`make_binance`, line 27). History per call and reachability from US runners: UNVERIFIED.
+- History/point-in-time: each exchange is gated and anchored on its own series (AC-W13 per exchange); an exchange with under the gate's days drops out of that day's composite and sub-weights rescale. Hyperliquid will be absent in backtests for roughly its first 90 days, so early composites are Binance/Coinbase/Kraken only. The 90-day state gate in `_classify` (`exchange_volume.py:35`) mirrors `registry.py:49`.
+- Wiring: `refresh_attention.py:196` maps source names to runners and `.github/workflows/attention-refresh.yml:193,200` runs `exchange_volume` and `hyperliquid_volume` as separate extra jobs, with a hardcoded source list at line 106. New sources (Coinbase, Kraken) therefore very likely need `.github/` edits (owner approval, Q8) as well as `refresh_attention.py` entries.
+
 ## Out of scope
 
-Forward returns after triggers (later optional step, W2b: for each trigger day report close-to-close return at +N days, N configurable, excluding triggers with < N days of price after them, shown as a table beside the chart); new source code for github_dev and defillama (W5, W6); T99 wiki article mapping fixes; T100 Trends backfill; detail table design beyond the column list; changes to `.github/` (needs owner approval, see Q8), My baskets tab, or rank-score weights in `attention_weights.json`.
+Forward returns after triggers (later optional step, W2b: for each trigger day report close-to-close return at +N days, N configurable, excluding triggers with < N days of price after them, shown as a table beside the chart); new source code for github_dev and defillama (W5, W6) and exchange_activity (W7); T99 wiki article mapping fixes; T100 Trends backfill; detail table design beyond the column list; changes to `.github/` (needs owner approval, see Q8), My baskets tab, or rank-score weights in `attention_weights.json`.
 
 ## Proposed slices
 
@@ -98,9 +110,10 @@ Forward returns after triggers (later optional step, W2b: for each trigger day r
 | W4 | Dense detail table: per-source value and arrow, last stored day, days of history, raw vs capped change, covered weight, trigger badge | `DiscoveryTable.tsx` and a detail component | RT3 | 2-3 |
 | W5 | New source `github_dev` (commits, stars per project): fetcher, registry entry, probe record, coin to repo map `api/data/github_repos.json` (new) | `api/data/attention/github_dev.py` (new), `registry.py`, `api/scripts/refresh_attention.py` | RT2 | 3-5 |
 | W6 | New source `defillama` (TVL and fees, DeFi/L1/L2 coins only): same pieces, coin to protocol slug map `api/data/defillama_slugs.json` (new) | `api/data/attention/defillama.py` (new), `registry.py`, `refresh_attention.py` | RT2 | 3-5 |
+| W7 | `exchange_activity` composite: Coinbase and Kraken adapters (ccxt, about 40 lines each, planner estimate), composite reader, `exchange_sub_weights` config, CoinGecko fallback, per-exchange `as_of` in rows, point-in-time handling | `api/data/attention/exchange_volume.py`, new `coinbase`/`kraken` fetchers, `registry.py`, `refresh_attention.py`, `discovery.py` | RT2 | 4-6 |
 | T99, T100 | Wiki article fixes; Trends backfill | separate tasks | | |
 
-Order: W1, W2, W3, then W4; W5, W6 and T99/T100 are independent and raise real max coverage. Total about 18-27 USD without W2b. Worker ceiling 185 USD (informational); per-slice cap 15 USD, planner asks the owner at 7 USD.
+Order: W1 (includes the fallback and composite reader against existing Binance data), W2, W3, then W4; W5, W6, W7 and T99/T100 are independent and raise real max coverage. Total about 22-33 USD without W2b. Worker ceiling 185 USD (informational); per-slice cap 15 USD, planner asks the owner at 7 USD.
 
 ## Risks
 
@@ -117,6 +130,7 @@ Order: W1, W2, W3, then W4; W5, W6 and T99/T100 are independent and raise real m
 - **Q3** Keep `gaining` and `sources_*` as aliases for one release, or remove?
 - **Q4** Price overlay if a coin lacks a 1d OHLCV cache: accept "price unavailable" or fetch from CoinGecko on demand?
 - **Q5** Category aggregate: mean of winsorised coin scores (consistent with today) or share of coins triggered? (Proposed: both, score as line, share as secondary.)
-- **Q7** Binance `exchange_volume` stays unweighted: drop it entirely, or add a Kraken/Coinbase fallback (coverage only, no weight)?
+- **Q7** CLOSED by the planner: Binance stays, inside exchange_activity.
+- **Q9** Approve the exchange_sub_weights proposal (40/25/15/20), or give a participation figure and source?
 - **Q8** May W5/W6 slices edit `.github/workflows/attention-refresh.yml` (needed to record probes for new sources)?
 - **Q6** Should the `github_dev` (8) and `defillama` (7) weights sit idle and silently rescale away until live? (Proposed yes; covered_weight shows it.)
