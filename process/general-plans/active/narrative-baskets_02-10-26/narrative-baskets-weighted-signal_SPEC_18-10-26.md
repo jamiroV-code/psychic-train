@@ -93,7 +93,7 @@ Both need: fetcher, `FETCHERS` entry (`registry.py:12-20`), probe record, histor
 - Hyperliquid keeps only a rolling 24h snapshot stored as the previous UTC day (`exchange_volume.py:75`), so it is forward-only, one point per refresh. A ccxt OHLCV backfill may be possible: UNVERIFIED live.
 - Coinbase and Kraken have no adapter; ccxt is already the Binance client (`make_binance`, line 27). History per call and reachability from US runners: UNVERIFIED.
 - History/point-in-time: each exchange is gated and anchored on its own series (AC-W13 per exchange); an exchange with under the gate's days drops out of that day's composite and sub-weights rescale. Hyperliquid will be absent in backtests for roughly its first 90 days, so early composites are Binance/Coinbase/Kraken only. The 90-day state gate in `_classify` (`exchange_volume.py:35`) mirrors `registry.py:49`.
-- Wiring: `refresh_attention.py:196` maps source names to runners and `.github/workflows/attention-refresh.yml:193,200` runs `exchange_volume` and `hyperliquid_volume` as separate extra jobs, with a hardcoded source list at line 106. New sources (Coinbase, Kraken) therefore very likely need `.github/` edits (owner approval, Q8) as well as `refresh_attention.py` entries.
+- Wiring: `refresh_attention.py:196` maps source names to runners and `.github/workflows/attention-refresh.yml:193,200` runs `exchange_volume` and `hyperliquid_volume` as separate extra jobs, with a hardcoded source list at line 106. New sources (Coinbase, Kraken) therefore very likely need `.github/` edits (owner approval, see Owner answers) as well as `refresh_attention.py` entries.
 
 ## W8: in-API fetch for sources GitHub runners cannot reach (design, revised by the planner, owner decision)
 
@@ -111,7 +111,7 @@ Why: some providers block GitHub runners (Binance HTTP 451 per the planner; Tren
 
 ## Out of scope
 
-Forward returns after triggers (later optional step, W2b: for each trigger day report close-to-close return at +N days, N configurable, excluding triggers with < N days of price after them, shown as a table beside the chart); new source code for github_dev and defillama (W5, W6) and exchange_activity (W7); the in-API fetch is W8; T99 wiki article mapping fixes; T100 Trends backfill; detail table design beyond the column list; changes to `.github/` (needs owner approval, see Q8), My baskets tab, or rank-score weights in `attention_weights.json`.
+Forward returns after triggers (later optional step, W2b: for each trigger day report close-to-close return at +N days, N configurable, excluding triggers with < N days of price after them, shown as a table beside the chart); new source code for github_dev and defillama (W5, W6) and exchange_activity (W7); the in-API fetch is W8; T99 wiki article mapping fixes; T100 Trends backfill; detail table design beyond the column list; changes to `.github/` (only for sources that work from GitHub, see Owner answers), My baskets tab, or rank-score weights in `attention_weights.json`.
 
 ## Proposed slices
 
@@ -138,15 +138,18 @@ Order: W1 (includes the fallback and composite reader against existing Binance d
 - Per-day recompute cost: up to 100 coins x sources x ~99 days; fine in memory per request, but cache the history per (symbol, window) if slow (UNVERIFIED, not measured).
 - `attention_weights.json` has similar-looking source keys with different meaning; name the new key `source_weights` and keep both documented.
 
-## Open questions for the owner
+## Owner answers (18-10-26) and remaining questions
 
-- **Q1** Should rising use the raw change or the winsorised one? (Proposed: raw, since the threshold is a per-source level.)
-- **Q2** May the backtest gate be lowered below 90 (e.g. 30) so the chart is useful now, accepting noisier early days? (Proposed: config key, default 90, chart shows a "thin" marker.)
+Answered by the owner:
+- **Q1 decided:** rising uses the RAW change.
+- **Q2 decided:** `min_history_days` config key, default 90; chart marks thin days; owner may lower it later.
+- **Q9 decided:** accept the exchange_activity sub-weights proposal (Binance 40, Coinbase 25, Kraken 15, Hyperliquid 20) for now; still UNVERIFIED, editable in config.
+- **Q7 closed:** Binance stays inside exchange_activity.
+- **Q8/Q10 decided (owner's words, interpreted):** whatever works through GitHub stays on the GitHub workflow; sources that cannot run there live on the site (in-API worker, W8). Consequences: W5 to W7 may edit `.github/workflows/attention-refresh.yml` for sources confirmed to work from GitHub runners (workflow edit approval is taken as given for those only, to be confirmed by the planner). Every new source needs a reachability check on a runner BEFORE its side is set: record it as a matrix (source, works from GitHub: yes/no/UNVERIFIED, side) in the slice report, and default to `pc_side` when unknown. The "updating data" state on Narrative tabs is accepted.
+
+Still open:
 - **Q3** Keep `gaining` and `sources_*` as aliases for one release, or remove?
 - **Q4** Price overlay if a coin lacks a 1d OHLCV cache: accept "price unavailable" or fetch from CoinGecko on demand?
-- **Q5** Category aggregate: mean of winsorised coin scores (consistent with today) or share of coins triggered? (Proposed: both, score as line, share as secondary.)
-- **Q7** CLOSED by the planner: Binance stays, inside exchange_activity.
-- **Q10** W8 runs a background thread inside the API on the owner PC: accept a visible 'updating' state on Narrative tabs while catch-up runs, and the env flag name?
-- **Q9** Approve the exchange_sub_weights proposal (40/25/15/20), or give a participation figure and source?
-- **Q8** May W5/W6 slices edit `.github/workflows/attention-refresh.yml` (needed to record probes for new sources)?
-- **Q6** Should the `github_dev` (8) and `defillama` (7) weights sit idle and silently rescale away until live? (Proposed yes; covered_weight shows it.)
+- **Q5** Category aggregate: mean of winsorised coin scores (today) or share of coins triggered? (Proposed: both.)
+- **Q6** Should the `github_dev` (8) and `defillama` (7) weights sit idle and rescale away until live? (Proposed yes.)
+- **Q11** Env flag name for the W8 worker (proposed `SCREENER_ATTENTION_PC_WORKER`).
