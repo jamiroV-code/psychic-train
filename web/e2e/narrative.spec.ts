@@ -274,3 +274,62 @@ test.describe("narrative: Discovery", () => {
     });
   }
 });
+
+function historyBody(kind: "coin" | "category") {
+  const dates = Array.from({ length: 30 }, (_, i) => new Date(Date.UTC(2026, 8, 16 + i)).toISOString().slice(0, 10));
+  const base = { id: kind === "coin" ? "AAA" : "ai", window: 30, as_of: dates[29], status: "ok", reason: "", min_history_days: 30, min_covered_weight: 30, history_days: { wikipedia: 99 } };
+  if (kind === "category") {
+    return { ...base, kind, days: dates.map((date, i) => ({ date, score: 4 + i * 0.8, coins_used: 5, triggered_count: i % 4, triggered_share: (i % 4) / 5 })) };
+  }
+  return {
+    ...base, kind,
+    days: dates.map((date, i) => ({
+      date, score: Math.sin(i / 4) * 12 + i * 0.9, covered_weight: i < 8 ? 10 : 35, rising_weight: i < 8 ? 0 : 25,
+      trigger: i > 20 && i % 3 === 0, thin: i < 8,
+    })),
+  };
+}
+
+test.describe("narrative: Discovery history chart", () => {
+  for (const width of [1280, 375] as const) {
+    test(`coin and category charts at ${width}px (routed data)`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.route("**/baskets/attention*", (route) => route.fulfill({ json: seededBody() }));
+      await page.route("**/api/narrative/discovery?*", (route) => route.fulfill({ json: discoveryBody() }));
+      const history: string[] = [];
+      await page.route("**/api/narrative/discovery/history*", (route) => {
+        const url = new URL(route.request().url());
+        history.push(`${url.searchParams.get("symbol") ?? url.searchParams.get("category")}:${url.searchParams.get("window")}`);
+        return route.fulfill({ json: historyBody(url.searchParams.has("symbol") ? "coin" : "category") });
+      });
+      await page.route("**/api/narrative/discovery/price*", (route) => {
+        const dates = historyBody("coin").days.map((d) => d.date);
+        return route.fulfill({ json: { symbol: "AAA", window: 30, status: "ok", last_date: dates[29], days: dates.map((date, i) => ({ date, close: 100 + i * 2 })) } });
+      });
+
+      await page.goto("/narrative");
+      await page.getByRole("tab", { name: "Discovery" }).click();
+      await page.getByTestId("discovery-row-ai").getByRole("button").click();
+      await expect(page.getByTestId("history-share-line")).toBeVisible();
+      await expect(page.getByTestId("history-readout")).toContainText("coins used 5");
+
+      await page.getByTestId("discovery-coin-ai-AAA").click();
+      await expect(page.getByTestId("history-band")).toBeVisible();
+      await expect(page.getByTestId("history-price-line")).toBeVisible();
+      expect(await page.getByTestId("history-trigger-marker").count()).toBeGreaterThan(0);
+      await expect(page.getByTestId("history-weight-note")).toContainText("Early days have little history");
+      await page.getByTestId("history-plot").focus();
+      await page.keyboard.press("Home");
+      await expect(page.getByTestId("history-readout")).toContainText("thin");
+
+      await page.getByTestId("discovery-window-90").click();
+      await page.getByTestId("discovery-row-ai").getByRole("button").click();
+      await page.getByTestId("discovery-coin-ai-AAA").click();
+      await expect(page.getByTestId("history-band")).toBeVisible();
+      expect(history).toContain("AAA:90");
+      await page.getByTestId("history-plot").scrollIntoViewIfNeeded();
+      await noHorizontalScroll(page);
+      await shot(page, "discovery-history-coin", width);
+    });
+  }
+});
