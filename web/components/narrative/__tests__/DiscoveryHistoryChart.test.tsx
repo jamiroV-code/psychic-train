@@ -81,16 +81,121 @@ function setup(over: Partial<React.ComponentProps<typeof DiscoveryHistoryChart>>
 }
 
 describe("DiscoveryHistoryChart: coin", () => {
-  it("shows loading, then the chart with a marker per stored trigger day and the weight band", async () => {
+  it("shows loading, then three stacked panels with a marker per stored trigger day and the coverage bars", async () => {
     setup();
     expect(screen.getByTestId("history-loading")).toBeInTheDocument();
-    const svg = await screen.findByTestId("history-svg");
-    expect(within(svg).getAllByTestId("history-trigger-marker")).toHaveLength(2);
-    expect(within(svg).getByTestId("history-band")).toBeInTheDocument();
-    expect(within(svg).getByTestId("history-band-floor")).toBeInTheDocument();
-    expect(within(svg).getByTestId("history-score-line").getAttribute("d")).toMatch(/^M/);
-    expect(within(svg).getByTestId("history-price-line")).toBeInTheDocument();
+    await screen.findByTestId("history-svg");
+    const plot = screen.getByTestId("history-plot");
+    expect(within(plot).getAllByTestId("history-trigger-marker")).toHaveLength(2);
+    expect(within(plot).getByTestId("history-band")).toBeInTheDocument();
+    expect(within(plot).getAllByTestId("history-band-floor")).toHaveLength(1);
+    expect(within(plot).getByTestId("history-score-line").getAttribute("d")).toMatch(/^M/);
+    expect(within(plot).getByTestId("history-price-line")).toBeInTheDocument();
+    for (const id of ["score", "price", "coverage"]) expect(within(plot).getByTestId(`history-panel-${id}`)).toBeInTheDocument();
     expect(screen.queryByTestId("history-price-unavailable")).toBeNull();
+  });
+
+  it("titles each panel on one line, with the coverage wording and the floor label", async () => {
+    setup();
+    await screen.findByTestId("history-svg");
+    expect(screen.getByTestId("history-panel-title-score").textContent).toContain("Weighted score (%)");
+    expect(screen.getByTestId("history-panel-title-score").textContent).toContain("trigger day");
+    expect(screen.getByTestId("history-panel-title-price").textContent).toContain("Price, % change since first common day");
+    expect(screen.getByTestId("history-panel-title-coverage").textContent).toBe("Data coverage (weight of sources with data, out of 100)");
+    expect(within(screen.getByTestId("history-panel-coverage")).getByText("needs 30 to fire")).toBeInTheDocument();
+    expect(screen.queryByTestId("history-legend")).toBeNull();
+  });
+
+  it("mutes coverage bars under the floor", async () => {
+    setup();
+    await screen.findByTestId("history-svg");
+    expect(screen.getAllByTestId("history-band-bar-muted")).toHaveLength(2);
+    expect(screen.getAllByTestId("history-band-bar")).toHaveLength(3);
+  });
+
+  it("gives the price its own scale: the line spans its panel although the score is far bigger", async () => {
+    setup({
+      fetchCoinHistory: () =>
+        Promise.resolve(coinHistory({ days: coinHistory().days.map((d, i) => ({ ...d, score: [10, 20, 30, 40, 49][i] })) })),
+      fetchPrice: () =>
+        Promise.resolve({ ...priceOk(), days: dates.map((date, i) => ({ date, close: 100 * (1 - [0, 0.01, 0.02, 0.03, 0.02][i]) })) }),
+    });
+    await screen.findByTestId("history-svg");
+    const ys = (testid: string) =>
+      (screen.getByTestId(testid).getAttribute("d") ?? "").match(/[ML][\d.]+ ([\d.]+)/g)!.map((m) => Number(m.split(" ")[1]));
+    const py = ys("history-price-line");
+    // The panel is 84px tall: a -3%..0% price must use most of it instead of hugging one edge.
+    expect(Math.max(...py) - Math.min(...py)).toBeGreaterThan(50);
+  });
+
+  it("shows at most 3 y labels per panel and one x axis (first, middle, last) at the bottom only", async () => {
+    setup();
+    await screen.findByTestId("history-svg");
+    for (const id of ["score", "price", "coverage"]) {
+      const labels = within(screen.getByTestId(`history-panel-${id}`)).getAllByText(/%$|^\d+$/, { selector: "svg text" });
+      expect(labels.length).toBeLessThanOrEqual(4);
+      const texts = labels.map((l) => l.textContent);
+      expect(new Set(texts).size).toBe(texts.length);
+    }
+    const axis = screen.getAllByTestId("history-xaxis");
+    expect(axis).toHaveLength(1);
+    expect(within(screen.getByTestId("history-panel-coverage")).getByTestId("history-xaxis")).toBe(axis[0]);
+    expect(Array.from(axis[0].querySelectorAll("text")).map((t) => t.textContent)).toEqual(["2026-10-11", "2026-10-13", "2026-10-15"]);
+  });
+
+  it("uses fixed-size text: no font size in the svg depends on the viewBox", async () => {
+    setup();
+    await screen.findByTestId("history-svg");
+    const svg = screen.getByTestId("history-svg");
+    expect(svg.getAttribute("width")).toBe(svg.getAttribute("viewBox")!.split(" ")[2]);
+    for (const t of Array.from(svg.querySelectorAll("text"))) expect(t.getAttribute("font-size")).toBe("11");
+  });
+
+  it("adds the trigger legend entry only when a trigger exists, and draws no markers otherwise", async () => {
+    setup({
+      fetchCoinHistory: () => Promise.resolve(coinHistory({ days: coinHistory().days.map((d) => ({ ...d, trigger: false })) })),
+    });
+    await screen.findByTestId("history-svg");
+    expect(screen.queryAllByTestId("history-trigger-marker")).toHaveLength(0);
+    expect(screen.getByTestId("history-panel-title-score").textContent).not.toContain("trigger day");
+  });
+
+  it("keeps the trigger dots semi-transparent and under the score line when every day triggers", async () => {
+    setup({
+      fetchCoinHistory: () => Promise.resolve(coinHistory({ days: coinHistory().days.map((d) => ({ ...d, trigger: true })) })),
+    });
+    await screen.findByTestId("history-svg");
+    const dots = screen.getAllByTestId("history-trigger-marker");
+    expect(dots).toHaveLength(5);
+    expect(dots[0].getAttribute("r")).toBe("3");
+    expect(Number(dots[0].getAttribute("fill-opacity"))).toBeLessThan(1);
+    const line = screen.getByTestId("history-score-line");
+    expect(dots[0].compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows constant coverage anyway, in a compact panel", async () => {
+    setup({
+      fetchCoinHistory: () =>
+        Promise.resolve(coinHistory({ days: coinHistory().days.map((d) => ({ ...d, covered_weight: 35, thin: false })) })),
+    });
+    await screen.findByTestId("history-svg");
+    expect(screen.getAllByTestId("history-band-bar")).toHaveLength(5);
+    const svg = within(screen.getByTestId("history-panel-coverage")).getByText("needs 30 to fire").closest("svg")!;
+    expect(Number(svg.getAttribute("height"))).toBeLessThan(40 + 12 + 20 + 1);
+  });
+
+  it("renders a one-day window without NaN", async () => {
+    setup({ fetchCoinHistory: () => Promise.resolve(coinHistory({ days: coinHistory().days.slice(0, 1) })) });
+    await screen.findByTestId("history-svg");
+    expect(screen.getByTestId("history-plot").innerHTML).not.toContain("NaN");
+    expect(screen.getByTestId("history-readout").textContent).toContain("2026-10-11");
+  });
+
+  it("keeps drawing the other panels when the price has gaps", async () => {
+    setup({ fetchPrice: () => Promise.resolve({ ...priceOk(), days: priceOk().days.filter((_, i) => i !== 2) }) });
+    await screen.findByTestId("history-svg");
+    expect(screen.getByTestId("history-price-line").getAttribute("d")).toContain("M");
+    expect(screen.getByTestId("history-plot").innerHTML).not.toContain("NaN");
   });
 
   it("reads out the numbers of the last day first, then the day under the arrow keys", async () => {
@@ -102,7 +207,7 @@ describe("DiscoveryHistoryChart: coin", () => {
     expect(readout.textContent).toContain("covered 35 of 100");
     expect(readout.textContent).toContain("rising 25");
     expect(readout.textContent).toContain("trigger");
-    expect(readout.textContent).toContain("price 120");
+    expect(readout.textContent).toContain("price 120 (+20.0% since first day)");
     fireEvent.keyDown(plot, { key: "ArrowLeft" });
     fireEvent.keyDown(plot, { key: "ArrowLeft" });
     expect(readout.textContent).toContain("2026-10-13");
@@ -211,14 +316,20 @@ describe("DiscoveryHistoryChart: coin", () => {
 });
 
 describe("DiscoveryHistoryChart: category", () => {
-  it("draws the average score with the triggered share as a second line and shows coins used", async () => {
+  it("draws the average score and the triggered share in two panels with their own scales, and shows coins used", async () => {
     const { fetchCategoryHistory, fetchPrice } = setup({ selection: { kind: "category", id: "ai", name: "AI" } });
-    const svg = await screen.findByTestId("history-svg");
+    await screen.findByTestId("history-svg");
+    const plot = screen.getByTestId("history-plot");
     expect(fetchCategoryHistory).toHaveBeenCalledWith("ai", 7);
     expect(fetchPrice).not.toHaveBeenCalled();
-    expect(within(svg).getByTestId("history-score-line")).toBeInTheDocument();
-    expect(within(svg).getByTestId("history-share-line")).toBeInTheDocument();
-    expect(within(svg).queryByTestId("history-band")).toBeNull();
+    expect(within(plot).getByTestId("history-score-line")).toBeInTheDocument();
+    expect(within(plot).getByTestId("history-share-line")).toBeInTheDocument();
+    expect(within(plot).queryByTestId("history-band")).toBeNull();
+    expect(screen.getByTestId("history-panel-title-score").textContent).toContain("Average score (%)");
+    expect(screen.getByTestId("history-panel-title-share").textContent).toContain("Coins triggered (% of coins used)");
+    expect(screen.getAllByTestId("history-xaxis")).toHaveLength(1);
+    const ys = (screen.getByTestId("history-share-line").getAttribute("d") ?? "").match(/[ML][\d.]+ ([\d.]+)/g)!.map((m) => Number(m.split(" ")[1]));
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(50);
     const readout = screen.getByTestId("history-readout").textContent ?? "";
     expect(readout).toContain("coins used 7");
     expect(readout).toContain("triggered 4 of 7");

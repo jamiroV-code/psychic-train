@@ -275,6 +275,28 @@ test.describe("narrative: Discovery", () => {
   }
 });
 
+/** No two SVG labels in the history chart may overlap, and none may leave the plot's box. */
+async function expectNoTextOverlap(page: Page) {
+  const result = await page.getByTestId("history-plot").evaluate((plot) => {
+    const box = plot.getBoundingClientRect();
+    const rects = Array.from(plot.querySelectorAll("svg text")).map((t) => {
+      const r = t.getBoundingClientRect();
+      return { text: t.textContent ?? "", l: r.left, r: r.right, t: r.top, b: r.bottom };
+    });
+    const overlaps: string[] = [];
+    for (let i = 0; i < rects.length; i += 1) {
+      const a = rects[i];
+      if (a.l < box.left - 1 || a.r > box.right + 1) overlaps.push(`clipped: ${a.text}`);
+      for (let j = i + 1; j < rects.length; j += 1) {
+        const c = rects[j];
+        if (a.l < c.r && c.l < a.r && a.t < c.b && c.t < a.b) overlaps.push(`${a.text} x ${c.text}`);
+      }
+    }
+    return overlaps;
+  });
+  expect(result).toEqual([]);
+}
+
 function historyBody(kind: "coin" | "category") {
   const dates = Array.from({ length: 30 }, (_, i) => new Date(Date.UTC(2026, 8, 16 + i)).toISOString().slice(0, 10));
   const base = { id: kind === "coin" ? "AAA" : "ai", window: 30, as_of: dates[29], status: "ok", reason: "", min_history_days: 30, min_covered_weight: 30, history_days: { wikipedia: 99 } };
@@ -312,11 +334,19 @@ test.describe("narrative: Discovery history chart", () => {
       await page.getByTestId("discovery-row-ai").getByRole("button").click();
       await expect(page.getByTestId("history-share-line")).toBeVisible();
       await expect(page.getByTestId("history-readout")).toContainText("coins used 5");
+      await expect(page.getByTestId("history-panel-share")).toBeVisible();
+      await expectNoTextOverlap(page);
+      await page.getByTestId("history-plot").scrollIntoViewIfNeeded();
+      await noHorizontalScroll(page);
+      await shot(page, "discovery-history-category", width);
 
       await page.getByTestId("discovery-coin-ai-AAA").click();
       await expect(page.getByTestId("history-band")).toBeVisible();
+      await expect(page.getByTestId("history-panel-title-coverage")).toHaveText("Data coverage (weight of sources with data, out of 100)");
+      await expect(page.getByText("needs 30 to fire")).toBeVisible();
       await expect(page.getByTestId("history-price-line")).toBeVisible();
       expect(await page.getByTestId("history-trigger-marker").count()).toBeGreaterThan(0);
+      await expectNoTextOverlap(page);
       await expect(page.getByTestId("history-weight-note")).toContainText("Early days have little history");
       await page.getByTestId("history-plot").focus();
       await page.keyboard.press("Home");
@@ -326,6 +356,7 @@ test.describe("narrative: Discovery history chart", () => {
       await page.getByTestId("discovery-row-ai").getByRole("button").click();
       await page.getByTestId("discovery-coin-ai-AAA").click();
       await expect(page.getByTestId("history-band")).toBeVisible();
+      await expectNoTextOverlap(page);
       expect(history).toContain("AAA:90");
       await page.getByTestId("history-plot").scrollIntoViewIfNeeded();
       await noHorizontalScroll(page);

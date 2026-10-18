@@ -1,18 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import {
   fetchCategoryHistory as fetchCategoryHistoryDefault,
   fetchCoinHistory as fetchCoinHistoryDefault,
   fetchDiscoveryPrice as fetchPriceDefault,
 } from "@/lib/api/discovery";
 import {
-  bandPoints,
+  axisTicks,
+  coverageBars,
+  dayIndexAt,
+  fitScale,
+  isConstant,
   linePath,
   shapeCategoryChart,
   shapeCoinChart,
   thinDayCount,
-  valueDomain,
+  xTickIndices,
+  type PanelScale,
 } from "@/lib/discovery-chart";
 import { formatSigned } from "@/lib/attention-lines";
 import type {
@@ -39,16 +44,18 @@ type Loaded =
   | { kind: "coin"; history: DiscoveryCoinHistory; price: DiscoveryPrice | null }
   | { kind: "category"; history: DiscoveryCategoryHistory };
 
-const W = 640;
-const LEFT = 52;
-const RIGHT = 12;
-const MAIN_TOP = 8;
-const MAIN_H = 176;
-const STRIP_TOP = 198;
-const STRIP_H = 40;
-const AXIS_Y = 256;
-const H = 266;
-const PLOT_W = W - LEFT - RIGHT;
+// Panels are drawn in real pixels (viewBox = measured width), so the 11px text never scales with the chart.
+const DEFAULT_W = 640;
+const MIN_W = 240;
+const LEFT = 46;
+const RIGHT = 10;
+const PAD = 6;
+const FONT = 11;
+const AXIS_H = 20;
+const H_MAIN = 112;
+const H_SIDE = 84;
+const H_COVER = 64;
+const H_COVER_COMPACT = 40;
 
 const NO_DATA_LINE = "No history to chart for this window yet.";
 
@@ -58,9 +65,10 @@ function formatPrice(v: number): string {
 
 /**
  * Point-in-time history for one coin or one category (T104 W3).
- * Coin: weighted score line, price as percent change since the first day both exist (same unit and axis as
- * the score, so the two lines compare directly), stored trigger days as markers, covered weight as a 0-100 band
- * with the floor. Category: average score, plus the share of coins triggered as a second line.
+ * Stacked panels on one shared date axis, each with its own y-scale fitted to its data so no line looks flat
+ * next to a bigger one. Coin: weighted score (+ stored trigger days), price as percent change since the first
+ * day both exist, data coverage bars against the trigger floor. Category: average score, share of coins
+ * triggered. One crosshair runs through every panel.
  */
 export function DiscoveryHistoryChart({
   selection,
@@ -75,6 +83,8 @@ export function DiscoveryHistoryChart({
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState<number | null>(null);
+  const [plotEl, setPlotEl] = useState<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(DEFAULT_W);
   const subject = selection.kind === "coin" ? selection.symbol : selection.id;
 
   useEffect(() => {
@@ -102,6 +112,19 @@ export function DiscoveryHistoryChart({
     };
     // fetchers are stable defaults or injected test doubles.
   }, [selection.kind, subject, window, attempt]);
+
+  useEffect(() => {
+    if (!plotEl) return;
+    const measure = () => {
+      const w = Math.floor(plotEl.getBoundingClientRect().width);
+      if (w > 0) setWidth(Math.max(MIN_W, w));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(plotEl);
+    return () => ro.disconnect();
+  }, [plotEl]);
 
   const shape = useMemo(() => {
     if (!loaded) return null;
@@ -145,16 +168,10 @@ export function DiscoveryHistoryChart({
       </p>
     );
   } else {
-    const x = (i: number) => LEFT + (n === 1 ? PLOT_W / 2 : (i * PLOT_W) / (n - 1));
-    const scores = shape.rows.map((r) => r.score);
-    const changes = shape.kind === "coin" ? shape.rows.map((r) => r.priceChange) : [];
-    const [lo, hi] = valueDomain([...scores, ...changes]);
-    const pad = (hi - lo) * 0.08;
-    const yMain = (v: number) => MAIN_TOP + MAIN_H - ((v - (lo - pad)) / (hi - lo + 2 * pad)) * MAIN_H;
-    const yStrip = (pct: number) => STRIP_TOP + STRIP_H - (pct / 100) * STRIP_H;
-    const step = n === 1 ? PLOT_W : PLOT_W / (n - 1);
-    const barW = Math.max(1, Math.min(step * 0.8, 24));
-    const ticks = Array.from(new Set([lo, 0, hi]));
+    const W = width;
+    const plotW = W - LEFT - RIGHT;
+    const x = (i: number) => LEFT + (n === 1 ? plotW / 2 : (i * plotW) / (n - 1));
+    const step = n === 1 ? plotW : plotW / (n - 1);
     const onKey = (e: KeyboardEvent) => {
       const moves: Record<string, number> = { ArrowLeft: Math.max(0, idx - 1), ArrowRight: Math.min(n - 1, idx + 1), Home: 0, End: n - 1 };
       if (e.key in moves) {
@@ -165,8 +182,7 @@ export function DiscoveryHistoryChart({
     const onMove = (e: PointerEvent<HTMLDivElement>) => {
       const box = e.currentTarget.getBoundingClientRect();
       if (box.width <= 0) return;
-      const px = ((e.clientX - box.left) / box.width) * W;
-      setActive(Math.min(n - 1, Math.max(0, Math.round(((px - LEFT) / PLOT_W) * (n - 1)))));
+      setActive(dayIndexAt(((e.clientX - box.left) / box.width) * W, LEFT, plotW, n));
     };
 
     let readout: string;
@@ -178,7 +194,9 @@ export function DiscoveryHistoryChart({
         `covered ${Math.round(r.covered)} of 100${r.thin ? " (thin)" : ""}`,
         `rising ${Math.round(r.rising)}`,
         r.trigger ? "trigger" : "no trigger",
-        r.price === null ? "price unavailable" : `price ${formatPrice(r.price)}`,
+        r.price === null || r.priceChange === null
+          ? "price unavailable"
+          : `price ${formatPrice(r.price)} (${formatSigned(r.priceChange)}% since first day)`,
       ].join(" · ");
     } else {
       const r = shape.rows[idx];
@@ -191,21 +209,195 @@ export function DiscoveryHistoryChart({
     }
 
     const thin = shape.kind === "coin" ? thinDayCount(shape.rows) : 0;
+    const scores = shape.rows.map((r) => r.score);
+    const lastPanel = shape.kind === "coin" ? "coverage" : "share";
+    const crosshair = (h: number, cy: number | null, color: string) => (
+      <>
+        <line x1={x(idx)} x2={x(idx)} y1={PAD} y2={PAD + h} stroke="var(--ink-2)" strokeWidth="1" strokeDasharray="2 2" />
+        {cy !== null && <circle cx={x(idx)} cy={cy} r="3" fill={color} stroke="var(--sh-0)" strokeWidth="1" />}
+      </>
+    );
+    const xAxis = (h: number) => (
+      <g data-testid="history-xaxis">
+        {xTickIndices(n).map((i, k, all) => (
+          <text
+            key={i}
+            x={x(i)}
+            y={PAD + h + 15}
+            fontSize={FONT}
+            fill="var(--ink-3)"
+            textAnchor={k === 0 ? "start" : k === all.length - 1 ? "end" : "middle"}
+          >
+            {shape.rows[i].date}
+          </text>
+        ))}
+      </g>
+    );
+    /** One panel: own scale, its own y labels (max 3), gridlines, zero line; content drawn by the caller. */
+    const panel = (
+      id: string,
+      title: ReactNode,
+      h: number,
+      scale: PanelScale,
+      opts: { includeZero: boolean; fmt?: (v: number, span: number) => string },
+      content: (y: (v: number) => number) => ReactNode,
+    ) => {
+      const y = (v: number) => PAD + ((scale.hi - v) / (scale.hi - scale.lo)) * h;
+      const ticks = axisTicks(scale, { height: h, includeZero: opts.includeZero, fmt: opts.fmt });
+      const showZero = opts.includeZero && scale.lo < 0 && scale.hi > 0;
+      const last = id === lastPanel;
+      return (
+        <div className="discovery-history__panel" data-testid={`history-panel-${id}`} key={id}>
+          <p className="discovery-history__title" data-testid={`history-panel-title-${id}`}>{title}</p>
+          <svg
+            data-testid={id === "score" ? "history-svg" : undefined}
+            width={W}
+            height={h + 2 * PAD + (last ? AXIS_H : 0)}
+            viewBox={`0 0 ${W} ${h + 2 * PAD + (last ? AXIS_H : 0)}`}
+            aria-hidden="true"
+            className="discovery-history__svg"
+          >
+            {ticks.map((t) => (
+              <g key={t.label}>
+                <line x1={LEFT} x2={W - RIGHT} y1={PAD + t.y} y2={PAD + t.y} stroke="var(--sh-rule)" strokeWidth="0.5" />
+                <text x={LEFT - 6} y={PAD + t.y + 4} textAnchor="end" fontSize={FONT} fill="var(--ink-3)">{t.label}</text>
+              </g>
+            ))}
+            {showZero && <line data-testid="history-zero-line" x1={LEFT} x2={W - RIGHT} y1={y(0)} y2={y(0)} stroke="var(--ink-3)" strokeDasharray="4 3" strokeWidth="1" />}
+            {content(y)}
+            {last && xAxis(h)}
+          </svg>
+        </div>
+      );
+    };
+
+    const panels: ReactNode[] = [];
+    if (shape.kind === "coin") {
+      const triggers = shape.rows.filter((r) => r.trigger).length;
+      const sScale = fitScale(scores, { includeZero: true });
+      panels.push(
+        panel(
+          "score",
+          <>
+            <span className="discovery-history__swatch" style={{ color: "var(--accent)" }} aria-hidden="true">―</span> Weighted score (%)
+            {triggers > 0 && (
+              <>
+                {" "}
+                <span className="discovery-history__swatch" style={{ color: "var(--sev-mature)" }} aria-hidden="true">●</span> trigger day
+              </>
+            )}
+          </>,
+          H_MAIN,
+          sScale,
+          { includeZero: true },
+          (y) => (
+            <>
+              {shape.rows.map((r, i) =>
+                r.trigger ? <circle key={r.date} data-testid="history-trigger-marker" cx={x(i)} cy={y(r.score)} r="3" fill="var(--sev-mature)" fillOpacity="0.55" stroke="var(--sev-mature)" strokeOpacity="0.9" strokeWidth="1" /> : null,
+              )}
+              <path data-testid="history-score-line" d={linePath(scores, x, y)} fill="none" stroke="var(--accent)" strokeWidth="2" />
+              {crosshair(H_MAIN, y(scores[idx]), "var(--accent)")}
+            </>
+          ),
+        ),
+      );
+      if (shape.priceAvailable) {
+        const changes = shape.rows.map((r) => r.priceChange);
+        const pScale = fitScale(changes, { includeZero: true });
+        const pc = changes[idx];
+        panels.push(
+          panel(
+            "price",
+            <>
+              <span className="discovery-history__swatch" style={{ color: "var(--sev-prov)" }} aria-hidden="true">―</span> Price, % change since first common day
+            </>,
+            H_SIDE,
+            pScale,
+            { includeZero: true },
+            (y) => (
+              <>
+                <path data-testid="history-price-line" d={linePath(changes, x, y)} fill="none" stroke="var(--sev-prov)" strokeWidth="1.75" />
+                {crosshair(H_SIDE, pc === null || pc === undefined ? null : y(pc), "var(--sev-prov)")}
+              </>
+            ),
+          ),
+        );
+      }
+      const bars = coverageBars(shape.rows, shape.floor);
+      const compact = isConstant(bars.map((b) => b.value));
+      const hc = compact ? H_COVER_COMPACT : H_COVER;
+      const barW = Math.max(1, Math.min(step * 0.7, 10));
+      const floorLabel = `needs ${Math.round(shape.floor)} to fire`;
+      panels.push(
+        panel(
+          "coverage",
+          "Data coverage (weight of sources with data, out of 100)",
+          hc,
+          { lo: 0, hi: 100, min: 0, max: 100 },
+          { includeZero: false, fmt: (v) => String(Math.round(v)) },
+          (y) => (
+            <g data-testid="history-band">
+              {bars.map((b, i) => (
+                <rect
+                  key={shape.rows[i].date}
+                  data-testid={b.muted ? "history-band-bar-muted" : "history-band-bar"}
+                  x={x(i) - barW / 2}
+                  y={y(b.value)}
+                  width={barW}
+                  height={Math.max(0, y(0) - y(b.value))}
+                  fill={b.muted ? "var(--ink-3)" : "var(--ink-2)"}
+                  opacity={b.muted ? 0.35 : 0.85}
+                />
+              ))}
+              <line data-testid="history-band-floor" x1={LEFT} x2={W - RIGHT} y1={y(shape.floor)} y2={y(shape.floor)} stroke="var(--ink-1)" strokeDasharray="4 3" strokeWidth="1" />
+              <text x={W - RIGHT - 2} y={y(shape.floor) - 3} textAnchor="end" fontSize={FONT} fill="var(--ink-1)" stroke="var(--sh-0)" strokeWidth="3" paintOrder="stroke">{floorLabel}</text>
+              {crosshair(hc, null, "var(--ink-1)")}
+            </g>
+          ),
+        ),
+      );
+    } else {
+      const shares = shape.rows.map((r) => r.sharePct);
+      const sScale = fitScale(scores, { includeZero: true });
+      const shScale = fitScale(shares, { includeZero: false, clamp: [0, 100] });
+      panels.push(
+        panel(
+          "score",
+          <>
+            <span className="discovery-history__swatch" style={{ color: "var(--accent)" }} aria-hidden="true">―</span> Average score (%)
+          </>,
+          H_MAIN,
+          sScale,
+          { includeZero: true },
+          (y) => (
+            <>
+              <path data-testid="history-score-line" d={linePath(scores, x, y)} fill="none" stroke="var(--accent)" strokeWidth="2" />
+              {crosshair(H_MAIN, y(scores[idx]), "var(--accent)")}
+            </>
+          ),
+        ),
+        panel(
+          "share",
+          <>
+            <span className="discovery-history__swatch" style={{ color: "var(--sev-mature)" }} aria-hidden="true">―</span> Coins triggered (% of coins used)
+          </>,
+          H_SIDE,
+          shScale,
+          { includeZero: false, fmt: (v) => `${Math.round(v)}%` },
+          (y) => (
+            <>
+              <path data-testid="history-share-line" d={linePath(shares, x, y)} fill="none" stroke="var(--sev-mature)" strokeWidth="1.75" />
+              {crosshair(H_SIDE, y(shares[idx]), "var(--sev-mature)")}
+            </>
+          ),
+        ),
+      );
+    }
+
     body = (
       <>
-        <ul className="plot-legend basket-legend" aria-label="Legend" data-testid="history-legend">
-          <li><span className="legend-glyph" style={{ color: "var(--accent)" }} aria-hidden="true">―</span> {shape.kind === "coin" ? "Score (weighted, %)" : "Average score (%)"}</li>
-          {shape.kind === "coin" ? (
-            <>
-              <li><span className="legend-glyph" style={{ color: "var(--sev-prov)" }} aria-hidden="true">―</span> Price (% since first day)</li>
-              <li><span className="legend-glyph" style={{ color: "var(--sev-mature)" }} aria-hidden="true">●</span> Trigger day</li>
-              <li><span className="legend-glyph" style={{ color: "var(--ink-3)" }} aria-hidden="true">▮</span> Covered weight (0-100), dashed = min {Math.round(shape.floor)}</li>
-            </>
-          ) : (
-            <li><span className="legend-glyph" style={{ color: "var(--sev-mature)" }} aria-hidden="true">―</span> Coins triggered (% of coins used)</li>
-          )}
-        </ul>
         <div
+          ref={setPlotEl}
           className="discovery-history__plot"
           data-testid="history-plot"
           tabIndex={0}
@@ -215,43 +407,7 @@ export function DiscoveryHistoryChart({
           onPointerMove={onMove}
           onPointerLeave={() => setActive(null)}
         >
-          <svg data-testid="history-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-hidden="true" className="discovery-history__svg">
-            {ticks.map((t) => (
-              <g key={t}>
-                <line x1={LEFT} x2={W - RIGHT} y1={yMain(t)} y2={yMain(t)} stroke="var(--sh-rule)" strokeDasharray={t === 0 ? "4 3" : undefined} strokeWidth={t === 0 ? 1 : 0.5} />
-                <text x={LEFT - 6} y={yMain(t) + 3} textAnchor="end" fontSize="12" fill="var(--ink-3)">{`${t > 0 ? "+" : ""}${t.toFixed(0)}%`}</text>
-              </g>
-            ))}
-            {shape.kind === "coin" && shape.priceAvailable && (
-              <path data-testid="history-price-line" d={linePath(shape.rows.map((r) => r.priceChange), x, yMain)} fill="none" stroke="var(--sev-prov)" strokeWidth="1.5" />
-            )}
-            <path data-testid="history-score-line" d={linePath(scores, x, yMain)} fill="none" stroke="var(--accent)" strokeWidth="2" />
-            {shape.kind === "coin" &&
-              shape.rows.map((r, i) =>
-                r.trigger ? <circle key={r.date} data-testid="history-trigger-marker" cx={x(i)} cy={yMain(r.score)} r="4" fill="var(--sev-mature)" stroke="var(--sh-0)" strokeWidth="1" /> : null,
-              )}
-            <line x1={x(idx)} x2={x(idx)} y1={MAIN_TOP} y2={STRIP_TOP + STRIP_H} stroke="var(--ink-2)" strokeWidth="1" strokeDasharray="2 2" />
-            {shape.kind === "coin" ? (
-              <g data-testid="history-band">
-                {bandPoints(shape.rows).map((v, i) => (
-                  <rect key={shape.rows[i].date} x={x(i) - barW / 2} y={yStrip(v)} width={barW} height={STRIP_TOP + STRIP_H - yStrip(v)} fill={shape.rows[i].thin ? "var(--sev-prov)" : "var(--ink-3)"} opacity="0.55" />
-                ))}
-                <line data-testid="history-band-floor" x1={LEFT} x2={W - RIGHT} y1={yStrip(shape.floor)} y2={yStrip(shape.floor)} stroke="var(--ink-2)" strokeDasharray="4 3" strokeWidth="1" />
-                <text x={LEFT - 6} y={STRIP_TOP + 8} textAnchor="end" fontSize="12" fill="var(--ink-3)">100</text>
-                <text x={LEFT - 6} y={STRIP_TOP + STRIP_H} textAnchor="end" fontSize="12" fill="var(--ink-3)">0</text>
-              </g>
-            ) : (
-              <g>
-                <line x1={LEFT} x2={W - RIGHT} y1={STRIP_TOP + STRIP_H} y2={STRIP_TOP + STRIP_H} stroke="var(--sh-rule)" />
-                <path data-testid="history-share-line" d={linePath(shape.rows.map((r) => r.sharePct), x, yStrip)} fill="none" stroke="var(--sev-mature)" strokeWidth="1.5" />
-                <text x={LEFT - 6} y={STRIP_TOP + 8} textAnchor="end" fontSize="12" fill="var(--ink-3)">100%</text>
-                <text x={LEFT - 6} y={STRIP_TOP + STRIP_H} textAnchor="end" fontSize="12" fill="var(--ink-3)">0%</text>
-              </g>
-            )}
-            <circle cx={x(idx)} cy={yMain(scores[idx])} r="3" fill="var(--ink-1)" />
-            <text x={LEFT} y={AXIS_Y} fontSize="12" fill="var(--ink-3)">{shape.rows[0].date}</text>
-            <text x={W - RIGHT} y={AXIS_Y} textAnchor="end" fontSize="12" fill="var(--ink-3)">{shape.rows[n - 1].date}</text>
-          </svg>
+          {panels}
         </div>
         <p className="basket-note" data-testid="history-readout" role="status" aria-live="polite">
           {readout}
