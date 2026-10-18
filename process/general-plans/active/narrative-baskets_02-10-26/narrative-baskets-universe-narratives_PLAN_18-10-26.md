@@ -12,7 +12,11 @@ metadata:
 
 [MODE: PLAN]
 
-**Complexity:** COMPLEX (6 slices, 3 waves). **SPEC:** `narrative-baskets-universe-narratives_SPEC_18-10-26.md` (T108, merged as #141). **Status:** PLANNED, not validated; VALIDATE is next. **Base read:** `main` at 8f2bf4b. PR #137 (T105 snapshots) is merged. **PR #139 (T107 chart panels) and #140 (T106 `min_category_coins`, sources panel) were NOT merged in the tree I read:** `min_category_coins` appears nowhere in `api/` or `web/`, `api/routers/discovery.py` has no sources route, and `DiscoveryTab.tsx` has no sources panel. Every file cite below is `main` at 8f2bf4b; slices that touch files #139/#140 also change must be re-measured by the planner at dispatch (UNVERIFIED what those PRs change).
+**Date:** 18-10-26. **Complexity:** COMPLEX (6 slices, 3 waves). **SPEC:** `narrative-baskets-universe-narratives_SPEC_18-10-26.md` (T108, merged as #141). **Status:** PLANNED, not validated; VALIDATE is next. **Base read:** `main` at 8f2bf4b. PR #137 (T105 snapshots) is merged. **PR #139 (T107 chart panels) and #140 (T106 `min_category_coins`, sources panel) were NOT merged in the tree I read:** `min_category_coins` appears nowhere in `api/` or `web/`, `api/routers/discovery.py` has no sources route, and `DiscoveryTab.tsx` has no sources panel. Every file cite below is `main` at 8f2bf4b; slices that touch files #139/#140 also change must be re-measured by the planner at dispatch (UNVERIFIED what those PRs change).
+
+## Overview and Context
+
+Context router: `process/context/all-context.md`; tests: `process/context/tests/all-tests.md`. Next step: VALIDATE, then the owner's ENTER EXECUTE MODE (RIPER-5). Phase Completion Rules: a slice is done when its red tests are green, its Acceptance Criteria below hold, and its report lists the owner probes.
 
 ## 1. Goal and non-goals
 
@@ -85,7 +89,7 @@ Ids: `majors-store-of-value`, `layer-1`, `layer-2`, `defi`, `memecoins`, `ai-dat
 
 `M` has no proposal (SPEC 2a): it lands in `Unassigned` until the owner places it (that is allowed by decision 7; G-OWN asks). `U` is a stablecoin? (UNVERIFIED): class `stablecoin` pending the owner; if wrong it goes to `Unassigned` too. Memberships are written once per narrative in the file: a coin with n memberships has n entries and exactly one `primary: true` (HYPE, PUMP, NEXO: the Exchange-tokens entry; XRP: Majors).
 
-## 6. Slices in detail
+## 6. Slices in detail (Implementation Checklist)
 
 ### U1: narratives file, loader, Discovery on narratives (+ snapshot-id mapping)
 - **Objective:** Discovery categories = narratives; 3-coin rule owned by the narratives loader; ids mappable from old snapshots.
@@ -142,7 +146,7 @@ Ids: `majors-store-of-value`, `layer-1`, `layer-2`, `defi`, `memecoins`, `ai-dat
 - **#139 (T107) not merged:** the chart panels use category ids from `DiscoveryTable.tsx:151` and `DiscoveryHistoryChart.tsx:92`; U1's id map keeps stored ids resolvable; nothing in #139 is edited by this PLAN.
 - **Frozen snapshots:** `signals/2026-10-17_w*.json` (the three present) store `category_ids` and a `config` copy; read-only, mapped on read only.
 
-## 8. Acceptance criteria (mapped to SPEC)
+## 8. Acceptance Criteria (mapped to SPEC)
 | ID | Criterion | Source | Slice |
 |---|---|---|---|
 | AC-U1' | `attention_narratives.json` loads; duplicate or missing primary, bad symbol are named errors; < 3 in-universe coins is NOT an error (hidden) and an uncovered coin is NOT an error (Unassigned) | rewrites AC-U1 | U1 |
@@ -181,7 +185,9 @@ Ids: `majors-store-of-value`, `layer-1`, `layer-2`, `defi`, `memecoins`, `ai-dat
 - Live unknowns: Binance reachability (HTTP 451 from US runners), Coinbase/Kraken lists absent (W7), CoinGecko 429 history, ccxt behaviour (UNVERIFIED).
 - UNVERIFIED reads: `web/lib/types/discovery.ts`, `outcome_summary`, test file locations in `api/tests/scripts`, `categories_store`, ccxt.
 
-## 11. Validation contract (to be filled by VALIDATE)
+## 11. Validate Contract (to be filled by VALIDATE)
+
+Verification gates, placeholders only:
 | Gate | Command / check | Pass criterion | Filled by |
 |---|---|---|---|
 | G1 | `uv run --project api pytest api/tests/analytics/attention -q` | TBD by VALIDATE | PENDING |
