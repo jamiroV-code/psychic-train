@@ -72,6 +72,7 @@ class DiscoveryHistoryBase(BaseModel):
     status: DiscoveryStatus
     reason: str
     min_history_days: int
+    min_covered_weight: float   # trigger floor, so a chart can draw covered_weight against it
 
 
 class DiscoveryCoinHistory(DiscoveryHistoryBase):
@@ -84,3 +85,17 @@ class DiscoveryCategoryHistory(DiscoveryHistoryBase):
     kind: Literal["category"] = "category"
     history_days: dict[str, int] = {}
     days: list[DiscoveryCategoryDay]
+
+
+class DiscoveryPriceDay(BaseModel):
+    date: str              # UTC day of the daily bar
+    close: float
+
+
+class DiscoveryPrice(BaseModel):
+    """Daily closes for the chart's price line, from the local 1d cache only (T104)."""
+    symbol: str
+    window: Literal[7, 30, 90]
+    status: DiscoveryStatus
+    last_date: str | None  # newest cached day on or before as_of, even when it is older than the window
+    days: list[DiscoveryPriceDay]

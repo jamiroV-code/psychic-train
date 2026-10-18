@@ -139,4 +139,54 @@ describe("DiscoveryTab", () => {
     expect(folded).toHaveTextContent("2 categories without data");
     expect(folded).not.toHaveAttribute("open");
   });
+
+  describe("history chart", () => {
+    const dates = ["2026-10-14", "2026-10-15"];
+    const coinHist = (window: DiscoveryWindow) => ({
+      kind: "coin" as const, id: "AAA", window, as_of: "2026-10-15", status: "ok" as const, reason: "",
+      min_history_days: 30, min_covered_weight: 30, history_days: {},
+      days: dates.map((date, i) => ({ date, score: 10 + i, covered_weight: 35, rising_weight: 25, trigger: i === 1, thin: false })),
+    });
+    const catHist = (window: DiscoveryWindow) => ({
+      kind: "category" as const, id: "high", window, as_of: "2026-10-15", status: "ok" as const, reason: "",
+      min_history_days: 30, min_covered_weight: 30, history_days: {},
+      days: dates.map((date, i) => ({ date, score: 5 + i, coins_used: 2, triggered_count: i, triggered_share: i / 2 })),
+    });
+    const history = () => ({
+      fetchCoinHistory: vi.fn((_s: string, w: DiscoveryWindow) => Promise.resolve(coinHist(w))),
+      fetchCategoryHistory: vi.fn((_i: string, w: DiscoveryWindow) => Promise.resolve(catHist(w))),
+      fetchPrice: vi.fn((s: string, w: DiscoveryWindow) =>
+        Promise.resolve({ symbol: s, window: w, status: "no-data" as const, last_date: null, days: [] })),
+    });
+
+    it("opens the category chart when a category opens, then a coin chart on a coin click", async () => {
+      const h = history();
+      render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp())} history={h} />);
+      await screen.findByTestId("discovery-table");
+      expect(screen.queryByTestId("discovery-history")).toBeNull();
+      fireEvent.click(within(screen.getByTestId("discovery-row-high")).getByRole("button"));
+      await screen.findByTestId("history-share-line");
+      expect(h.fetchCategoryHistory).toHaveBeenCalledWith("high", 30);
+      expect(screen.getByTestId("discovery-row-high")).toHaveAttribute("aria-current", "true");
+      fireEvent.click(screen.getByTestId("discovery-coin-high-AAA"));
+      await screen.findByTestId("history-band");
+      expect(h.fetchCoinHistory).toHaveBeenCalledWith("AAA", 30);
+      expect(screen.getByTestId("discovery-coin-high-AAA").closest("li")).toHaveAttribute("aria-current", "true");
+      expect(screen.getByTestId("discovery-row-high")).not.toHaveAttribute("aria-current");
+    });
+
+    it("refetches the open chart when the shared window changes, and closes", async () => {
+      const h = history();
+      render(<DiscoveryTab fetchDiscovery={(w) => Promise.resolve(resp({ window: w }))} history={h} />);
+      await screen.findByTestId("discovery-table");
+      fireEvent.click(within(screen.getByTestId("discovery-row-high")).getByRole("button"));
+      fireEvent.click(await screen.findByTestId("discovery-coin-high-AAA"));
+      await screen.findByTestId("history-band");
+      fireEvent.click(screen.getByTestId("discovery-window-90"));
+      await waitFor(() => expect(h.fetchCoinHistory).toHaveBeenLastCalledWith("AAA", 90));
+      await screen.findByTestId("history-band");
+      fireEvent.click(screen.getByTestId("history-close"));
+      expect(screen.queryByTestId("discovery-history")).toBeNull();
+    });
+  });
 });

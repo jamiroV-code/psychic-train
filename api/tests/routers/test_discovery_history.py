@@ -37,7 +37,8 @@ def test_coin_payload_shape(wired):
     b = r.json()
     assert (b["kind"], b["id"], b["window"], b["status"], b["reason"]) == ("coin", "A", 30, "ok", "")
     assert set(b) == {"kind", "id", "window", "as_of", "status", "reason", "min_history_days",
-                      "history_days", "days"}
+                      "min_covered_weight", "history_days", "days"}
+    assert b["min_covered_weight"] == 30
     assert len(b["days"]) == 30
     assert set(b["days"][-1]) == {"date", "score", "covered_weight", "rising_weight", "trigger", "thin"}
     assert b["days"][-1]["date"] == b["as_of"]

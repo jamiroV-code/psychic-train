@@ -97,7 +97,8 @@ def _days(end: date, window: int) -> list[date]:
 
 
 def _base(cfg: dict, subject: str, window: int, end: date) -> dict:
-    return {"id": subject, "window": window, "as_of": end.isoformat(), "min_history_days": int(cfg["min_history_days"])}
+    return {"id": subject, "window": window, "as_of": end.isoformat(), "min_history_days": int(cfg["min_history_days"]),
+            "min_covered_weight": float(cfg["min_covered_weight"])}
 
 
 def coin_history(symbol: str, window: int, *, today: date, probe_path: Path | None = None,

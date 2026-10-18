@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 import { DiscoveryTable } from "@/components/narrative/DiscoveryTable";
 import { fetchDiscovery as fetchDiscoveryDefault } from "@/lib/api/discovery";
-import type { DiscoveryReason, DiscoveryResponse, DiscoveryWindow } from "@/lib/types/discovery";
+import { DiscoveryHistoryChart, type DiscoveryHistoryChartProps } from "@/components/narrative/DiscoveryHistoryChart";
+import type { DiscoveryReason, DiscoveryResponse, DiscoverySelection, DiscoveryWindow } from "@/lib/types/discovery";
 
 export interface DiscoveryTabProps {
   fetchDiscovery?: (window: DiscoveryWindow) => Promise<DiscoveryResponse>;
+  /** History chart fetchers, injected by tests. */
+  history?: Pick<DiscoveryHistoryChartProps, "fetchCoinHistory" | "fetchCategoryHistory" | "fetchPrice">;
 }
 
 const WINDOWS: readonly DiscoveryWindow[] = [7, 30, 90];
@@ -24,11 +27,12 @@ function liveWeight(data: DiscoveryResponse): number {
 }
 
 /** Discovery tab: 7d/30d/90d selector, then a ranked category table or one plain state line. */
-export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault }: DiscoveryTabProps) {
+export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault, history }: DiscoveryTabProps) {
   const [window, setWindow] = useState<DiscoveryWindow>(30);
   const [attempt, setAttempt] = useState(0);
   const [data, setData] = useState<DiscoveryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selection, setSelection] = useState<DiscoverySelection | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,7 +75,7 @@ export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault }: Discove
       </p>
     );
   } else {
-    body = <DiscoveryTable categories={data.categories} />;
+    body = <DiscoveryTable categories={data.categories} selection={selection} onSelect={setSelection} />;
   }
 
   return (
@@ -100,6 +104,15 @@ export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault }: Discove
         <p data-testid="discovery-live-weight" className="basket-note">{`Live weight today: ${liveWeight(data)} of 100`}</p>
       )}
       {body}
+      {selection && data && data.status === "ok" && (
+        <DiscoveryHistoryChart
+          selection={selection}
+          window={window}
+          liveWeight={liveWeight(data)}
+          onClose={() => setSelection(null)}
+          {...history}
+        />
+      )}
     </section>
   );
 }

@@ -249,7 +249,7 @@ def test_shipped_config_is_valid_and_sums_to_100():
     assert sum(c["exchange_sub_weights"].values()) == pytest.approx(100)
     assert c["source_weights"] == WEIGHTS and c["exchange_sub_weights"] == SUB
     assert (c["rising_threshold_pct"], c["trigger_pct"], c["min_covered_weight"], c["min_history_days"]) == (
-        10, 60, 30, 90)
+        10, 60, 30, 30)
     assert "min_independent_sources" not in c and "source_groups" not in c
 
 
