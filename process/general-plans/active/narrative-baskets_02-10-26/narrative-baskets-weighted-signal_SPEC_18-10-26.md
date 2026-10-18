@@ -95,9 +95,21 @@ Both need: fetcher, `FETCHERS` entry (`registry.py:12-20`), probe record, histor
 - History/point-in-time: each exchange is gated and anchored on its own series (AC-W13 per exchange); an exchange with under the gate's days drops out of that day's composite and sub-weights rescale. Hyperliquid will be absent in backtests for roughly its first 90 days, so early composites are Binance/Coinbase/Kraken only. The 90-day state gate in `_classify` (`exchange_volume.py:35`) mirrors `registry.py:49`.
 - Wiring: `refresh_attention.py:196` maps source names to runners and `.github/workflows/attention-refresh.yml:193,200` runs `exchange_volume` and `hyperliquid_volume` as separate extra jobs, with a hardcoded source list at line 106. New sources (Coinbase, Kraken) therefore very likely need `.github/` edits (owner approval, Q8) as well as `refresh_attention.py` entries.
 
+## W8: PC-side fetch (design)
+
+Why: some providers block GitHub runners (Binance returned HTTP 451 per the planner; Trends and Reddit reachability UNVERIFIED). Owner constraints: fully automatic, no user workload, nothing to wait for when the site opens, and the PC is NOT on every day.
+
+- **Side per source:** config key `fetch_side` per source in `discovery.json`, values `github` or `pc_side`, owner-editable. Candidates for `pc_side`: Binance volume, Google Trends, Reddit only if blocked. Evidence (planner, run 4, 2026-10-18, job refresh-extra): Hyperliquid volume stored parquet for about 60 symbols from the GitHub runner, so Hyperliquid stays `github`. Binance and Trends result lines were not seen: UNVERIFIED. I read no run logs.
+- **Entry point:** a small idempotent Python script (proposed `api/scripts/refresh_attention_pc.py`) that fetches ONLY sources marked `pc_side`, reuses the existing fetchers and `store.write_series` merge (first observation wins, completed days only, `store.py:41-56`), and exits silently on success. Lock file, no overlap, per-provider rate limits, silent log file.
+- **Schedule:** a Windows scheduled task at boot/wake and every few hours while on, following the `deploy/register-tasks.ps1` pattern. Dependency: R12 owns `deploy/*.ps1` (MASTER-PLAN row R12), so W8 must be dispatched after R12's files are settled and the owner approves edits there. Does NOT touch `.github/`.
+- **Catch-up after downtime:** backfillable sources fill the whole gap on the next run: Binance (100 daily bars, `exchange_volume.py:18`), Kraken/Coinbase OHLCV, Hyperliquid OHLCV (UNVERIFIED live), Trends `today 3-m` with replace-whole-series semantics (this needs a new write mode, since `write_series` is first-wins; and it must keep one normalised pull per coin to avoid the scale-mixing trap). Forward-only sources (Reddit, one value per run) leave gaps while the PC is off, so they should stay on GitHub unless blocked; if blocked, the gaps are accepted and show up as thin `covered_weight` days.
+- **Pattern:** the equities catch-up rule (T51), `_behind` in `api/data/equities_refresh.py:231` and its use at `:267`: compare the last stored/fetched point to the expected one and fetch only what is missing.
+- **Stores:** the PC writes to its own cache folders, not committed to git (proposed `cache/attention_pc/<source>/`). The API reader merges both stores per source at read time. No file is written by both sides. Merge rule when both hold a day: GitHub's store wins on ties (first observation wins, as today). Changing `registry.read_series` (`registry.py:36-51`) to read two roots is part of W8.
+- **Verification:** workers cannot reach providers, so tests use fakes (RT2); real behaviour needs owner PC probes after the build (RT4). Trends and Binance results from the PC are UNVERIFIED until then.
+
 ## Out of scope
 
-Forward returns after triggers (later optional step, W2b: for each trigger day report close-to-close return at +N days, N configurable, excluding triggers with < N days of price after them, shown as a table beside the chart); new source code for github_dev and defillama (W5, W6) and exchange_activity (W7); T99 wiki article mapping fixes; T100 Trends backfill; detail table design beyond the column list; changes to `.github/` (needs owner approval, see Q8), My baskets tab, or rank-score weights in `attention_weights.json`.
+Forward returns after triggers (later optional step, W2b: for each trigger day report close-to-close return at +N days, N configurable, excluding triggers with < N days of price after them, shown as a table beside the chart); new source code for github_dev and defillama (W5, W6) and exchange_activity (W7); the PC fetch is W8; T99 wiki article mapping fixes; T100 Trends backfill; detail table design beyond the column list; changes to `.github/` (needs owner approval, see Q8), My baskets tab, or rank-score weights in `attention_weights.json`.
 
 ## Proposed slices
 
@@ -111,9 +123,10 @@ Forward returns after triggers (later optional step, W2b: for each trigger day r
 | W5 | New source `github_dev` (commits, stars per project): fetcher, registry entry, probe record, coin to repo map `api/data/github_repos.json` (new) | `api/data/attention/github_dev.py` (new), `registry.py`, `api/scripts/refresh_attention.py` | RT2 | 3-5 |
 | W6 | New source `defillama` (TVL and fees, DeFi/L1/L2 coins only): same pieces, coin to protocol slug map `api/data/defillama_slugs.json` (new) | `api/data/attention/defillama.py` (new), `registry.py`, `refresh_attention.py` | RT2 | 3-5 |
 | W7 | `exchange_activity` composite: Coinbase and Kraken adapters (ccxt, about 40 lines each, planner estimate), composite reader, `exchange_sub_weights` config, CoinGecko fallback, per-exchange `as_of` in rows, point-in-time handling | `api/data/attention/exchange_volume.py`, new `coinbase`/`kraken` fetchers, `registry.py`, `refresh_attention.py`, `discovery.py` | RT2 | 4-6 |
+| W8 | PC-side fetch for sources GitHub runners cannot reach (design below): entry point, config key `fetch_side`, second store, scheduled task | `api/scripts/refresh_attention_pc.py` (new), `api/data/attention/store.py`, `discovery.json`, `deploy/register-tasks.ps1` | RT2 + owner PC probes (RT4) | 5-8 |
 | T99, T100 | Wiki article fixes; Trends backfill | separate tasks | | |
 
-Order: W1 (includes the fallback and composite reader against existing Binance data), W2, W3, then W4; W5, W6, W7 and T99/T100 are independent and raise real max coverage. Total about 22-33 USD without W2b. Worker ceiling 185 USD (informational); per-slice cap 15 USD, planner asks the owner at 7 USD.
+Order: W1 (includes the fallback and composite reader against existing Binance data), W2, W3, then W4; W5, W6, W7 and T99/T100 are independent and raise real max coverage. Total about 27-41 USD without W2b. Worker ceiling 185 USD (informational); per-slice cap 15 USD, planner asks the owner at 7 USD.
 
 ## Risks
 
@@ -131,6 +144,7 @@ Order: W1 (includes the fallback and composite reader against existing Binance d
 - **Q4** Price overlay if a coin lacks a 1d OHLCV cache: accept "price unavailable" or fetch from CoinGecko on demand?
 - **Q5** Category aggregate: mean of winsorised coin scores (consistent with today) or share of coins triggered? (Proposed: both, score as line, share as secondary.)
 - **Q7** CLOSED by the planner: Binance stays, inside exchange_activity.
+- **Q10** Allow W8 to edit `deploy/register-tasks.ps1` (R12-owned), and where should the PC-side cache live?
 - **Q9** Approve the exchange_sub_weights proposal (40/25/15/20), or give a participation figure and source?
 - **Q8** May W5/W6 slices edit `.github/workflows/attention-refresh.yml` (needed to record probes for new sources)?
 - **Q6** Should the `github_dev` (8) and `defillama` (7) weights sit idle and silently rescale away until live? (Proposed yes; covered_weight shows it.)
