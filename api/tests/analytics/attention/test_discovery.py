@@ -6,7 +6,8 @@ from datetime import timedelta
 
 import pytest
 
-from api.analytics.attention import discovery as disc, score as score_mod, universe as universe_mod
+from api.analytics.attention import discovery as disc, narratives as narr_mod, score as score_mod
+from api.analytics.attention import universe as universe_mod
 from api.data.attention import categories_store, registry, store, universe_store
 from api.data.attention.types import SourceSeries
 from api.tests.analytics.attention.conftest import SOURCES, TODAY, write_configs
@@ -30,21 +31,42 @@ def cfg(tmp_path, **over):
     base = {"min_volume_24h_usd": 20_000_000, "exclude": ["BNB"], "exclude_category_ids": ["cex"],
             "source_weights": WEIGHTS, "exchange_sub_weights": SUB, "rising_threshold_pct": 10,
             "trigger_pct": 60, "min_covered_weight": 30, "min_history_days": 90,
-            "winsor_percentile": 95, "recent_days": 7, "max_source_lag_days": 3, "categories": CATS,
-            "min_category_coins": 1}
+            "winsor_percentile": 95, "recent_days": 7, "max_source_lag_days": 3,
+            "universe_rules": {"min_narrative_coins": over.pop("min_narrative_coins", 1)}}
     base.update(over)
     p = tmp_path / "discovery.json"
     p.write_text(json.dumps(base))
     return p
 
 
+def write_narratives(tmp_path, cats, status="proposed", as_of="2026-10-14"):
+    """Narratives fixture: the `cats` entries whose id is in CATS; a coin's first narrative is its primary."""
+    names, seen, out = {c["id"]: c["name"] for c in CATS}, set(), []
+    for cid, name in names.items():
+        coins = []
+        for s in (cats or {}).get(cid, []):
+            coins.append({"symbol": s, "primary": s not in seen})
+            seen.add(s)
+        out.append({"id": cid, "name": name, "coins": coins})
+    p = tmp_path / "attention_narratives.json"
+    p.write_text(json.dumps({"status": status, "as_of": as_of, "narratives": out}))
+    return p
+
+
 def world(tmp_path, monkeypatch, coins, cats=None, **over):
-    """coins: {SYM: volume}; cats: {category id: [SYM]} (None = no categories snapshot)."""
+    """coins: {SYM: volume}; cats: {category id: [SYM]} (None = no categories snapshot). The ids in CATS are
+    also written as the narratives fixture (members = Discovery categories); other ids (e.g. "cex") only feed
+    the CoinGecko snapshot that `exclude_category_ids` reads until U2."""
     probe, w, u = write_configs(tmp_path, sources=PROBED, reference=())
     monkeypatch.setattr(registry, "PROBE_RECORDS_PATH", probe)
     monkeypatch.setattr(score_mod, "WEIGHTS_PATH", w)
     monkeypatch.setattr(universe_mod, "UNIVERSE_PATH", u)
     monkeypatch.setattr(disc, "CONFIG_PATH", cfg(tmp_path, **over))
+    monkeypatch.setattr(narr_mod, "NARRATIVES_PATH", write_narratives(tmp_path, cats))
+    id_map = tmp_path / "attention_narrative_id_map.json"
+    id_map.write_text(json.dumps({"map": {"artificial-intelligence": {"narrative": "ai", "name": "AI"},
+                                          "gaming": {"narrative": None, "name": "Gaming"}}}))
+    monkeypatch.setattr(narr_mod, "ID_MAP_PATH", id_map)
     rows = [{"id": s.lower(), "symbol": s, "market_cap": 1000 - i, "volume_24h": v}
             for i, (s, v) in enumerate(coins.items())]
     universe_store.write_snapshot("2026-10-15", rows)
@@ -162,7 +184,7 @@ def test_ranked_by_momentum_desc(isolated_cache, tmp_path, monkeypatch):
 
 
 def test_category_without_usable_coins_has_no_score(isolated_cache, tmp_path, monkeypatch):
-    world(tmp_path, monkeypatch, {"A": 5e7}, cats={"ai": ["A"], "defi": []})
+    world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7}, cats={"ai": ["A"], "defi": ["B"]})
     gain("A")
     d = cat(disc.build_discovery(30, today=TODAY), "defi")
     assert (d.score, d.median, d.coins_used) == (None, None, 0)
@@ -241,7 +263,8 @@ def test_shipped_config_lag_limit_is_sane():
 
 def good(**over):
     return {"source_weights": dict(WEIGHTS), "exchange_sub_weights": dict(SUB), "rising_threshold_pct": 10,
-            "trigger_pct": 60, "min_covered_weight": 30, "min_history_days": 90, "min_category_coins": 1, **over}
+            "trigger_pct": 60, "min_covered_weight": 30, "min_history_days": 90,
+            "universe_rules": {"min_narrative_coins": 1}, **over}
 
 
 def test_shipped_config_is_valid_and_sums_to_100():
@@ -271,12 +294,14 @@ def _sw(**kw):
     {"exchange_sub_weights": {**SUB, "okx": 0}},
     {"min_history_days": 0},
     {"trigger_pct": 101},
-    {"min_category_coins": 0},
-    {"min_category_coins": -2},
-    {"min_category_coins": 2.5},
-    {"min_category_coins": True},
-    {"min_category_coins": "3"},
-    {"min_category_coins": None},
+    {"universe_rules": None},
+    {"universe_rules": {}},
+    {"universe_rules": {"min_narrative_coins": 0}},
+    {"universe_rules": {"min_narrative_coins": -2}},
+    {"universe_rules": {"min_narrative_coins": 2.5}},
+    {"universe_rules": {"min_narrative_coins": True}},
+    {"universe_rules": {"min_narrative_coins": "3"}},
+    {"universe_rules": {"min_narrative_coins": None}},
 ])
 def test_invalid_config_is_rejected(tmp_path, over):
     p = tmp_path / "d.json"
@@ -286,8 +311,7 @@ def test_invalid_config_is_rejected(tmp_path, over):
 
 
 def cfg_base():
-    return {"min_volume_24h_usd": 1, "winsor_percentile": 95, "recent_days": 7, "max_source_lag_days": 3,
-            "categories": CATS}
+    return {"min_volume_24h_usd": 1, "winsor_percentile": 95, "recent_days": 7, "max_source_lag_days": 3}
 
 
 def test_weight_sum_tolerance_accepts_small_drift(tmp_path):
@@ -412,7 +436,8 @@ def test_payload_drops_old_fields(isolated_cache, tmp_path, monkeypatch):
     world(tmp_path, monkeypatch, {"A": 5e7}, cats={"ai": ["A"]})
     gain("A")
     row = disc.build_discovery(30, today=TODAY).model_dump()["categories"][0]["coins"][0]
-    assert set(row) == {"symbol", "change", "raw_change", "covered_weight", "rising_weight", "trigger", "sources"}
+    assert set(row) == {"symbol", "change", "raw_change", "covered_weight", "rising_weight", "trigger", "sources",
+                        "primary"}
 
 
 # ---- exchange_activity composite -----------------------------------------------------------
@@ -473,23 +498,24 @@ def test_coingecko_not_used_when_any_exchange_has_data(isolated_cache, tmp_path,
 
 # ---- T106: ranked-category rule and exclusion counts ---------------------------------------
 
-def test_shipped_min_category_coins_is_three():
-    assert disc.load_config()["min_category_coins"] == 3
+def test_shipped_min_narrative_coins_is_three():
+    c = disc.load_config()
+    assert c["universe_rules"]["min_narrative_coins"] == 3 and "min_category_coins" not in c
 
 
-def test_missing_min_category_coins_is_rejected(tmp_path):
+def test_missing_min_narrative_coins_is_rejected(tmp_path):
     p = tmp_path / "d.json"
     c = {**cfg_base(), **good()}
-    del c["min_category_coins"]
+    del c["universe_rules"]["min_narrative_coins"]
     p.write_text(json.dumps(c))
-    with pytest.raises(ValueError, match="min_category_coins"):
+    with pytest.raises(ValueError, match="min_narrative_coins"):
         disc.load_config(p)
 
 
 def test_category_below_minimum_is_unranked_but_keeps_its_score(isolated_cache, tmp_path, monkeypatch):
-    coins = {"A": 5e7, "B": 5e7, "C": 5e7}
-    world(tmp_path, monkeypatch, coins, cats={"ai": ["A", "B", "C"], "defi": ["A"]}, min_category_coins=3)
-    for s in coins:
+    coins = {"A": 5e7, "B": 5e7, "C": 5e7, "D": 5e7, "E": 5e7}
+    world(tmp_path, monkeypatch, coins, cats={"ai": ["A", "B", "C"], "defi": ["A", "D", "E"]}, min_narrative_coins=3)
+    for s in "ABC":
         gain(s, factor=1.2)
     res = disc.build_discovery(30, today=TODAY)
     assert res.min_category_coins == 3
@@ -499,21 +525,21 @@ def test_category_below_minimum_is_unranked_but_keeps_its_score(isolated_cache, 
 
 
 def test_minimum_is_inclusive(isolated_cache, tmp_path, monkeypatch):
-    world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7}, cats={"ai": ["A", "B"]}, min_category_coins=2)
+    world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7}, cats={"ai": ["A", "B"]}, min_narrative_coins=2)
     gain("A"), gain("B")
     assert cat(disc.build_discovery(30, today=TODAY), "ai").ranked is True
 
 
 def test_coins_without_usable_data_do_not_count_toward_the_minimum(isolated_cache, tmp_path, monkeypatch):
-    world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7, "C": 5e7}, cats={"ai": ["A", "B", "C"]}, min_category_coins=3)
+    world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7, "C": 5e7}, cats={"ai": ["A", "B", "C"]}, min_narrative_coins=3)
     gain("A"), gain("B")
     c = cat(disc.build_discovery(30, today=TODAY), "ai")
     assert (c.coins_used, c.ranked) == (2, False)
 
 
 def test_unranked_sit_after_ranked_whatever_their_score(isolated_cache, tmp_path, monkeypatch):
-    coins = {"A": 5e7, "B": 5e7, "C": 5e7, "D": 5e7}
-    world(tmp_path, monkeypatch, coins, cats={"ai": ["A", "B", "C"], "defi": ["D"]}, min_category_coins=3)
+    coins = {"A": 5e7, "B": 5e7, "C": 5e7, "D": 5e7, "E": 5e7, "F": 5e7}
+    world(tmp_path, monkeypatch, coins, cats={"ai": ["A", "B", "C"], "defi": ["D", "E", "F"]}, min_narrative_coins=3)
     for s in "ABC":
         gain(s, factor=1.1)
     gain("D", factor=5.0)
@@ -524,7 +550,7 @@ def test_unranked_sit_after_ranked_whatever_their_score(isolated_cache, tmp_path
 
 def test_ranked_order_is_unchanged_by_the_rule(isolated_cache, tmp_path, monkeypatch):
     coins = {s: 5e7 for s in "ABCDEF"}
-    world(tmp_path, monkeypatch, coins, cats={"ai": ["A", "B", "C"], "defi": ["D", "E", "F"]}, min_category_coins=3)
+    world(tmp_path, monkeypatch, coins, cats={"ai": ["A", "B", "C"], "defi": ["D", "E", "F"]}, min_narrative_coins=3)
     for s in "ABC":
         gain(s, factor=1.2)
     for s in "DEF":
@@ -549,3 +575,74 @@ def test_response_carries_thresholds(isolated_cache, tmp_path, monkeypatch):
     gain("A")
     res = disc.build_discovery(30, today=TODAY)
     assert (res.rising_threshold_pct, res.min_covered_weight) == (10, 30)
+
+
+# ---- T113 U1: Discovery categories are the narratives file ---------------------------------------------------
+
+def test_discovery_uses_narratives_not_categories(isolated_cache, tmp_path, monkeypatch):
+    world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7}, cats={"ai": ["A"]})
+    monkeypatch.setattr(narr_mod, "NARRATIVES_PATH", write_narratives(tmp_path, {"ai": ["A", "B"], "defi": ["B"]}))
+    gain("A"), gain("B")
+    res = disc.build_discovery(30, today=TODAY)
+    assert sorted(c.symbol for c in cat(res, "ai").coins) == ["A", "B"]
+    assert [c.symbol for c in cat(res, "defi").coins] == ["B"]
+    assert (coin(res, "ai", "B").primary, coin(res, "defi", "B").primary, coin(res, "ai", "A").primary) == (
+        True, False, True)
+
+
+def test_min_narrative_coins_drives_hidden_and_min_category_coins_field(isolated_cache, tmp_path, monkeypatch):
+    coins = {"A": 5e7, "B": 5e7, "C": 5e7, "D": 5e7}
+    world(tmp_path, monkeypatch, coins, cats={"ai": ["A", "B", "C"], "defi": ["C", "D", "OUT"]},
+          min_narrative_coins=3)
+    for s in coins:
+        gain(s)
+    res = disc.build_discovery(30, today=TODAY)
+    assert res.min_category_coins == 3
+    assert [c.id for c in res.categories] == ["ai"]
+    assert [h.model_dump() for h in res.hidden_narratives] == [{"id": "defi", "name": "DeFi", "coins": ["C", "D"]}]
+
+
+def test_unassigned_new_coin_listed_not_error(isolated_cache, tmp_path, monkeypatch):
+    world(tmp_path, monkeypatch, {"A": 5e7, "NEW": 5e7}, cats={"ai": ["A"]})
+    gain("A"), gain("NEW")
+    res = disc.build_discovery(30, today=TODAY)
+    assert res.status == "ok" and res.unassigned == ["NEW"]
+    assert res.excluded.no_category == 1
+
+
+def test_response_carries_narratives_status_and_as_of(isolated_cache, tmp_path, monkeypatch):
+    world(tmp_path, monkeypatch, {"A": 5e7}, cats={"ai": ["A"]})
+    gain("A")
+    res = disc.build_discovery(30, today=TODAY)
+    assert (res.narratives_status, res.categories_as_of) == ("proposed", "2026-10-14")
+    monkeypatch.setattr(narr_mod, "NARRATIVES_PATH",
+                        write_narratives(tmp_path, {"ai": ["A"]}, status="reviewed", as_of="2026-10-15"))
+    res = disc.build_discovery(30, today=TODAY)
+    assert (res.narratives_status, res.categories_as_of) == ("reviewed", "2026-10-15")
+
+
+def test_invalid_narratives_file_fails_loudly(isolated_cache, tmp_path, monkeypatch):
+    world(tmp_path, monkeypatch, {"A": 5e7}, cats={"ai": ["A"]})
+    bad = tmp_path / "bad.json"
+    coins = [{"symbol": "../X", "primary": True}]
+    bad.write_text(json.dumps({"status": "proposed", "as_of": "2026-10-14",
+                               "narratives": [{"id": "ai", "name": "AI", "coins": coins}]}))
+    monkeypatch.setattr(narr_mod, "NARRATIVES_PATH", bad)
+    with pytest.raises(ValueError, match=r"\.\./X"):
+        disc.build_discovery(30, today=TODAY)
+
+
+@pytest.mark.parametrize("key, value", [("categories", CATS), ("min_category_coins", 3)])
+def test_removed_keys_categories_and_min_category_coins_rejected(tmp_path, key, value):
+    p = tmp_path / "d.json"
+    p.write_text(json.dumps({**cfg_base(), **good(), key: value}))
+    with pytest.raises(ValueError, match=key):
+        disc.load_config(p)
+
+
+def test_shipped_config_has_no_categories_key():
+    raw = json.loads(disc.CONFIG_PATH.read_text())
+    assert "categories" not in raw and "min_category_coins" not in raw
+    assert raw["universe_rules"] == {"min_narrative_coins": 3}
+    # kept until U2 (F3): the exclusion step still reads CoinGecko categories
+    assert raw["exclude_category_ids"] == ["exchange-based-tokens"]

@@ -1,0 +1,14 @@
+{
+ "note": "Old CoinGecko category id -> narrative id (null = retired). Resolves ids stored in frozen signal snapshots and bookmarked history links; the nightly categories runner fetches these ids as a seeding hint. Lossy in meaning: oracle (1 coin) -> infrastructure (4).",
+ "map": {
+  "layer-1": {"narrative": "layer-1", "name": "Layer 1"},
+  "layer-2": {"narrative": "layer-2", "name": "Layer 2"},
+  "decentralized-finance-defi": {"narrative": "defi", "name": "DeFi"},
+  "meme-token": {"narrative": "memecoins", "name": "Memecoins"},
+  "artificial-intelligence": {"narrative": "ai-data-compute", "name": "AI"},
+  "real-world-assets-rwa": {"narrative": "real-world-assets", "name": "Real-world assets"},
+  "gaming": {"narrative": null, "name": "Gaming"},
+  "privacy-coins": {"narrative": "privacy", "name": "Privacy"},
+  "oracle": {"narrative": "infrastructure", "name": "Oracles"}
+ }
+}

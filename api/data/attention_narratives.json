@@ -1,0 +1,448 @@
+{
+ "status": "proposed",
+ "as_of": "2026-10-18",
+ "narratives": [
+  {
+   "id": "majors-store-of-value",
+   "name": "Majors / store of value",
+   "coins": [
+    {
+     "symbol": "BTC",
+     "primary": true
+    },
+    {
+     "symbol": "ETH",
+     "primary": true
+    },
+    {
+     "symbol": "XRP",
+     "primary": true,
+     "note": "owner placement 18-10-26"
+    },
+    {
+     "symbol": "XAUT",
+     "primary": false
+    },
+    {
+     "symbol": "PAXG",
+     "primary": false
+    }
+   ]
+  },
+  {
+   "id": "layer-1",
+   "name": "Layer 1",
+   "coins": [
+    {
+     "symbol": "SOL",
+     "primary": true
+    },
+    {
+     "symbol": "TRX",
+     "primary": true
+    },
+    {
+     "symbol": "ADA",
+     "primary": true
+    },
+    {
+     "symbol": "AVAX",
+     "primary": true
+    },
+    {
+     "symbol": "CC",
+     "primary": true
+    },
+    {
+     "symbol": "SUI",
+     "primary": true
+    },
+    {
+     "symbol": "HBAR",
+     "primary": true
+    },
+    {
+     "symbol": "DOT",
+     "primary": true
+    },
+    {
+     "symbol": "ETC",
+     "primary": true
+    },
+    {
+     "symbol": "ALGO",
+     "primary": true
+    },
+    {
+     "symbol": "KAS",
+     "primary": true
+    },
+    {
+     "symbol": "ATOM",
+     "primary": true
+    },
+    {
+     "symbol": "PI",
+     "primary": true
+    },
+    {
+     "symbol": "APT",
+     "primary": true
+    },
+    {
+     "symbol": "GRAM",
+     "primary": true,
+     "note": "UNVERIFIED: SPEC proposal, owner reviews at G-OWN"
+    },
+    {
+     "symbol": "NEAR",
+     "primary": true,
+     "note": "primary from the SPEC per-coin table; PLAN section 5 lists it only as an extra (T113)"
+    },
+    {
+     "symbol": "ICP",
+     "primary": true,
+     "note": "primary from the SPEC per-coin table; PLAN section 5 lists it only as an extra (T113)"
+    },
+    {
+     "symbol": "INJ",
+     "primary": true,
+     "note": "primary from the SPEC per-coin table; PLAN section 5 lists it only as an extra (T113)"
+    },
+    {
+     "symbol": "ETH",
+     "primary": false
+    },
+    {
+     "symbol": "XRP",
+     "primary": false
+    },
+    {
+     "symbol": "HYPE",
+     "primary": false
+    },
+    {
+     "symbol": "XDC",
+     "primary": false
+    }
+   ]
+  },
+  {
+   "id": "layer-2",
+   "name": "Layer 2",
+   "coins": [
+    {
+     "symbol": "MNT",
+     "primary": true
+    },
+    {
+     "symbol": "ARB",
+     "primary": true
+    },
+    {
+     "symbol": "POL",
+     "primary": true
+    },
+    {
+     "symbol": "STX",
+     "primary": true
+    }
+   ]
+  },
+  {
+   "id": "defi",
+   "name": "DeFi",
+   "coins": [
+    {
+     "symbol": "UNI",
+     "primary": true
+    },
+    {
+     "symbol": "ENA",
+     "primary": true
+    },
+    {
+     "symbol": "AAVE",
+     "primary": true
+    },
+    {
+     "symbol": "ASTER",
+     "primary": true
+    },
+    {
+     "symbol": "MORPHO",
+     "primary": true
+    },
+    {
+     "symbol": "SKY",
+     "primary": true
+    },
+    {
+     "symbol": "JST",
+     "primary": true
+    },
+    {
+     "symbol": "JUP",
+     "primary": true
+    },
+    {
+     "symbol": "AERO",
+     "primary": true
+    },
+    {
+     "symbol": "LIT",
+     "primary": true
+    },
+    {
+     "symbol": "CAKE",
+     "primary": true
+    },
+    {
+     "symbol": "RAIN",
+     "primary": true,
+     "note": "UNVERIFIED: SPEC proposal, owner reviews at G-OWN"
+    },
+    {
+     "symbol": "BTW",
+     "primary": true,
+     "note": "UNVERIFIED: SPEC proposal, owner reviews at G-OWN"
+    },
+    {
+     "symbol": "WLFI",
+     "primary": true,
+     "note": "UNVERIFIED: SPEC proposal, owner reviews at G-OWN"
+    },
+    {
+     "symbol": "HYPE",
+     "primary": false
+    },
+    {
+     "symbol": "LINK",
+     "primary": false
+    },
+    {
+     "symbol": "ONDO",
+     "primary": false
+    },
+    {
+     "symbol": "INJ",
+     "primary": false
+    },
+    {
+     "symbol": "NEXO",
+     "primary": false,
+     "note": "UNVERIFIED: SPEC proposal, owner reviews at G-OWN"
+    }
+   ]
+  },
+  {
+   "id": "memecoins",
+   "name": "Memecoins",
+   "coins": [
+    {
+     "symbol": "DOGE",
+     "primary": true
+    },
+    {
+     "symbol": "SHIB",
+     "primary": true
+    },
+    {
+     "symbol": "PEPE",
+     "primary": true
+    },
+    {
+     "symbol": "PUMP",
+     "primary": false
+    }
+   ]
+  },
+  {
+   "id": "ai-data-compute",
+   "name": "AI and data/compute",
+   "coins": [
+    {
+     "symbol": "TAO",
+     "primary": true
+    },
+    {
+     "symbol": "WLD",
+     "primary": true
+    },
+    {
+     "symbol": "RENDER",
+     "primary": true
+    },
+    {
+     "symbol": "VVV",
+     "primary": true
+    },
+    {
+     "symbol": "PRL",
+     "primary": true,
+     "note": "UNVERIFIED: SPEC proposal, owner reviews at G-OWN"
+    },
+    {
+     "symbol": "AKE",
+     "primary": true,
+     "note": "UNVERIFIED: SPEC proposal, owner reviews at G-OWN"
+    },
+    {
+     "symbol": "NEAR",
+     "primary": false
+    },
+    {
+     "symbol": "ICP",
+     "primary": false
+    }
+   ]
+  },
+  {
+   "id": "real-world-assets",
+   "name": "Real-world assets",
+   "coins": [
+    {
+     "symbol": "ONDO",
+     "primary": true
+    },
+    {
+     "symbol": "XDC",
+     "primary": true
+    },
+    {
+     "symbol": "XAUT",
+     "primary": true
+    },
+    {
+     "symbol": "PAXG",
+     "primary": true
+    }
+   ]
+  },
+  {
+   "id": "privacy",
+   "name": "Privacy",
+   "coins": [
+    {
+     "symbol": "ZEC",
+     "primary": true
+    },
+    {
+     "symbol": "XMR",
+     "primary": true
+    },
+    {
+     "symbol": "NIGHT",
+     "primary": true,
+     "note": "UNVERIFIED: SPEC proposal, owner reviews at G-OWN"
+    }
+   ]
+  },
+  {
+   "id": "payments-settlement",
+   "name": "Payments and settlement",
+   "coins": [
+    {
+     "symbol": "XLM",
+     "primary": true
+    },
+    {
+     "symbol": "BCH",
+     "primary": true
+    },
+    {
+     "symbol": "LTC",
+     "primary": true
+    },
+    {
+     "symbol": "STABLE",
+     "primary": true,
+     "note": "UNVERIFIED: SPEC proposal, owner reviews at G-OWN"
+    },
+    {
+     "symbol": "XRP",
+     "primary": false
+    }
+   ]
+  },
+  {
+   "id": "infrastructure",
+   "name": "Infrastructure",
+   "coins": [
+    {
+     "symbol": "LINK",
+     "primary": true
+    },
+    {
+     "symbol": "QNT",
+     "primary": true
+    },
+    {
+     "symbol": "FIL",
+     "primary": true
+    },
+    {
+     "symbol": "ZRO",
+     "primary": true
+    }
+   ]
+  },
+  {
+   "id": "exchange-tokens",
+   "name": "Exchange tokens",
+   "coins": [
+    {
+     "symbol": "BNB",
+     "primary": true
+    },
+    {
+     "symbol": "WBT",
+     "primary": true
+    },
+    {
+     "symbol": "LEO",
+     "primary": true
+    },
+    {
+     "symbol": "CRO",
+     "primary": true
+    },
+    {
+     "symbol": "OKB",
+     "primary": true
+    },
+    {
+     "symbol": "HTX",
+     "primary": true
+    },
+    {
+     "symbol": "BGB",
+     "primary": true
+    },
+    {
+     "symbol": "GT",
+     "primary": true
+    },
+    {
+     "symbol": "KCS",
+     "primary": true
+    },
+    {
+     "symbol": "HYPE",
+     "primary": true,
+     "note": "owner placement 18-10-26"
+    },
+    {
+     "symbol": "PUMP",
+     "primary": true,
+     "note": "owner placement 18-10-26"
+    },
+    {
+     "symbol": "NEXO",
+     "primary": true,
+     "note": "owner placement 18-10-26"
+    }
+   ]
+  }
+ ]
+}

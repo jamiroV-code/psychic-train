@@ -311,3 +311,38 @@ def test_cache_hit_skips_store_reads_and_invalidates(isolated_cache, tmp_path, m
     clone = hist.category_history("ai", 30, today=TODAY)
     clone.days.clear()  # callers cannot corrupt the cache
     assert hist.category_history("ai", 30, today=TODAY).days
+
+
+# ---- T113 U1: ids resolve to narratives; old category ids through the map -----------------------------------
+
+def test_history_accepts_old_category_id_via_map(isolated_cache, tmp_path, monkeypatch):
+    world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7}, cats={"ai": ["A", "B"]})
+    seed_coin("A"), seed_coin("B")
+    old = hist.category_history("artificial-intelligence", 30, today=TODAY)
+    new = hist.category_history("ai", 30, today=TODAY)
+    assert old.id == "ai" and old.status == "ok" and old.days == new.days
+
+
+def test_history_retired_old_id_is_unknown(isolated_cache, tmp_path, monkeypatch):
+    world(tmp_path, monkeypatch, {"A": 5e7}, cats={"ai": ["A"]})
+    with pytest.raises(hist.UnknownSubject, match="gaming"):
+        hist.category_history("gaming", 30, today=TODAY)
+
+
+def test_history_members_come_from_narratives(isolated_cache, tmp_path, monkeypatch):
+    from api.analytics.attention import narratives as narr_mod
+    from api.tests.analytics.attention.test_discovery import write_narratives
+    world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7}, cats={"ai": ["A"]})
+    monkeypatch.setattr(narr_mod, "NARRATIVES_PATH", write_narratives(tmp_path, {"ai": ["A", "B"]}))
+    seed_coin("A"), seed_coin("B")
+    assert hist.category_history("ai", 30, today=TODAY).days[-1].coins_used == 2
+
+
+def test_history_payload_carries_membership_as_of(isolated_cache, tmp_path, monkeypatch):
+    from api.analytics.attention import narratives as narr_mod
+    from api.tests.analytics.attention.test_discovery import write_narratives
+    world(tmp_path, monkeypatch, {"A": 5e7}, cats={"ai": ["A"]})
+    seed_coin("A")
+    assert hist.category_history("ai", 30, today=TODAY).membership_as_of == "2026-10-14"
+    monkeypatch.setattr(narr_mod, "NARRATIVES_PATH", write_narratives(tmp_path, {"ai": ["A"]}, as_of="2026-10-15"))
+    assert hist.category_history("ai", 30, today=TODAY).membership_as_of == "2026-10-15"  # cache invalidated
