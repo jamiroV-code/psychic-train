@@ -30,7 +30,7 @@ Discovery today says a coin is "gaining" when 2 independent source groups rise (
 
 ## Locked decisions (owner, 18-10-26)
 
-1. **Weights.** Each source has a weight in percent in `api/data/discovery.json` (key `source_weights`), owner-editable. Starting: wikipedia 25, trends 25, reddit 20, xsearch 10, coingecko 10, github_dev 10. Binance `exchange_volume` and `hyperliquid_volume` carry no weight. `min_independent_sources` and `source_groups` are removed.
+1. **Weights.** Each source has a weight in percent in `api/data/discovery.json` (key `source_weights`), owner-editable. Starting (revised by the planner, 18-10-26): wikipedia 25, trends 25, reddit 15, xsearch 10, coingecko 10, github_dev 8, defillama 7 (sum 100). github_dev and defillama are new, unbuilt, inert until each has data. Binance `exchange_volume` and `hyperliquid_volume` carry no weight. `min_independent_sources` and `source_groups` are removed.
 2. **Rescale.** A source with no usable value for a coin drops out; remaining weights are rescaled to that coin's available weight. Missing is never 0.
 3. **Rising.** Source change over the window >= `rising_threshold_pct` (10).
 4. **Trigger.** `rising_weight / covered_weight >= trigger_pct` (60) AND `covered_weight >= min_covered_weight` (30), where covered_weight is in points of the 100.
@@ -41,11 +41,11 @@ Discovery today says a coin is "gaining" when 2 independent source groups rise (
 
 ## Honest coverage today
 
-Live and weighted sources are Wikipedia (25) and CoinGecko (10) only: max covered_weight is **35**. The 30 floor therefore needs Wikipedia present. A coin without a Wikipedia article reaches at most 10 and **can never trigger** until reddit, trends, xsearch or github_dev have data. With both live, a trigger needs rising_weight/35 >= 60%, i.e. Wikipedia alone (25/35 = 71%) is enough; CoinGecko alone is not. The trigger is effectively "Wikipedia is rising" until more sources land. The UI must say so (AC-W12). reddit, trends, xsearch are in the registry but whether their stores hold enough history to reach `ok` is UNVERIFIED (no parquet reader in this session; stores for them are not in the local cache listing).
+Live and weighted sources are Wikipedia (25) and CoinGecko (10) only: max covered_weight is **35**. The 30 floor therefore needs Wikipedia present. A coin without a Wikipedia article reaches at most 10 and **can never trigger** until reddit, trends, xsearch, github_dev or defillama have data. With both live, a trigger needs rising_weight/35 >= 60%, i.e. Wikipedia alone (25/35 = 71%) is enough; CoinGecko alone is not. The trigger is effectively "Wikipedia is rising" until more sources land. The UI must say so (AC-W12). reddit, trends, xsearch are in the registry but whether their stores hold enough history to reach `ok` is UNVERIFIED (no parquet reader in this session; stores for them are not in the local cache listing).
 
 ## Acceptance criteria
 
-- **AC-W1** `discovery.json` loads `source_weights`; load fails with a clear error if any weight < 0, the sum is outside 100 +/- 0.01, or a key is not a known source (known = `FETCHERS` keys minus `EXCLUDED_SOURCES`, plus `github_dev`).
+- **AC-W1** `discovery.json` loads `source_weights`; load fails with a clear error if any weight < 0, the sum is outside 100 +/- 0.01, or a key is not a known source (known = `FETCHERS` keys minus `EXCLUDED_SOURCES`, plus `github_dev` and `defillama`).
 - **AC-W2** `exchange_volume` and `hyperliquid_volume` are rejected as weighted keys; their data is unused by scoring.
 - **AC-W3** A source whose series state is not `ok`, or whose change is `None`, is absent from that coin's covered_weight. A 0 value is never substituted.
 - **AC-W4** Rescaling: score = sum(w_i * c_i) / covered_weight over available sources. Test: weights 25/10 both present gives (25a+10b)/35; Wikipedia only gives a.
@@ -75,9 +75,17 @@ Live and weighted sources are Wikipedia (25) and CoinGecko (10) only: max covere
 - **Survivorship.** The universe is today's top-100; delisted or fallen coins are missing, so hit rates are optimistic.
 - **Sample.** About 99 days, one or two regimes. Treat trigger hit rates as anecdotes, not statistics.
 
+## New sources W5 and W6 (design notes)
+
+Both need: fetcher, `FETCHERS` entry (`registry.py:12-20`), probe record, history behaviour, a mapping file. Both cover only mapped coins; a coin with no mapping drops the source and is rescaled, never 0. That makes their coverage partial, and `defillama` is meaningful only for DeFi, L1 and L2 coins.
+
+- **github_dev:** commits and stars per project via the GitHub REST API. Key and rate limits: UNVERIFIED (unauthenticated limits are low; a token is likely needed, kept in env, never in files). One-call backfill: UNVERIFIED (commit activity may be available as weekly aggregates, stars history typically is not); if no backfill, history accrues one day at a time and the 90-day gate applies.
+- **defillama:** TVL and fees, free API. Key and rate limits: UNVERIFIED. Historical TVL is publicly charted by DefiLlama, so a one-call backfill per protocol is plausible: UNVERIFIED, no provider was called. Fees history, same.
+- **Daily fetch wiring:** `DEFAULT_SOURCES` in `api/scripts/refresh_attention.py:32` is `("wikipedia", "coingecko", "universe")`, and a test pins it (`api/tests/scripts/test_refresh_attention.py:103`). The workflow also hardcodes a source list for probe recording (`.github/workflows/attention-refresh.yml:106`). So adding a source likely touches `.github/`, which needs owner approval, beyond `DEFAULT_SOURCES`. Mark each slice's envelope accordingly.
+
 ## Out of scope
 
-Forward returns after triggers (later optional step, W2b: for each trigger day report close-to-close return at +N days, N configurable, excluding triggers with < N days of price after them, shown as a table beside the chart); new source code for github_dev (W5); T99 wiki article mapping fixes; T100 Trends backfill; detail table design beyond the column list; changes to `.github/`, My baskets tab, or rank-score weights in `attention_weights.json`.
+Forward returns after triggers (later optional step, W2b: for each trigger day report close-to-close return at +N days, N configurable, excluding triggers with < N days of price after them, shown as a table beside the chart); new source code for github_dev and defillama (W5, W6); T99 wiki article mapping fixes; T100 Trends backfill; detail table design beyond the column list; changes to `.github/` (needs owner approval, see Q8), My baskets tab, or rank-score weights in `attention_weights.json`.
 
 ## Proposed slices
 
@@ -88,10 +96,11 @@ Forward returns after triggers (later optional step, W2b: for each trigger day r
 | W2b (optional) | Forward return N days after trigger | same module | RT2 | 1 |
 | W3 | Web chart: score, price overlay, trigger marks, covered band | `web/components/narrative/DiscoveryHistoryChart.tsx` (new), `web/lib/api/discovery.ts`, `DiscoveryTab.tsx` | RT3 | 3-4 |
 | W4 | Dense detail table: per-source value and arrow, last stored day, days of history, raw vs capped change, covered weight, trigger badge | `DiscoveryTable.tsx` and a detail component | RT3 | 2-3 |
-| W5 | New source `github_dev` (fetcher, store, probe record, registry entry); weight inert until data exists | `api/data/attention/github_dev.py` (new), `registry.py` | RT2 | 2-3 |
+| W5 | New source `github_dev` (commits, stars per project): fetcher, registry entry, probe record, coin to repo map `api/data/github_repos.json` (new) | `api/data/attention/github_dev.py` (new), `registry.py`, `api/scripts/refresh_attention.py` | RT2 | 3-5 |
+| W6 | New source `defillama` (TVL and fees, DeFi/L1/L2 coins only): same pieces, coin to protocol slug map `api/data/defillama_slugs.json` (new) | `api/data/attention/defillama.py` (new), `registry.py`, `refresh_attention.py` | RT2 | 3-5 |
 | T99, T100 | Wiki article fixes; Trends backfill | separate tasks | | |
 
-Order: W1, W2, W3, then W4; W5 and T99/T100 are independent and raise real max coverage. Total about 12-17 USD without W2b.
+Order: W1, W2, W3, then W4; W5, W6 and T99/T100 are independent and raise real max coverage. Total about 18-27 USD without W2b. Worker ceiling 185 USD (informational); per-slice cap 15 USD, planner asks the owner at 7 USD.
 
 ## Risks
 
@@ -108,4 +117,6 @@ Order: W1, W2, W3, then W4; W5 and T99/T100 are independent and raise real max c
 - **Q3** Keep `gaining` and `sources_*` as aliases for one release, or remove?
 - **Q4** Price overlay if a coin lacks a 1d OHLCV cache: accept "price unavailable" or fetch from CoinGecko on demand?
 - **Q5** Category aggregate: mean of winsorised coin scores (consistent with today) or share of coins triggered? (Proposed: both, score as line, share as secondary.)
-- **Q6** Should `github_dev` weight sit idle at 10 and silently rescale away until live? (Proposed yes; covered_weight shows it.)
+- **Q7** Binance `exchange_volume` stays unweighted: drop it entirely, or add a Kraken/Coinbase fallback (coverage only, no weight)?
+- **Q8** May W5/W6 slices edit `.github/workflows/attention-refresh.yml` (needed to record probes for new sources)?
+- **Q6** Should the `github_dev` (8) and `defillama` (7) weights sit idle and silently rescale away until live? (Proposed yes; covered_weight shows it.)
