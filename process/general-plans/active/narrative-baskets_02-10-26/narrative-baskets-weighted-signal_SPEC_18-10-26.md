@@ -150,7 +150,8 @@ Answered by the owner:
 - **Q3 decided:** remove `gaining`, `sources_used`, `sources_gaining`; `trigger`, `covered_weight`, `rising_weight` and `sources[]` replace them (AC-W8); web types change in the same slice.
 - **Q4 decided (owner's words):** worst case show "price unavailable", but aim for a system that gives every-day price data reliably. So W3 must first check how complete the daily price cache is for the universe and, if gaps exist, propose a daily price refresh (for example a CoinGecko daily close stored like the attention series) as part of W3 or a small slice before it. Coverage of the cache is UNVERIFIED.
 
-Still open:
-- **Q5** Category aggregate: mean of winsorised coin scores (today) or share of coins triggered? (Proposed: both.)
-- **Q6** Should the `github_dev` (8) and `defillama` (7) weights sit idle and rescale away until live? (Proposed yes.)
-- **Q11** Env flag name for the W8 worker (proposed `SCREENER_ATTENTION_PC_WORKER`).
+- **Q5 decided:** category chart shows both: average score as the main line, share of coins triggered as a smaller second line.
+- **Q6 decided:** github_dev (8) and defillama (7) stay in the config; they switch on automatically once data exists and rescale away until then.
+- **Q11 decided:** env flag `SCREENER_ATTENTION_PC_WORKER`.
+
+No open questions remain except those the planner raises at dispatch (for example the unverified items marked UNVERIFIED above).
