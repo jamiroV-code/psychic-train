@@ -1,7 +1,8 @@
 """Discovery: category momentum over the top-100 (S-F1, AC-41). Store and config only.
 
 Per coin and source: mean of the last `recent_days` completed days vs the mean of the
-`window` days before them. A coin is "gaining" iff at least `min_independent_sources`
+`window` days before them. Each source is anchored to its own newest stored day, if within `max_source_lag_days` of the window end.
+A coin is "gaining" iff at least `min_independent_sources`
 independent source groups rise. Coin change = mean of its per-source changes (percent),
 winsorized at the category's p-th percentile. Category score = mean of those, median beside.
 A coin counts in each of its categories; there is no cross-category total.
@@ -34,7 +35,15 @@ def _percentile(vals: list[float], pct: float) -> float:
     return s[lo] + (s[hi] - s[lo]) * (pos - lo)
 
 
-def _source_change(points: list[tuple[date, float]], end: date, recent: int, window: int) -> float | None:
+def _source_change(points: list[tuple[date, float]], end: date, recent: int, window: int,
+                   max_lag: int) -> float | None:
+    """Anchored to the source's own newest stored day; None when that is more than `max_lag` days before `end`."""
+    if not points:
+        return None
+    last = max(d for d, _ in points)
+    if (end - last).days > max_lag:
+        return None
+    end = min(end, last)
     cut = end - timedelta(days=recent)
     now = [v for d, v in points if cut < d <= end]
     base = [v for d, v in points if cut - timedelta(days=window) < d <= cut]
@@ -46,12 +55,12 @@ def _source_change(points: list[tuple[date, float]], end: date, recent: int, win
     return (mean(now) / base_mean - 1.0) * 100.0
 
 
-def _coin(symbol, sources, groups, data, end, recent, window, need) -> tuple[float, int, int, bool] | None:
+def _coin(symbol, sources, groups, data, end, recent, window, need, max_lag) -> tuple[float, int, int, bool] | None:
     """(raw change %, sources used, sources gaining, gaining) or None with under 2 usable sources."""
     changes = []
     for s in sources:
         sr = data[(s, symbol)]
-        c = _source_change(sr.points, end, recent, window) if sr.state == "ok" else None
+        c = _source_change(sr.points, end, recent, window, max_lag) if sr.state == "ok" else None
         if c is not None:
             changes.append((s, c))
     if len(changes) < need:
@@ -94,8 +103,9 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
     sources = list(load_weights(weights_path))
     data = {(src, sym): registry.read_series(src, sym, today, probe_path) for src in sources for sym in eligible}
     need, recent = int(cfg["min_independent_sources"]), int(cfg["recent_days"])
+    max_lag = int(cfg["max_source_lag_days"])
     groups = cfg.get("source_groups", {})
-    coins = {s: _coin(s, sources, groups, data, end, recent, window, need) for s in eligible}
+    coins = {s: _coin(s, sources, groups, data, end, recent, window, need, max_lag) for s in eligible}
     if not any(coins.values()):
         return _empty(window, as_of, cats_asof, "no-data", "no-attention-data", len(symbols), len(eligible))
 

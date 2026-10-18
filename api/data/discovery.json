@@ -6,6 +6,7 @@
   "min_independent_sources": 2,
   "winsor_percentile": 95,
   "recent_days": 7,
+  "max_source_lag_days": 3,
   "source_groups": {"coingecko": "volume", "exchange_volume": "volume"},
   "categories": [
     {"id": "layer-1", "name": "Layer 1"},
