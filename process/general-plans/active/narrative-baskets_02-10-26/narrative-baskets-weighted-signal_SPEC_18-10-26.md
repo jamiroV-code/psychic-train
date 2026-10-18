@@ -145,11 +145,12 @@ Answered by the owner:
 - **Q2 decided:** `min_history_days` config key, default 90; chart marks thin days; owner may lower it later.
 - **Q9 decided:** accept the exchange_activity sub-weights proposal (Binance 40, Coinbase 25, Kraken 15, Hyperliquid 20) for now; still UNVERIFIED, editable in config.
 - **Q7 closed:** Binance stays inside exchange_activity.
-- **Q8/Q10 decided (owner's words, interpreted):** whatever works through GitHub stays on the GitHub workflow; sources that cannot run there live on the site (in-API worker, W8). Consequences: W5 to W7 may edit `.github/workflows/attention-refresh.yml` for sources confirmed to work from GitHub runners (workflow edit approval is taken as given for those only, to be confirmed by the planner). Every new source needs a reachability check on a runner BEFORE its side is set: record it as a matrix (source, works from GitHub: yes/no/UNVERIFIED, side) in the slice report, and default to `pc_side` when unknown. The "updating data" state on Narrative tabs is accepted.
+- **Q8/Q10 decided (owner's words, interpreted):** whatever works through GitHub stays on the GitHub workflow; sources that cannot run there live on the site (in-API worker, W8). Consequences: W5 to W7 may edit `.github/workflows/attention-refresh.yml` for sources confirmed to work from GitHub runners (owner confirmed 18-10-26: approved for GitHub-reachable sources only). Every new source needs a reachability check on a runner BEFORE its side is set: record it as a matrix (source, works from GitHub: yes/no/UNVERIFIED, side) in the slice report, and default to `pc_side` when unknown. The "updating data" state on Narrative tabs is accepted.
+
+- **Q3 decided:** remove `gaining`, `sources_used`, `sources_gaining`; `trigger`, `covered_weight`, `rising_weight` and `sources[]` replace them (AC-W8); web types change in the same slice.
+- **Q4 decided (owner's words):** worst case show "price unavailable", but aim for a system that gives every-day price data reliably. So W3 must first check how complete the daily price cache is for the universe and, if gaps exist, propose a daily price refresh (for example a CoinGecko daily close stored like the attention series) as part of W3 or a small slice before it. Coverage of the cache is UNVERIFIED.
 
 Still open:
-- **Q3** Keep `gaining` and `sources_*` as aliases for one release, or remove?
-- **Q4** Price overlay if a coin lacks a 1d OHLCV cache: accept "price unavailable" or fetch from CoinGecko on demand?
 - **Q5** Category aggregate: mean of winsorised coin scores (today) or share of coins triggered? (Proposed: both.)
 - **Q6** Should the `github_dev` (8) and `defillama` (7) weights sit idle and rescale away until live? (Proposed yes.)
 - **Q11** Env flag name for the W8 worker (proposed `SCREENER_ATTENTION_PC_WORKER`).
