@@ -251,3 +251,100 @@ def test_signals_line_is_ignored_by_the_verify_step_parse(isolated_cache, tmp_pa
     _run(["--sources", "signals"], _handler())
     lines = [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("signals:")]
     assert len(lines) == 1 and not any(lines[0].startswith(s + ":") for s in ("wikipedia", "coingecko", "universe", "categories"))
+
+
+# --- U4 (T114): CoinGecko and Wikipedia take their symbol list and ids from the universe snapshot ---
+
+UNIVERSE_ROWS = [
+    {"id": "bitcoin", "symbol": "BTC", "market_cap": 3, "volume_24h": 1},
+    {"id": "tether", "symbol": "USDT", "market_cap": 2, "volume_24h": 1},
+    {"id": "wrapped-bitcoin", "symbol": "WBTC", "market_cap": 2, "volume_24h": 1},
+    {"id": "solana-snapshot-id", "symbol": "SOL", "market_cap": 1, "volume_24h": 1},
+]
+
+
+def _write_universe(rows=UNIVERSE_ROWS):
+    from api.data.attention import universe_store
+    universe_store.write_snapshot("2026-10-18", rows)
+
+
+def _recording(urls):
+    def h(r: httpx.Request):
+        urls.append(str(r.url))
+        return _handler()(r)
+    return h
+
+
+def _line(out, src):
+    return next(ln for ln in out.splitlines() if ln.startswith(src + ":"))
+
+
+def test_symbols_from_universe_snapshot_not_wiki_keys(isolated_cache, capsys):
+    _write_universe()
+    assert refresh_attention._symbols(None) == ["BTC", "SOL"]
+    assert _run(["--dry-run", "--sources", "coingecko,wikipedia"], _handler()) == 0
+    out = capsys.readouterr().out
+    assert "coingecko: dry run, would fetch 2 symbols" in out
+    assert "wikipedia: dry run, would fetch 2 symbols" in out
+
+
+def test_symbols_fall_back_to_wiki_keys_without_snapshot(isolated_cache):
+    import json
+    keys = list(json.loads(refresh_attention.WIKI_ARTICLES_PATH.read_text()))
+    assert refresh_attention._symbols(None) == keys
+
+
+def test_id_taken_from_snapshot_row(isolated_cache):
+    _write_universe()
+    urls = []
+    assert _run(["--sources", "coingecko"], _recording(urls)) == 0
+    assert not any("coins/markets" in u for u in urls)  # no extra markets call
+    assert any("/coins/solana-snapshot-id/market_chart" in u for u in urls)
+    assert len(store.read_points("coingecko", "SOL")) == 99
+
+
+def test_missing_id_is_counted_no_id_outcome(isolated_cache, capsys):
+    _write_universe(UNIVERSE_ROWS + [{"id": None, "symbol": "NOID", "market_cap": 1, "volume_24h": 1}])
+    urls = []
+    assert _run(["--sources", "coingecko"], _recording(urls)) == 0
+    line = _line(capsys.readouterr().out, "coingecko")
+    assert line.startswith("coingecko: 2/3 ok") and "no-id 1" in line
+    assert not any("noid" in u.lower() for u in urls)
+    from api.data.attention.types import SourceSeries
+    assert refresh_attention.outcome_summary(
+        [SourceSeries("coingecko", "X", [], "unavailable", "no-id")]) == "no-id 1"
+
+
+def test_explicit_symbols_arg_still_wins(isolated_cache, capsys):
+    _write_universe()
+    assert refresh_attention._symbols("btc, eth") == ["BTC", "ETH"]
+    urls = []
+    assert _run(["--sources", "coingecko", "--symbols", "BTC"], _recording(urls)) == 0
+    assert [u for u in urls if "market_chart" in u] and all("/coins/bitcoin/" in u for u in urls)
+    assert _line(capsys.readouterr().out, "coingecko").startswith("coingecko: 1/1 ok")
+
+
+def test_stablecoin_not_requested(isolated_cache, capsys):
+    _write_universe()
+    urls = []
+    assert _run(["--sources", "coingecko,wikipedia"], _recording(urls)) == 0
+    assert not any("tether" in u or "wrapped-bitcoin" in u for u in urls)
+    assert "USDT" not in refresh_attention._symbols(None)
+    capsys.readouterr()
+    # an explicit stablecoin is not requested either: it has no id in the filtered universe
+    assert _run(["--sources", "coingecko", "--symbols", "USDT"], _recording(urls)) == 1
+    assert not any("tether" in u for u in urls)
+    assert "no-id 1" in _line(capsys.readouterr().out, "coingecko")
+
+
+def test_coingecko_result_line_keeps_n_of_m_ok_prefix(isolated_cache, capsys):
+    # the workflow verify step: lines starting "<src>:", FAILED on " error ", else ^<src>: (\d+)/(\d+) ok with N > 0
+    import re
+    _write_universe(UNIVERSE_ROWS + [{"symbol": "NOID", "market_cap": 1, "volume_24h": 1}])
+    assert _run(["--sources", "wikipedia,coingecko"], _handler()) == 0
+    out = capsys.readouterr().out
+    for src in ("wikipedia", "coingecko"):
+        line = _line(out, src)
+        m = re.match(rf"{src}: (\d+)/(\d+) ok", line)
+        assert m and int(m.group(1)) > 0, line
+        assert " error " not in line + " "
