@@ -12,7 +12,11 @@ metadata:
 
 [MODE: PLAN]
 
-**Date:** 18-10-26. **Complexity:** COMPLEX (6 slices, 3 waves). **SPEC:** `narrative-baskets-universe-narratives_SPEC_18-10-26.md` (T108, merged as #141). **Status:** PLANNED, not validated; VALIDATE is next. **Base read:** `main` at 8f2bf4b. PR #137 (T105 snapshots) is merged. **PR #139 (T107 chart panels) and #140 (T106 `min_category_coins`, sources panel) were NOT merged in the tree I read:** `min_category_coins` appears nowhere in `api/` or `web/`, `api/routers/discovery.py` has no sources route, and `DiscoveryTab.tsx` has no sources panel. Every file cite below is `main` at 8f2bf4b; slices that touch files #139/#140 also change must be re-measured by the planner at dispatch (UNVERIFIED what those PRs change).
+Date: 18-10-26
+Complexity: COMPLEX (6 slices, 3 waves)
+Status: PLANNED, not validated
+
+**Summary:** **SPEC:** `narrative-baskets-universe-narratives_SPEC_18-10-26.md` (T108, merged as #141). **Status:** PLANNED, not validated; VALIDATE is next. **Base read:** `main` at 8f2bf4b. PR #137 (T105 snapshots) is merged. **PR #139 (T107 chart panels) and #140 (T106 `min_category_coins`, sources panel) were NOT merged in the tree I read:** `min_category_coins` appears nowhere in `api/` or `web/`, `api/routers/discovery.py` has no sources route, and `DiscoveryTab.tsx` has no sources panel. Every file cite below is `main` at 8f2bf4b; slices that touch files #139/#140 also change must be re-measured by the planner at dispatch (UNVERIFIED what those PRs change).
 
 ## Overview and Context
 
@@ -185,7 +189,7 @@ Ids: `majors-store-of-value`, `layer-1`, `layer-2`, `defi`, `memecoins`, `ai-dat
 - Live unknowns: Binance reachability (HTTP 451 from US runners), Coinbase/Kraken lists absent (W7), CoinGecko 429 history, ccxt behaviour (UNVERIFIED).
 - UNVERIFIED reads: `web/lib/types/discovery.ts`, `outcome_summary`, test file locations in `api/tests/scripts`, `categories_store`, ccxt.
 
-## 11. Validate Contract (to be filled by VALIDATE)
+## Validate Contract (section 11, to be filled by VALIDATE)
 
 Verification gates, placeholders only:
 | Gate | Command / check | Pass criterion | Filled by |
