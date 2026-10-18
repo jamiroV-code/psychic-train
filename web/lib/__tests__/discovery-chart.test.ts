@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  axisTicks,
   bandPoints,
+  coverageBars,
+  dayIndexAt,
+  fitScale,
+  isConstant,
+  xTickIndices,
   linePath,
   shapeCategoryChart,
   shapeCoinChart,
@@ -139,5 +145,136 @@ describe("linePath", () => {
   });
   it("is empty when nothing is finite", () => {
     expect(linePath([null, Number.NaN], (i) => i, (v) => v)).toBe("");
+  });
+});
+
+describe("fitScale (T107 per-panel scale)", () => {
+  it("fits each series to its own range with padding, so a -3%..0% price is not flattened by a +49% score", () => {
+    const price = fitScale([-3, -1, 0], { includeZero: true });
+    const score = fitScale([5, 49], { includeZero: true });
+    expect([price.min, price.max]).toEqual([-3, 0]);
+    expect(price.lo).toBeLessThan(-3);
+    expect(price.hi).toBeGreaterThan(0);
+    expect(price.hi - price.lo).toBeLessThan(4);
+    expect(score.hi).toBeGreaterThan(49);
+    expect(score.lo).toBeLessThan(0);
+  });
+
+  it("includes zero only when asked", () => {
+    const a = fitScale([40, 50], { includeZero: false });
+    expect(a.lo).toBeGreaterThan(30);
+    const b = fitScale([40, 50], { includeZero: true });
+    expect(b.lo).toBeLessThan(0);
+  });
+
+  it("handles negative-only series (zero line stays on the panel)", () => {
+    const s = fitScale([-8, -2], { includeZero: true });
+    expect(s.max).toBe(0);
+    expect(s.min).toBe(-8);
+    expect(s.hi).toBeGreaterThan(0);
+  });
+
+  it("never returns a zero-width domain for constant, one-point or empty input", () => {
+    for (const vs of [[5, 5, 5], [7], [], [0], [null, Number.NaN]]) {
+      const s = fitScale(vs, { includeZero: false });
+      expect(s.hi - s.lo).toBeGreaterThan(0);
+      const z = fitScale(vs, { includeZero: true });
+      expect(z.hi - z.lo).toBeGreaterThan(0);
+    }
+  });
+
+  it("skips null and NaN days", () => {
+    const s = fitScale([null, 2, Number.NaN, 4, undefined], { includeZero: false });
+    expect([s.min, s.max]).toEqual([2, 4]);
+  });
+
+  it("clamps to the given bounds (share panel stays inside 0..100)", () => {
+    const s = fitScale([1, 99], { includeZero: false, clamp: [0, 100] });
+    expect(s.lo).toBe(0);
+    expect(s.hi).toBe(100);
+  });
+});
+
+describe("axisTicks (at most 3 labels, never overlapping)", () => {
+  it("gives min, zero and max for a signed series", () => {
+    const s = fitScale([-10, 30], { includeZero: true });
+    const t = axisTicks(s, { height: 120, includeZero: true });
+    expect(t.map((x) => x.value)).toEqual([-10, 0, 30]);
+    expect(t.map((x) => x.label)).toEqual(["-10%", "0%", "+30%"]);
+  });
+
+  it("merges zero with the max when they coincide, and never repeats a label", () => {
+    const s = fitScale([-3, 0], { includeZero: true });
+    const t = axisTicks(s, { height: 90, includeZero: true });
+    expect(t.map((x) => x.label)).toEqual(["-3.0%", "-1.5%", "0%"]);
+    expect(new Set(t.map((x) => x.label)).size).toBe(t.length);
+  });
+
+  it("is never more than 3 and keeps a minimum pixel gap", () => {
+    const s = fitScale([-0.4, 0.5], { includeZero: true });
+    const t = axisTicks(s, { height: 40, includeZero: true, minGap: 14 });
+    expect(t.length).toBeLessThanOrEqual(3);
+    const ys = t.map((x) => x.y).sort((a, b) => a - b);
+    for (let i = 1; i < ys.length; i += 1) expect(ys[i] - ys[i - 1]).toBeGreaterThanOrEqual(14);
+  });
+
+  it("uses finer decimals on tiny ranges and never prints -0", () => {
+    const s = fitScale([-0.12, 0.3], { includeZero: true });
+    const t = axisTicks(s, { height: 120, includeZero: true });
+    expect(t.map((x) => x.label)).toEqual(["-0.12%", "0%", "+0.30%"]);
+  });
+
+  it("a constant series gets a single tick", () => {
+    const t = axisTicks(fitScale([5, 5], { includeZero: false }), { height: 90, includeZero: false });
+    expect(t).toHaveLength(1);
+    expect(t[0].label).toBe("+5.0%");
+  });
+
+  it("uses a mid tick when zero is not on the panel", () => {
+    const t = axisTicks(fitScale([20, 40], { includeZero: false }), { height: 120, includeZero: false });
+    expect(t.map((x) => x.value)).toEqual([20, 30, 40]);
+  });
+});
+
+describe("xTickIndices", () => {
+  it.each([
+    [0, []],
+    [1, [0]],
+    [2, [0, 1]],
+    [3, [0, 1, 2]],
+    [30, [0, 14, 29]],
+  ])("n=%i", (n, want) => {
+    expect(xTickIndices(n)).toEqual(want);
+  });
+});
+
+describe("coverageBars", () => {
+  it("clamps to 0..100 and mutes days under the floor", () => {
+    const rows = shapeCoinChart(
+      coin([day("2026-10-11", { covered_weight: 10 }), day("2026-10-12", { covered_weight: 30 }), day("2026-10-13", { covered_weight: 140 })]),
+      null,
+    ).rows;
+    expect(coverageBars(rows, 30)).toEqual([
+      { value: 10, muted: true },
+      { value: 30, muted: false },
+      { value: 100, muted: false },
+    ]);
+  });
+
+  it("flags a constant series", () => {
+    expect(isConstant([35, 35, 35])).toBe(true);
+    expect(isConstant([35, 36])).toBe(false);
+    expect(isConstant([])).toBe(true);
+  });
+});
+
+describe("dayIndexAt", () => {
+  it("maps a pointer x to the nearest day and clamps", () => {
+    expect(dayIndexAt(44, 44, 200, 5)).toBe(0);
+    expect(dayIndexAt(244, 44, 200, 5)).toBe(4);
+    expect(dayIndexAt(144, 44, 200, 5)).toBe(2);
+    expect(dayIndexAt(-50, 44, 200, 5)).toBe(0);
+    expect(dayIndexAt(900, 44, 200, 5)).toBe(4);
+    expect(dayIndexAt(100, 44, 200, 1)).toBe(0);
   });
 });
