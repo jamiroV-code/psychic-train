@@ -29,7 +29,7 @@ from api.scripts.attention_extra import reason_kind  # noqa: E402
 WIKI_ARTICLES_PATH = Path(__file__).resolve().parents[1] / "data" / "wiki_articles.json"
 DEFAULT_SYMBOLS = ("BTC", "ETH")
 # Volume and Trends are opt-in (--sources): they reach ccxt/pytrends, and are not-probed until G.
-DEFAULT_SOURCES = ("wikipedia", "coingecko", "universe")
+DEFAULT_SOURCES = ("wikipedia", "coingecko", "universe", "signals")
 # Consecutive rate-limited series after which the rest of a source is skipped (no more requests).
 CIRCUIT_BREAKER_AFTER = 5
 # Soft wall-clock per opt-in source (workflow step timeout is 8 min): stop cleanly, keep what was fetched.
@@ -192,17 +192,42 @@ def _run_categories(symbols, client, today, sleep):
     return []
 
 
+def _run_signals(symbols, client, today, sleep):
+    """Freeze today's Discovery signal (opt-in/last default). Never raises into the run: see main()."""
+    from api.analytics.attention import signal_snapshots
+    return signal_snapshots.take_snapshot(today)
+
+
 RUNNERS = {"universe": _run_universe, "wikipedia": _run_wikipedia, "coingecko": _run_coingecko,
            "exchange_volume": _run_exchange_volume, "hyperliquid_volume": _run_hyperliquid_volume,
            "trends": _run_trends, "reddit": _run_reddit, "xsearch": _run_xsearch,
-           "categories": _run_categories}
+           "categories": _run_categories, "signals": _run_signals}
+
+
+def _snapshot_signals(run, symbols, client, today, sleep) -> None:
+    """One `signals:` line; a failure is logged and swallowed. It is not counted in `results`, so the exit code
+    is the same with or without it (a stale snapshot is not worth a red refresh). The workflow verify step only
+    parses lines of the sources it lists, so this line cannot turn the job red."""
+    try:
+        res = run(symbols, client, today, sleep)
+    except Exception as exc:
+        print(f"signals: error {describe_exc(exc)}", file=sys.stderr)
+        return
+    counts: dict[str, int] = {}
+    for r in res:
+        counts[r["status"]] = counts.get(r["status"], 0) + 1
+    print(f"signals: {', '.join(f'{n} {k}' for k, n in counts.items())}")
+    for r in res:
+        if r["status"] == "config-changed":
+            print(f"signals: warning window {r['window']} config changed since the stored snapshot "
+                  f"({r['stored_hash']} -> {r['current_hash']}); stored record kept", file=sys.stderr)
 
 
 def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
          today: date | None = None, sleep=time.sleep) -> int:
     parser = argparse.ArgumentParser(description="Refresh the attention store.")
     parser.add_argument("--dry-run", action="store_true", help="print the planned fetches; no network call, write nothing")
-    parser.add_argument("--sources", help="comma list; default wikipedia,coingecko,universe")
+    parser.add_argument("--sources", help="comma list; default wikipedia,coingecko,universe,signals")
     parser.add_argument("--symbols", help="comma list; default wiki_articles.json")
     args = parser.parse_args(argv)
 
@@ -215,6 +240,9 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
     symbols = _symbols(args.symbols)
     if args.dry_run:
         for name in names:
+            if name == "signals":
+                print("signals: dry run, would snapshot windows 7,30,90 (no network call, nothing written)")
+                continue
             print(f"{name}: dry run, would fetch {len(symbols)} symbols (no network call, nothing written)")
         return 0
     own = client is None
@@ -222,6 +250,9 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
     results: dict[str, str] = {}
     try:
         for name in names:
+            if name == "signals":
+                _snapshot_signals(RUNNERS[name], symbols, client, today, sleep)
+                continue
             try:
                 series = RUNNERS[name](symbols, client, today, sleep)
                 if name in ("universe", "categories"):
@@ -246,6 +277,8 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
     finally:
         if own:
             client.close()
+    if not results:  # signals only: never fails the run
+        return 0
     if results and all(v == "error" for v in results.values()):
         return 1
     return 0 if any(v == "ok" for v in results.values()) else 2
