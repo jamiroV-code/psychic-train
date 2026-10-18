@@ -1,10 +1,11 @@
-"""Discovery: category momentum over the top-100 (S-F1, AC-41). Store and config only.
+"""Discovery: category momentum over the top-100 (S-F1, AC-41; weighted signal T101). Store and config only.
 
-Per coin and source: mean of the last `recent_days` completed days vs the mean of the
+Per coin and weighted source: mean of the last `recent_days` completed days vs the mean of the
 `window` days before them. Each source is anchored to its own newest stored day, if within `max_source_lag_days` of the window end.
-A coin is "gaining" iff at least `min_independent_sources`
-independent source groups rise. Coin change = mean of its per-source changes (percent),
-winsorized at the category's p-th percentile. Category score = mean of those, median beside.
+A source with no usable change drops out of the coin's covered weight (never 0). Coin change =
+sum(weight * change) / covered weight, winsorized at the category's p-th percentile. A source is rising
+iff its raw change >= `rising_threshold_pct`; a coin triggers iff rising weight is at least `trigger_pct` percent
+of covered weight and covered weight >= `min_covered_weight`. Category score = mean of coin changes, median beside.
 A coin counts in each of its categories; there is no cross-category total.
 """
 from __future__ import annotations
@@ -14,16 +15,49 @@ from datetime import date, timedelta
 from pathlib import Path
 from statistics import mean, median
 
-from api.analytics.attention.score import load_weights
 from api.analytics.attention.universe import load_universe
 from api.data.attention import categories_store, registry, universe_store
-from api.models.discovery import DiscoveryCategory, DiscoveryCoin, DiscoveryResponse
+from api.models.discovery import DiscoveryCategory, DiscoveryCoin, DiscoveryResponse, DiscoverySource
 
 CONFIG_PATH = Path(__file__).resolve().parents[2] / "data" / "discovery.json"
 
 
+SLOT = "exchange_activity"
+WEIGHTED_SOURCES = (SLOT, "wikipedia", "trends", "reddit", "xsearch", "github_dev", "defillama")
+# Exchange member -> registry series. Coinbase and Kraken have no fetcher yet (W7): not-probed, so they drop out.
+EXCHANGE_SERIES = {"binance": "exchange_volume", "coinbase": "coinbase_volume", "kraken": "kraken_volume",
+                   "hyperliquid": "hyperliquid_volume"}
+FALLBACK_SERIES = "coingecko"
+WEIGHT_SUM_TOLERANCE = 0.01
+
+
+def _check_weights(name: str, weights, known) -> None:
+    if not isinstance(weights, dict) or not weights:
+        raise ValueError(f"discovery config: {name} must be a non-empty object")
+    for k, v in weights.items():
+        if k not in known:
+            raise ValueError(f"discovery config: {name} has unknown key {k!r}; known: {', '.join(known)}")
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0:
+            raise ValueError(f"discovery config: {name}[{k!r}] must be a number >= 0")
+    total = sum(weights.values())
+    if abs(total - 100.0) > WEIGHT_SUM_TOLERANCE:
+        raise ValueError(f"discovery config: {name} must sum to 100 (+/- {WEIGHT_SUM_TOLERANCE}), got {total}")
+
+
+def validate_config(cfg: dict) -> dict:
+    _check_weights("source_weights", cfg.get("source_weights"), WEIGHTED_SOURCES)
+    _check_weights("exchange_sub_weights", cfg.get("exchange_sub_weights"), tuple(EXCHANGE_SERIES))
+    for key, lo, hi in (("rising_threshold_pct", None, None), ("trigger_pct", 0, 100),
+                        ("min_covered_weight", 0, 100), ("min_history_days", 1, None)):
+        v = cfg.get(key)
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or (lo is not None and v < lo) or (
+                hi is not None and v > hi):
+            raise ValueError(f"discovery config: {key} is missing or out of range")
+    return cfg
+
+
 def load_config(path: Path | None = None) -> dict:
-    return json.loads((path or CONFIG_PATH).read_text())
+    return validate_config(json.loads((path or CONFIG_PATH).read_text()))
 
 
 def _percentile(vals: list[float], pct: float) -> float:
@@ -55,18 +89,58 @@ def _source_change(points: list[tuple[date, float]], end: date, recent: int, win
     return (mean(now) / base_mean - 1.0) * 100.0
 
 
-def _coin(symbol, sources, groups, data, end, recent, window, need, max_lag) -> tuple[float, int, int, bool] | None:
-    """(raw change %, sources used, sources gaining, gaining) or None with under 2 usable sources."""
-    changes = []
-    for s in sources:
-        sr = data[(s, symbol)]
-        c = _source_change(sr.points, end, recent, window, max_lag) if sr.state == "ok" else None
-        if c is not None:
-            changes.append((s, c))
-    if len(changes) < need:
+def _is_rising(change: float, threshold_pct: float) -> bool:
+    return change >= threshold_pct
+
+
+def _as_of(points: list[tuple[date, float]], end: date) -> str:
+    return min(end, max(d for d, _ in points)).isoformat()
+
+
+def _series_source(label, data, series, symbol, end, recent, window, max_lag) -> DiscoverySource | None:
+    sr = data[(series, symbol)]
+    if sr.state != "ok":
         return None
-    rising = {groups.get(s, s) for s, c in changes if c > 0}
-    return mean(c for _, c in changes), len(changes), len(rising), len(rising) >= need
+    c = _source_change(sr.points, end, recent, window, max_lag)
+    return None if c is None else DiscoverySource(source=label, change=c, as_of=_as_of(sr.points, end))
+
+
+def _exchange_slot(symbol, sub_weights, data, end, recent, window, max_lag) -> DiscoverySource | None:
+    """Sub-weighted mean of each exchange's own change over exchanges with data, rescaled; never sums volumes."""
+    members = []
+    for name, sw in sub_weights.items():
+        m = _series_source(name, data, EXCHANGE_SERIES[name], symbol, end, recent, window, max_lag)
+        if m is not None and sw > 0:
+            members.append((sw, m))
+    if not members:
+        return None
+    total = sum(sw for sw, _ in members)
+    return DiscoverySource(source=SLOT, change=sum(sw * m.change for sw, m in members) / total,
+                           as_of=max(m.as_of for _, m in members), members=[m for _, m in members])
+
+
+def _coin(symbol, cfg, data, end, recent, window, max_lag) -> tuple[float, float, float, bool, list] | None:
+    """(raw change %, covered weight, rising weight, trigger, sources) or None when no source is usable."""
+    weights = cfg["source_weights"]
+    found = []
+    for src, w in weights.items():
+        if w <= 0:
+            continue
+        if src == SLOT:
+            s = _exchange_slot(symbol, cfg["exchange_sub_weights"], data, end, recent, window, max_lag)
+            if s is None:
+                s = _series_source(FALLBACK_SERIES, data, FALLBACK_SERIES, symbol, end, recent, window, max_lag)
+        else:
+            s = _series_source(src, data, src, symbol, end, recent, window, max_lag)
+        if s is not None:
+            found.append((w, s))
+    if not found:
+        return None
+    covered = sum(w for w, _ in found)
+    thr = float(cfg["rising_threshold_pct"])
+    rising = sum(w for w, s in found if _is_rising(s.change, thr))
+    trigger = rising * 100.0 >= float(cfg["trigger_pct"]) * covered and covered >= float(cfg["min_covered_weight"])
+    return sum(w * s.change for w, s in found) / covered, covered, rising, trigger, [s for _, s in found]
 
 
 def _empty(window, as_of, cats_asof, status, reason, usize=0, esize=0, cats=None) -> DiscoveryResponse:
@@ -100,12 +174,10 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
     eligible = [s for s in symbols if s not in excluded
                 and isinstance(vols.get(s), (int, float)) and vols[s] >= floor]
 
-    sources = list(load_weights(weights_path))
-    data = {(src, sym): registry.read_series(src, sym, today, probe_path) for src in sources for sym in eligible}
-    need, recent = int(cfg["min_independent_sources"]), int(cfg["recent_days"])
-    max_lag = int(cfg["max_source_lag_days"])
-    groups = cfg.get("source_groups", {})
-    coins = {s: _coin(s, sources, groups, data, end, recent, window, need, max_lag) for s in eligible}
+    series = {s for s in cfg["source_weights"] if s != SLOT} | set(EXCHANGE_SERIES.values()) | {FALLBACK_SERIES}
+    data = {(src, sym): registry.read_series(src, sym, today, probe_path) for src in series for sym in eligible}
+    recent, max_lag = int(cfg["recent_days"]), int(cfg["max_source_lag_days"])
+    coins = {s: _coin(s, cfg, data, end, recent, window, max_lag) for s in eligible}
     if not any(coins.values()):
         return _empty(window, as_of, cats_asof, "no-data", "no-attention-data", len(symbols), len(eligible))
 
@@ -114,13 +186,13 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
         used = [(s, coins[s]) for s in eligible if s in members.get(spec["id"], set()) and coins[s]]
         raws = [c[0] for _, c in used]
         cap = _percentile(raws, float(cfg["winsor_percentile"])) if raws else None
-        rows = [DiscoveryCoin(symbol=s, change=min(c[0], cap), raw_change=c[0], gaining=c[3],
-                              sources_used=c[1], sources_gaining=c[2]) for s, c in used]
+        rows = [DiscoveryCoin(symbol=s, change=min(c[0], cap), raw_change=c[0], covered_weight=c[1],
+                              rising_weight=c[2], trigger=c[3], sources=c[4]) for s, c in used]
         rows.sort(key=lambda r: r.change, reverse=True)
         changes = [r.change for r in rows]
         out.append(DiscoveryCategory(
             id=spec["id"], name=spec["name"], score=mean(changes) if changes else None,
             median=median(changes) if changes else None, coins_used=len(rows),
-            gaining_count=sum(r.gaining for r in rows), coins=rows))
+            gaining_count=sum(r.trigger for r in rows), coins=rows))
     out.sort(key=lambda c: (c.score is None, -(c.score or 0.0)))
     return _empty(window, as_of, cats_asof, "ok", "", len(symbols), len(eligible), out)

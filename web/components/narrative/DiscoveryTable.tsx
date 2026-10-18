@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { formatSigned, NO_DATA } from "@/lib/attention-lines";
-import type { DiscoveryCategory } from "@/lib/types/discovery";
+import type { DiscoveryCategory, DiscoveryCoin } from "@/lib/types/discovery";
 
 export interface DiscoveryTableProps {
   categories: readonly DiscoveryCategory[];
@@ -11,6 +11,11 @@ export interface DiscoveryTableProps {
 function formatPercent(value: number | null): string {
   if (value === null) return NO_DATA;
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function coverageText(coin: DiscoveryCoin): string {
+  const rising = coin.covered_weight > 0 ? Math.round((coin.rising_weight / coin.covered_weight) * 100) : 0;
+  return `covers ${Math.round(coin.covered_weight)}% of weight, ${rising}% rising`;
 }
 
 /** Ranked by score, nulls last. Four columns; coins sit behind the name. */
@@ -79,7 +84,8 @@ export function DiscoveryTable({ categories }: DiscoveryTableProps) {
                         <p className="basket-coins__head">
                           <span className="basket-coins__symbol">{coin.symbol}</span>
                           <span>{formatPercent(coin.change)}</span>
-                          <span className="basket-coins__muted">{`${coin.sources_gaining} of ${coin.sources_used} sources rising`}</span>
+                          <span className="basket-coins__muted">{coverageText(coin)}</span>
+                          {coin.trigger && <span className="basket-coins__trigger">Trigger</span>}
                         </p>
                       </li>
                     ))}

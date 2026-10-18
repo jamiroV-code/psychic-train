@@ -17,6 +17,12 @@ const NO_DATA_LINES: Record<Exclude<DiscoveryReason, "">, string> = {
   "no-attention-data": "There is no attention data to compare for this window yet.",
 };
 
+/** The most weight any returned coin had data for: how much of the 100 is live today. */
+function liveWeight(data: DiscoveryResponse): number {
+  const all = data.categories.flatMap((c) => c.coins.map((coin) => coin.covered_weight));
+  return all.length === 0 ? 0 : Math.round(Math.max(...all));
+}
+
 /** Discovery tab: 7d/30d/90d selector, then a ranked category table or one plain state line. */
 export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault }: DiscoveryTabProps) {
   const [window, setWindow] = useState<DiscoveryWindow>(30);
@@ -89,6 +95,9 @@ export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault }: Discove
       </header>
       {data && data.status === "ok" && (
         <p data-testid="discovery-as-of" className="basket-note">{`as of ${data.as_of.slice(0, 10)}`}</p>
+      )}
+      {data && data.status === "ok" && (
+        <p data-testid="discovery-live-weight" className="basket-note">{`Live weight today: ${liveWeight(data)} of 100`}</p>
       )}
       {body}
     </section>
