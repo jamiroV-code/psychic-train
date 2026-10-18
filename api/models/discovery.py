@@ -44,3 +44,43 @@ class DiscoveryResponse(BaseModel):
     universe_size: int
     eligible_size: int
     categories: list[DiscoveryCategory]
+
+
+class DiscoveryHistoryDay(BaseModel):
+    """One coin-day, computed from points dated on or before `date` only."""
+    date: str
+    score: float           # weighted mean of source changes over covered weight (raw, not winsorized)
+    covered_weight: float
+    rising_weight: float
+    trigger: bool
+    thin: bool             # covered_weight below the trigger floor (min_covered_weight)
+
+
+class DiscoveryCategoryDay(BaseModel):
+    """One category-day over the coins scorable that day."""
+    date: str
+    score: float           # mean of winsorized coin scores
+    coins_used: int
+    triggered_count: int
+    triggered_share: float  # triggered_count / coins_used, 0..1
+
+
+class DiscoveryHistoryBase(BaseModel):
+    id: str
+    window: Literal[7, 30, 90]
+    as_of: str
+    status: DiscoveryStatus
+    reason: str
+    min_history_days: int
+
+
+class DiscoveryCoinHistory(DiscoveryHistoryBase):
+    kind: Literal["coin"] = "coin"
+    history_days: dict[str, int]   # series name -> stored days dated on or before as_of
+    days: list[DiscoveryHistoryDay]
+
+
+class DiscoveryCategoryHistory(DiscoveryHistoryBase):
+    kind: Literal["category"] = "category"
+    history_days: dict[str, int] = {}
+    days: list[DiscoveryCategoryDay]

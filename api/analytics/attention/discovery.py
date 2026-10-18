@@ -148,6 +148,26 @@ def _empty(window, as_of, cats_asof, status, reason, usize=0, esize=0, cats=None
                              reason=reason, universe_size=usize, eligible_size=esize, categories=cats or [])
 
 
+def series_names(cfg: dict) -> set[str]:
+    return {s for s in cfg["source_weights"] if s != SLOT} | set(EXCHANGE_SERIES.values()) | {FALLBACK_SERIES}
+
+
+def eligibility(cfg: dict, symbols: list[str], cats: dict) -> tuple[list[str], dict[str, set[str]]]:
+    """(eligible symbols in universe order, category id -> member symbols)."""
+    vols = {str(r.get("symbol", "")).upper(): r.get("volume_24h")
+            for r in (universe_store.read_latest() or {}).get("coins", []) if isinstance(r, dict)}
+    floor = float(cfg["min_volume_24h_usd"])
+    excluded = {str(s).upper() for s in cfg.get("exclude", [])}
+    members = {c["id"]: {str(s).upper() for s in c.get("symbols", [])} for c in cats["categories"]}
+    for cid in cfg.get("exclude_category_ids", []):
+        excluded |= members.get(cid, set())
+    excluded -= {str(s).upper() for s in cfg.get("include_despite_category", [])} - {
+        str(s).upper() for s in cfg.get("exclude", [])}
+    eligible = [s for s in symbols if s not in excluded
+                and isinstance(vols.get(s), (int, float)) and vols[s] >= floor]
+    return eligible, members
+
+
 def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
                     weights_path: Path | None = None, universe_path: Path | None = None,
                     config_path: Path | None = None) -> DiscoveryResponse:
@@ -162,19 +182,9 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
         return _empty(window, as_of, "", "no-data", "categories-missing", len(symbols))
     cats_asof = str(cats["date"])
 
-    vols = {str(r.get("symbol", "")).upper(): r.get("volume_24h")
-            for r in (universe_store.read_latest() or {}).get("coins", []) if isinstance(r, dict)}
-    floor = float(cfg["min_volume_24h_usd"])
-    excluded = {str(s).upper() for s in cfg.get("exclude", [])}
-    members = {c["id"]: {str(s).upper() for s in c.get("symbols", [])} for c in cats["categories"]}
-    for cid in cfg.get("exclude_category_ids", []):
-        excluded |= members.get(cid, set())
-    excluded -= {str(s).upper() for s in cfg.get("include_despite_category", [])} - {
-        str(s).upper() for s in cfg.get("exclude", [])}
-    eligible = [s for s in symbols if s not in excluded
-                and isinstance(vols.get(s), (int, float)) and vols[s] >= floor]
+    eligible, members = eligibility(cfg, symbols, cats)
 
-    series = {s for s in cfg["source_weights"] if s != SLOT} | set(EXCHANGE_SERIES.values()) | {FALLBACK_SERIES}
+    series = series_names(cfg)
     data = {(src, sym): registry.read_series(src, sym, today, probe_path) for src in series for sym in eligible}
     recent, max_lag = int(cfg["recent_days"]), int(cfg["max_source_lag_days"])
     coins = {s: _coin(s, cfg, data, end, recent, window, max_lag) for s in eligible}
