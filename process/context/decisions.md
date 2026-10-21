@@ -29,6 +29,17 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 | D-12 | Pinned planner budget, per-file ceilings and the same-failure stop | 03-10-26 | active |
 | D-13 | Gate 4 test counts measured by installing frozen dependencies and running each suite once (G4-K1 = A) | 03-10-26 | active |
 | D-15 | Data integration tooling: separate uv project, one approval gate, REA wrapper only (DIT-1..DIT-9) | 14-10-26 | active |
+| D-16 | Data integration tooling: cloud run, resource hosts, outlines, bot checks (DIT-10..DIT-13) | 16-10-26 | active |
+| D-17 | Narrative baskets: groups are baskets, percentile attention score | 17-10-26 | active |
+| D-18 | Narrative baskets: sources and Discovery outlier rules | 17-10-26 | active |
+| D-19 | Narrative baskets: daily refresh workflow; trust_weight kept | 17-10-26 | active |
+| D-20 | Exchange-token exclusion list | 17-10-26 | active |
+| D-21 | Planner session shell can break with E2BIG in long sessions | 17-10-26 | active |
+| D-22 | Weighted attention signal: sources, weights, rising rule | 18-10-26 | active |
+| D-23 | exchange_activity composite: four venues, blended by change | 18-10-26 | proposed |
+| D-24 | Frozen daily signal snapshots and the calibration plan | 18-10-26 | active |
+| D-25 | Tradeable universe and narratives rules | 18-10-26 | active |
+| D-26 | Return to full RIPER-5 for new slices; lapse note T96-T107 | 18-10-26 | active |
 | D-0 | Original goal: one confidence level that sizes positions | 17-09-26 | superseded by D-1, D-2 |
 
 ## Entries
@@ -188,4 +199,34 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
   - Workarounds: GitHub MCP tools for repo reads/writes; all edits and test runs in worker sessions from create_session (clean shells). Agent subagents inherit the broken shell and failed.
   - Fix: start a fresh planner session (the repo holds all state). Mitigation: past ~6 hours, many compactions, or the first E2BIG, hand over instead of working around it.
 - **Date:** 17-10-26. **Reason:** owner asked to remember this; it will come back. **Alternatives:** keep working around it (rejected).
+- **Status:** active.
+
+### D-22 Weighted attention signal: sources, weights, rising rule
+- **Decision:** (owner answers in the T98 SPEC, 18-10-26; built in T101 W1) the Discovery signal is a weighted blend. Weights: wikipedia 25, trends 25, reddit 15, xsearch 10, exchange_activity 10, github_dev 8, defillama 7, rescaled over the weight that is available. A source is rising at +10 percent on raw change. A coin triggers when the rising weight is at least 60 percent of the covered weight and the covered weight is at least 30. The history chart needs `min_history_days` 30. CoinGecko volume is the fallback for the exchange_activity slot.
+- **Date:** 18-10-26. **Reason:** the earlier per-source-group count made every coin read under 2 sources after the per-source lag finding (T95, fixed in T96). **Alternatives:** keep the 2-group count (rejected).
+- **Consequences:** X stays off. Reddit API access was requested by the owner on 18-10-26 and awaits approval. Weights are the owner's to change, never automatically (D-24).
+- **Status:** active.
+
+### D-23 exchange_activity composite: four venues, blended by change
+- **Decision:** PROPOSAL, unverified: exchange_activity = Binance, Coinbase, Kraken, Hyperliquid with sub-weights 40/25/15/20, blended by each venue's own change, never by summing volumes. The Coinbase and Kraken adapters (W7) are proposed, not approved.
+- **Date:** 18-10-26. **Reason:** a summed volume is dominated by the largest venue. **Alternatives:** summed volume (rejected).
+- **Status:** proposed.
+
+### D-24 Frozen daily signal snapshots and the calibration plan
+- **Decision:** (T105 W9) the daily job stores one frozen signal snapshot per window per day under `api/data/cache/attention/signals/`, first write wins. Calibration plan: a 3-month report, then 6-month weight suggestions (scheduled reminders for 2027-01-18 and 2027-04-18: calibration check and suggestion check). The owner decides every weight change; nothing is applied automatically.
+- **Date:** 18-10-26. **Reason:** the signal can only be judged against what it said at the time. **Alternatives:** recompute history on read only (rejected).
+- **Consequences:** the file count under `signals/` grows daily; the three 2026-10-17 files are pinned by sha256 in the universe-narratives PLAN gate G8.
+- **Status:** active.
+
+### D-25 Tradeable universe and narratives rules
+- **Decision:** (owner, 18-10-26; SPEC T108, PLAN T111) Discovery covers the top 100 coins with reasoned exclusions (closed reason list). No volume floor and no volume cut: volume under 20M USD only adds a label. 11 narratives with multi-membership and a 3-coin minimum; coins in no narrative go to an Unassigned bucket. Baskets stays on the old universe lists (Q-V1). The exchange-token question (D-20) is left untouched here; slice U6 writes its entry.
+- **Date:** 18-10-26. **Reason:** exclude by reason, not by a volume cut. **Alternatives:** keep the 20M floor (rejected).
+- **G-OWN review:** planner-reported (not verified by this task): on 2026-10-21 the owner passed the review of the 11-narrative coin list in `api/data/attention_narratives.json` as on main (75 placed; NEAR, ICP, INJ primary Layer 1 accepted; M left Unassigned; the UNVERIFIED placements RAIN, GRAM, BTW, WLFI, PRL, AKE, STABLE, NIGHT and NEXO DeFi membership accepted as is). The file's `status` field is still `proposed`; a separate small worker task flips it to `reviewed` (pending).
+- **Consequences:** slices U1 (T113, #145) and U4 (T114, #144) merged; U2 (T115, PR #146) is an open draft in review; U3, U5, U6 queued.
+- **Status:** active.
+
+### D-26 Return to full RIPER-5 for new slices; lapse note T96-T107
+- **Decision:** (owner, 18-10-26) new slices run SPEC, PLAN, VALIDATE (contract and /goal block), an explicit ENTER EXECUTE MODE, an independent review before the owner merges, and EVL gates after each slice. Opus for code slices, sonnet otherwise.
+- **Lapse note:** T96-T107 and part of T113 and T114 were merged by the owner before the independent review; T96-T107 skipped PLAN, VALIDATE and EVL.
+- **Date:** 18-10-26. **Reason:** speed cost review coverage. **Alternatives:** keep the fast lane (rejected).
 - **Status:** active.
