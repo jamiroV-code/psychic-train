@@ -23,6 +23,7 @@ class DiscoveryCoin(BaseModel):
     rising_weight: float   # points of covered_weight whose source change is at or above the threshold
     trigger: bool
     sources: list[DiscoverySource]
+    primary: bool = False  # this category is the coin's primary narrative
 
 
 class DiscoveryCategory(BaseModel):
@@ -32,7 +33,7 @@ class DiscoveryCategory(BaseModel):
     median: float | None
     coins_used: int
     gaining_count: int     # coins with trigger true
-    ranked: bool = True    # False when fewer than `min_category_coins` coins were used: score kept, not ranked
+    ranked: bool = True    # False when fewer than `min_category_coins` coins had data: score kept, not ranked
     coins: list[DiscoveryCoin]
 
 
@@ -42,6 +43,13 @@ class DiscoveryExcluded(BaseModel):
     below_volume_floor: int = 0   # 24h volume under the floor, or unknown
     no_category: int = 0          # eligible but in none of the configured categories
     no_source_data: int = 0       # in a configured category but no source has usable data
+
+
+class DiscoveryHiddenNarrative(BaseModel):
+    """A narrative with fewer than `min_category_coins` member coins in the universe: listed, not scored."""
+    id: str
+    name: str
+    coins: list[str]       # its in-universe members
 
 
 class DiscoveryResponse(BaseModel):
@@ -54,10 +62,13 @@ class DiscoveryResponse(BaseModel):
     eligible_size: int
     shown_size: int = 0                  # distinct coins listed in any category
     excluded: DiscoveryExcluded = DiscoveryExcluded()
-    min_category_coins: int = 3
+    min_category_coins: int = 3          # value of universe_rules.min_narrative_coins (name kept for the web)
     rising_threshold_pct: float = 10.0
     min_covered_weight: float = 30.0
-    categories: list[DiscoveryCategory]
+    categories: list[DiscoveryCategory]  # the narratives; `categories_as_of` is the narratives file `as_of`
+    narratives_status: Literal["proposed", "reviewed"] = "proposed"
+    unassigned: list[str] = []           # universe coins in no narrative
+    hidden_narratives: list[DiscoveryHiddenNarrative] = []
 
 
 SourceState = Literal["ok", "insufficient-history", "unavailable", "not-probed", "off"]
@@ -126,6 +137,7 @@ class DiscoveryCoinHistory(DiscoveryHistoryBase):
 class DiscoveryCategoryHistory(DiscoveryHistoryBase):
     kind: Literal["category"] = "category"
     history_days: dict[str, int] = {}
+    membership_as_of: str = ""     # narratives file `as_of`: the membership used for EVERY day of the chart
     days: list[DiscoveryCategoryDay]
 
 

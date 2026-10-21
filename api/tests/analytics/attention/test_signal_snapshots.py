@@ -1,14 +1,18 @@
 """W9: the daily frozen Discovery snapshot. Fixture world as in test_discovery.py; every path in tmp_path."""
 from __future__ import annotations
 
+import hashlib
 import json
+import shutil
 from datetime import date, timedelta
+from pathlib import Path
 
-from api.analytics.attention import discovery as disc, signal_snapshots as snaps
+from api.analytics.attention import discovery as disc, narratives as narr_mod, signal_snapshots as snaps
 from api.data.attention import categories_store, registry, store, universe_store
 from api.data.attention.types import SourceSeries
 from api.tests.analytics.attention.conftest import TODAY
-from api.tests.analytics.attention.test_discovery import END, SUB, WEIGHTS, cfg, gain, put_change, world
+from api.tests.analytics.attention.test_discovery import (END, SUB, WEIGHTS, cfg, gain, put_change, world,
+                                                          write_narratives)
 
 
 def _world(tmp_path, monkeypatch):
@@ -52,7 +56,8 @@ def test_record_carries_config_and_hash(isolated_cache, tmp_path, monkeypatch):
     snaps.take_snapshot(TODAY)
     rec = json.loads((isolated_cache / "attention" / "signals" / f"{END.isoformat()}_w7.json").read_text())
     assert rec["config"]["source_weights"] == WEIGHTS and rec["config"]["exchange_sub_weights"] == SUB
-    assert rec["config"]["trigger_pct"] == 60 and rec["config_hash"] == snaps.config_hash(rec["config"])
+    assert rec["config"]["trigger_pct"] == 60
+    assert rec["config_hash"] == snaps.snapshot_hash(rec["config"], rec["narratives_sha"])
 
 
 def test_rerun_is_idempotent(isolated_cache, tmp_path, monkeypatch):
@@ -141,3 +146,64 @@ def test_signals_dir_is_not_a_source(isolated_cache, tmp_path, monkeypatch):
     assert universe_store.read_latest()["date"] == "2026-10-15"
     # sources that glob the store per source name never see it
     assert not list((isolated_cache / "attention" / "signals").glob("*.parquet"))
+
+
+# ---- T113 U1: narrative ids, marker, narratives sha; old ids mapped on read, never rewritten -------------------
+
+FROZEN = Path(__file__).resolve().parents[3] / "data" / "cache" / "attention" / "signals" / "2026-10-17_w7.json"
+
+
+def test_new_snapshot_writes_narrative_ids_and_marker(isolated_cache, tmp_path, monkeypatch):
+    _world(tmp_path, monkeypatch)
+    snaps.take_snapshot(TODAY)
+    rec = json.loads((isolated_cache / "attention" / "signals" / f"{END.isoformat()}_w30.json").read_text())
+    assert rec["membership_definition"] == "attention-narratives-v1"
+    assert rec["narratives_sha"] == narr_mod.file_sha() and rec["categories_as_of"] == "2026-10-14"
+    rows = snaps.read_snapshots(END, END, 30)
+    a = next(r for r in rows if r["symbol"] == "A")
+    assert a["category_ids"] == a["narrative_ids"] == ["ai", "defi"] and a["retired_ids"] == []
+
+
+def test_narratives_edit_changes_snapshot_hash(isolated_cache, tmp_path, monkeypatch):
+    _world(tmp_path, monkeypatch)
+    first = snaps.take_snapshot(TODAY)
+    monkeypatch.setattr(narr_mod, "NARRATIVES_PATH",
+                        write_narratives(tmp_path, {"ai": ["A"], "defi": ["A", "B"]}))
+    again = snaps.take_snapshot(TODAY)
+    assert {o["status"] for o in again} == {"config-changed"}
+    assert {o["current_hash"] for o in again} != {o["current_hash"] for o in first}
+
+
+def test_snapshot_reader_maps_old_ids_without_rewrite(isolated_cache):
+    dest = isolated_cache / "attention" / "signals" / FROZEN.name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(FROZEN, dest)
+    before = hashlib.sha256(dest.read_bytes()).hexdigest()
+    rows = snaps.read_snapshots(date(2026, 10, 17), date(2026, 10, 17), 7)
+    assert rows and hashlib.sha256(dest.read_bytes()).hexdigest() == before
+    stored = json.loads(dest.read_text())["rows"]
+    assert [r["category_ids"] for r in rows] == [r["category_ids"] for r in stored]   # raw ids untouched
+    mapped = {"meme-token": "memecoins", "decentralized-finance-defi": "defi", "oracle": "infrastructure",
+              "artificial-intelligence": "ai-data-compute", "real-world-assets-rwa": "real-world-assets",
+              "privacy-coins": "privacy", "layer-1": "layer-1", "layer-2": "layer-2"}
+    for r in rows:
+        assert r["narrative_ids"] == sorted({mapped[c] for c in r["category_ids"] if c in mapped})
+        assert r["retired_ids"] == sorted(c for c in r["category_ids"] if c not in mapped)
+
+
+def test_snapshot_reader_sends_unmapped_old_ids_to_retired(isolated_cache):
+    dest = isolated_cache / "attention" / "signals" / "2026-10-16_w7.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps({"rows": [{"date": "2026-10-16", "window": 7, "symbol": "X", "trigger": False,
+                                          "category_ids": ["gaming", "meme-token", "oracle", "zzz"]}]}))
+    before = dest.read_bytes()
+    (r,) = snaps.read_snapshots(date(2026, 10, 16), date(2026, 10, 16), 7)
+    assert (r["narrative_ids"], r["retired_ids"]) == (["infrastructure", "memecoins"], ["gaming", "zzz"])
+    assert dest.read_bytes() == before
+
+
+def test_snapshot_reader_skips_a_record_that_is_not_an_object(isolated_cache):
+    d = isolated_cache / "attention" / "signals"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "2026-10-16_w7.json").write_text("[1, 2]")
+    assert snaps.read_snapshots(date(2026, 10, 16), date(2026, 10, 16)) == []

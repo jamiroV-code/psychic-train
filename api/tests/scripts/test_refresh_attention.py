@@ -177,6 +177,30 @@ def test_categories_source_writes_dated_snapshot(isolated_cache):
     assert all(set(c) == {"id", "name", "symbols"} for c in snap["categories"])
 
 
+def test_run_categories_works_without_removed_config_keys(isolated_cache, capsys):
+    """T113 U1 (F1, AC-N7): the shipped config has no `categories`; the runner fetches the id-map ids plus
+    `exclude_category_ids`, names them from the map, and prints no ` error ` line the workflow would fail on."""
+    import json
+    from api.analytics.attention import discovery, narratives
+    from api.data.attention import categories_store
+    assert "categories" not in json.loads(discovery.CONFIG_PATH.read_text())
+    asked = []
+
+    def h(r: httpx.Request):
+        if r.url.params.get("category"):
+            asked.append(r.url.params["category"])
+        return _cat_handler()(r)
+    assert _run(["--sources", "categories"], h) == 0
+    id_map = narratives.load_id_map()
+    expect = list(id_map) + discovery.load_config()["exclude_category_ids"]
+    assert sorted(set(asked)) == sorted(expect)
+    snap = categories_store.read_latest()
+    assert {c["id"]: c["name"] for c in snap["categories"]} == {
+        **{k: v["name"] for k, v in id_map.items()}, "exchange-based-tokens": "exchange-based-tokens"}
+    out = capsys.readouterr()
+    assert " error " not in out.out + out.err and "categories: snapshot written" in out.out
+
+
 def test_categories_not_in_default_sources():
     assert "categories" not in refresh_attention.DEFAULT_SOURCES
 

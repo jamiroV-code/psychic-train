@@ -179,11 +179,13 @@ def _run_xsearch(symbols, client, today, sleep):
 
 
 def _run_categories(symbols, client, today, sleep):
-    """Write today's category snapshot (opt-in: --sources categories); a failed fetch raises."""
-    from api.analytics.attention import discovery
+    """Write today's category snapshot (opt-in: --sources categories); a failed fetch raises. The ids are the old
+    category ids of the narrative id map (a seeding hint; nothing scores from them) plus `exclude_category_ids`."""
+    from api.analytics.attention import discovery, narratives
     cfg = discovery.load_config()
-    ids = [c["id"] for c in cfg["categories"]] + [i for i in cfg["exclude_category_ids"]]
-    names = {c["id"]: c["name"] for c in cfg["categories"]}
+    id_map = narratives.load_id_map()
+    ids = list(id_map) + [i for i in cfg["exclude_category_ids"] if i not in id_map]
+    names = {k: v["name"] for k, v in id_map.items()}
     got = coingecko_attention.fetch_categories(ids, client=client, sleep=sleep)
     if not got:
         raise RuntimeError(f"categories unavailable: {coingecko_attention.LAST_FAILURE}")

@@ -4,6 +4,9 @@ Day D is scored exactly like live scoring (`discovery._coin`) with end = D, from
 The 90-day gate is evaluated per day: a series counts on D only if it has at least `min_history_days`
 points dated <= D (never the total stored length, so no availability lookahead). Each stored series is read
 once and sliced by date. Days with no usable source are omitted (missing is never 0).
+
+A category is a narrative (U1); an old CoinGecko category id resolves through the id map. Every day of a category
+chart uses TODAY'S membership (the narratives file, dated `membership_as_of`), never a past one.
 """
 from __future__ import annotations
 
@@ -13,6 +16,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from statistics import mean
 
+from api.analytics.attention import narratives
 from api.analytics.attention.discovery import (_coin, _percentile, eligibility, load_config, series_names)
 from api.analytics.attention.universe import load_universe
 from api.data.attention import categories_store, registry, store
@@ -133,18 +137,21 @@ def category_history(category_id: str, window: int, *, today: date, probe_path: 
                      universe_path: Path | None = None, config_path: Path | None = None
                      ) -> DiscoveryCategoryHistory:
     cfg = load_config(config_path)
+    doc = narratives.load_narratives()
     end = today - timedelta(days=1)
-    base = _base(cfg, category_id, window, end)
-    if category_id not in {c["id"] for c in cfg["categories"]}:
+    nid = narratives.resolve_id(category_id, doc, narratives.load_id_map())
+    if nid is None:
         raise UnknownSubject(f"unknown category {category_id!r}")
+    base = {**_base(cfg, nid, window, end), "membership_as_of": doc["as_of"]}
     symbols, reason = load_universe(universe_path)
     if not symbols:
         return DiscoveryCategoryHistory(**base, status="no-data", reason=reason, days=[])
     cats = categories_store.read_latest()
     if not cats or not cats.get("categories"):
         return DiscoveryCategoryHistory(**base, status="no-data", reason="categories-missing", days=[])
-    eligible, members = eligibility(cfg, symbols, cats)
-    coins = [s for s in eligible if s in members.get(category_id, set())]
+    eligible = eligibility(cfg, symbols, cats)[0]
+    in_narrative = {c["symbol"] for n in doc["narratives"] if n["id"] == nid for c in n["coins"]}
+    coins = [s for s in eligible if s in in_narrative]
 
     def compute():
         stored = _load(cfg, coins, probe_path)
@@ -164,4 +171,4 @@ def category_history(category_id: str, window: int, *, today: date, probe_path: 
         return DiscoveryCategoryHistory(**base, status="ok" if days else "no-data",
                                         reason="" if days else NO_DATA, days=days)
 
-    return _cached(("category", category_id, window, end, _signature(cfg, coins, probe_path)), compute)
+    return _cached(("category", nid, doc["as_of"], window, end, _signature(cfg, coins, probe_path)), compute)

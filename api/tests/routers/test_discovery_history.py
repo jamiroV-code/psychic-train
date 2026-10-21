@@ -83,3 +83,10 @@ def test_empty_is_no_data(wired, isolated_cache):
 
 def test_live_endpoint_unchanged(wired):
     assert wired.get("/api/narrative/discovery", params={"window": 30}).status_code == 200
+
+
+def test_category_payload_carries_membership_as_of_and_old_ids_resolve(wired):
+    b = wired.get(URL, params={"category": "artificial-intelligence", "window": 7}).json()
+    assert (b["id"], b["status"], b["membership_as_of"]) == ("ai", "ok", "2026-10-14")
+    r = wired.get(URL, params={"category": "gaming"})
+    assert r.status_code == 404 and "gaming" in r.json()["detail"]

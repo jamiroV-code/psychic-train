@@ -36,12 +36,13 @@ def test_ok_payload_shape(wired):
     assert body["window"] == 30 and body["status"] == "ok" and body["reason"] == ""
     assert set(body) == {"window", "as_of", "categories_as_of", "status", "reason",
                          "universe_size", "eligible_size", "shown_size", "excluded", "min_category_coins",
-                         "rising_threshold_pct", "min_covered_weight", "categories"}
+                         "rising_threshold_pct", "min_covered_weight", "categories",
+                         "narratives_status", "unassigned", "hidden_narratives"}
     assert set(body["excluded"]) == {"exclusion_list", "below_volume_floor", "no_category", "no_source_data"}
     c = body["categories"][0]
     assert set(c) == {"id", "name", "score", "median", "coins_used", "gaining_count", "ranked", "coins"}
     assert set(c["coins"][0]) == {"symbol", "change", "raw_change", "covered_weight", "rising_weight",
-                                  "trigger", "sources"}
+                                  "trigger", "sources", "primary"}
     assert set(c["coins"][0]["sources"][0]) == {"source", "change", "as_of", "members"}
     assert [x["symbol"] for x in c["coins"]] == ["B", "A"]
 
@@ -76,3 +77,11 @@ def test_sources_route_shape_and_no_network(wired):
     assert set(b["sources"][0]) == {"id", "label", "kind", "weight", "state", "newest", "history_days",
                                     "coins_with_data", "eligible_size", "note"}
     assert b["total_sources"] == 7 and b["eligible_size"] == 2
+
+
+def test_router_discovery_new_fields_present(wired):
+    body = wired.get(URL, params={"window": 30}).json()
+    assert (body["narratives_status"], body["categories_as_of"]) == ("proposed", "2026-10-14")
+    assert (body["unassigned"], body["min_category_coins"]) == ([], 1)
+    assert body["hidden_narratives"] == [{"id": "defi", "name": "DeFi", "coins": []}]
+    assert [c["primary"] for c in body["categories"][0]["coins"]] == [True, True]
