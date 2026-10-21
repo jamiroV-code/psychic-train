@@ -10,7 +10,7 @@ export const REASON_LABEL: Record<DiscoveryExclusionReason, string> = {
   "wrapped-staked": "wrapped or staked copies",
   "not-tradeable-config": "not tradeable (config)",
   unassigned: "unassigned",
-  "hidden-narrative": "hidden narrative",
+  "hidden-narrative": "coins in hidden narratives",
   "no-source-data": "no source data",
 };
 

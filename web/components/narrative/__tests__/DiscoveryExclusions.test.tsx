@@ -50,6 +50,8 @@ describe("DiscoveryExclusions", () => {
       expect(sentence).toMatch(/^[A-Z].*\.$/);
     }
     expect(screen.getByTestId("discovery-excluded-hidden-narrative")).toHaveTextContent(/fewer than 3 coins/);
+    // The count is coins, not narratives.
+    expect(screen.getByTestId("discovery-excluded-hidden-narrative").querySelector("h3")).toHaveTextContent(/^1 coins in hidden narratives$/);
     expect(screen.getByTestId("discovery-excluded-brand-new")).toHaveTextContent(/brand-new/);
   });
 

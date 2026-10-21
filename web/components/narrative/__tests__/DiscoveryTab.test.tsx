@@ -189,10 +189,10 @@ describe("DiscoveryTab", () => {
   });
 
   it("names every reason in plain words, hidden narratives and unknown reasons included", async () => {
-    const counts = { "wrapped-staked": 3, "not-tradeable-config": 2, "hidden-narrative": 1, "some-new-reason": 1 };
-    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ universe_size: 100, shown_size: 93, excluded_counts: counts }))} />);
+    const counts = { "hidden-narrative": 6, "wrapped-staked": 3, "not-tradeable-config": 2, "some-new-reason": 1 };
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ universe_size: 100, shown_size: 88, excluded_counts: counts }))} />);
     expect(await screen.findByTestId("discovery-coverage")).toHaveTextContent(
-      "93 of 100 top coins shown, 7 excluded: 3 wrapped or staked copies, 2 not tradeable (config), 1 hidden narrative, 1 some-new-reason",
+      "88 of 100 top coins shown, 12 excluded: 6 coins in hidden narratives, 3 wrapped or staked copies, 2 not tradeable (config), 1 some-new-reason",
     );
   });
 
