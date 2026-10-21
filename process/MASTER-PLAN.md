@@ -100,7 +100,7 @@ Columns: ID · What · Status · PR / evidence · Cost USD (planner-measured). `
 | T111 | universe-narratives PLAN | review | #142 | 1.05 |
 | T112 | VALIDATE of that PLAN, `Gate: PASS` | review | #143 | 3.69 |
 | T113 | U1 narratives file and loader | review | #145 (part merged before review) | 6.55 |
-| T114 | U4 symbol source (CoinGecko and Wikipedia cover the universe) | review | #144 (part merged before review) | 1.84 |
+| T114 | U4 symbol source (CoinGecko and Wikipedia cover the universe) | review | #144 (part merged before review); owner probe P-CG passed 21-10-26 on the owner's PC (planner-reported): `coingecko: 90/92 ok, 3605 rows written [ok 90, insufficient-history 2]`, was 56 of 103 ok before U4 | 1.84 |
 | T115 | U2 reasoned exclusions, label-only volume | review | PR #146 open draft | 3.75 |
 | T116 | review, report-only | review | report only | 0.69 |
 | T117 | independent review of T115 | in_progress | report only | - |

@@ -20,6 +20,7 @@ Staleness rule (master-planner.md): stale when the stamp is not an ancestor of H
 | Workflows | 7: `ci.yml`, `attention-refresh.yml`, `chain-growth-snapshot.yml`, `liqtide-snapshot.yml`, `liquidity-backfill-snapshot.yml`, `narrative-snapshot.yml`, `pairs-refresh-snapshot.yml` | `ls .github/workflows` |
 | Scheduled attention refresh | commits `attention refresh` landed on 18, 19 and 20 Oct 2026 (also `attention extra refresh`, narrative, chain-growth and liqtide snapshots); runs start late | `git log origin/main --format='%ad %s'` |
 | Frozen signal snapshots | 9 tracked files under `api/data/cache/attention/signals/` (3 windows x 17, 18, 19 Oct); the count grows daily | `git ls-files api/data/cache/attention/signals \| wc -l` |
+| Owner probe P-CG (U4, T114) | passed 2026-10-21 on the owner's PC, local cache (planner-reported, not verified here): `coingecko: 90/92 ok, 3605 rows written [ok 90, insufficient-history 2]`; was 56 of 103 ok before U4; runtime about 9 min, not yet reported | owner run |
 | `.agents/skills` | not a symlink to `.claude/skills` (baseline validator failure) | `validate-context-discovery` |
 
 ## Tests and CI (worker report, not re-run here)
