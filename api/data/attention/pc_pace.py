@@ -53,18 +53,23 @@ class Trickle:
         return self.rng.uniform(self.min_s, self.max_s)
 
     def first_due(self, start: datetime, last_unit_at: datetime | None) -> datetime:
+        """`last_unit_at` is when the previous unit ENDED (`PcSource.record_unit` stamps the end)."""
         due = _utc(start) + timedelta(seconds=BEHIND_DELAY_S)
         if last_unit_at is not None:
             due = max(due, _utc(last_unit_at) + timedelta(seconds=self.min_s))
         return due
 
-    def next_due(self, last_unit_at: datetime) -> datetime:
-        return _utc(last_unit_at) + timedelta(seconds=self.next_delay())
+    def next_due(self, last_unit_end: datetime) -> datetime:
+        """The delay runs from the end of the previous unit, so idle time is never below the minimum."""
+        return _utc(last_unit_end) + timedelta(seconds=self.next_delay())
 
 
 def plan_run(trickle: Trickle, *, start: datetime, stop: datetime,
              last_unit_at: datetime | None = None) -> list[datetime]:
-    """Unit start times for one PC session [start, stop): the same pace whatever was missed before."""
+    """Unit start times for one PC session [start, stop): the same pace whatever was missed before.
+
+    Units are treated as instantaneous here; the worker passes each unit's end to `next_due`.
+    """
     out: list[datetime] = []
     due = trickle.first_due(start, last_unit_at)
     while due < _utc(stop):
@@ -74,14 +79,21 @@ def plan_run(trickle: Trickle, *, start: datetime, stop: datetime,
 
 
 def build_queue(symbols: Iterable[str], *, now: datetime, stored: Mapping[str, set[date]],
-                backfill_days: int) -> list[tuple[str, date]]:
-    """(symbol, day) work items: yesterday for every coin, then older missing days newest first."""
+                backfill_days: int, rotation: bool = False) -> list[tuple[str, date]]:
+    """(symbol, day) work items: yesterday for every coin, then older missing days newest first.
+
+    `rotation` (X rotation mode, SPEC rule 9): yesterday's items run oldest newest-stored day first, coins with
+    nothing stored before all others; ties keep the given symbol order.
+    """
     syms = list(symbols)
     yesterday = density.completed_day(now)
     out: list[tuple[str, date]] = []
     for back in range(backfill_days + 1):
         day = yesterday - timedelta(days=back)
-        out += [(s, day) for s in syms if day not in stored.get(s, set())]
+        items = [(s, day) for s in syms if day not in stored.get(s, set())]
+        if rotation and back == 0:
+            items.sort(key=lambda item: max(stored.get(item[0]) or {date.min}))
+        out += items
     return out
 
 
@@ -195,8 +207,14 @@ class PcSource:
 
     # --- units and warnings ---
     def record_unit(self) -> None:
+        """A unit ran (counts toward a clean day); stamps its end for the next delay."""
         self._roll()
         self._activity()["units"] += 1
+        self._s["last_unit_at"] = _utc(self.clock()).isoformat()
+        self._save()
+
+    def stamp_attempt(self) -> None:
+        """A request was sent but the unit failed: the next delay still runs from now."""
         self._s["last_unit_at"] = _utc(self.clock()).isoformat()
         self._save()
 
@@ -205,11 +223,17 @@ class PcSource:
         return datetime.fromisoformat(v) if v else None
 
     def warn(self, reason: str) -> None:
-        """Pause on a warning: rest of the UTC day, or until `owner_reset` for suspension and login-expired."""
+        """Pause on a warning: rest of the UTC day, or until `owner_reset` for suspension and login-expired.
+
+        An active owner-action pause is never replaced by a shorter one.
+        """
         if reason not in pa.WARNING_REASONS:
             raise ValueError("unknown warning reason")
         self._roll()
         self._activity()["warned"] = True
+        if self._s["pause_reason"] in pa.OWNER_ACTION_REASONS:
+            self._save()
+            return
         if reason in pa.OWNER_ACTION_REASONS:
             until = None
         else:
@@ -268,9 +292,13 @@ def run_x_unit(adapter: pa.XAdapter, src: PcSource, config: CollectorConfig, *, 
         try:
             got = adapter.search_page(query, start, end, page)
         except pa.CollectorError as exc:
+            src.stamp_attempt()
             if exc.warning:
                 src.warn(exc.reason)
             return UnitOutcome(None, loaded, pages, exc.reason)
+        except Exception:
+            src.stamp_attempt()
+            raise
         pages += 1
         loaded += len(got.posts)
         src.record_loaded(len(got.posts))

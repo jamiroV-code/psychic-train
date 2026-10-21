@@ -117,6 +117,19 @@ def test_collector_logs_use_class_and_status_helper_only():
     assert not offenders
 
 
+def test_no_fixed_utc_hour_in_pure_modules():
+    """AC28 (pure part): nothing compares the clock to an hour of the day; only the 00:00 UTC day boundary exists."""
+    offenders = []
+    for path in PURE_MODULES:
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Attribute) and node.attr in {"hour", "minute"}:
+                offenders.append(f"{path.name}:{node.lineno}")
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "time"
+                    and any(not (isinstance(a, ast.Constant) and a.value == 0) for a in node.args)):
+                offenders.append(f"{path.name}:{node.lineno}")
+    assert not offenders
+
+
 def test_no_machine_state_committed():
     """State and evidence paths resolve under the git-ignored cache root, never in tracked repo folders."""
     ignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()

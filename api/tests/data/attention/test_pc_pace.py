@@ -125,6 +125,16 @@ def test_yesterday_before_backfill():
     assert pp.build_queue(["SOL"], now=T0, stored={}, backfill_days=0) == [("SOL", YESTERDAY)]
 
 
+def test_rotation_queue_oldest_newest_stored_first():
+    stored = {"SOL": {YESTERDAY - timedelta(days=2)},
+              "ETH": {YESTERDAY - timedelta(days=9), YESTERDAY - timedelta(days=5)},
+              "LINK": {YESTERDAY}}
+    q = pp.build_queue(["SOL", "ETH", "BTC", "AAVE", "LINK"], now=T0, stored=stored, backfill_days=0, rotation=True)
+    assert q == [("BTC", YESTERDAY), ("AAVE", YESTERDAY), ("ETH", YESTERDAY), ("SOL", YESTERDAY)]
+    window = pp.build_queue(["SOL", "ETH", "BTC", "AAVE", "LINK"], now=T0, stored=stored, backfill_days=0)
+    assert window == [("SOL", YESTERDAY), ("ETH", YESTERDAY), ("BTC", YESTERDAY), ("AAVE", YESTERDAY)]
+
+
 def test_pace_rejects_bad_delays():
     for lo, hi in ((0, 10), (10, 5), (-1, 3)):
         with pytest.raises(ValueError):
@@ -330,6 +340,33 @@ def test_suspension_and_login_expired_stay_paused(attention_cache):
         assert x_source(clock).is_paused()
         src.owner_reset()
         assert not src.is_paused()
+
+
+def test_owner_action_pause_not_downgraded(attention_cache):
+    clock = Clock()
+    src = x_source(clock)
+    src.warn("x_account_suspended")
+    src.warn("rate_limited")
+    clock.advance(days=2)
+    assert src.is_paused() and src.pause_reason() == "x_account_suspended"
+
+
+def test_failed_attempt_stamps_time_for_next_delay(attention_cache):
+    clock = Clock()
+    src = x_source(clock)
+    run_unit(pa.FakeAdapter(pages=[pa.Offline()]), src, clock)
+    assert src.last_unit_at() == T0
+    t = pp.Trickle(180, 360, random.Random(0))
+    assert t.first_due(T0, src.last_unit_at()) == T0 + timedelta(seconds=180)
+
+    class Broken(pa.FakeAdapter):
+        def search_page(self, *a):
+            raise RuntimeError
+
+    clock.advance(minutes=10)
+    with pytest.raises(RuntimeError):
+        run_unit(Broken(), src, clock)
+    assert src.last_unit_at() == T0 + timedelta(minutes=10)
 
 
 def test_other_source_keeps_running(attention_cache):

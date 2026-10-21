@@ -172,6 +172,17 @@ def test_cap_resets_next_month(attention_cache):
     assert adapter.repairs == 2
 
 
+def test_unknown_repair_cost_fails_closed(attention_cache):
+    clock = Clock(datetime(2026, 10, 3, tzinfo=timezone.utc))
+    meter = pa.CostMeter(clock=clock)
+    for bad in (float("nan"), None, -2.0):
+        pa.CostMeter.path().unlink(missing_ok=True)
+        adapter = pa.FakeAdapter(pages=[], repair_cost_usd=bad)
+        with pytest.raises(pa.SelfRepairRefused):
+            pa.attempt_self_repair(adapter, meter)
+        assert adapter.repairs == 1 and meter.spent() == 15.0 and not meter.can_repair()
+
+
 def test_negative_or_bad_cost_rejected(attention_cache):
     meter = pa.CostMeter(clock=Clock(datetime(2026, 10, 3, tzinfo=timezone.utc)))
     for bad in (-1.0, float("nan"), float("inf"), "3"):
