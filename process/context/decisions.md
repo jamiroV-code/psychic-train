@@ -33,13 +33,14 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 | D-17 | Narrative baskets: groups are baskets, percentile attention score | 17-10-26 | active |
 | D-18 | Narrative baskets: sources and Discovery outlier rules | 17-10-26 | active |
 | D-19 | Narrative baskets: daily refresh workflow; trust_weight kept | 17-10-26 | active |
-| D-20 | Exchange-token exclusion list | 17-10-26 | active |
+| D-20 | Exchange-token exclusion list | 17-10-26 | superseded by D-27 |
 | D-21 | Planner session shell can break with E2BIG in long sessions | 17-10-26 | active |
 | D-22 | Weighted attention signal: sources, weights, rising rule | 18-10-26 | active |
 | D-23 | exchange_activity composite: four venues, blended by change | 18-10-26 | proposed |
 | D-24 | Frozen daily signal snapshots and the calibration plan | 18-10-26 | active |
 | D-25 | Tradeable universe and narratives rules | 18-10-26 | active |
 | D-26 | Return to full RIPER-5 for new slices; lapse note T96-T107 | 18-10-26 | active |
+| D-27 | Exchange tokens are IN as a narrative (supersedes D-20) | 18-10-26 | active |
 | D-0 | Original goal: one confidence level that sizes positions | 17-09-26 | superseded by D-1, D-2 |
 
 ## Entries
@@ -191,7 +192,7 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 ### D-20 Exchange-token exclusion list
 - **Decision:** owner confirmed 2026-10-17: BNB kept, LEO OKB CRO GT KCS BGB MX excluded (editable in `attention_universe.json` and `discovery.json`; BNB is allowed past the exchange-based-tokens category via `include_despite_category`).
 - **Date:** 17-10-26. **Reason:** exchange tokens track their venue, not a narrative. **Alternatives:** keep them all in (rejected for all but BNB).
-- **Status:** active.
+- **Status:** superseded by D-27.
 
 ### D-21 Planner session shell can break with E2BIG in long sessions
 - **Decision:** observed 2026-10-17. Every Bash call failed to start with `Could not start /bin/bash: ... exceed the OS exec argument limit (E2BIG)` (command line ~150-170 KB across 3 args), even for `git status`, for a whole long planner session (many compactions). The environment was ~8 KB, so the harness-built command line is the oversized part. Unconfirmed hypotheses: the shell wrapper/snapshot grows with session age, or the shell-init snapshot from the user profile.
@@ -229,4 +230,10 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 - **Decision:** (owner, 18-10-26) new slices run SPEC, PLAN, VALIDATE (contract and /goal block), an explicit ENTER EXECUTE MODE, an independent review before the owner merges, and EVL gates after each slice. Opus for code slices, sonnet otherwise.
 - **Lapse note:** T96-T107 and part of T113 and T114 were merged by the owner before the independent review; T96-T107 skipped PLAN, VALIDATE and EVL.
 - **Date:** 18-10-26. **Reason:** speed cost review coverage. **Alternatives:** keep the fast lane (rejected).
+- **Status:** active.
+
+### D-27 Exchange tokens are IN as a narrative (supersedes D-20)
+- **Decision:** (owner, 18-10-26; slice U6 of the universe-narratives PLAN, T146) exchange tokens (BNB, WBT, LEO, CRO, OKB, HTX, BGB, GT, KCS and later ones) are IN the Discovery universe as the narrative "Exchange tokens"; HYPE, PUMP and NEXO have it as primary or secondary membership as placed in `api/data/attention_narratives.json`. There is no exchange-token exclusion, no volume floor and no volume cut: volume under `thin_volume_label_below_usd` 20000000 (in `universe_rules` of `api/data/discovery.json`) only adds a "thin volume" label. Exclusions stay the closed reason list of D-25 (stablecoins, tokenized funds, wrapped/staked copies, coins with no market on Binance, Coinbase, Kraken or Hyperliquid), each shown with its reason.
+- **Date:** 18-10-26. **Reason:** the goal is attention on coins the owner can trade; exchange tokens are tradeable and have their own attention. **Alternatives:** keep the D-20 exclusion list (rejected by the owner); keep a 5M backup floor (rejected).
+- **Consequences:** thin exchange tokens will often read "low data". `exclude`, `exclude_category_ids`, `include_despite_category` and the volume floor are gone from `discovery.json`. The Baskets tab keeps the old universe lists of `attention_universe.json` for its reference (its scores are unchanged); moving Baskets to the new universe is a separate decision (Q-V1). Does not change D-22..D-26: the weights v2 (PR #156: trends and wikipedia as one search group, early-source rule) and the X/Reddit collector SPEC (PR #153) are separate.
 - **Status:** active.
