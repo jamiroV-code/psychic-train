@@ -13,6 +13,7 @@ from api.data.attention import trends_keywords as k
 from api.scripts import check_trends_keywords as c
 from api.tests.trends_fixtures import (
     FORBIDDEN_IN_OUTPUT,
+    SECRET,
     FakeTrendReq,
     block_network,
     candidate,
@@ -83,8 +84,8 @@ def test_candidate_without_valid_mid_is_not_proposed():
 
 
 def test_duplicate_proposed_topic_is_not_pasted():
-    client = FakeTrendReq({"Chainlink": [LINK_TOPIC], "Chain Link": [LINK_TOPIC]})
-    res, text = _run({"LINK": "Chainlink", "LNK": "Chain Link"}, client)
+    client = FakeTrendReq({"Chainlink": [LINK_TOPIC]})
+    res, text = _run({"LINK": "Chainlink", "LNK": "Chainlink"}, client)
     assert [r.verdict for r in res] == ["AMBIGUOUS", "AMBIGUOUS"]
     assert _block(text) == {}
 
@@ -102,7 +103,7 @@ def test_sleep_is_at_least_two_seconds_between_calls():
 
 def test_three_consecutive_429_stop_the_run():
     names = {f"S{i}": f"Name{i}" for i in range(6)}
-    client = FakeTrendReq({"Name0": [LINK_TOPIC], **{f"Name{i}": too_many() for i in range(1, 6)}})
+    client = FakeTrendReq({"Name0": [candidate("/m/0n0", "Name0", "Token")], **{f"Name{i}": too_many() for i in range(1, 6)}})
     res, text = _run(names, client)
     assert client.suggestion_calls == ["Name0", "Name1", "Name2", "Name3"]
     assert [r.verdict for r in res] == ["PASS", "FAIL", "FAIL", "FAIL", "NOT-RUN", "NOT-RUN"]
@@ -188,3 +189,33 @@ def test_pytrends_missing_exits_3_and_prints_the_command(monkeypatch, capsys):
     assert c.main(["--symbols", "SOL"], sleep=lambda s: None) == 3
     err = capsys.readouterr().err
     assert "uv run --project api --with pytrends python -m api.scripts.check_trends_keywords" in err
+
+
+def test_single_crypto_candidate_not_passed_for_ticker_label_or_title_mismatch():
+    client = FakeTrendReq({"RAIN": [candidate("/g/11rain", "Rain", "Cryptocurrency")],
+                           "Kaspa": [candidate("/g/11kas", "Kaspa Network", "Cryptocurrency")],
+                           "Monero": [candidate("/m/0xmr", "Some other coin", "Cryptocurrency")]})
+    res, text = _run({"RAIN": "RAIN", "KAS": "Kaspa", "XMR": "Monero"}, client)
+    assert [r.verdict for r in res] == ["AMBIGUOUS", "PASS", "AMBIGUOUS"]
+    assert "label is only the ticker" in text and "title does not contain the name" in text
+    assert set(_block(text)) == {"KAS"}
+
+
+def test_virtual_currency_type_counts_as_crypto():
+    assert "virtual currency" in c.CRYPTO_TYPE_WORDS
+    res, _ = _run({"ZEC": "Zcash"}, FakeTrendReq({"Zcash": [candidate("/m/0zec", "Zcash", "Virtual currency")]}))
+    assert res[0].verdict == "PASS"
+
+
+def test_client_start_failure_exits_1_and_prints_class_only(capsys, caplog):
+    planted = "HTTPSConnectionPool(host='trends.google.com', url=/?geo=US) " + SECRET
+
+    def _boom():
+        raise ConnectionError(planted)
+
+    assert c.main(["--symbols", "SOL"], trendreq_factory=_boom, sleep=lambda s: None) == 1
+    cap = capsys.readouterr()
+    text = cap.out + cap.err + caplog.text
+    assert "ConnectionError" in text
+    for bad in (planted, SECRET, "trends.google.com", "Traceback", "HTTPSConnectionPool"):
+        assert bad not in text

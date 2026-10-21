@@ -12,6 +12,7 @@ from api.scripts import probe_trends as p
 from api.scripts import trends_cli_common as common
 from api.tests.trends_fixtures import (
     FORBIDDEN_IN_OUTPUT,
+    SECRET,
     TODAY,
     FakeTrendReq,
     block_network,
@@ -210,3 +211,18 @@ def test_429_on_evidence_request_2_skips_request_3():
     code, text, client = _run([daily_frame(R1), too_many(), daily_frame(R3)])
     assert code == 0 and len(client.payloads) == 2
     assert "evidence request 3: skipped after HTTP 429" in text
+
+
+def test_client_start_failure_exits_1_and_prints_class_only(capsys, caplog):
+    planted = "HTTPSConnectionPool(host='trends.google.com', url=/?geo=US) " + SECRET
+
+    def _boom():
+        raise ConnectionError(planted)
+
+    out, err = io.StringIO(), io.StringIO()
+    assert p.main([], trendreq_factory=_boom, sleep=lambda s: None, out=out, err=err) == 1
+    cap = capsys.readouterr()
+    text = out.getvalue() + err.getvalue() + cap.out + cap.err + caplog.text
+    assert "ConnectionError" in text
+    for bad in (planted, SECRET, "trends.google.com", "Traceback", "HTTPSConnectionPool"):
+        assert bad not in text
