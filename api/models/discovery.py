@@ -24,6 +24,9 @@ class DiscoveryCoin(BaseModel):
     trigger: bool
     sources: list[DiscoverySource]
     primary: bool = False  # this category is the coin's primary narrative
+    volume_24h: float | None = None   # snapshot 24h volume (USD); never excludes
+    thin_volume: bool = False         # volume under universe_rules.thin_volume_label_below_usd: a label only
+    tradeability: Literal["tradeable", "unverified"] = "unverified"   # unverified = a venue list is unknown
 
 
 class DiscoveryCategory(BaseModel):
@@ -38,11 +41,18 @@ class DiscoveryCategory(BaseModel):
 
 
 class DiscoveryExcluded(BaseModel):
-    """Why top-N coins are not shown. Disjoint, first matching reason wins; they add up to universe - shown."""
-    exclusion_list: int = 0       # on the `exclude` list or in an `exclude_category_ids` category
-    below_volume_floor: int = 0   # 24h volume under the floor, or unknown
-    no_category: int = 0          # eligible but in none of the configured categories
-    no_source_data: int = 0       # in a configured category but no source has usable data
+    """Legacy (deprecated, kept for the old web; U2): `excluded_counts` folded into the old four keys.
+    They add up to universe - shown."""
+    exclusion_list: int = 0       # stablecoin + wrapped-staked + no-market + not-tradeable-config
+    below_volume_floor: int = 0   # always 0: there is no volume cut
+    no_category: int = 0          # unassigned + hidden-narrative
+    no_source_data: int = 0       # in a visible narrative but no source has usable data
+
+
+class DiscoveryExcludedCoin(BaseModel):
+    symbol: str
+    reason: str            # closed list: universe_classes.REASONS
+    detail: str = ""
 
 
 class DiscoveryHiddenNarrative(BaseModel):
@@ -62,6 +72,8 @@ class DiscoveryResponse(BaseModel):
     eligible_size: int
     shown_size: int = 0                  # distinct coins listed in any category
     excluded: DiscoveryExcluded = DiscoveryExcluded()
+    excluded_coins: list[DiscoveryExcludedCoin] = []   # every universe coin not shown, with its reason
+    excluded_counts: dict[str, int] = {}               # reason -> count; shown_size + sum = universe_size
     min_category_coins: int = 3          # value of universe_rules.min_narrative_coins (name kept for the web)
     rising_threshold_pct: float = 10.0
     min_covered_weight: float = 30.0

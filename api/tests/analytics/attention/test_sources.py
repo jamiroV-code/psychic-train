@@ -30,7 +30,7 @@ def live(isolated_cache, tmp_path, monkeypatch):
 def test_row_set_is_every_configured_source(live):
     ids = [r.id for r in src.build_sources(TODAY).sources]
     assert ids == ["wikipedia", "trends", "reddit", "xsearch", "exchange_activity", "github_dev", "defillama",
-                   "binance", "coinbase", "kraken", "hyperliquid", "coingecko", "universe", "categories"]
+                   "binance", "coinbase", "kraken", "hyperliquid", "coingecko", "universe", "narratives"]
 
 
 def test_ok_source_reports_coins_days_and_newest(live):
@@ -104,7 +104,7 @@ def test_helper_stores(live):
     res = src.build_sources(TODAY)
     assert (row(res, "universe").state, row(res, "universe").coins_with_data) == ("ok", 3)
     assert row(res, "universe").newest == "2026-10-15"
-    assert (row(res, "categories").state, row(res, "categories").coins_with_data) == ("ok", 1)
+    assert (row(res, "narratives").state, row(res, "narratives").note) == ("ok", "status proposed")
 
 
 def test_helper_snapshot_without_date_is_not_a_500():
@@ -115,7 +115,7 @@ def test_helper_snapshot_without_date_is_not_a_500():
 def test_helper_stores_missing(isolated_cache, tmp_path):
     src.clear_cache()
     res = src.build_sources(TODAY)
-    assert row(res, "universe").state == "unavailable" and row(res, "categories").state == "unavailable"
+    assert row(res, "universe").state == "unavailable"
     assert res.eligible_size == 0 and res.live_weight == 0
 
 

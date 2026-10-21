@@ -1,8 +1,4 @@
 {
-  "min_volume_24h_usd": 20000000,
-  "exclude": ["LEO", "OKB", "CRO", "GT", "KCS", "BGB", "MX"],
-  "exclude_category_ids": ["exchange-based-tokens"],
-  "include_despite_category": ["BNB"],
   "source_weights": {
     "wikipedia": 25,
     "trends": 25,
@@ -25,5 +21,16 @@
   "winsor_percentile": 95,
   "recent_days": 7,
   "max_source_lag_days": 3,
-  "universe_rules": {"min_narrative_coins": 3}
+  "universe_rules": {
+    "min_narrative_coins": 3,
+    "thin_volume_label_below_usd": 20000000,
+    "classes": {
+      "stablecoin": ["USDT", "USDC", "USDS", "USDE", "DAI", "USD1", "PYUSD", "USDD", "USDG", "RLUSD", "USDF", "BFUSD",
+                     "USDGO", "OUSD", "GHO", "U", "FDUSD", "TUSD"],
+      "wrapped_staked": ["WBTC", "WETH", "STETH", "WSTETH", "WEETH", "CBBTC", "WBETH", "BSC-USD", "WBNB"],
+      "tokenized_fund": ["USDY", "BUIDL", "USYC", "USTB", "EUTBL", "EURSAFO", "BCAP", "FIGR_HELOC"]
+    },
+    "not_tradeable": {},
+    "force_include": []
+  }
 }

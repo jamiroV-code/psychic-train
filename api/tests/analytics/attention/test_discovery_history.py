@@ -204,10 +204,17 @@ def test_unknown_symbol_and_category(isolated_cache, tmp_path, monkeypatch):
         hist.category_history("nope", 30, today=TODAY)
 
 
-def test_category_missing_snapshot_is_no_data(isolated_cache, tmp_path, monkeypatch):
+def test_category_history_needs_no_categories_snapshot(isolated_cache, tmp_path, monkeypatch):
     world(tmp_path, monkeypatch, {"A": 5e7}, cats=None)
     res = hist.category_history("ai", 30, today=TODAY)
-    assert (res.status, res.reason) == ("no-data", "categories-missing")
+    assert res.reason != "categories-missing"
+
+
+def test_coin_history_accepts_exchange_token_now_in_universe(isolated_cache, tmp_path, monkeypatch):
+    world(tmp_path, monkeypatch, {"LEO": 5e7, "USDT": 5e7}, cats={"ai": ["LEO"]})
+    assert hist.coin_history("LEO", 30, today=TODAY).id == "LEO"
+    with pytest.raises(hist.UnknownSubject):
+        hist.coin_history("USDT", 30, today=TODAY)
 
 
 def test_category_aggregate_matches_live_on_last_day(isolated_cache, tmp_path, monkeypatch):

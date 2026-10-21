@@ -45,3 +45,27 @@ def load_universe(path: Path | None = None) -> tuple[list[str], str]:
 
 def load_reference(path: Path | None = None) -> list[str]:
     return load_universe(path)[0]
+
+
+def load_universe_rows(path: Path | None = None) -> tuple[list[dict], str]:
+    """Discovery universe (U2): the top-N snapshot ROWS (symbol, id, market_cap, volume_24h), cap order, with
+    none of the three lists dropped; classes decide what is OUT (`universe_classes`). A non-empty `reference`
+    override gives symbol-only rows (no volume). Baskets keeps `load_universe`/`load_reference` (Q-V1)."""
+    try:
+        override = json.loads((path or UNIVERSE_PATH).read_text()).get("reference") or []
+    except (OSError, ValueError, AttributeError, TypeError):
+        return [], MISSING
+    if override:
+        rows, reason = [{"symbol": str(s)} for s in override], "override"
+    else:
+        snap = universe_store.read_latest()
+        rows = sorted((r for r in (snap or {}).get("coins", []) if isinstance(r, dict) and r.get("symbol")),
+                      key=_cap, reverse=True)[:TOP_N]
+        reason = "snapshot"
+    out, seen = [], set()
+    for r in rows:
+        sym = str(r["symbol"]).upper()
+        if sym not in seen:
+            seen.add(sym)
+            out.append({**r, "symbol": sym})
+    return (out, reason) if out else ([], MISSING)

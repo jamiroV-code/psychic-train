@@ -18,8 +18,8 @@ from statistics import mean
 
 from api.analytics.attention import narratives
 from api.analytics.attention.discovery import (_coin, _percentile, eligibility, load_config, series_names)
-from api.analytics.attention.universe import load_universe
-from api.data.attention import categories_store, registry, store
+from api.analytics.attention.universe import load_universe_rows
+from api.data.attention import registry, store
 from api.data.attention.types import SourceSeries
 from api.models.discovery import (DiscoveryCategoryDay, DiscoveryCategoryHistory, DiscoveryCoinHistory,
                                   DiscoveryHistoryDay)
@@ -111,10 +111,10 @@ def coin_history(symbol: str, window: int, *, today: date, probe_path: Path | No
     end = today - timedelta(days=1)
     sym = symbol.strip().upper()
     base = _base(cfg, sym, window, end)
-    symbols, reason = load_universe(universe_path)
-    if not symbols:
+    rows, reason = load_universe_rows(universe_path)
+    if not rows:
         return DiscoveryCoinHistory(**base, status="no-data", reason=reason, history_days={}, days=[])
-    if sym not in symbols:
+    if sym not in eligibility(cfg, rows).eligible:
         raise UnknownSubject(f"unknown symbol {symbol!r}")
 
     def compute():
@@ -143,13 +143,10 @@ def category_history(category_id: str, window: int, *, today: date, probe_path: 
     if nid is None:
         raise UnknownSubject(f"unknown category {category_id!r}")
     base = {**_base(cfg, nid, window, end), "membership_as_of": doc["as_of"]}
-    symbols, reason = load_universe(universe_path)
-    if not symbols:
+    rows, reason = load_universe_rows(universe_path)
+    if not rows:
         return DiscoveryCategoryHistory(**base, status="no-data", reason=reason, days=[])
-    cats = categories_store.read_latest()
-    if not cats or not cats.get("categories"):
-        return DiscoveryCategoryHistory(**base, status="no-data", reason="categories-missing", days=[])
-    eligible = eligibility(cfg, symbols, cats)[0]
+    eligible = eligibility(cfg, rows).eligible
     in_narrative = {c["symbol"] for n in doc["narratives"] if n["id"] == nid for c in n["coins"]}
     coins = [s for s in eligible if s in in_narrative]
 

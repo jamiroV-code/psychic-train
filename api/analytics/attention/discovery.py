@@ -9,7 +9,8 @@ of covered weight and covered weight >= `min_covered_weight`. Category score = m
 A coin counts in each of its categories; there is no cross-category total.
 
 Categories are the narratives of `attention_narratives.json` (U1): membership comes from that file, never from
-CoinGecko categories. The CoinGecko category snapshot is still read for `exclude_category_ids` until U2.
+CoinGecko categories. Eligibility (U2) is `universe_classes`: class exclusion, then tradeability, then IN; there
+is no volume cut, and every top-N coin that is not shown carries a reason from a closed list.
 """
 from __future__ import annotations
 
@@ -18,11 +19,11 @@ from datetime import date, timedelta
 from pathlib import Path
 from statistics import mean, median
 
-from api.analytics.attention import narratives
-from api.analytics.attention.universe import load_universe
-from api.data.attention import categories_store, registry, universe_store
-from api.models.discovery import (DiscoveryCategory, DiscoveryCoin, DiscoveryExcluded, DiscoveryHiddenNarrative,
-                                  DiscoveryResponse, DiscoverySource)
+from api.analytics.attention import narratives, universe_classes
+from api.analytics.attention.universe import load_universe_rows
+from api.data.attention import registry
+from api.models.discovery import (DiscoveryCategory, DiscoveryCoin, DiscoveryExcluded, DiscoveryExcludedCoin,
+                                  DiscoveryHiddenNarrative, DiscoveryResponse, DiscoverySource)
 
 CONFIG_PATH = Path(__file__).resolve().parents[2] / "data" / "discovery.json"
 
@@ -68,6 +69,7 @@ def validate_config(cfg: dict) -> dict:
     v = rules.get("min_narrative_coins") if isinstance(rules, dict) else None
     if isinstance(v, bool) or not isinstance(v, int) or v < 1:
         raise ValueError("discovery config: universe_rules.min_narrative_coins is missing or not an integer >= 1")
+    universe_classes.validate_rules(cfg)
     return cfg
 
 
@@ -171,53 +173,35 @@ def series_names(cfg: dict) -> set[str]:
     return {s for s in cfg["source_weights"] if s != SLOT} | set(EXCHANGE_SERIES.values()) | {FALLBACK_SERIES}
 
 
-def _volumes() -> dict:
-    return {str(r.get("symbol", "")).upper(): r.get("volume_24h")
-            for r in (universe_store.read_latest() or {}).get("coins", []) if isinstance(r, dict)}
+def eligibility(cfg: dict, rows: list[dict], venues=None) -> universe_classes.Universe:
+    """Class exclusion -> tradeability -> IN over the universe rows; `.eligible` is the IN set in universe order."""
+    return universe_classes.build(rows, cfg["universe_rules"], venues)
 
 
-def _excluded_symbols(cfg: dict, members: dict[str, set[str]]) -> set[str]:
-    excluded = {str(s).upper() for s in cfg.get("exclude", [])}
-    for cid in cfg.get("exclude_category_ids", []):
-        excluded |= members.get(cid, set())
-    return excluded - ({str(s).upper() for s in cfg.get("include_despite_category", [])} - {
-        str(s).upper() for s in cfg.get("exclude", [])})
-
-
-def _members(cats: dict) -> dict[str, set[str]]:
-    return {c["id"]: {str(s).upper() for s in c.get("symbols", [])} for c in cats["categories"]}
-
-
-def eligibility(cfg: dict, symbols: list[str], cats: dict) -> tuple[list[str], dict[str, set[str]]]:
-    """(eligible symbols in universe order, category id -> member symbols)."""
-    vols = _volumes()
-    floor = float(cfg["min_volume_24h_usd"])
-    members = _members(cats)
-    excluded = _excluded_symbols(cfg, members)
-    eligible = [s for s in symbols if s not in excluded
-                and isinstance(vols.get(s), (int, float)) and vols[s] >= floor]
-    return eligible, members
-
-
-def _excluded_counts(cfg: dict, symbols: list[str], eligible: list[str], members: dict[str, set[str]],
-                     shown: set[str], listed: set[str]) -> DiscoveryExcluded:
-    """Why each top-N coin is not shown; the first matching reason wins, so the counts are disjoint.
-    `members` are the CoinGecko categories (exclusion only); `listed` are the visible narrative members."""
-    excluded = _excluded_symbols(cfg, members)
-    ok = set(eligible)
-    out = {"exclusion_list": 0, "below_volume_floor": 0, "no_category": 0, "no_source_data": 0}
-    for s in symbols:
+def _excluded(u: universe_classes.Universe, nm: narratives.Memberships, shown: set[str]) -> dict:
+    """Every universe coin not shown, with one reason; first match wins, so the counts are disjoint."""
+    hidden_only = {s for h in nm.hidden for s in h["coins"]} - set().union(set(), *nm.visible.values())
+    unassigned = set(nm.unassigned)
+    coins = []
+    for r in u.rows:
+        s = r["symbol"]
         if s in shown:
             continue
-        if s in excluded:
-            out["exclusion_list"] += 1
-        elif s not in ok:
-            out["below_volume_floor"] += 1
-        elif s not in listed:
-            out["no_category"] += 1
+        if s in u.out:
+            reason, detail = u.out[s]
+        elif s in unassigned:
+            reason, detail = "unassigned", "in no narrative"
+        elif s in hidden_only:
+            reason, detail = "hidden-narrative", "only in hidden narratives"
         else:
-            out["no_source_data"] += 1
-    return DiscoveryExcluded(**out)
+            reason, detail = "no-source-data", "no source has usable data"
+        coins.append(DiscoveryExcludedCoin(symbol=s, reason=reason, detail=detail))
+    counts = {k: sum(c.reason == k for c in coins) for k in universe_classes.REASONS}
+    legacy = DiscoveryExcluded(
+        exclusion_list=sum(counts[k] for k in ("stablecoin", "wrapped-staked", "no-market", "not-tradeable-config")),
+        below_volume_floor=0, no_category=counts["unassigned"] + counts["hidden-narrative"],
+        no_source_data=counts["no-source-data"])
+    return {"excluded_coins": coins, "excluded_counts": counts, "excluded": legacy}
 
 
 def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
@@ -227,27 +211,24 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
     doc = narratives.load_narratives()
     end = today - timedelta(days=1)
     as_of = end.isoformat()
-    symbols, reason = load_universe(universe_path)
-    if not symbols:
+    urows, reason = load_universe_rows(universe_path)
+    if not urows:
         return _empty(window, as_of, doc["as_of"], "no-data", reason, narratives_status=doc["status"])
-    cats = categories_store.read_latest()
-    if not cats or not cats.get("categories"):
-        return _empty(window, as_of, doc["as_of"], "no-data", "categories-missing", len(symbols),
-                      narratives_status=doc["status"])
+    u = eligibility(cfg, urows)
+    eligible = u.eligible
     min_coins = min_narrative_coins(cfg)
-    nm = narratives.memberships(symbols, min_coins, doc)
+    nm = narratives.memberships(eligible, min_coins, doc)
     cats_asof = nm.as_of
     flags = {"narratives_status": nm.status, "unassigned": nm.unassigned,
              "hidden_narratives": [DiscoveryHiddenNarrative(**h) for h in nm.hidden]}
-
-    eligible, members = eligibility(cfg, symbols, cats)
 
     series = series_names(cfg)
     data = {(src, sym): registry.read_series(src, sym, today, probe_path) for src in series for sym in eligible}
     recent, max_lag = int(cfg["recent_days"]), int(cfg["max_source_lag_days"])
     coins = {s: _coin(s, cfg, data, end, recent, window, max_lag) for s in eligible}
     if not any(coins.values()):
-        return _empty(window, as_of, cats_asof, "no-data", "no-attention-data", len(symbols), len(eligible), **flags)
+        return _empty(window, as_of, cats_asof, "no-data", "no-attention-data", len(urows), len(eligible), **flags,
+                      **_excluded(u, nm, set()))
 
     out = []
     for nid, in_narrative in nm.visible.items():
@@ -255,7 +236,8 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
         raws = [c[0] for _, c in used]
         cap = _percentile(raws, float(cfg["winsor_percentile"])) if raws else None
         rows = [DiscoveryCoin(symbol=s, change=min(c[0], cap), raw_change=c[0], covered_weight=c[1],
-                              rising_weight=c[2], trigger=c[3], sources=c[4], primary=nm.primary.get(s) == nid)
+                              rising_weight=c[2], trigger=c[3], sources=c[4], primary=nm.primary.get(s) == nid,
+                              volume_24h=u.volume[s], thin_volume=u.thin[s], tradeability=u.tradeability[s])
                 for s, c in used]
         rows.sort(key=lambda r: r.change, reverse=True)
         changes = [r.change for r in rows]
@@ -265,8 +247,7 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
             gaining_count=sum(r.trigger for r in rows), ranked=len(rows) >= min_coins, coins=rows))
     out.sort(key=lambda c: (not c.ranked, c.score is None, -(c.score or 0.0)))
     shown = {r.symbol for c in out for r in c.coins}
-    listed = set().union(*nm.visible.values())
-    return _empty(window, as_of, cats_asof, "ok", "", len(symbols), len(eligible), out, shown_size=len(shown),
-                  excluded=_excluded_counts(cfg, symbols, eligible, members, shown, listed),
+    return _empty(window, as_of, cats_asof, "ok", "", len(urows), len(eligible), out, shown_size=len(shown),
+                  **_excluded(u, nm, shown),
                   min_category_coins=min_coins, rising_threshold_pct=float(cfg["rising_threshold_pct"]),
                   min_covered_weight=float(cfg["min_covered_weight"]), **flags)

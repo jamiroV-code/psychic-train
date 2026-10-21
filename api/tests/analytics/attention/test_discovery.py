@@ -28,11 +28,12 @@ def put_change(source, symbol, recent, base, days=130, lag=0):
 
 
 def cfg(tmp_path, **over):
-    base = {"min_volume_24h_usd": 20_000_000, "exclude": ["BNB"], "exclude_category_ids": ["cex"],
-            "source_weights": WEIGHTS, "exchange_sub_weights": SUB, "rising_threshold_pct": 10,
+    rules = {"min_narrative_coins": over.pop("min_narrative_coins", 1), "thin_volume_label_below_usd": 20_000_000,
+             "classes": {"stablecoin": ["USDT"]}, **over.pop("rules", {})}
+    base = {"source_weights": WEIGHTS, "exchange_sub_weights": SUB, "rising_threshold_pct": 10,
             "trigger_pct": 60, "min_covered_weight": 30, "min_history_days": 90,
             "winsor_percentile": 95, "recent_days": 7, "max_source_lag_days": 3,
-            "universe_rules": {"min_narrative_coins": over.pop("min_narrative_coins", 1)}}
+            "universe_rules": rules}
     base.update(over)
     p = tmp_path / "discovery.json"
     p.write_text(json.dumps(base))
@@ -56,7 +57,7 @@ def write_narratives(tmp_path, cats, status="proposed", as_of="2026-10-14"):
 def world(tmp_path, monkeypatch, coins, cats=None, **over):
     """coins: {SYM: volume}; cats: {category id: [SYM]} (None = no categories snapshot). The ids in CATS are
     also written as the narratives fixture (members = Discovery categories); other ids (e.g. "cex") only feed
-    the CoinGecko snapshot that `exclude_category_ids` reads until U2."""
+    the CoinGecko snapshot, which nothing reads for eligibility since U2."""
     probe, w, u = write_configs(tmp_path, sources=PROBED, reference=())
     monkeypatch.setattr(registry, "PROBE_RECORDS_PATH", probe)
     monkeypatch.setattr(score_mod, "WEIGHTS_PATH", w)
@@ -89,10 +90,12 @@ def gain(sym, n=3, factor=2.0):
         put_change(s, sym, factor, 1.0)
 
 
-def test_categories_missing_is_not_ok(isolated_cache, tmp_path, monkeypatch):
+def test_categories_snapshot_is_not_needed(isolated_cache, tmp_path, monkeypatch):
     world(tmp_path, monkeypatch, {"A": 5e7}, cats=None)
+    monkeypatch.setattr(narr_mod, "NARRATIVES_PATH", write_narratives(tmp_path, {"ai": ["A"]}))
+    gain("A")
     res = disc.build_discovery(30, today=TODAY)
-    assert (res.status, res.reason, res.categories) == ("no-data", "categories-missing", [])
+    assert (res.status, [c.symbol for c in cat(res, "ai").coins]) == ("ok", ["A"])
 
 
 def test_universe_missing(isolated_cache, tmp_path, monkeypatch):
@@ -102,35 +105,43 @@ def test_universe_missing(isolated_cache, tmp_path, monkeypatch):
     assert (res.status, res.reason) == ("no-data", "reference-missing")
 
 
-def test_exclusion_list_and_stablecoins(isolated_cache, tmp_path, monkeypatch):
+def test_stablecoin_class_is_excluded_exchange_token_is_in(isolated_cache, tmp_path, monkeypatch):
     world(tmp_path, monkeypatch, {"A": 5e7, "BNB": 5e7, "USDT": 5e7}, cats={"ai": ["A", "BNB", "USDT"]})
     for s in ("A", "BNB", "USDT"):
         gain(s)
     res = disc.build_discovery(30, today=TODAY)
-    assert [c.symbol for c in cat(res, "ai").coins] == ["A"]
+    assert sorted(c.symbol for c in cat(res, "ai").coins) == ["A", "BNB"]
+    assert [c.model_dump() for c in res.excluded_coins] == [
+        {"symbol": "USDT", "reason": "stablecoin", "detail": "stablecoin"}]
 
 
-def test_exclusion_by_category_tag(isolated_cache, tmp_path, monkeypatch):
+def test_coingecko_category_tag_no_longer_excludes(isolated_cache, tmp_path, monkeypatch):
     world(tmp_path, monkeypatch, {"A": 5e7, "T": 5e7}, cats={"ai": ["A", "T"], "cex": ["T"]})
     gain("A"), gain("T")
     res = disc.build_discovery(30, today=TODAY)
-    assert [c.symbol for c in cat(res, "ai").coins] == ["A"]
+    assert sorted(c.symbol for c in cat(res, "ai").coins) == ["A", "T"]
     assert all(c.id != "cex" for c in res.categories)
 
 
-def test_volume_floor(isolated_cache, tmp_path, monkeypatch):
-    coins = {"LOW": 19_999_999, "EDGE": 20_000_000, "HIGH": 9e8}
+def test_no_volume_cut_zero_and_null_volume_stays(isolated_cache, tmp_path, monkeypatch):
+    coins = {"ZERO": 0, "NULL": None, "LOW": 1.0, "HIGH": 9e8}
     world(tmp_path, monkeypatch, coins, cats={"ai": list(coins)})
     for s in coins:
         gain(s)
     res = disc.build_discovery(30, today=TODAY)
-    assert sorted(c.symbol for c in cat(res, "ai").coins) == ["EDGE", "HIGH"]
+    assert sorted(c.symbol for c in cat(res, "ai").coins) == ["HIGH", "LOW", "NULL", "ZERO"]
+    assert res.excluded_coins == [] and coin(res, "ai", "NULL").volume_24h is None
 
 
-def test_unknown_volume_is_excluded(isolated_cache, tmp_path, monkeypatch):
-    world(tmp_path, monkeypatch, {"A": None, "B": 5e7}, cats={"ai": ["A", "B"]})
-    gain("A"), gain("B")
-    assert [c.symbol for c in cat(disc.build_discovery(30, today=TODAY), "ai").coins] == ["B"]
+def test_thin_volume_label_below_20m_only_label(isolated_cache, tmp_path, monkeypatch):
+    coins = {"LOW": 19_999_999, "EDGE": 20_000_000, "HIGH": 9e8, "ZERO": 0, "NULL": None}
+    world(tmp_path, monkeypatch, coins, cats={"ai": list(coins)})
+    for s in coins:
+        gain(s)
+    res = disc.build_discovery(30, today=TODAY)
+    thin = {c.symbol: c.thin_volume for c in cat(res, "ai").coins}
+    assert thin == {"LOW": True, "EDGE": False, "HIGH": False, "ZERO": True, "NULL": False}
+    assert coin(res, "ai", "LOW").volume_24h == 19_999_999 and res.shown_size == 5
 
 
 def test_coin_with_one_source_is_scored_but_cannot_trigger(isolated_cache, tmp_path, monkeypatch):
@@ -204,23 +215,20 @@ def test_window_changes_baseline(isolated_cache, tmp_path, monkeypatch):
         assert disc.build_discovery(w, today=TODAY).window == w
 
 
-def test_shipped_config_keeps_bnb_excludes_other_exchange_tokens():
-    cfg = json.loads(disc.CONFIG_PATH.read_text())
-    uni = json.loads(universe_mod.UNIVERSE_PATH.read_text())
-    assert "BNB" not in cfg["exclude"] and "BNB" not in uni["exchange_tokens"]
-    assert "BNB" in cfg["include_despite_category"]
-    for s in ("LEO", "OKB", "CRO", "GT", "KCS", "BGB", "MX"):
-        assert s in cfg["exclude"] and s in uni["exchange_tokens"]
+def test_shipped_config_has_no_exchange_token_exclusion():
+    rules = json.loads(disc.CONFIG_PATH.read_text())["universe_rules"]
+    listed = {s for syms in rules["classes"].values() for s in syms} | set(rules["not_tradeable"])
+    assert not listed & {"BNB", "LEO", "OKB", "CRO", "GT", "KCS", "BGB", "MX"}
+    assert rules["force_include"] == [] and "backup_floor_usd" not in rules
 
 
-def test_bnb_eligible_despite_exchange_category_but_leo_excluded(isolated_cache, tmp_path, monkeypatch):
+def test_bnb_and_leo_both_eligible_despite_exchange_category(isolated_cache, tmp_path, monkeypatch):
     coins = {"BNB": 5e7, "LEO": 5e7}
-    world(tmp_path, monkeypatch, coins, cats={"ai": ["BNB", "LEO"], "cex": ["BNB", "LEO"]},
-          exclude=["LEO"], include_despite_category=["BNB"])
+    world(tmp_path, monkeypatch, coins, cats={"ai": ["BNB", "LEO"], "cex": ["BNB", "LEO"]})
     for s in coins:
         gain(s)
     res = disc.build_discovery(30, today=TODAY)
-    assert [c.symbol for c in cat(res, "ai").coins] == ["BNB"]
+    assert sorted(c.symbol for c in cat(res, "ai").coins) == ["BNB", "LEO"]
 
 
 def test_lagging_sources_are_anchored_to_their_own_newest_day(isolated_cache, tmp_path, monkeypatch):
@@ -311,7 +319,7 @@ def test_invalid_config_is_rejected(tmp_path, over):
 
 
 def cfg_base():
-    return {"min_volume_24h_usd": 1, "winsor_percentile": 95, "recent_days": 7, "max_source_lag_days": 3}
+    return {"winsor_percentile": 95, "recent_days": 7, "max_source_lag_days": 3}
 
 
 def test_weight_sum_tolerance_accepts_small_drift(tmp_path):
@@ -437,7 +445,7 @@ def test_payload_drops_old_fields(isolated_cache, tmp_path, monkeypatch):
     gain("A")
     row = disc.build_discovery(30, today=TODAY).model_dump()["categories"][0]["coins"][0]
     assert set(row) == {"symbol", "change", "raw_change", "covered_weight", "rising_weight", "trigger", "sources",
-                        "primary"}
+                        "primary", "volume_24h", "thin_volume", "tradeability"}
 
 
 # ---- exchange_activity composite -----------------------------------------------------------
@@ -558,14 +566,14 @@ def test_ranked_order_is_unchanged_by_the_rule(isolated_cache, tmp_path, monkeyp
     assert [c.id for c in disc.build_discovery(30, today=TODAY).categories if c.ranked] == ["defi", "ai"]
 
 
-def test_exclusion_counts_are_disjoint_and_add_up(isolated_cache, tmp_path, monkeypatch):
-    coins = {"BNB": 5e7, "T": 5e7, "LOW": 1e6, "NOCAT": 5e7, "NODATA": 5e7, "A": 5e7, "UNK": None}
-    world(tmp_path, monkeypatch, coins, cats={"ai": ["BNB", "T", "LOW", "NODATA", "A", "UNK"], "cex": ["T"]},
-          exclude=["BNB"])
-    gain("A")
+def test_legacy_excluded_object_still_sums(isolated_cache, tmp_path, monkeypatch):
+    coins = {"USDT": 5e7, "W": 5e7, "F": 0, "LOW": 1e6, "NOCAT": 5e7, "NODATA": 5e7, "A": 5e7, "UNK": None}
+    world(tmp_path, monkeypatch, coins, cats={"ai": ["USDT", "W", "F", "LOW", "NODATA", "A", "UNK"]},
+          rules={"classes": {"stablecoin": ["USDT"], "wrapped_staked": ["W"], "tokenized_fund": ["F"]}})
+    gain("A"), gain("LOW"), gain("UNK")
     res = disc.build_discovery(30, today=TODAY)
-    assert res.universe_size == 7 and res.shown_size == 1
-    assert res.excluded.model_dump() == {"exclusion_list": 2, "below_volume_floor": 2, "no_category": 1,
+    assert res.universe_size == 8 and res.shown_size == 3
+    assert res.excluded.model_dump() == {"exclusion_list": 3, "below_volume_floor": 0, "no_category": 1,
                                          "no_source_data": 1}
     assert res.shown_size + sum(res.excluded.model_dump().values()) == res.universe_size
 
@@ -643,6 +651,4 @@ def test_removed_keys_categories_and_min_category_coins_rejected(tmp_path, key, 
 def test_shipped_config_has_no_categories_key():
     raw = json.loads(disc.CONFIG_PATH.read_text())
     assert "categories" not in raw and "min_category_coins" not in raw
-    assert raw["universe_rules"] == {"min_narrative_coins": 3}
-    # kept until U2 (F3): the exclusion step still reads CoinGecko categories
-    assert raw["exclude_category_ids"] == ["exchange-based-tokens"]
+    assert raw["universe_rules"]["min_narrative_coins"] == 3
