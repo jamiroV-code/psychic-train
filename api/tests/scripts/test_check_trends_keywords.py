@@ -1,0 +1,190 @@
+"""Trends keyword checker (T100a): fake TrendReq only, no network, no real sleeping."""
+from __future__ import annotations
+
+import hashlib
+import io
+import json
+import sys
+from datetime import datetime, timezone
+
+import pytest
+
+from api.data.attention import trends_keywords as k
+from api.scripts import check_trends_keywords as c
+from api.tests.trends_fixtures import (
+    FORBIDDEN_IN_OUTPUT,
+    FakeTrendReq,
+    block_network,
+    candidate,
+    factory,
+    forbidden,
+    too_many,
+    tree_snapshot,
+)
+
+NOW = lambda: datetime(2026, 10, 21, 9, 0, tzinfo=timezone.utc)
+LINK_TOPIC = candidate("/m/0link1", "Chainlink", "Cryptocurrency")
+
+
+@pytest.fixture(autouse=True)
+def _no_network(monkeypatch):
+    block_network(monkeypatch)
+
+
+def _run(mapping, client, sleeps=None):
+    out = io.StringIO()
+    sleeps = [] if sleeps is None else sleeps
+    res = c.run(mapping, client=client, sleep=sleeps.append, out=out, now=NOW)
+    return res, out.getvalue()
+
+
+def _block(text: str) -> dict:
+    start = text.index(c.PASTE_HEADER) + len(c.PASTE_HEADER)
+    end = text.index(c.DECISION_HEADER)
+    return json.loads(text[start:end])
+
+
+def test_pass_single_crypto_candidate():
+    client = FakeTrendReq({"Chainlink": [LINK_TOPIC, candidate("/m/0chain", "Chain link", "Topic")]})
+    res, text = _run({"LINK": "Chainlink"}, client)
+    assert res[0].verdict == "PASS" and res[0].proposed["mid"] == "/m/0link1"
+    assert 'LINK | Chainlink | 2 candidates | proposed /m/0link1 "Chainlink" (Cryptocurrency) | PASS' in text
+    assert "PASS: 1 AMBIGUOUS: 0 FAIL: 0 NOT-RUN: 0" in text
+
+
+def test_ambiguous_several_crypto_candidates():
+    client = FakeTrendReq({"Sui": [candidate("/g/11sui", "Sui", "Blockchain"), candidate("/g/11suit", "Sui token", "Token")]})
+    res, text = _run({"SUI": "Sui"}, client)
+    assert res[0].verdict == "AMBIGUOUS" and res[0].proposed is None
+    assert "/g/11sui" in text and "/g/11suit" in text
+    assert _block(text) == {}
+
+
+def test_ambiguous_candidates_but_none_crypto_typed():
+    client = FakeTrendReq({"Near": [candidate("/m/0near", "Near", "Word")]})
+    res, text = _run({"NEAR": "Near"}, client)
+    assert res[0].verdict == "AMBIGUOUS"
+    assert '/m/0near "Near" (Word)' in text
+
+
+def test_fail_no_candidates_reports_term_fallback():
+    res, text = _run({"KAS": "Kaspa", "WEIRD": "a,b"}, FakeTrendReq())
+    assert [r.verdict for r in res] == ["FAIL", "FAIL"]
+    assert "falls back to term" in text.split("WEIRD")[0]
+    assert "needs a human" in text
+
+
+def test_candidate_without_valid_mid_is_not_proposed():
+    client = FakeTrendReq({"Aave": [candidate("m/0aave", "Aave", "Cryptocurrency"), {"title": "Aave", "type": "Token"},
+                                    candidate("/m/0aave", "", "Cryptocurrency"), "junk"]})
+    res, text = _run({"AAVE": "Aave"}, client)
+    assert res[0].verdict == "FAIL" and res[0].proposed is None
+    assert "AAVE | Aave | 0 candidates" in text
+
+
+def test_duplicate_proposed_topic_is_not_pasted():
+    client = FakeTrendReq({"Chainlink": [LINK_TOPIC], "Chain Link": [LINK_TOPIC]})
+    res, text = _run({"LINK": "Chainlink", "LNK": "Chain Link"}, client)
+    assert [r.verdict for r in res] == ["AMBIGUOUS", "AMBIGUOUS"]
+    assert _block(text) == {}
+
+
+def test_sleep_is_at_least_two_seconds_between_calls():
+    sleeps: list[float] = []
+    client = FakeTrendReq()
+    _run({"A": "Aaa", "B": "Bbb", "C": "Ccc"}, client, sleeps)
+    assert len(sleeps) == 2 and all(s >= 2.0 for s in sleeps)
+    assert c.INTERVAL_SECONDS >= 2.0
+    sleeps.clear()
+    _run({"A": "Aaa"}, FakeTrendReq(), sleeps)
+    assert sleeps == []
+
+
+def test_three_consecutive_429_stop_the_run():
+    names = {f"S{i}": f"Name{i}" for i in range(6)}
+    client = FakeTrendReq({"Name0": [LINK_TOPIC], **{f"Name{i}": too_many() for i in range(1, 6)}})
+    res, text = _run(names, client)
+    assert client.suggestion_calls == ["Name0", "Name1", "Name2", "Name3"]
+    assert [r.verdict for r in res] == ["PASS", "FAIL", "FAIL", "FAIL", "NOT-RUN", "NOT-RUN"]
+    assert text.count("NOT-RUN (stopped after 3 consecutive HTTP 429)") == 2
+    assert "NOT-RUN: 2" in text
+
+
+def test_429_streak_resets_after_a_success():
+    script = {"N1": too_many(), "N2": too_many(), "N3": [LINK_TOPIC], "N4": too_many(), "N5": too_many(), "N6": []}
+    client = FakeTrendReq(script)
+    res, _ = _run({f"S{i}": f"N{i}" for i in range(1, 7)}, client)
+    assert len(client.suggestion_calls) == 6
+    assert "NOT-RUN" not in [r.verdict for r in res]
+
+
+def test_other_failure_prints_class_only_no_secret():
+    client = FakeTrendReq({"Kaspa": forbidden(), "Monero": too_many(), "Zcash": ConnectionError("boom " + "x")})
+    _, text = _run({"KAS": "Kaspa", "XMR": "Monero", "ZEC": "Zcash"}, client)
+    assert "ResponseError(HTTP 403)" in text and "TooManyRequestsError(HTTP 429)" in text and "ConnectionError" in text
+    for bad in FORBIDDEN_IN_OUTPUT + ("boom", "403 tok", "code 429"):
+        assert bad not in text
+
+
+def test_paste_ready_block_is_valid_and_only_pass_entries():
+    client = FakeTrendReq({"Chainlink": [LINK_TOPIC], "Aave": [candidate("/m/0aave", "Aave", "Decentralized finance protocol")],
+                           "Near": [candidate("/m/0near", "Near", "Word")]})
+    _, text = _run({"LINK": "Chainlink", "AAVE": "Aave", "NEAR": "Near", "KAS": "Kaspa"}, client)
+    block = _block(text)
+    assert block == {
+        "LINK": {"topic": "/m/0link1", "label": "Chainlink", "note": "checker PASS 21-10-26"},
+        "AAVE": {"topic": "/m/0aave", "label": "Aave", "note": "checker PASS 21-10-26"},
+    }
+    seed = json.loads(k.KEYWORDS_PATH.read_text(encoding="utf-8"))
+    merged = {**seed, **block}
+    placed = set(k.load().entries)
+    out = k.validate(merged, placed)
+    assert out["entries"]["LINK"]["topic"] == "/m/0link1"
+    decision = text.split(c.DECISION_HEADER)[1]
+    assert "NEAR" in decision and "KAS" in decision and "LINK" not in decision
+
+
+def test_writes_no_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    data_dir = k.KEYWORDS_PATH.parent
+    before = tree_snapshot(data_dir)
+    sha = hashlib.sha256(k.KEYWORDS_PATH.read_bytes()).hexdigest()
+    client = FakeTrendReq({"Chainlink": [LINK_TOPIC]})
+    assert c.main(["--symbols", "LINK,AAVE"], trendreq_factory=factory(client), sleep=lambda s: None, now=NOW) == 0
+    assert tree_snapshot(data_dir) == before
+    assert hashlib.sha256(k.KEYWORDS_PATH.read_bytes()).hexdigest() == sha
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_unreadable_or_non_object_file_exits_2_and_empty_map_exits_0(tmp_path, capsys):
+    fac = factory(FakeTrendReq())
+    assert c.main(["--file", str(tmp_path / "nope.json")], trendreq_factory=fac, sleep=lambda s: None) == 2
+    (tmp_path / "list.json").write_text("[1, 2]", encoding="utf-8")
+    assert c.main(["--file", str(tmp_path / "list.json")], trendreq_factory=fac, sleep=lambda s: None) == 2
+    (tmp_path / "bad.json").write_text("{nope", encoding="utf-8")
+    assert c.main(["--file", str(tmp_path / "bad.json")], trendreq_factory=fac, sleep=lambda s: None) == 2
+    err = capsys.readouterr().err
+    assert "nope" not in err.replace("nope.json", "")  # class only, no file content
+    (tmp_path / "empty.json").write_text("{}", encoding="utf-8")
+    assert c.main(["--file", str(tmp_path / "empty.json")], trendreq_factory=fac, sleep=lambda s: None) == 0
+    assert "PASS: 0 AMBIGUOUS: 0 FAIL: 0 NOT-RUN: 0" in capsys.readouterr().out
+    assert c.main(["--symbols", "lower"], trendreq_factory=fac, sleep=lambda s: None) == 2
+
+
+def test_default_map_comes_from_keyword_file_labels():
+    client = FakeTrendReq()
+    assert c.main([], trendreq_factory=factory(client), sleep=lambda s: None, now=NOW) == 0
+    m = k.load()
+    assert client.suggestion_calls == [e["label"] for e in m.entries.values()]
+    assert m.anchor["label"] not in client.suggestion_calls
+    client2 = FakeTrendReq()
+    assert c.main(["--symbols", "SOL,ATOM"], trendreq_factory=factory(client2), sleep=lambda s: None) == 0
+    assert client2.suggestion_calls == ["Solana", m.entries["ATOM"]["label"]]
+
+
+def test_pytrends_missing_exits_3_and_prints_the_command(monkeypatch, capsys):
+    monkeypatch.setitem(sys.modules, "pytrends", None)
+    monkeypatch.setitem(sys.modules, "pytrends.request", None)
+    assert c.main(["--symbols", "SOL"], sleep=lambda s: None) == 3
+    err = capsys.readouterr().err
+    assert "uv run --project api --with pytrends python -m api.scripts.check_trends_keywords" in err

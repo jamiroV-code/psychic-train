@@ -1,0 +1,339 @@
+{
+  "_anchor": {
+    "term": "Bitcoin",
+    "label": "Bitcoin (placeholder anchor)",
+    "note": "placeholder: the owner picks the anchor (Bitcoin or Ethereum) from the probe_trends evidence"
+  },
+  "AAVE": {
+    "term": "Aave",
+    "label": "Aave"
+  },
+  "ADA": {
+    "term": "Cardano",
+    "label": "Cardano"
+  },
+  "AERO": {
+    "term": "Aerodrome Finance",
+    "label": "Aerodrome Finance"
+  },
+  "AKE": {
+    "no-keyword": true,
+    "label": "AKE",
+    "note": "unidentified ticker (UNVERIFIED), owner names it"
+  },
+  "ALGO": {
+    "term": "Algorand",
+    "label": "Algorand"
+  },
+  "APT": {
+    "term": "Aptos",
+    "label": "Aptos"
+  },
+  "ARB": {
+    "term": "Arbitrum",
+    "label": "Arbitrum"
+  },
+  "ASTER": {
+    "no-keyword": true,
+    "label": "Aster",
+    "note": "common word; needs topic id"
+  },
+  "ATOM": {
+    "no-keyword": true,
+    "label": "Cosmos",
+    "note": "common word (Cosmos, Avalanche, UNUS SED LEO); needs topic id"
+  },
+  "AVAX": {
+    "no-keyword": true,
+    "label": "Avalanche",
+    "note": "common word (Cosmos, Avalanche, UNUS SED LEO); needs topic id"
+  },
+  "BCH": {
+    "term": "Bitcoin Cash",
+    "label": "Bitcoin Cash"
+  },
+  "BGB": {
+    "term": "Bitget Token",
+    "label": "Bitget Token"
+  },
+  "BNB": {
+    "term": "BNB",
+    "label": "BNB"
+  },
+  "BTC": {
+    "term": "Bitcoin",
+    "label": "Bitcoin"
+  },
+  "BTW": {
+    "no-keyword": true,
+    "label": "BTW",
+    "note": "unidentified ticker (UNVERIFIED), owner names it"
+  },
+  "CAKE": {
+    "term": "PancakeSwap",
+    "label": "PancakeSwap"
+  },
+  "CC": {
+    "no-keyword": true,
+    "label": "Canton Coin",
+    "note": "identity UNVERIFIED (Canton Coin, Midnight, Venice token, World Liberty Financial, XDC Network); needs topic id"
+  },
+  "CRO": {
+    "term": "Cronos",
+    "label": "Cronos"
+  },
+  "DOGE": {
+    "term": "Dogecoin",
+    "label": "Dogecoin"
+  },
+  "DOT": {
+    "term": "Polkadot",
+    "label": "Polkadot"
+  },
+  "ENA": {
+    "term": "Ethena",
+    "label": "Ethena"
+  },
+  "ETC": {
+    "term": "Ethereum Classic",
+    "label": "Ethereum Classic"
+  },
+  "ETH": {
+    "term": "Ethereum",
+    "label": "Ethereum"
+  },
+  "FIL": {
+    "term": "Filecoin",
+    "label": "Filecoin"
+  },
+  "GRAM": {
+    "no-keyword": true,
+    "label": "GRAM",
+    "note": "unidentified ticker (UNVERIFIED), owner names it"
+  },
+  "GT": {
+    "no-keyword": true,
+    "label": "GateToken",
+    "note": "exchange token, ambiguous with the exchange or word; needs topic id"
+  },
+  "HBAR": {
+    "term": "Hedera",
+    "label": "Hedera"
+  },
+  "HTX": {
+    "no-keyword": true,
+    "label": "HTX",
+    "note": "exchange token, ambiguous with the exchange or word; needs topic id"
+  },
+  "HYPE": {
+    "term": "Hyperliquid",
+    "label": "Hyperliquid"
+  },
+  "ICP": {
+    "term": "Internet Computer",
+    "label": "Internet Computer"
+  },
+  "INJ": {
+    "term": "Injective",
+    "label": "Injective"
+  },
+  "JST": {
+    "no-keyword": true,
+    "label": "JUST",
+    "note": "common word; needs topic id"
+  },
+  "JUP": {
+    "no-keyword": true,
+    "label": "Jupiter",
+    "note": "common word; needs topic id"
+  },
+  "KAS": {
+    "term": "Kaspa",
+    "label": "Kaspa"
+  },
+  "KCS": {
+    "term": "KuCoin Token",
+    "label": "KuCoin Token"
+  },
+  "LEO": {
+    "no-keyword": true,
+    "label": "UNUS SED LEO",
+    "note": "common word (Cosmos, Avalanche, UNUS SED LEO); needs topic id"
+  },
+  "LINK": {
+    "term": "Chainlink",
+    "label": "Chainlink"
+  },
+  "LIT": {
+    "no-keyword": true,
+    "label": "LIT",
+    "note": "unidentified ticker (UNVERIFIED), owner names it"
+  },
+  "LTC": {
+    "term": "Litecoin",
+    "label": "Litecoin"
+  },
+  "MNT": {
+    "no-keyword": true,
+    "label": "Mantle",
+    "note": "common word; needs topic id"
+  },
+  "MORPHO": {
+    "term": "Morpho",
+    "label": "Morpho"
+  },
+  "NEAR": {
+    "no-keyword": true,
+    "label": "NEAR Protocol",
+    "note": "common word; needs topic id"
+  },
+  "NEXO": {
+    "term": "Nexo",
+    "label": "Nexo"
+  },
+  "NIGHT": {
+    "no-keyword": true,
+    "label": "Midnight",
+    "note": "identity UNVERIFIED (Canton Coin, Midnight, Venice token, World Liberty Financial, XDC Network); needs topic id"
+  },
+  "OKB": {
+    "term": "OKB",
+    "label": "OKB"
+  },
+  "ONDO": {
+    "term": "Ondo",
+    "label": "Ondo"
+  },
+  "PAXG": {
+    "no-keyword": true,
+    "label": "PAX Gold",
+    "note": "gold token; attention tracks gold, not the token"
+  },
+  "PEPE": {
+    "term": "Pepe coin",
+    "label": "Pepe coin"
+  },
+  "PI": {
+    "no-keyword": true,
+    "label": "Pi Network",
+    "note": "common word; needs topic id"
+  },
+  "POL": {
+    "no-keyword": true,
+    "label": "Polygon",
+    "note": "common word; needs topic id"
+  },
+  "PRL": {
+    "no-keyword": true,
+    "label": "PRL",
+    "note": "unidentified ticker (UNVERIFIED), owner names it"
+  },
+  "PUMP": {
+    "term": "Pump.fun",
+    "label": "Pump.fun"
+  },
+  "QNT": {
+    "no-keyword": true,
+    "label": "Quant",
+    "note": "common word; needs topic id"
+  },
+  "RAIN": {
+    "no-keyword": true,
+    "label": "RAIN",
+    "note": "unidentified ticker (UNVERIFIED); common word; owner names it"
+  },
+  "RENDER": {
+    "no-keyword": true,
+    "label": "Render",
+    "note": "common word; needs topic id"
+  },
+  "SHIB": {
+    "term": "Shiba Inu",
+    "label": "Shiba Inu"
+  },
+  "SKY": {
+    "no-keyword": true,
+    "label": "Sky",
+    "note": "common word; needs topic id"
+  },
+  "SOL": {
+    "term": "Solana",
+    "label": "Solana"
+  },
+  "STABLE": {
+    "no-keyword": true,
+    "label": "STABLE",
+    "note": "unidentified ticker (UNVERIFIED), owner names it"
+  },
+  "STX": {
+    "no-keyword": true,
+    "label": "Stacks",
+    "note": "common word; needs topic id"
+  },
+  "SUI": {
+    "no-keyword": true,
+    "label": "Sui",
+    "note": "common word; needs topic id"
+  },
+  "TAO": {
+    "term": "Bittensor",
+    "label": "Bittensor"
+  },
+  "TRX": {
+    "term": "TRON",
+    "label": "TRON"
+  },
+  "UNI": {
+    "term": "Uniswap",
+    "label": "Uniswap"
+  },
+  "VVV": {
+    "no-keyword": true,
+    "label": "Venice token",
+    "note": "identity UNVERIFIED (Canton Coin, Midnight, Venice token, World Liberty Financial, XDC Network); needs topic id"
+  },
+  "WBT": {
+    "term": "WhiteBIT Coin",
+    "label": "WhiteBIT Coin"
+  },
+  "WLD": {
+    "term": "Worldcoin",
+    "label": "Worldcoin"
+  },
+  "WLFI": {
+    "no-keyword": true,
+    "label": "World Liberty Financial",
+    "note": "identity UNVERIFIED (Canton Coin, Midnight, Venice token, World Liberty Financial, XDC Network); needs topic id"
+  },
+  "XAUT": {
+    "no-keyword": true,
+    "label": "Tether Gold",
+    "note": "gold token; attention tracks gold, not the token"
+  },
+  "XDC": {
+    "no-keyword": true,
+    "label": "XDC Network",
+    "note": "identity UNVERIFIED (Canton Coin, Midnight, Venice token, World Liberty Financial, XDC Network); needs topic id"
+  },
+  "XLM": {
+    "no-keyword": true,
+    "label": "Stellar",
+    "note": "common word; needs topic id"
+  },
+  "XMR": {
+    "term": "Monero",
+    "label": "Monero"
+  },
+  "XRP": {
+    "term": "XRP",
+    "label": "XRP"
+  },
+  "ZEC": {
+    "term": "Zcash",
+    "label": "Zcash"
+  },
+  "ZRO": {
+    "term": "LayerZero",
+    "label": "LayerZero"
+  }
+}
