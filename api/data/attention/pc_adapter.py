@@ -25,7 +25,7 @@ PINNED_COMMIT = "20cb677039fcfe92d3d9c777aa9362e30ff1fdb8"
 INSTALL_COMMAND = "npm ci --ignore-scripts"
 MONTHLY_REPAIR_CAP_USD = 15.0
 PROFILE_ENV = "SCREENER_PC_PROFILE_DIR"
-DEFAULT_PROFILE = Path.home() / ".screener-pc-profile"
+DEFAULT_PROFILE_NAME = ".screener-pc-profile"  # under the owner's home folder, outside any repository
 REPO_ROOT = Path(__file__).resolve().parents[3]
 # API Anything features the wrapper never reaches: registry pull, publish, cookie import.
 _REFUSED = re.compile(r"registry|publish|cookie", re.IGNORECASE)
@@ -148,9 +148,8 @@ class SafeAdapter:
         self._inner = inner
 
     def __getattr__(self, name: str):
-        if name.startswith("_") or name not in self._ALLOWED:
-            raise RefusedFeature()
-        return getattr(self._inner, name)
+        # Only reached for names not defined here; the three allowed ones are.
+        raise RefusedFeature()
 
     def search_page(self, query: str, since: datetime, until: datetime, page: int) -> SearchPage:
         return self._inner.search_page(query, since, until, page)
@@ -174,7 +173,7 @@ def check_recipe_path(path: Path) -> Path:
 def profile_dir() -> Path:
     """The owner's API Anything profile/cookie folder; refused when it would sit inside this repository."""
     raw = os.environ.get(PROFILE_ENV)
-    p = Path(raw).expanduser() if raw else DEFAULT_PROFILE
+    p = Path(raw).expanduser() if raw else Path.home() / DEFAULT_PROFILE_NAME
     resolved = p.resolve()
     if resolved == REPO_ROOT or REPO_ROOT in resolved.parents:
         raise RefusedFeature()
@@ -220,17 +219,34 @@ class CostMeter:
         return self.spent() < self.cap_usd
 
     def charge(self, usd: float) -> None:
-        if not isinstance(usd, (int, float)) or isinstance(usd, bool) or not math.isfinite(usd) or usd < 0:
+        if not valid_cost(usd):
             raise ValueError("cost must be a finite non-negative number")
+        self._write(self.spent() + float(usd))
+
+    def exhaust(self) -> None:
+        """Mark the month's cap as spent (an unknown repair cost fails closed)."""
+        self._write(max(self.spent(), self.cap_usd))
+
+    def _write(self, spent_usd: float) -> None:
         p = self.path()
         p.parent.mkdir(parents=True, exist_ok=True)
-        cache._atomic_write_json({"month": self._month(), "spent_usd": self.spent() + float(usd)}, p)
+        cache._atomic_write_json({"month": self._month(), "spent_usd": spent_usd}, p)
+
+
+def valid_cost(usd: object) -> bool:
+    return isinstance(usd, (int, float)) and not isinstance(usd, bool) and math.isfinite(usd) and usd >= 0
 
 
 def attempt_self_repair(adapter: XAdapter, meter: CostMeter) -> float:
-    """One self-repair while the monthly cap is not spent; refused (source stays `layout_changed`) otherwise."""
+    """One self-repair while the monthly cap is not spent; refused (source stays `layout_changed`) otherwise.
+
+    A repair that reports no usable cost spends the rest of the month's cap: the meter never under-counts.
+    """
     if not meter.can_repair():
         raise SelfRepairRefused()
     cost = adapter.self_repair()
+    if not valid_cost(cost):
+        meter.exhaust()
+        raise SelfRepairRefused()
     meter.charge(cost)
     return cost
