@@ -14,10 +14,10 @@ metadata:
 
 Date: 21-10-26
 Complexity: COMPLEX (eight slices, two providers, a worker; each slice is one EXECUTE envelope)
-Status: VALIDATED: Gate: PASS (re-validated T135; the PLAN artifact; per-slice execution gates are the contract for later EXECUTE)
+Status: VALIDATED: Gate: PASS (re-validated T136; the PLAN artifact; per-slice execution gates are the contract for later EXECUTE)
 Validation: T131 (FAST MODE: SPEC amendment, PLAN, VALIDATE in one session), 21-10-26, branch base `main` 007d53c. Next step: the owner's separate ENTER EXECUTE MODE per slice, starting with W8a. This session builds nothing.
 
-**Summary:** **SPEC:** `narrative-baskets-xreddit-collector_SPEC_21-10-26.md` (T126, amended by T131, status "ready for owner review (amended T131)"; the owner has NOT approved it, so every slice below is conditional on that approval). Config pace (X default one coin unit per 3-6 min, Reddit one request per 20-60 s), daily X read budget 800 posts with sample N 40 (about 20 coins per day), adaptive halving, yesterday-only values, pause on any warning, narrative coins only, throwaway X account, Reddit first (amended T133). Every provider (X, Reddit, API Anything) is unreachable from the build container: live behaviour is UNVERIFIED and proven only by owner probes.
+**Summary:** **SPEC:** `narrative-baskets-xreddit-collector_SPEC_21-10-26.md` (T126, amended by T131, T133, T135, T136; status APPROVED (locked) by the owner on 21-10-26, recorded on the planner's message; each slice still needs the owner's own ENTER EXECUTE MODE). Config pace (X default one coin unit per 3-6 min, Reddit one request per 20-60 s), daily X read budget 800 posts with sample N 40 (about 20 coins per day), adaptive halving, yesterday-only values, pause on any warning, narrative coins only, throwaway X account, Reddit first (amended T133). Every provider (X, Reddit, API Anything) is unreachable from the build container: live behaviour is UNVERIFIED and proven only by owner probes.
 
 ## Overview and Context
 
@@ -37,6 +37,7 @@ Context router: `process/context/all-context.md`; tests: `process/context/tests/
 |---|---|---|
 | 1 | Trickle with config pace: `x_query_delay_min_s`/`x_query_delay_max_s` (default 180/360), never faster than the configured minimum on catch-up; Reddit one request per 20-60 s, 300 per day (T133, supersedes T131's 10-20 min) | W8b scheduler core and its tests; W8e uses it |
 | 1b | Daily read budget `x_daily_post_budget` 800, sample `x_sample_n` 40, `x_sample_min` 20, `x_page_cap` 3; adaptive halving after a warning day, doubling after 7 clean days (T133) | W8b budget and adaptive state and tests (AC21, AC22); W8d spends it; W8e persists it |
+| 1e | Owner answers (T136): SPEC APPROVED (locked) on 21-10-26; Q13 yes (rotation score = newest of the latest 3 stored values against the mean of the other 2; `x_rotation_max_lag_days` 7); Q14 yes (X and Reddit concurrent, per-source locks) | W8e, W8f; no longer open |
 | 1d | Owner answers (T135): shorter 3-6 min delay confirmed; Q10 rotation mode for X (latest 3 stored values; locked, built in W8f); PC on about 1-3 h per day (pace and budget must fit; X about 90 min, Reddit concurrent); Reddit numbers unchanged. The owner is still reading the SPEC and has NOT approved it | W8b, W8e, W8f |
 | 1c | Throwaway X account only; official X counts route is a recorded, unbuilt fallback (option D); Q10 rotation rule flagged to the owner, not implemented (T133) | W8d precondition; no code for option D or rotation |
 | 2 | Yesterday-only, one day late, today's partial day never stored or shown | W8b window rule; AC1 |
@@ -76,7 +77,7 @@ Context router: `process/context/all-context.md`; tests: `process/context/tests/
 | 2 | W8b pure core | `claude/<id>-w8b-collector-core` | W8a verdict "usable" | yes, own | opus, medium | 5-7 |
 | 3 | W8c Reddit connector | `claude/<id>-w8c-reddit-web` | W8b; probes P-R1 (before), P-R2..P-R5 (after) | yes, own | opus, medium | 3-5 |
 | 4 | W8e worker wiring | `claude/<id>-w8e-pc-worker` | W8b, W8c (or an existing W8 worker) | yes, own | opus, medium | 3-5 |
-| 5 | W8f Discovery wiring (incl. X rotation mode) | `claude/<id>-w8f-discovery-wiring` | W8e, W8c; owner answer to Q13 | yes, own | opus, medium | 3-4 |
+| 5 | W8f Discovery wiring (incl. X rotation mode) | `claude/<id>-w8f-discovery-wiring` | W8e, W8c | yes, own | opus, medium | 3-4 |
 | 6 | W8g web status text | `claude/<id>-w8g-web-status` | W8f | yes, own | opus, low | 1-2 |
 | 7 | W8d X connector | `claude/<id>-w8d-xsearch-web` | W8b, W8e; owner probes P-X1..P-X7 passed and Q1 answered | yes, own, only after the probes | opus, high | 5-7 |
 | 8 | W8h owner guide and closeout | `claude/<id>-w8h-closeout` | W8c live (Reddit) and, when built, W8d | yes, own | sonnet, low | 1 |
@@ -90,6 +91,16 @@ Slices touch disjoint new files except these shared edits, which are serialised 
 ## 5. Per-slice detail
 
 ### W8a: vet API Anything (report only, sonnet)
+
+**Envelope readiness (T136):** W8a is first and is READY to dispatch as a docs-only, report-only envelope (sonnet, medium, branch `claude/<id>-w8a-vet-apianything`, one draft PR, never merge), with one precondition: the owner pastes the output of the P-X2 commands below, because `goodnight000/api-anything` is outside the worker's GitHub scope (the planner may instead grant read access with `add_repo`, which is better). With only the paste, W8a can vet the commit SHA, the manifest hooks, the dependency list, the licence file name and the outbound-host and process-spawn greps; it cannot read the code paths the adapter will call, so the verdict is capped at `usable with changes` or `UNVERIFIED (code paths not read)` unless the repo is attached. The owner's separate ENTER EXECUTE MODE is still required. No `.github/` file is touched.
+
+**Owner commands, again, exactly (PowerShell, from any folder; nothing from the package is installed or run):**
+1. P-X1: `curl.exe -s -o NUL -w "%{http_code}\n" https://x.com/`
+2. P-X2: `git ls-remote https://github.com/goodnight000/api-anything HEAD` then `git clone --no-checkout https://github.com/goodnight000/api-anything C:\vet\apianything` then `git -C C:\vet\apianything checkout --detach <SHA from ls-remote>` then `Get-ChildItem C:\vet\apianything -Recurse -Include package.json,pyproject.toml,setup.py,setup.cfg,requirements*.txt | Select-String -Pattern "postinstall|preinstall|prepare|cmdclass|console_scripts|bin"`
+3. P-R1: `curl.exe -s -A "attention-probe/0.1" -o NUL -w "%{http_code} %{size_download}\n" "https://www.reddit.com/r/CryptoCurrency/search.json?q=solana&restrict_sr=1&sort=new&limit=1"`
+4. P-X2b (optional, read-only, makes a paste-only vetting possible): `git -C C:\vet\apianything ls-tree -r --name-only HEAD` and `Get-ChildItem C:\vet\apianything -Recurse -File -Include *.py,*.js,*.ts | Where-Object FullName -notmatch "node_modules|\\\.git\\" | Select-String -Pattern "child_process|subprocess|os\.system|eval\(|exec\(|https?://" | Select-Object -First 200 Path,LineNumber,Line`
+
+The owner pastes the output only; it contains file names, line numbers and source lines, never secrets.
 
 - **Files:** one report `process/general-plans/active/narrative-baskets_02-10-26/narrative-baskets-w8a-apianything-vetting_REPORT_<dd-mm-yy>.md`. No code, no install, nothing from the repo is executed.
 - **Method (SPEC Annex F):** write down one commit SHA; read the manifest(s) for install, postinstall, prepare, build hooks; list dependencies and versions; read only the code paths the adapter will call (request replay, tier 3 browser launch, self-repair network calls and any file, cookie or env access); list outbound hosts; licence; verdict `usable` / `usable with changes` / `not usable`; decide the adapter shape; answer "does self-repair call a paid LLM".
@@ -131,7 +142,7 @@ Slices touch disjoint new files except these shared edits, which are serialised 
 ### W8e: worker wiring (opus)
 
 - **Files:** `api/data/attention_pc_refresh.py`, edit `api/main.py` (start in lifespan, stop in `finally`, same pattern as lines 48-58), edit `api/data/discovery.json` (`fetch_side` per source: `xsearch` and `reddit` `pc_side`, others `github`), tests `api/tests/data/test_attention_pc_refresh.py`.
-- **T135 additions:** X and Reddit run as two concurrent streams with a per-source lock (planner to confirm, Q14); in rotation mode the X queue is ordered by oldest newest-stored day first; a coin-day unfinished when the PC stops stays queued for a later day; nothing is stored for PC-off time.
+- **T135 additions:** X and Reddit run as two concurrent streams with a per-source lock (locked by the owner's answer to Q14, T136); in rotation mode the X queue is ordered by oldest newest-stored day first; a coin-day unfinished when the PC stops stays queued for a later day; nothing is stored for PC-off time.
 - **T133 additions:** the worker reads the collector config, runs X units only while budget remains, persists the effective budget and clean-day count with the pause state (cache `_pc_state`), and never starts a unit earlier than the configured minimum delay after the previous one, including right after a restart.
 - **Red-first tests:** `test_flag_off_starts_no_thread`, `test_tests_and_runners_never_start_worker_by_default`, `test_behind_source_schedules_first_unit_20s_after_start`, `test_up_to_date_source_waits`, `test_pass_lock_prevents_overlap`, `test_worker_skips_github_side_sources`, `test_restart_keeps_pause_and_daily_counts`, `test_restart_keeps_effective_budget_and_clean_day_count`, `test_one_hour_uptime_runs_about_13_x_units_and_reddit_concurrently` (AC24), `test_three_hour_uptime_x_stops_at_budget`, `test_pc_off_stores_nothing`, `test_unfinished_coin_day_carries_over`, `test_rotation_queue_oldest_stored_first`, `test_x_and_reddit_streams_have_separate_locks`, `test_no_unit_before_min_delay_after_restart`, `test_worker_with_two_hours_uptime_stops_cleanly`, `test_stop_worker_joins_thread`, `test_unit_failure_never_crashes_the_api`, `test_lifespan_starts_and_stops_worker`, `test_no_network_in_tests`.
 - **Gates:** pytest on the new file; `api/tests` routers and main-related tests unchanged; the two workflow guards green; G-file-set (only `api/main.py`, `discovery.json` and new files).
@@ -215,7 +226,7 @@ Slices touch disjoint new files except these shared edits, which are serialised 
 
 Each item is its own EXECUTE envelope and needs the owner's separate ENTER EXECUTE MODE.
 
-- [ ] 0. Owner reads PR #153 and approves the SPEC (not yet given).
+- [x] 0. Owner approved the SPEC on 21-10-26 (recorded by T136 on the planner's message); Q13 and Q14 answered yes.
 - [ ] 1. W8a vet API Anything, report only; owner pastes P-X1, P-X2, P-R1.
 - [ ] 2. W8b pure core (red tests first, then code).
 - [ ] 3. W8c Reddit connector; owner runs P-R2..P-R5.
@@ -262,7 +273,7 @@ Baselines measured on this checkout (base `main` 007d53c), `UV_FROZEN=1 uv sync 
 2. Last completed step: SPEC amended and PLAN validated (T131), docs only.
 3. Validate-contract status: written (below), Gate: PASS for the PLAN artifact.
 4. Context loaded: SPEC (T126 amended), weighted-signal SPEC (T98), `api/main.py`, `equities_refresh.py`, `store.py`, `sources.py`, `discovery.json`, T121 plan (format).
-5. Next: the owner reads PR #153 and approves the SPEC; then the owner's own ENTER EXECUTE MODE for W8a with the planner's envelope (sonnet, report only).
+5. Next: the owner's own ENTER EXECUTE MODE for W8a with the planner's envelope (sonnet, report only), after the owner pastes the P-X2 output (section 5, W8a).
 
 ## Validate Contract
 
@@ -311,7 +322,7 @@ Section 7, verbatim.
 
 ### Open gaps
 
-None blocking the PLAN. Recorded: (1) the SPEC is not yet approved by the owner; (2) whether a GitHub-scope grant for the API Anything repo is available to W8a; (3) other open PRs touching the shared edit files were not checked; (4) the T98 W8 slice may land first, shrinking W8e; (5) every live provider behaviour is UNVERIFIED; (6) the X backfill capacity (about 50 days for 14 days of 75 coins at the locked pace) means X history accrues mostly forward.
+None blocking the PLAN. Recorded: (1) the SPEC is approved (T136); (2) W8a cannot read the API Anything repo (outside worker GitHub scope), so it needs the owner's P-X2 paste, and a code-path vetting from a paste alone is partial; (3) other open PRs touching the shared edit files were not checked; (4) the T98 W8 slice may land first, shrinking W8e; (5) every live provider behaviour is UNVERIFIED; (6) the X backfill capacity (about 50 days for 14 days of 75 coins at the locked pace) means X history accrues mostly forward.
 
 ### What This Coverage Does NOT Prove
 
@@ -319,7 +330,7 @@ The gates read committed documents and measure existing suites; none calls X, Re
 
 ### Accepted by
 
-session (T131 worker, 21-10-26, docs only), on the planner's envelope; the owner has not accepted the SPEC or this PLAN yet.
+session (T131 worker, 21-10-26, docs only), on the planner's envelope; the owner approved the SPEC on 21-10-26 (relayed by the planner); no concern in this PLAN is separately accepted by the owner until each slice's ENTER EXECUTE MODE.
 
 ## Validation record (T131, 21-10-26)
 
@@ -332,3 +343,7 @@ Re-validation after the T133 amendment (config pace, daily read budget, sample N
 ## Validation record (T135, 21-10-26)
 
 Re-validation after recording the owner's answers (shorter delay confirmed, Q10 rotation mode locked, Q11 PC 1-3 h/day, Q12 Reddit unchanged). The owner is still reading the SPEC and has NOT approved it. Gates re-run on branch `claude/t126-xreddit-collector-spec`: V1 plan validator failures []; V2 prints nothing; V3 prints 0; V4 hits only in ban or guard sentences; V5 prints nothing; V6 exit 0; V7 count 24 and AC1..AC24 mapped in section 8; V8 eight slices, W8f USD 3-4, total 23-34. No code exists. Verdict: Gate: PASS for the PLAN artifact. New open items for the owner/planner: Q13 (exact rotation formula and the 7-day rotation lag default), Q14 (concurrent X and Reddit streams; sequential 1.5 h plus 2.5 h would not fit a 1-3 h PC window).
+
+## Validation record (T136, 21-10-26)
+
+Re-validation after the owner's approval of the SPEC (recorded on the planner's message; this session did not see the approval itself) and the answers Q13 (rotation formula and lag default 7) and Q14 (X and Reddit concurrent, per-source locks), now locked in the SPEC and this PLAN. W8a stays first; its envelope readiness and the owner's P-X1, P-X2, P-X2b, P-R1 commands are at the top of the W8a section. Gates re-run on branch `claude/t126-xreddit-collector-spec`: V1 plan validator failures []; V2 prints nothing; V3 prints 0; V4 hits only in ban or guard sentences; V5 prints nothing; V6 exit 0; V7 count 24, AC1..AC24 mapped; V8 eight slices. No code exists. Verdict: Gate: PASS for the PLAN artifact. Not proven: that the owner pasted anything yet; that the API Anything repo is safe (that is W8a).
