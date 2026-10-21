@@ -62,7 +62,7 @@ All `UV_FROZEN=1 uv run --project api ...`, gate run started 2026-10-21T22:14:42
 | File set | `git diff --name-only origin/main...HEAD` | | the 14 files above plus this report; forbidden-path count 0 |
 | Hygiene | `git diff --check origin/main...HEAD` | | exit 0 |
 | Secret scan (Validate Contract G8 pattern) | `git diff -U0 origin/main...HEAD \| grep -nE "^\+.*(Bearer ...\|API_KEY...)"` | | prints nothing |
-| Banned names | `git diff -U0 origin/main...HEAD \| grep -niE "xscrape\|kloxeld\|gunkonchi"` | | prints nothing (guard builds them from split strings) |
+| Banned names | the PLAN section 6 banned-name grep over `git diff -U0 origin/main...HEAD` (the three names of PLAN section 7) | | prints nothing (the guard builds them from split strings) |
 | No network import | `grep -nE "^\s*(import\|from)\s+(requests\|httpx\|socket\|urllib\|playwright)"` over the 5 modules and the probe | | prints nothing |
 | Lint | `ruff check --line-length 120` on the 13 Python files | | all checks passed |
 
