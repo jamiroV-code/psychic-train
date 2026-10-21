@@ -1,0 +1,292 @@
+{
+ "version": 1,
+ "note": "Owner-editable (SPEC T126 Annex A, Locked pacing rules). collector: pace and budget defaults; ambiguous: coins never collected for that source (missing, never 0); coins: one display name per placed narrative coin, cashtag_only keeps X to the cashtag when the name is a common word. Names and lists are a starting proposal, UNVERIFIED until the owner reviews them. No secrets.",
+ "collector": {
+  "x_query_delay_min_s": 180,
+  "x_query_delay_max_s": 360,
+  "x_page_gap_min_s": 5,
+  "x_page_gap_max_s": 15,
+  "x_daily_post_budget": 800,
+  "x_sample_n": 40,
+  "x_sample_min": 20,
+  "x_page_cap": 3,
+  "x_backfill_days": 14,
+  "reddit_request_delay_min_s": 60,
+  "reddit_request_delay_max_s": 120,
+  "reddit_daily_request_budget": 150,
+  "reddit_sample_min": 10
+ },
+ "subreddits": [
+  "CryptoCurrency",
+  "CryptoMarkets",
+  "altcoin",
+  "CryptoMoonShots",
+  "SatoshiStreetBets",
+  "defi",
+  "CryptoTechnology",
+  "ethtrader",
+  "ethereum",
+  "solana",
+  "Bitcoin",
+  "binance"
+ ],
+ "ambiguous": {
+  "xsearch_web": [
+   "AKE",
+   "BTW",
+   "PRL"
+  ],
+  "reddit_web": [
+   "AKE",
+   "BTW",
+   "GRAM",
+   "LIT",
+   "NIGHT",
+   "PRL",
+   "RAIN",
+   "SKY",
+   "STABLE"
+  ]
+ },
+ "coins": {
+  "AAVE": {
+   "name": "Aave"
+  },
+  "ADA": {
+   "name": "Cardano"
+  },
+  "AERO": {
+   "name": "Aerodrome Finance"
+  },
+  "AKE": {
+   "name": "AKE"
+  },
+  "ALGO": {
+   "name": "Algorand"
+  },
+  "APT": {
+   "name": "Aptos"
+  },
+  "ARB": {
+   "name": "Arbitrum"
+  },
+  "ASTER": {
+   "name": "Aster",
+   "cashtag_only": true
+  },
+  "ATOM": {
+   "name": "Cosmos",
+   "cashtag_only": true
+  },
+  "AVAX": {
+   "name": "Avalanche",
+   "cashtag_only": true
+  },
+  "BCH": {
+   "name": "Bitcoin Cash"
+  },
+  "BGB": {
+   "name": "Bitget Token"
+  },
+  "BNB": {
+   "name": "BNB"
+  },
+  "BTC": {
+   "name": "Bitcoin"
+  },
+  "BTW": {
+   "name": "BTW"
+  },
+  "CAKE": {
+   "name": "PancakeSwap"
+  },
+  "CC": {
+   "name": "Canton Coin"
+  },
+  "CRO": {
+   "name": "Cronos",
+   "cashtag_only": true
+  },
+  "DOGE": {
+   "name": "Dogecoin"
+  },
+  "DOT": {
+   "name": "Polkadot"
+  },
+  "ENA": {
+   "name": "Ethena"
+  },
+  "ETC": {
+   "name": "Ethereum Classic"
+  },
+  "ETH": {
+   "name": "Ethereum"
+  },
+  "FIL": {
+   "name": "Filecoin"
+  },
+  "GRAM": {
+   "name": "GRAM"
+  },
+  "GT": {
+   "name": "GateToken"
+  },
+  "HBAR": {
+   "name": "Hedera"
+  },
+  "HTX": {
+   "name": "HTX"
+  },
+  "HYPE": {
+   "name": "Hyperliquid"
+  },
+  "ICP": {
+   "name": "Internet Computer"
+  },
+  "INJ": {
+   "name": "Injective"
+  },
+  "JST": {
+   "name": "JUST",
+   "cashtag_only": true
+  },
+  "JUP": {
+   "name": "Jupiter",
+   "cashtag_only": true
+  },
+  "KAS": {
+   "name": "Kaspa"
+  },
+  "KCS": {
+   "name": "KuCoin Token"
+  },
+  "LEO": {
+   "name": "UNUS SED LEO"
+  },
+  "LINK": {
+   "name": "Chainlink"
+  },
+  "LIT": {
+   "name": "LIT"
+  },
+  "LTC": {
+   "name": "Litecoin"
+  },
+  "MNT": {
+   "name": "Mantle",
+   "cashtag_only": true
+  },
+  "MORPHO": {
+   "name": "Morpho"
+  },
+  "NEAR": {
+   "name": "NEAR Protocol"
+  },
+  "NEXO": {
+   "name": "Nexo"
+  },
+  "NIGHT": {
+   "name": "Midnight",
+   "cashtag_only": true
+  },
+  "OKB": {
+   "name": "OKB"
+  },
+  "ONDO": {
+   "name": "Ondo"
+  },
+  "PAXG": {
+   "name": "PAX Gold"
+  },
+  "PEPE": {
+   "name": "Pepe"
+  },
+  "PI": {
+   "name": "Pi Network"
+  },
+  "POL": {
+   "name": "Polygon",
+   "cashtag_only": true
+  },
+  "PRL": {
+   "name": "PRL"
+  },
+  "PUMP": {
+   "name": "Pump.fun"
+  },
+  "QNT": {
+   "name": "Quant",
+   "cashtag_only": true
+  },
+  "RAIN": {
+   "name": "RAIN"
+  },
+  "RENDER": {
+   "name": "Render",
+   "cashtag_only": true
+  },
+  "SHIB": {
+   "name": "Shiba Inu"
+  },
+  "SKY": {
+   "name": "Sky",
+   "cashtag_only": true
+  },
+  "SOL": {
+   "name": "Solana"
+  },
+  "STABLE": {
+   "name": "STABLE"
+  },
+  "STX": {
+   "name": "Stacks",
+   "cashtag_only": true
+  },
+  "SUI": {
+   "name": "Sui"
+  },
+  "TAO": {
+   "name": "Bittensor"
+  },
+  "TRX": {
+   "name": "TRON"
+  },
+  "UNI": {
+   "name": "Uniswap"
+  },
+  "VVV": {
+   "name": "Venice token"
+  },
+  "WBT": {
+   "name": "WhiteBIT Coin"
+  },
+  "WLD": {
+   "name": "Worldcoin"
+  },
+  "WLFI": {
+   "name": "World Liberty Financial"
+  },
+  "XAUT": {
+   "name": "Tether Gold"
+  },
+  "XDC": {
+   "name": "XDC Network"
+  },
+  "XLM": {
+   "name": "Stellar",
+   "cashtag_only": true
+  },
+  "XMR": {
+   "name": "Monero"
+  },
+  "XRP": {
+   "name": "XRP"
+  },
+  "ZEC": {
+   "name": "Zcash"
+  },
+  "ZRO": {
+   "name": "LayerZero"
+  }
+ }
+}
