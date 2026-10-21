@@ -8,6 +8,12 @@ iff its raw change >= `rising_threshold_pct`; a coin triggers iff rising weight 
 of covered weight and covered weight >= `min_covered_weight`. Category score = mean of coin changes, median beside.
 A coin counts in each of its categories; there is no cross-category total.
 
+Weights v2 (T130): weights need not sum to 100; weight 0 parks a source (not read, not counted). A `source_groups`
+group votes once: it is rising iff its rising members hold at least half of its available weight, and then adds that
+whole weight to the rising weight (covered weight and score are unchanged). A coin can only trigger when one of
+`early_sources` is itself rising. The weights in force for a day come from `weights_for_day`: an older version in
+`weights_history` covers the days up to its `until`, so a past day is never rescored with newer weights.
+
 Categories are the narratives of `attention_narratives.json` (U1): membership comes from that file, never from
 CoinGecko categories. Eligibility (U2) is `universe_classes`: class exclusion, then tradeability, then IN; there
 is no volume cut, and every top-N coin that is not shown carries a reason from a closed list.
@@ -35,12 +41,18 @@ EXCHANGE_SERIES = {"binance": "exchange_volume", "coinbase": "coinbase_volume", 
                    "hyperliquid": "hyperliquid_volume"}
 FALLBACK_SERIES = "coingecko"
 WEIGHT_SUM_TOLERANCE = 0.01
+GROUP_RISING_SHARE = 0.5
+# Per-version keys: top-level for the current version, and in each `weights_history` entry for older ones.
+VERSION_KEYS = ("source_weights", "source_groups", "early_sources")
+CONFIG_KEYS = {"source_weights", "source_groups", "early_sources", "weights_version", "weights_history",
+               "exchange_sub_weights", "rising_threshold_pct", "trigger_pct", "min_covered_weight",
+               "min_history_days", "winsor_percentile", "recent_days", "max_source_lag_days", "universe_rules"}
 # Moved or removed by U1: a stale local config fails loudly instead of being half-read.
 REMOVED_KEYS = {"categories": "categories come from attention_narratives.json",
                 "min_category_coins": "moved to universe_rules.min_narrative_coins"}
 
 
-def _check_weights(name: str, weights, known) -> None:
+def _check_weights(name: str, weights, known, sum_100: bool = True) -> None:
     if not isinstance(weights, dict) or not weights:
         raise ValueError(f"discovery config: {name} must be a non-empty object")
     for k, v in weights.items():
@@ -49,12 +61,73 @@ def _check_weights(name: str, weights, known) -> None:
         if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0:
             raise ValueError(f"discovery config: {name}[{k!r}] must be a number >= 0")
     total = sum(weights.values())
-    if abs(total - 100.0) > WEIGHT_SUM_TOLERANCE:
+    if sum_100 and abs(total - 100.0) > WEIGHT_SUM_TOLERANCE:
         raise ValueError(f"discovery config: {name} must sum to 100 (+/- {WEIGHT_SUM_TOLERANCE}), got {total}")
+    if total <= 0:
+        raise ValueError(f"discovery config: {name} must give some source a weight > 0")
+
+
+def _check_version(name: str, v: dict) -> None:
+    """source_weights, source_groups and early_sources of one weights version."""
+    _check_weights(f"{name}source_weights", v.get("source_weights"), WEIGHTED_SOURCES, sum_100=False)
+    groups, seen = v.get("source_groups", {}), set()
+    if not isinstance(groups, dict):
+        raise ValueError(f"discovery config: {name}source_groups must be an object")
+    for g, members in groups.items():
+        if not isinstance(members, list) or not members or any(m not in WEIGHTED_SOURCES for m in members):
+            raise ValueError(f"discovery config: {name}source_groups[{g!r}] must list known source ids")
+        if seen & set(members):
+            raise ValueError(f"discovery config: {name}source_groups: a source is in two groups")
+        seen |= set(members)
+    early = v.get("early_sources", [])
+    if not isinstance(early, list) or any(e not in WEIGHTED_SOURCES for e in early):
+        raise ValueError(f"discovery config: {name}early_sources must list known source ids")
+
+
+def _check_history(cfg: dict) -> None:
+    current = cfg.get("weights_version", 1)
+    if isinstance(current, bool) or not isinstance(current, int) or current < 1:
+        raise ValueError("discovery config: weights_version must be an integer >= 1")
+    history = cfg.get("weights_history", [])
+    if not isinstance(history, list):
+        raise ValueError("discovery config: weights_history must be a list")
+    prev_v, prev_until = 0, None
+    for i, h in enumerate(history):
+        name = f"weights_history[{i}]."
+        if not isinstance(h, dict) or set(h) - {"weights_version", "until", *VERSION_KEYS}:
+            raise ValueError(f"discovery config: {name[:-1]} has unknown keys")
+        v = h.get("weights_version")
+        try:
+            until = date.fromisoformat(h.get("until"))
+        except (TypeError, ValueError):
+            raise ValueError(f"discovery config: {name}until must be an ISO date") from None
+        if isinstance(v, bool) or not isinstance(v, int) or not prev_v < v < current:
+            raise ValueError(f"discovery config: {name}weights_version must increase and stay below "
+                             f"weights_version {current}")
+        if prev_until is not None and until <= prev_until:
+            raise ValueError(f"discovery config: {name}until must be after the previous entry's")
+        _check_version(name, h)
+        prev_v, prev_until = v, until
+
+
+def weights_for_day(cfg: dict, day: date) -> dict:
+    """The weights version scoring `day`: the first `weights_history` entry with day <= until, else the current."""
+    for h in cfg.get("weights_history", []):
+        if day <= date.fromisoformat(h["until"]):
+            v = h
+            break
+    else:
+        v = {**cfg, "weights_version": cfg.get("weights_version", 1)}
+    return {"weights_version": v["weights_version"], "source_weights": v["source_weights"],
+            "source_groups": v.get("source_groups", {}), "early_sources": v.get("early_sources", [])}
 
 
 def validate_config(cfg: dict) -> dict:
-    _check_weights("source_weights", cfg.get("source_weights"), WEIGHTED_SOURCES)
+    for key, why in REMOVED_KEYS.items():
+        if key in cfg:
+            raise ValueError(f"discovery config: {key} is no longer read ({why})")
+    _check_version("", cfg)
+    _check_history(cfg)
     _check_weights("exchange_sub_weights", cfg.get("exchange_sub_weights"), tuple(EXCHANGE_SERIES))
     for key, lo, hi in (("rising_threshold_pct", None, None), ("trigger_pct", 0, 100),
                         ("min_covered_weight", 0, 100), ("min_history_days", 1, None)):
@@ -62,14 +135,14 @@ def validate_config(cfg: dict) -> dict:
         if isinstance(v, bool) or not isinstance(v, (int, float)) or (lo is not None and v < lo) or (
                 hi is not None and v > hi):
             raise ValueError(f"discovery config: {key} is missing or out of range")
-    for key, why in REMOVED_KEYS.items():
-        if key in cfg:
-            raise ValueError(f"discovery config: {key} is no longer read ({why})")
     rules = cfg.get("universe_rules")
     v = rules.get("min_narrative_coins") if isinstance(rules, dict) else None
     if isinstance(v, bool) or not isinstance(v, int) or v < 1:
         raise ValueError("discovery config: universe_rules.min_narrative_coins is missing or not an integer >= 1")
-    universe_classes.validate_rules(cfg)
+    universe_classes.validate_rules(cfg)   # names the keys it retired before the generic check below
+    unknown = sorted(set(cfg) - CONFIG_KEYS)
+    if unknown:
+        raise ValueError(f"discovery config: unknown keys {', '.join(unknown)}")
     return cfg
 
 
@@ -140,11 +213,27 @@ def _exchange_slot(symbol, sub_weights, data, end, recent, window, max_lag) -> D
                            as_of=max(m.as_of for _, m in members), members=[m for _, m in members])
 
 
-def _coin(symbol, cfg, data, end, recent, window, max_lag) -> tuple[float, float, float, bool, list] | None:
-    """(raw change %, covered weight, rising weight, trigger, sources) or None when no source is usable."""
-    weights = cfg["source_weights"]
+def _rising_weight(found: list[tuple[str, float, DiscoverySource]], groups: dict, thr: float) -> float:
+    """Ungrouped sources count on their own; a group counts its available weight once, if half of it is rising."""
+    group_of = {m: g for g, members in groups.items() for m in members}
+    rising, per_group = 0.0, {}
+    for src, w, s in found:
+        up = _is_rising(s.change, thr)
+        if src in group_of:
+            tot = per_group.setdefault(group_of[src], [0.0, 0.0])
+            tot[0] += w
+            tot[1] += w if up else 0.0
+        elif up:
+            rising += w
+    return rising + sum(tot for tot, up in per_group.values() if up >= GROUP_RISING_SHARE * tot)
+
+
+def _coin(symbol, cfg, data, end, recent, window, max_lag) -> tuple[float, float, float, bool, list, int] | None:
+    """(raw change %, covered weight, rising weight, trigger, sources, weights version) or None when no source
+    is usable. `end` is the scored day and picks the weights version."""
+    wv = weights_for_day(cfg, end)
     found = []
-    for src, w in weights.items():
+    for src, w in wv["source_weights"].items():
         if w <= 0:
             continue
         if src == SLOT:
@@ -154,14 +243,18 @@ def _coin(symbol, cfg, data, end, recent, window, max_lag) -> tuple[float, float
         else:
             s = _series_source(src, data, src, symbol, end, recent, window, max_lag)
         if s is not None:
-            found.append((w, s))
+            found.append((src, w, s))
     if not found:
         return None
-    covered = sum(w for w, _ in found)
+    covered = sum(w for _, w, _ in found)
     thr = float(cfg["rising_threshold_pct"])
-    rising = sum(w for w, s in found if _is_rising(s.change, thr))
-    trigger = rising * 100.0 >= float(cfg["trigger_pct"]) * covered and covered >= float(cfg["min_covered_weight"])
-    return sum(w * s.change for w, s in found) / covered, covered, rising, trigger, [s for _, s in found]
+    rising = _rising_weight(found, wv["source_groups"], thr)
+    early = wv["early_sources"]
+    early_ok = not early or any(src in early and _is_rising(s.change, thr) for src, _, s in found)
+    trigger = (early_ok and rising * 100.0 >= float(cfg["trigger_pct"]) * covered
+               and covered >= float(cfg["min_covered_weight"]))
+    return (sum(w * s.change for _, w, s in found) / covered, covered, rising, trigger, [s for _, _, s in found],
+            wv["weights_version"])
 
 
 def _empty(window, as_of, cats_asof, status, reason, usize=0, esize=0, cats=None, **extra) -> DiscoveryResponse:
@@ -170,7 +263,10 @@ def _empty(window, as_of, cats_asof, status, reason, usize=0, esize=0, cats=None
 
 
 def series_names(cfg: dict) -> set[str]:
-    return {s for s in cfg["source_weights"] if s != SLOT} | set(EXCHANGE_SERIES.values()) | {FALLBACK_SERIES}
+    """Series read for scoring: every source weighted > 0 in the current or any older weights version."""
+    versions = [cfg, *cfg.get("weights_history", [])]
+    weighted = {s for v in versions for s, w in v["source_weights"].items() if w > 0 and s != SLOT}
+    return weighted | set(EXCHANGE_SERIES.values()) | {FALLBACK_SERIES}
 
 
 def eligibility(cfg: dict, rows: list[dict], venues=None) -> universe_classes.Universe:
@@ -211,15 +307,17 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
     doc = narratives.load_narratives()
     end = today - timedelta(days=1)
     as_of = end.isoformat()
+    wver = weights_for_day(cfg, end)["weights_version"]
     urows, reason = load_universe_rows(universe_path)
     if not urows:
-        return _empty(window, as_of, doc["as_of"], "no-data", reason, narratives_status=doc["status"])
+        return _empty(window, as_of, doc["as_of"], "no-data", reason, narratives_status=doc["status"],
+                      weights_version=wver)
     u = eligibility(cfg, urows)
     eligible = u.eligible
     min_coins = min_narrative_coins(cfg)
     nm = narratives.memberships(eligible, min_coins, doc)
     cats_asof = nm.as_of
-    flags = {"narratives_status": nm.status, "unassigned": nm.unassigned,
+    flags = {"narratives_status": nm.status, "unassigned": nm.unassigned, "weights_version": wver,
              "hidden_narratives": [DiscoveryHiddenNarrative(**h) for h in nm.hidden]}
 
     series = series_names(cfg)

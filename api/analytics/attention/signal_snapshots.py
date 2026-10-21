@@ -23,6 +23,9 @@ narratives file's sha256 prefix `narratives_sha`, which is folded into the store
 config change). Records written before U1 hold CoinGecko category ids; `read_snapshots` maps them to narrative ids
 through the id map ON READ (`narrative_ids`, unmapped ones in `retired_ids`) and never rewrites a file.
 
+Weights versions (T130): new records carry `weights_version`, the version scoring that day
+(`discovery.weights_for_day`). Records written before carry none and read back as version 1 (in memory only).
+
 LIMITATION: the snapshot is taken at the end of the `refresh` job, so it cannot include sources fed later the same
 day by `refresh-extra` (Binance, Hyperliquid, Trends, Reddit), nor the category snapshot refreshed after the
 default run (the previous day's categories are used). Those sources are therefore missing or one day lagged in
@@ -75,6 +78,7 @@ def _record(res, day: date, window: int, cfg: dict, h: str, nsha: str) -> dict:
         row["category_ids"].sort()
     return {"date": day.isoformat(), "window": window, "categories_as_of": res.categories_as_of,
             "config_hash": h, "config": cfg, "membership_definition": narratives.DEFINITION, "narratives_sha": nsha,
+            "weights_version": discovery.weights_for_day(cfg, day)["weights_version"],
             "categories": [{"id": c.id, "score": c.score, "median": c.median, "coins_used": c.coins_used,
                             "gaining_count": c.gaining_count} for c in res.categories],
             "rows": [coins[s] for s in sorted(coins)]}
@@ -131,14 +135,15 @@ def take_snapshot(today: date) -> list[dict]:
 def _with_narrative_ids(rec: dict, id_map: dict[str, dict]) -> list[dict]:
     """Rows of one record plus `narrative_ids` and `retired_ids` (in memory only; the file is never rewritten)."""
     old = rec.get("membership_definition") is None
+    wv = rec.get("weights_version", 1)
     out = []
     for r in rec["rows"]:
         ids = r.get("category_ids", [])
         if not old:
-            out.append({**r, "narrative_ids": list(ids), "retired_ids": []})
+            out.append({**r, "narrative_ids": list(ids), "retired_ids": [], "weights_version": wv})
             continue
         mapped = {c: (id_map.get(c) or {}).get("narrative") for c in ids}
-        out.append({**r, "narrative_ids": sorted({n for n in mapped.values() if n}),
+        out.append({**r, "weights_version": wv, "narrative_ids": sorted({n for n in mapped.values() if n}),
                     "retired_ids": sorted(c for c, n in mapped.items() if not n)})
     return out
 

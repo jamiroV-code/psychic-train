@@ -275,14 +275,14 @@ def good(**over):
             "universe_rules": {"min_narrative_coins": 1}, **over}
 
 
-def test_shipped_config_is_valid_and_sums_to_100():
+def test_shipped_config_is_valid():
+    """Weights v2 (T130) live in test_weights_v2.py; WEIGHTS here mirror the shipped v1 history entry."""
     c = disc.load_config()
-    assert sum(c["source_weights"].values()) == pytest.approx(100)
     assert sum(c["exchange_sub_weights"].values()) == pytest.approx(100)
-    assert c["source_weights"] == WEIGHTS and c["exchange_sub_weights"] == SUB
+    assert c["weights_history"][0]["source_weights"] == WEIGHTS and c["exchange_sub_weights"] == SUB
     assert (c["rising_threshold_pct"], c["trigger_pct"], c["min_covered_weight"], c["min_history_days"]) == (
         10, 60, 30, 30)
-    assert "min_independent_sources" not in c and "source_groups" not in c
+    assert "min_independent_sources" not in c
 
 
 def _sw(**kw):
@@ -291,8 +291,8 @@ def _sw(**kw):
 
 @pytest.mark.parametrize("over", [
     {"source_weights": _sw(wikipedia=-1, trends=51)},
-    {"source_weights": _sw(wikipedia=24)},
-    {"source_weights": _sw(wikipedia=25.02)},
+    {"source_weights": {k: 0 for k in WEIGHTS}},
+    {"source_weights": _sw(wikipedia="25")},
     {"source_weights": {**WEIGHTS, "coingecko": 0}},
     {"source_weights": {**WEIGHTS, "exchange_volume": 0}},
     {"source_weights": {**WEIGHTS, "hyperliquid_volume": 0}},
@@ -322,10 +322,10 @@ def cfg_base():
     return {"winsor_percentile": 95, "recent_days": 7, "max_source_lag_days": 3}
 
 
-def test_weight_sum_tolerance_accepts_small_drift(tmp_path):
+def test_source_weights_need_not_sum_to_100(tmp_path):
     p = tmp_path / "d.json"
-    p.write_text(json.dumps({**cfg_base(), **good(source_weights=_sw(wikipedia=25.005))}))
-    assert disc.load_config(p)["source_weights"]["wikipedia"] == 25.005
+    p.write_text(json.dumps({**cfg_base(), **good(source_weights=_sw(wikipedia=24.5))}))
+    assert disc.load_config(p)["source_weights"]["wikipedia"] == 24.5
 
 
 def test_rising_boundary_is_ten_percent():
