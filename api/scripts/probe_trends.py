@@ -4,7 +4,9 @@ Run from the repo root: uv run --project api --with pytrends python -m api.scrip
 Request 1: [anchor, 4 coins] over "today 3-m". Requests 2 and 3: [Bitcoin, Ethereum, sample coins] so both
 anchor candidates sit on one scale with the coins. Prints raw numbers only, no recommendation.
 Writes nothing; prints an exception's class and HTTP status only. Exit 0 when a report was printed
-(a failed request is evidence), 2 bad arguments or keyword file, 3 pytrends not installed.
+(a failed request is evidence), 1 the Trends session cannot start, 2 bad arguments or keyword file,
+3 pytrends not installed. Starting the session sends one cookie request to Google, outside the 3 data
+requests counted above. PowerShell: quote comma lists, e.g. --coins 'SOL,LINK,AAVE,INJ,MORPHO'.
 """
 from __future__ import annotations
 
@@ -18,12 +20,11 @@ from itertools import pairwise
 
 from api.data.attention import trends_keywords as tk
 from api.scripts.trends_cli_common import (
-    PytrendsMissing,
     http_status,
     is_rate_limited,
     make_trendreq,
-    missing_message,
     pytrends_version,
+    start_client,
 )
 
 DEFAULT_COINS = ("SOL", "LINK", "AAVE", "INJ", "MORPHO")
@@ -218,11 +219,9 @@ def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep
         return 2
     except SystemExit:  # --help
         return 0
-    try:
-        client = trendreq_factory()
-    except PytrendsMissing:
-        print(missing_message("probe_trends"), file=err)
-        return 3
+    client, code = start_client(trendreq_factory, "probe_trends", err)
+    if client is None:
+        return code
 
     anchor = km.anchor_keyword()
     sample = _pick_coins(km, requested, {anchor.casefold(), anchor_a.casefold(), anchor_b.casefold()}, out)

@@ -34,6 +34,20 @@ def missing_message(module: str) -> str:
     return f"pytrends is not installed in the api env. Run: {RUN_COMMAND.format(module=module)}"
 
 
+def start_client(factory, module: str, err) -> tuple[object | None, int]:
+    """Build the client: (client, 0), or (None, 3) when pytrends is missing, or (None, 1) on any other
+    failure. TrendReq() itself sends one cookie request to Google, so offline, VPN or timeout fails here;
+    only the class (and HTTP status) is printed, never the message (it carries the URL)."""
+    try:
+        return factory(), 0
+    except PytrendsMissing:
+        print(missing_message(module), file=err)
+        return None, 3
+    except Exception as exc:  # noqa: BLE001 - the class is reported, never the message
+        print(f"cannot start a Google Trends session: {error_class(exc)}", file=err)
+        return None, 1
+
+
 def make_trendreq():
     """Build a TrendReq; pytrends is imported here only. No retries/backoff_factor (urllib3 2.x)."""
     try:

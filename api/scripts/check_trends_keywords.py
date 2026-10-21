@@ -2,8 +2,10 @@
 
 Run from the repo root: uv run --project api --with pytrends python -m api.scripts.check_trends_keywords
 Reads a symbol -> name JSON map (default: the labels of api/data/trends_keywords.json), prints one line per
-coin and a paste-ready JSON of PASS entries. Writes nothing. Exit 0 (also after a 429 stop), 2 if the input
-is unreadable, 3 if pytrends is not installed.
+coin and a paste-ready JSON of PASS entries. Writes nothing. Exit 0 (also after a 429 stop), 1 if the Trends
+session cannot start, 2 if the input is unreadable, 3 if pytrends is not installed.
+Starting the session sends one cookie request to Google before the per-coin calls.
+PowerShell: quote comma lists, e.g. --symbols 'LINK,AAVE'.
 """
 from __future__ import annotations
 
@@ -17,16 +19,16 @@ from pathlib import Path
 
 from api.data.attention import trends_keywords as tk
 from api.scripts.trends_cli_common import (
-    PytrendsMissing,
     error_class,
     is_rate_limited,
     make_trendreq,
-    missing_message,
+    start_client,
 )
 
 INTERVAL_SECONDS = 3.0
 MAX_CONSECUTIVE_429 = 3
-CRYPTO_TYPE_WORDS = ("cryptocurrency", "blockchain", "token", "coin", "digital currency", "protocol", "decentralized")
+CRYPTO_TYPE_WORDS = ("cryptocurrency", "blockchain", "token", "coin", "digital currency", "virtual currency",
+                     "protocol", "decentralized")
 PASTE_HEADER = "--- paste-ready JSON (PASS entries) ---"
 DECISION_HEADER = "--- needs a decision ---"
 NOT_RUN_REASON = f"stopped after {MAX_CONSECUTIVE_429} consecutive HTTP 429"
@@ -68,7 +70,11 @@ def check_name(client, symbol: str, name: str) -> Result:
         return res
     res.candidates = _usable(raw)
     crypto = [c for c in res.candidates if any(w in c["type"].lower() for w in CRYPTO_TYPE_WORDS)]
-    if len(crypto) == 1:
+    if len(crypto) == 1 and name == symbol:
+        res.verdict, res.reason = "AMBIGUOUS", "label is only the ticker"
+    elif len(crypto) == 1 and name.casefold() not in crypto[0]["title"].casefold():
+        res.verdict, res.reason = "AMBIGUOUS", "title does not contain the name"
+    elif len(crypto) == 1:
         res.verdict, res.proposed = "PASS", crypto[0]
     elif len(crypto) > 1:
         res.verdict, res.reason = "AMBIGUOUS", "several crypto-typed candidates"
@@ -166,11 +172,9 @@ def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep
             print(f"--symbols must be comma-separated symbols matching {tk.SYMBOL_RE.pattern}", file=err)
             return 2
         mapping = {s: mapping[s] for s in wanted if s in mapping}
-    try:
-        client = trendreq_factory()
-    except PytrendsMissing:
-        print(missing_message("check_trends_keywords"), file=err)
-        return 3
+    client, code = start_client(trendreq_factory, "check_trends_keywords", err)
+    if client is None:
+        return code
     run(mapping, client=client, sleep=sleep, out=out, now=now)
     return 0
 
