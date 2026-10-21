@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { formatSigned, NO_DATA } from "@/lib/attention-lines";
-import type { DiscoveryCategory, DiscoveryCoin, DiscoverySelection } from "@/lib/types/discovery";
+import type { DiscoveryCategory, DiscoveryCoin, DiscoveryHiddenNarrative, DiscoverySelection } from "@/lib/types/discovery";
 
 export interface DiscoveryTableProps {
   categories: readonly DiscoveryCategory[];
@@ -16,6 +16,10 @@ export interface DiscoveryTableProps {
   risingThresholdPct?: number;
   /** Covered weight a coin needs before it can fire a signal. */
   minCoveredWeight?: number;
+  /** Universe coins in no narrative. */
+  unassigned?: readonly string[];
+  /** Narratives with fewer than `minCategoryCoins` member coins: listed, not ranked, no chart. */
+  hiddenNarratives?: readonly DiscoveryHiddenNarrative[];
 }
 
 const SOURCE_SHORT: Record<string, string> = {
@@ -35,6 +39,9 @@ const COLUMN_HELP = {
   sources: "Each source that has data for this coin, with its own change over the window.",
   coverage: "Weight of the sources that have data for this coin, out of 100.",
 };
+
+// The response does not carry the threshold, so the tag names no number.
+const THIN_HELP = "low 24h volume: label only, not excluded";
 
 function formatPercent(value: number | null): string {
   if (value === null) return NO_DATA;
@@ -79,6 +86,11 @@ function CoinRow({ coin, id, selected, onSelect, risingThresholdPct, minCoveredW
         ) : (
           <span className="discovery-muted">{"\u2014"}</span>
         )}
+        {coin.thin_volume && (
+          <span className="discovery-tag" data-testid={`discovery-thin-${id}-${coin.symbol}`} title={THIN_HELP}>
+            thin volume<span className="visually-hidden">{`: ${THIN_HELP}`}</span>
+          </span>
+        )}
       </td>
       <td>
         <span className="discovery-chips">
@@ -111,6 +123,8 @@ export function DiscoveryTable({
   minCategoryCoins = 3,
   risingThresholdPct = 10,
   minCoveredWeight = 30,
+  unassigned = [],
+  hiddenNarratives = [],
 }: DiscoveryTableProps) {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -149,12 +163,33 @@ export function DiscoveryTable({
       <p className="discovery-muted">No history chart for these: a category this small is not a narrative.</p>
     </section>
   );
+  const unassignedLine = unassigned.length > 0 && (
+    <details data-testid="discovery-unassigned" className="basket-empty-cats">
+      <summary>{`${unassigned.length} unassigned ${unassigned.length === 1 ? "coin" : "coins"}`}</summary>
+      <p className="basket-note">{unassigned.join(", ")}</p>
+      <p className="discovery-muted">Not in any narrative yet: add them to attention_narratives.json.</p>
+    </details>
+  );
+  const hiddenLine = hiddenNarratives.length > 0 && (
+    <details data-testid="discovery-hidden" className="basket-empty-cats">
+      <summary>{`${hiddenNarratives.length} hidden ${hiddenNarratives.length === 1 ? "narrative" : "narratives"} (fewer than ${minCategoryCoins} coins)`}</summary>
+      <ul className="discovery-unranked__list">
+        {hiddenNarratives.map((n) => (
+          <li key={n.id} data-testid={`discovery-hidden-${n.id}`}>
+            {`${n.name}: ${n.coins.length} ${n.coins.length === 1 ? "coin" : "coins"}${n.coins.length > 0 ? ` (${n.coins.join(", ")})` : ""}`}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
   if (ranked.length === 0) {
     return (
       <>
         <p data-testid="discovery-none" className="basket-note">No category has enough coins to rank in this window.</p>
         {unrankedGroup}
         {emptyLine}
+        {hiddenLine}
+        {unassignedLine}
       </>
     );
   }
@@ -231,6 +266,8 @@ export function DiscoveryTable({
     </table>
     {unrankedGroup}
     {emptyLine}
+    {hiddenLine}
+    {unassignedLine}
     </>
   );
 }

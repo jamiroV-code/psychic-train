@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DiscoveryExclusions, reasonLabel } from "@/components/narrative/DiscoveryExclusions";
 import { DiscoverySourcesPanel } from "@/components/narrative/DiscoverySourcesPanel";
 import { DiscoveryTable } from "@/components/narrative/DiscoveryTable";
 import { fetchDiscovery as fetchDiscoveryDefault } from "@/lib/api/discovery";
@@ -23,7 +24,6 @@ export interface DiscoveryTabProps {
 const WINDOWS: readonly DiscoveryWindow[] = [7, 30, 90];
 
 const NO_DATA_LINES: Record<Exclude<DiscoveryReason, "">, string> = {
-  "categories-missing": "Category lists have not been downloaded yet, so there is nothing to rank.",
   "reference-missing": "The reference data for this window is not available yet.",
   "no-attention-data": "There is no attention data to compare for this window yet.",
 };
@@ -34,20 +34,16 @@ function liveWeight(data: DiscoveryResponse): number {
   return all.length === 0 ? 0 : Math.round(Math.max(...all));
 }
 
-const EXCLUDED_TEXT: [keyof DiscoveryResponse["excluded"], string][] = [
-  ["below_volume_floor", "below the volume floor"],
-  ["exclusion_list", "exchange tokens and other exclusions"],
-  ["no_category", "in none of the categories"],
-  ["no_source_data", "no source data yet"],
-];
-
-/** "N of 100 top coins shown", with the biggest reasons the rest are not. */
+/** "N of 100 top coins shown, M excluded: ..." with each reason count in plain words, biggest first. */
 function coverageLine(data: DiscoveryResponse): string {
-  const reasons = EXCLUDED_TEXT.filter(([k]) => data.excluded[k] > 0)
-    .sort((a, b) => data.excluded[b[0]] - data.excluded[a[0]])
-    .map(([k, label]) => `${data.excluded[k]} ${label}`);
+  const head = `${data.shown_size} of ${data.universe_size} top coins shown`;
   const rest = data.universe_size - data.shown_size;
-  return `${data.shown_size} of ${data.universe_size} top coins shown${rest > 0 && reasons.length > 0 ? `: the others are excluded (${reasons.join(", ")})` : ""}`;
+  if (rest <= 0) return head;
+  const reasons = Object.entries(data.excluded_counts ?? {})
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason, n]) => `${n} ${reasonLabel(reason)}`);
+  return `${head}, ${rest} excluded${reasons.length > 0 ? `: ${reasons.join(", ")}` : ""}`;
 }
 
 /** Discovery tab: 7d/30d/90d selector, then a ranked category table or one plain state line. */
@@ -95,7 +91,7 @@ export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault, fetchSour
     const reason = data.reason === "" ? "no-attention-data" : data.reason;
     body = (
       <p data-testid={`discovery-nodata-${reason}`} className="basket-note">
-        {NO_DATA_LINES[reason]}
+        {NO_DATA_LINES[reason] ?? NO_DATA_LINES["no-attention-data"]}
       </p>
     );
   } else {
@@ -107,6 +103,8 @@ export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault, fetchSour
         minCategoryCoins={data.min_category_coins}
         risingThresholdPct={data.rising_threshold_pct}
         minCoveredWeight={data.min_covered_weight}
+        unassigned={data.unassigned}
+        hiddenNarratives={data.hidden_narratives}
       />
     );
   }
@@ -131,8 +129,21 @@ export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault, fetchSour
         </span>
       </header>
       <DiscoverySourcesPanel fetchSources={fetchSources} />
+      {data?.narratives_status === "proposed" && (
+        <p data-testid="discovery-proposed-banner" role="status" className="basket-note discovery-banner">
+          Narrative list not yet reviewed: the coin-to-narrative list is a proposal until the owner reviews it.
+        </p>
+      )}
       {data && data.status === "ok" && (
         <p data-testid="discovery-coverage" className="basket-note">{coverageLine(data)}</p>
+      )}
+      {data && data.status === "ok" && (
+        <DiscoveryExclusions
+          coins={data.excluded_coins ?? []}
+          counts={data.excluded_counts ?? {}}
+          minCategoryCoins={data.min_category_coins}
+          tradeabilityUnverified={data.categories.some((c) => c.coins.some((coin) => coin.tradeability === "unverified"))}
+        />
       )}
       {data && data.status === "ok" && (
         <p data-testid="discovery-as-of" className="basket-note">{`as of ${data.as_of.slice(0, 10)}`}</p>
