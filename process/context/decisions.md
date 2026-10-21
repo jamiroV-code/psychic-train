@@ -221,6 +221,7 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 ### D-25 Tradeable universe and narratives rules
 - **Decision:** (owner, 18-10-26; SPEC T108, PLAN T111) Discovery covers the top 100 coins with reasoned exclusions (closed reason list). No volume floor and no volume cut: volume under 20M USD only adds a label. 11 narratives with multi-membership and a 3-coin minimum; coins in no narrative go to an Unassigned bucket. Baskets stays on the old universe lists (Q-V1). The exchange-token question (D-20) is left untouched here; slice U6 writes its entry.
 - **Date:** 18-10-26. **Reason:** exclude by reason, not by a volume cut. **Alternatives:** keep the 20M floor (rejected).
+- **G-OWN review:** planner-reported (not verified by this task): on 2026-10-21 the owner passed the review of the 11-narrative coin list in `api/data/attention_narratives.json` as on main (75 placed; NEAR, ICP, INJ primary Layer 1 accepted; M left Unassigned; the UNVERIFIED placements RAIN, GRAM, BTW, WLFI, PRL, AKE, STABLE, NIGHT and NEXO DeFi membership accepted as is). The file's `status` field is still `proposed`; a separate small worker task flips it to `reviewed` (pending).
 - **Consequences:** slices U1 (T113, #145) and U4 (T114, #144) merged; U2 (T115, PR #146) is an open draft in review; U3, U5, U6 queued.
 - **Status:** active.
 
