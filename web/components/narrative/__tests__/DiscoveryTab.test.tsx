@@ -40,7 +40,15 @@ const resp = (over: Partial<DiscoveryResponse> = {}): DiscoveryResponse => ({
   universe_size: 90,
   eligible_size: 60,
   shown_size: 50,
-  excluded: { exclusion_list: 7, below_volume_floor: 30, no_category: 2, no_source_data: 1 },
+  excluded_counts: { "no-source-data": 19, stablecoin: 16, "no-market": 7, unassigned: 4 },
+  excluded_coins: [
+    { symbol: "USDT", reason: "stablecoin", detail: "stablecoin" },
+    { symbol: "BUIDL", reason: "no-market", detail: "tokenized fund" },
+    { symbol: "MMM", reason: "unassigned", detail: "" },
+  ],
+  narratives_status: "reviewed",
+  unassigned: [],
+  hidden_narratives: [],
   min_category_coins: 3,
   rising_threshold_pct: 10,
   min_covered_weight: 30,
@@ -80,7 +88,6 @@ describe("DiscoveryTab", () => {
   });
 
   it.each([
-    ["categories-missing"],
     ["reference-missing"],
     ["no-attention-data"],
   ] as const)("renders the %s no-data state with one plain line", async (reason) => {
@@ -167,15 +174,124 @@ describe("DiscoveryTab", () => {
     expect(within(coins).getAllByText(/^(Wiki|CG volume|Trends) /)).toHaveLength(3);
   });
 
-  it("says how many of the top coins are shown and why the others are not", async () => {
-    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp())} />);
+  it("shows_n_of_100_shown_m_excluded_with_reason_counts", async () => {
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ universe_size: 100, shown_size: 54 }))} />);
     const line = await screen.findByTestId("discovery-coverage");
-    expect(line).toHaveTextContent("50 of 90 top coins shown: the others are excluded (30 below the volume floor, 7 exchange tokens and other exclusions, 2 in none of the categories, 1 no source data yet)");
+    expect(line).toHaveTextContent(
+      "54 of 100 top coins shown, 46 excluded: 19 no source data, 16 stablecoins, 7 tokenized funds / no market, 4 unassigned",
+    );
   });
 
   it("shows only the totals when nothing is excluded", async () => {
-    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ shown_size: 90, universe_size: 90 }))} />);
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ shown_size: 90, universe_size: 90, excluded_counts: {}, excluded_coins: [] }))} />);
     expect(await screen.findByTestId("discovery-coverage")).toHaveTextContent(/^90 of 90 top coins shown$/);
+    expect(screen.queryByTestId("discovery-exclusions")).toBeNull();
+  });
+
+  it("names every reason in plain words, hidden narratives and unknown reasons included", async () => {
+    const counts = { "wrapped-staked": 3, "not-tradeable-config": 2, "hidden-narrative": 1, "some-new-reason": 1 };
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ universe_size: 100, shown_size: 93, excluded_counts: counts }))} />);
+    expect(await screen.findByTestId("discovery-coverage")).toHaveTextContent(
+      "93 of 100 top coins shown, 7 excluded: 3 wrapped or staked copies, 2 not tradeable (config), 1 hidden narrative, 1 some-new-reason",
+    );
+  });
+
+  it("old_response_without_new_fields_still_renders", async () => {
+    const old = resp() as Partial<DiscoveryResponse>;
+    for (const k of ["excluded_counts", "excluded_coins", "narratives_status", "unassigned", "hidden_narratives"] as const) delete old[k];
+    const legacy = { ...old, excluded: { exclusion_list: 7, below_volume_floor: 30, no_category: 2, no_source_data: 1 } };
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(legacy as DiscoveryResponse)} />);
+    await screen.findByTestId("discovery-table");
+    expect(screen.getByTestId("discovery-coverage")).toHaveTextContent(/^50 of 90 top coins shown, 40 excluded$/);
+    expect(screen.queryByTestId("discovery-proposed-banner")).toBeNull();
+    expect(screen.queryByTestId("discovery-unassigned")).toBeNull();
+    expect(screen.queryByTestId("discovery-hidden")).toBeNull();
+  });
+
+  it("thin_volume_tag_rendered_for_thin_coin_only", async () => {
+    const thin = category("high", { score: 40 });
+    thin.coins = [{ ...thin.coins[0], thin_volume: true, volume_24h: 4_000_000 }, { ...thin.coins[1], thin_volume: false }];
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ categories: [thin] }))} />);
+    await screen.findByTestId("discovery-table");
+    fireEvent.click(within(screen.getByTestId("discovery-row-high")).getByRole("button"));
+    const tags = screen.getAllByTestId(/^discovery-thin-/);
+    expect(tags.map((t) => t.getAttribute("data-testid"))).toEqual(["discovery-thin-high-AAA"]);
+    expect(tags[0]).toHaveTextContent(/thin volume/);
+    expect(tags[0]).toHaveAttribute("title", "low 24h volume: label only, not excluded");
+    expect(tags[0]).toHaveTextContent("thin volume: low 24h volume: label only, not excluded");
+  });
+
+  it("unassigned_bucket_rendered_when_nonempty", async () => {
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ unassigned: ["MMM", "NNN"] }))} />);
+    const bucket = await screen.findByTestId("discovery-unassigned");
+    expect(bucket.tagName).toBe("DETAILS");
+    expect(bucket).toHaveTextContent("2 unassigned coins");
+    expect(bucket).toHaveTextContent("MMM, NNN");
+    expect(bucket).toHaveTextContent(/not in any narrative yet: add them to attention_narratives\.json/i);
+  });
+
+  it("does not render the Unassigned bucket when it is empty", async () => {
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ unassigned: [] }))} />);
+    await screen.findByTestId("discovery-table");
+    expect(screen.queryByTestId("discovery-unassigned")).toBeNull();
+  });
+
+  it("hidden_narrative_listed_not_in_table", async () => {
+    const hidden = [{ id: "privacy", name: "Privacy", coins: ["XMR", "ZEC"] }];
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ hidden_narratives: hidden }))} />);
+    const group = await screen.findByTestId("discovery-hidden");
+    expect(within(group).getByTestId("discovery-hidden-privacy")).toHaveTextContent("Privacy: 2 coins (XMR, ZEC)");
+    expect(group).toHaveTextContent(/fewer than 3 coins/);
+    expect(within(screen.getByTestId("discovery-table")).queryByText("Privacy")).toBeNull();
+    expect(screen.queryByTestId("discovery-row-privacy")).toBeNull();
+    expect(screen.queryByTestId("history-svg")).toBeNull();
+  });
+
+  it("lists hidden narratives and unassigned coins even when nothing ranks", async () => {
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({
+      categories: [], unassigned: ["MMM"], hidden_narratives: [{ id: "p", name: "Privacy", coins: ["XMR"] }],
+    }))} />);
+    await screen.findByTestId("discovery-none");
+    expect(screen.getByTestId("discovery-unassigned")).toHaveTextContent("1 unassigned coin");
+    expect(screen.getByTestId("discovery-hidden-p")).toHaveTextContent("Privacy: 1 coin (XMR)");
+  });
+
+  it("proposed_narratives_banner_when_status_proposed", async () => {
+    const { unmount } = render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ narratives_status: "proposed" }))} />);
+    expect(await screen.findByTestId("discovery-proposed-banner")).toHaveTextContent(/narrative list not yet reviewed/i);
+    unmount();
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ narratives_status: "reviewed" }))} />);
+    await screen.findByTestId("discovery-table");
+    expect(screen.queryByTestId("discovery-proposed-banner")).toBeNull();
+  });
+
+  it("no_text_mentions_volume_floor_or_exchange_token_exclusion", async () => {
+    const forbidden = /floor|exchange[- ]tokens?|category lists have not been downloaded/i;
+    const thin = category("high", { score: 40 });
+    thin.coins = [{ ...thin.coins[0], thin_volume: true, tradeability: "unverified" }, thin.coins[1]];
+    const legacy = { exclusion_list: 7, below_volume_floor: 30, no_category: 2, no_source_data: 1 };
+    const states: DiscoveryResponse[] = [
+      resp({ excluded: legacy, categories: [thin], narratives_status: "proposed", unassigned: ["MMM"],
+        hidden_narratives: [{ id: "p", name: "Privacy", coins: ["XMR"] }],
+        excluded_counts: { stablecoin: 1, "wrapped-staked": 1, "no-market": 1, "not-tradeable-config": 1, unassigned: 1, "hidden-narrative": 1, "no-source-data": 1 },
+        excluded_coins: ["stablecoin", "wrapped-staked", "no-market", "not-tradeable-config", "unassigned", "hidden-narrative", "no-source-data"]
+          .map((reason, i) => ({ symbol: `X${i}`, reason, detail: "" })) }),
+      resp({ excluded: legacy, categories: [] }),
+      ...(["reference-missing", "no-attention-data"] as const).map((r) => ({ ...noData(r), excluded: legacy })),
+    ];
+    for (const state of states) {
+      const { container, unmount } = render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(state)} />);
+      await waitFor(() => expect(screen.queryByTestId("discovery-loading")).toBeNull());
+      const toggle = screen.queryByTestId("discovery-exclusions-toggle");
+      if (toggle) fireEvent.click(toggle);
+      const row = screen.queryByTestId("discovery-row-high");
+      if (row) fireEvent.click(within(row).getByRole("button"));
+      const attrs = Array.from(container.querySelectorAll("[title],[aria-label]"))
+        .map((el) => `${el.getAttribute("title") ?? ""} ${el.getAttribute("aria-label") ?? ""}`).join(" ");
+      expect(container.textContent ?? "").not.toMatch(forbidden);
+      expect(attrs).not.toMatch(forbidden);
+      unmount();
+    }
   });
 
   it("lists categories with too few coins apart, unranked, with no score and no chart", async () => {

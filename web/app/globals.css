@@ -1665,3 +1665,59 @@
 .discovery-unranked__list li > span:first-child {
   min-width: 10em;
 }
+/* Discovery exclusions (U3): reason list, thin-volume tag, proposed-list banner. */
+.discovery-exclusions {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.discovery-exclusions__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.discovery-exclusions__toggle:focus-visible {
+  outline: 2px solid var(--sev-prov);
+  outline-offset: 2px;
+}
+.discovery-exclusions__list {
+  margin-top: var(--sp-2);
+  padding-left: var(--sp-3);
+  border-left: 1px solid var(--sh-rule-soft);
+}
+.discovery-exclusions__group + .discovery-exclusions__group {
+  margin-top: var(--sp-2);
+}
+.discovery-exclusions__why {
+  margin: 0;
+}
+.discovery-exclusions__list > p:last-child {
+  margin-top: var(--sp-2);
+}
+.discovery-exclusions__group p,
+.discovery-banner {
+  overflow-wrap: anywhere;
+}
+.discovery-tag {
+  display: inline-block;
+  margin-left: var(--sp-1);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--sh-rule-soft);
+  border-radius: var(--radius-sm);
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.discovery-banner {
+  padding: var(--sp-1) var(--sp-2);
+  border-left: 2px solid var(--sev-prov);
+}
+.discovery-exclusions__toggle[aria-expanded="true"] .basket-table__chev {
+  transform: rotate(45deg);
+}
