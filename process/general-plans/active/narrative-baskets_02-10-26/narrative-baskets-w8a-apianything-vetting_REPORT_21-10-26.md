@@ -273,7 +273,7 @@ Already recorded: P-X1 and P-X2 (inputs). New, in order:
 
 ## 13. Gates (run before the PR)
 
-- `grep -niE 'xscrape|kloxeld|gunkonchi'` on this report: no hits.
+- The banned-names grep from the envelope over this report: no hits (the names are not written anywhere in it).
 - `git diff --name-only origin/main...HEAD`: this file only.
 - No secrets in the file (no cookie, token, key or private URL; the public bearer in `sites/x.json` is NOT reproduced).
 - No `.github/` file touched.
