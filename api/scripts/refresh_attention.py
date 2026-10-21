@@ -35,13 +35,15 @@ CIRCUIT_BREAKER_AFTER = 5
 # Soft wall-clock per opt-in source (workflow step timeout is 8 min): stop cleanly, keep what was fetched.
 SOURCE_TIME_BUDGET_S = 360
 _clock = time.monotonic
-OUTCOME_ORDER = ("ok", "no-article", "rate-limited", "http-error", "insufficient-history", "other")
+OUTCOME_ORDER = ("ok", "no-article", "no-id", "rate-limited", "http-error", "insufficient-history", "other")
 
 
 def _outcome(s) -> str:
     if s.state == "capped":
         return "rate-limited"
     if s.state == "unavailable":
+        if s.reason == "no-id":
+            return "no-id"
         m = re.fullmatch(r"HTTP (\d{3})", s.reason or "")
         return f"http-error({m.group(1)})" if m else "other"
     return s.state if s.state in ("ok", "no-article", "insufficient-history") else "other"
@@ -112,9 +114,23 @@ def _collect_guarded(symbols, fetch, source: str, *, budget: float | None = None
     return out
 
 
+def _universe_rows() -> list[dict]:
+    """Rows of the latest universe snapshot minus stablecoins and wrapped coins; [] when there is no snapshot."""
+    snap = universe_store.read_latest()
+    rows = snap.get("coins") if snap else None
+    if not isinstance(rows, list):
+        return []
+    skip = coingecko_attention.STABLECOIN_SYMBOLS | coingecko_attention.WRAPPED_SYMBOLS
+    return [r for r in rows if isinstance(r, dict) and r.get("symbol") and str(r["symbol"]).upper() not in skip]
+
+
 def _symbols(arg: str | None) -> list[str]:
+    """--symbols wins; else the universe snapshot; else the wiki_articles.json keys; else DEFAULT_SYMBOLS."""
     if arg:
         return [s.strip().upper() for s in arg.split(",") if s.strip()]
+    rows = _universe_rows()
+    if rows:
+        return list(dict.fromkeys(str(r["symbol"]).upper() for r in rows))
     try:
         return list(json.loads(WIKI_ARTICLES_PATH.read_text()))
     except (OSError, ValueError):
@@ -131,12 +147,19 @@ def _run_wikipedia(symbols, client, today, sleep):
 
 
 def _run_coingecko(symbols, client, today, sleep):
-    top = coingecko_attention.fetch_top100(client=client, sleep=sleep)
-    if top is None:
-        raise RuntimeError(f"top100 unavailable: {coingecko_attention.LAST_FAILURE}")
-    ids = {r["symbol"]: r["id"] for r in top}
+    """Ids from the universe snapshot rows (today's top 100 only when there is no snapshot); no id = counted no-id."""
+    from api.data.attention.types import SourceSeries
+    rows = _universe_rows()
+    if not rows:
+        rows = coingecko_attention.fetch_top100(client=client, sleep=sleep)
+        if rows is None:
+            raise RuntimeError(f"top100 unavailable: {coingecko_attention.LAST_FAILURE}")
+    ids: dict[str, str] = {}
+    for r in rows:
+        ids.setdefault(str(r["symbol"]).upper(), r.get("id"))
     return _collect(symbols, lambda s: coingecko_attention.fetch_series(
-        s, ids[s], client=client, today=today, sleep=sleep) if s in ids else None)
+        s, ids[s], client=client, today=today, sleep=sleep) if ids.get(s) else SourceSeries(
+        "coingecko", s, [], "unavailable", "no-id"))
 
 
 def _run_exchange_volume(symbols, client, today, sleep):
