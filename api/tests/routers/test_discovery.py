@@ -35,14 +35,15 @@ def test_ok_payload_shape(wired):
     body = r.json()
     assert body["window"] == 30 and body["status"] == "ok" and body["reason"] == ""
     assert set(body) == {"window", "as_of", "categories_as_of", "status", "reason",
-                         "universe_size", "eligible_size", "shown_size", "excluded", "min_category_coins",
+                         "universe_size", "eligible_size", "shown_size", "excluded", "excluded_coins",
+                         "excluded_counts", "min_category_coins",
                          "rising_threshold_pct", "min_covered_weight", "categories",
                          "narratives_status", "unassigned", "hidden_narratives"}
     assert set(body["excluded"]) == {"exclusion_list", "below_volume_floor", "no_category", "no_source_data"}
     c = body["categories"][0]
     assert set(c) == {"id", "name", "score", "median", "coins_used", "gaining_count", "ranked", "coins"}
     assert set(c["coins"][0]) == {"symbol", "change", "raw_change", "covered_weight", "rising_weight",
-                                  "trigger", "sources", "primary"}
+                                  "trigger", "sources", "primary", "volume_24h", "thin_volume", "tradeability"}
     assert set(c["coins"][0]["sources"][0]) == {"source", "change", "as_of", "members"}
     assert [x["symbol"] for x in c["coins"]] == ["B", "A"]
 
@@ -61,11 +62,11 @@ def test_enum_rejects_with_422(wired, w):
     assert wired.get(URL, params={"window": w}).status_code == 422
 
 
-def test_categories_missing_over_http(isolated_cache, tmp_path, monkeypatch):
+def test_no_categories_snapshot_is_not_an_error_over_http(isolated_cache, tmp_path, monkeypatch):
     monkeypatch.setattr(router_mod, "utc_today", lambda: TODAY)
     world(tmp_path, monkeypatch, {"A": 5e7}, cats=None)
     body = TestClient(app).get(URL).json()
-    assert (body["status"], body["reason"], body["categories"]) == ("no-data", "categories-missing", [])
+    assert body["reason"] != "categories-missing"
 
 
 def test_sources_route_shape_and_no_network(wired):

@@ -13,8 +13,9 @@ from pathlib import Path
 import pandas as pd
 
 from api.analytics.attention.discovery import (EXCHANGE_SERIES, FALLBACK_SERIES, SLOT, eligibility, load_config)
-from api.analytics.attention.universe import load_universe
-from api.data.attention import categories_store, registry, store, universe_store
+from api.analytics.attention import narratives
+from api.analytics.attention.universe import load_universe_rows
+from api.data.attention import registry, store, universe_store
 from api.data.attention.types import MIN_HISTORY_DAYS
 from api.models.discovery import DiscoverySourceRow, DiscoverySourcesResponse
 
@@ -23,7 +24,7 @@ LABELS = {
     "github_dev": "GitHub dev activity", "defillama": "DefiLlama", SLOT: "Exchange activity",
     "binance": "Binance volume", "coinbase": "Coinbase volume", "kraken": "Kraken volume",
     "hyperliquid": "Hyperliquid volume", FALLBACK_SERIES: "CoinGecko (volume fallback)",
-    "universe": "Top-100 universe", "categories": "Category lists",
+    "universe": "Top-100 universe", "narratives": "Narratives file",
 }
 
 _file_cache: dict[str, tuple[int, int, int, date | None]] = {}   # path -> (mtime_ns, size, days, newest)
@@ -90,14 +91,27 @@ def _helper(sid: str, snap: dict | None, key: str, what: str) -> DiscoverySource
                               note="" if ok else f"{what} not downloaded yet")
 
 
+def _narratives_row() -> DiscoverySourceRow:
+    """Helper row (U2): the narratives file that Discovery membership comes from; `ok` when it loads."""
+    try:
+        doc = narratives.load_narratives()
+    except (OSError, ValueError) as exc:
+        return DiscoverySourceRow(id="narratives", label=LABELS["narratives"], kind="helper", weight=None,
+                                  state="unavailable", newest=None, history_days=0, coins_with_data=0,
+                                  eligible_size=0, note=f"narratives file invalid: {exc}")
+    coins = {c["symbol"] for n in doc["narratives"] for c in n["coins"]}
+    return DiscoverySourceRow(id="narratives", label=LABELS["narratives"], kind="helper", weight=None, state="ok",
+                              newest=doc["as_of"], history_days=0, coins_with_data=len(coins), eligible_size=0,
+                              note="status proposed" if doc["status"] == "proposed" else "")
+
+
 def build_sources(today: date, *, probe_path: Path | None = None, universe_path: Path | None = None,
                   config_path: Path | None = None) -> DiscoverySourcesResponse:
     cfg = load_config(config_path)
     end = today - timedelta(days=1)
     max_lag = int(cfg["max_source_lag_days"])
-    symbols, _ = load_universe(universe_path)
-    cats = categories_store.read_latest()
-    eligible = eligibility(cfg, symbols, cats)[0] if symbols and cats and cats.get("categories") else []
+    rows, _ = load_universe_rows(universe_path)
+    eligible = eligibility(cfg, rows).eligible if rows else []
     probed = registry.load_probe_records(probe_path)
     x_live = os.environ.get("X_LIVE") == "1"
     n = len(eligible)
@@ -132,11 +146,11 @@ def build_sources(today: date, *, probe_path: Path | None = None, universe_path:
         out.append(row(m, "exchange-member", cfg["exchange_sub_weights"].get(m), *members[m]))
     out.append(row(FALLBACK_SERIES, "fallback", None, *fallback))
     out.append(_helper("universe", universe_store.read_latest(), "coins", "top-100 snapshot"))
-    out.append(_helper("categories", cats, "categories", "category lists"))
+    out.append(_narratives_row())
 
     weighted = [r for r in out if r.kind == "weighted"]
     live = [r for r in weighted if r.state == "ok"]
     return DiscoverySourcesResponse(
-        as_of=end.isoformat(), universe_size=len(symbols), eligible_size=n, live_sources=len(live),
+        as_of=end.isoformat(), universe_size=len(rows), eligible_size=n, live_sources=len(live),
         total_sources=len(weighted), live_weight=sum(r.weight or 0 for r in live),
         newest=max((r.newest for r in live if r.newest), default=None), sources=out)

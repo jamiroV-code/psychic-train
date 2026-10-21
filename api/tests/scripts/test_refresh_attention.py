@@ -178,12 +178,14 @@ def test_categories_source_writes_dated_snapshot(isolated_cache):
 
 
 def test_run_categories_works_without_removed_config_keys(isolated_cache, capsys):
-    """T113 U1 (F1, AC-N7): the shipped config has no `categories`; the runner fetches the id-map ids plus
-    `exclude_category_ids`, names them from the map, and prints no ` error ` line the workflow would fail on."""
+    """T113 U1 / T115 U2 (F1, AC-N7): the shipped config has no `categories` and no `exclude_category_ids`; the
+    runner fetches the id-map ids only, names them from the map, and prints no ` error ` line the workflow would
+    fail on."""
     import json
     from api.analytics.attention import discovery, narratives
     from api.data.attention import categories_store
-    assert "categories" not in json.loads(discovery.CONFIG_PATH.read_text())
+    raw = json.loads(discovery.CONFIG_PATH.read_text())
+    assert "categories" not in raw and "exclude_category_ids" not in raw
     asked = []
 
     def h(r: httpx.Request):
@@ -192,11 +194,9 @@ def test_run_categories_works_without_removed_config_keys(isolated_cache, capsys
         return _cat_handler()(r)
     assert _run(["--sources", "categories"], h) == 0
     id_map = narratives.load_id_map()
-    expect = list(id_map) + discovery.load_config()["exclude_category_ids"]
-    assert sorted(set(asked)) == sorted(expect)
+    assert sorted(set(asked)) == sorted(id_map)
     snap = categories_store.read_latest()
-    assert {c["id"]: c["name"] for c in snap["categories"]} == {
-        **{k: v["name"] for k, v in id_map.items()}, "exchange-based-tokens": "exchange-based-tokens"}
+    assert {c["id"]: c["name"] for c in snap["categories"]} == {k: v["name"] for k, v in id_map.items()}
     out = capsys.readouterr()
     assert " error " not in out.out + out.err and "categories: snapshot written" in out.out
 
