@@ -29,9 +29,9 @@ def n(nid, *coins, name=None):
             "coins": [{"symbol": c.rstrip("-"), "primary": not c.endswith("-")} for c in coins]}
 
 
-def test_loads_proposed_file():
+def test_loads_reviewed_file():
     d = narr.load_narratives()
-    assert d["status"] == "proposed" and d["as_of"] == "2026-10-18"
+    assert d["status"] == "reviewed" and d["as_of"] == "2026-10-18"
     assert [x["id"] for x in d["narratives"]] == [
         "majors-store-of-value", "layer-1", "layer-2", "defi", "memecoins", "ai-data-compute", "real-world-assets",
         "privacy", "payments-settlement", "infrastructure", "exchange-tokens"]
