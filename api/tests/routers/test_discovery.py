@@ -38,7 +38,7 @@ def test_ok_payload_shape(wired):
                          "universe_size", "eligible_size", "shown_size", "excluded", "excluded_coins",
                          "excluded_counts", "min_category_coins",
                          "rising_threshold_pct", "min_covered_weight", "categories",
-                         "narratives_status", "unassigned", "hidden_narratives"}
+                         "narratives_status", "unassigned", "hidden_narratives", "weights_version"}
     assert set(body["excluded"]) == {"exclusion_list", "below_volume_floor", "no_category", "no_source_data"}
     c = body["categories"][0]
     assert set(c) == {"id", "name", "score", "median", "coins_used", "gaining_count", "ranked", "coins"}

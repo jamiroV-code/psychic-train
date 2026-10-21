@@ -19,8 +19,8 @@ class DiscoveryCoin(BaseModel):
     symbol: str
     change: float          # percent, winsorized at the category's 95th percentile
     raw_change: float      # percent, weighted mean over covered weight, as measured
-    covered_weight: float  # points of the 100 that had usable data for this coin
-    rising_weight: float   # points of covered_weight whose source change is at or above the threshold
+    covered_weight: float  # weight points that had usable data for this coin (weights need not sum to 100)
+    rising_weight: float   # points of covered_weight that are rising; a source group votes its weight once
     trigger: bool
     sources: list[DiscoverySource]
     primary: bool = False  # this category is the coin's primary narrative
@@ -81,6 +81,7 @@ class DiscoveryResponse(BaseModel):
     narratives_status: Literal["proposed", "reviewed"] = "proposed"
     unassigned: list[str] = []           # universe coins in no narrative
     hidden_narratives: list[DiscoveryHiddenNarrative] = []
+    weights_version: int = 1             # weights version scoring `as_of` (T130); additive
 
 
 SourceState = Literal["ok", "insufficient-history", "unavailable", "not-probed", "off"]
@@ -119,6 +120,7 @@ class DiscoveryHistoryDay(BaseModel):
     rising_weight: float
     trigger: bool
     thin: bool             # covered_weight below the trigger floor (min_covered_weight)
+    weights_version: int = 1   # weights version that scored this day (T130); a day keeps its version
 
 
 class DiscoveryCategoryDay(BaseModel):
@@ -128,6 +130,7 @@ class DiscoveryCategoryDay(BaseModel):
     coins_used: int
     triggered_count: int
     triggered_share: float  # triggered_count / coins_used, 0..1
+    weights_version: int = 1   # weights version that scored this day (T130)
 
 
 class DiscoveryHistoryBase(BaseModel):
