@@ -77,6 +77,10 @@ restart min delay -> 2 failed; no warn -> 4 failed; posts not counted -> 4 faile
 1 failed. The 5 review-fix tests were written after their fixes (not red first); the mutations above are the
 evidence that each one fails without its fix.
 
+After the PR opened, main moved to 4675f82 (T130 weights v2 and two data refreshes; no file overlap with this
+PR, clean merge). Full API on a local merge of 4675f82 into this head: 1959 passed, 1 skipped, 5 deselected,
+0 failed. PR CI on that merge ref: `api — pytest` and `web — vitest, tsc, island build` both success.
+
 Baselines differ from the PLAN's (main 007d53c: 492 and 1714 total) only by merged PRs: 7 commits since, adding
 `test_trends_keywords.py`, `test_check_trends_keywords.py`, `test_probe_trends.py` and `trends_fixtures.py`
 (+97 tests in the scripts/data/attention group, same +97 in the full run).
@@ -107,8 +111,15 @@ No provider, API Anything or live network call (none exists in W8b). Owner probe
 
 ## 9 Blockers
 
-None. Risks: live behaviour is unproven until W8c/W8d probes; `run_x_unit` is a core the W8d connector and W8e
-worker still have to wire.
+None for W8b. Risks:
+- Live behaviour is unproven until the W8c/W8d probes; `run_x_unit` is a core the W8d connector and the W8e
+  worker still have to wire.
+- PLAN R-3 relies on `api/data/cache/*` being git-ignored, but `.github/workflows/attention-refresh.yml`
+  (lines 158 and 253) runs `git add -f api/data/cache/attention/`, which force-adds everything under that root,
+  `_pc_state/` and `<source>/_meta/` included, if they ever exist on the runner. They do not today (the PC code
+  runs only on the owner's PC; tests use a temporary cache). W8e (worker never on runners) and the later
+  "how PC values reach the repo" decision must keep it that way, or narrow that `git add` (a `.github/` edit,
+  owner approval first). Not changed here: `.github/` is a hard stop for this slice.
 
 ## 10 Follow-up
 
