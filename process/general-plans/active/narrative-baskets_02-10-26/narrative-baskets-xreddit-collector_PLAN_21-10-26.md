@@ -14,10 +14,10 @@ metadata:
 
 Date: 21-10-26
 Complexity: COMPLEX (eight slices, two providers, a worker; each slice is one EXECUTE envelope)
-Status: VALIDATED: Gate: PASS (the PLAN artifact; per-slice execution gates are the contract for later EXECUTE)
+Status: VALIDATED: Gate: PASS (re-validated T133; the PLAN artifact; per-slice execution gates are the contract for later EXECUTE)
 Validation: T131 (FAST MODE: SPEC amendment, PLAN, VALIDATE in one session), 21-10-26, branch base `main` 007d53c. Next step: the owner's separate ENTER EXECUTE MODE per slice, starting with W8a. This session builds nothing.
 
-**Summary:** **SPEC:** `narrative-baskets-xreddit-collector_SPEC_21-10-26.md` (T126, amended by T131, status "ready for owner review (amended T131)"; the owner has NOT approved it, so every slice below is conditional on that approval). Slow trickle (X one coin unit per 10-20 min, Reddit one request per 20-60 s), yesterday-only values, pause on any warning, narrative coins only, Reddit first. Every provider (X, Reddit, API Anything) is unreachable from the build container: live behaviour is UNVERIFIED and proven only by owner probes.
+**Summary:** **SPEC:** `narrative-baskets-xreddit-collector_SPEC_21-10-26.md` (T126, amended by T131, status "ready for owner review (amended T131)"; the owner has NOT approved it, so every slice below is conditional on that approval). Config pace (X default one coin unit per 3-6 min, Reddit one request per 20-60 s), daily X read budget 800 posts with sample N 40 (about 20 coins per day), adaptive halving, yesterday-only values, pause on any warning, narrative coins only, throwaway X account, Reddit first (amended T133). Every provider (X, Reddit, API Anything) is unreachable from the build container: live behaviour is UNVERIFIED and proven only by owner probes.
 
 ## Overview and Context
 
@@ -35,7 +35,9 @@ Context router: `process/context/all-context.md`; tests: `process/context/tests/
 
 | # | Decision (owner via planner, T131) | Effect |
 |---|---|---|
-| 1 | Slow trickle: X one coin unit per 10-20 min random, whole UTC day, never faster to catch up; Reddit one request per 20-60 s, 300 per day | W8b scheduler core and its tests; W8e uses it |
+| 1 | Trickle with config pace: `x_query_delay_min_s`/`x_query_delay_max_s` (default 180/360), never faster than the configured minimum on catch-up; Reddit one request per 20-60 s, 300 per day (T133, supersedes T131's 10-20 min) | W8b scheduler core and its tests; W8e uses it |
+| 1b | Daily read budget `x_daily_post_budget` 800, sample `x_sample_n` 40, `x_sample_min` 20, `x_page_cap` 3; adaptive halving after a warning day, doubling after 7 clean days (T133) | W8b budget and adaptive state and tests (AC21, AC22); W8d spends it; W8e persists it |
+| 1c | Throwaway X account only; official X counts route is a recorded, unbuilt fallback (option D); Q10 rotation rule flagged to the owner, not implemented (T133) | W8d precondition; no code for option D or rotation |
 | 2 | Yesterday-only, one day late, today's partial day never stored or shown | W8b window rule; AC1 |
 | 3 | Rate-limit, login or suspension warning pauses that source for the rest of the day, no retries; pause persisted | W8b pause state; W8e restart test |
 | 4 | Narrative coins only first (Q3); short backfill (Q2); Reddit first, X later after probes; self-repair spend cap 15 USD per month (Q4); both Reddit series kept separate, config picks (Q7) | slice order, W8b cap meter, W8f `source_impl` |
@@ -52,8 +54,8 @@ Context router: `process/context/all-context.md`; tests: `process/context/tests/
 | File (all new unless marked edit) | Slice | Content |
 |---|---|---|
 | `api/data/attention/density.py` | W8b | the SPEC A.1 formula (exact, capped, floor, page-cap, below-min), pure |
-| `api/data/attention/pc_pace.py` | W8b | trickle scheduler core: next-unit time from a seeded RNG, daily caps, priority queue (yesterday first, then backfill), pause state with persistence; injected clock |
-| `api/data/attention/web_queries.py` and `api/data/attention_queries.json` | W8b | per-coin X query terms and Reddit terms, ambiguity list, subreddit list, validator; coin set derived from `attention_narratives.json` |
+| `api/data/attention/pc_pace.py` | W8b | trickle scheduler core: next-unit time from a seeded RNG using config delays, daily read budget (posts read), adaptive effective budget (halve after warning, double after 7 clean days), priority queue (yesterday first, then backfill), pause state with persistence; injected clock |
+| `api/data/attention/web_queries.py` and `api/data/attention_queries.json` | W8b | per-coin X query terms and Reddit terms, ambiguity list, subreddit list, and the collector config block (`x_query_delay_min_s`, `x_query_delay_max_s`, `x_daily_post_budget`, `x_sample_n`, `x_sample_min`, `x_page_cap`, `reddit_request_delay_min_s`, `reddit_request_delay_max_s`, `reddit_daily_request_budget`) with validator (positive numbers, min <= max, sample_min <= sample_n); coin set derived from `attention_narratives.json` |
 | `api/data/attention/web_evidence.py` | W8b | evidence sidecar rows (n, span_hours, capped, pagecap, spike, method version, collected_at, backfilled) |
 | `api/data/attention/pc_adapter.py` | W8b | adapter Protocol, error classes, fake adapter for tests, cost meter (monthly 15 USD cap) |
 | `api/scripts/probe_pc_sources.py` | W8b (Reddit modes W8c, X modes W8d) | owner probe, prints numbers and class names only |
@@ -70,7 +72,7 @@ Context router: `process/context/all-context.md`; tests: `process/context/tests/
 | Order | Slice | Branch (proposed) | Depends on | Owner ENTER EXECUTE MODE | Model, effort | USD (ask at 7, cap 15) |
 |---|---|---|---|---|---|---|
 | 1 | W8a vet API Anything (report only) | `claude/<id>-w8a-vet-apianything` | owner approves SPEC | yes, own | sonnet, medium | 2-3 |
-| 2 | W8b pure core | `claude/<id>-w8b-collector-core` | W8a verdict "usable" | yes, own | opus, medium | 4-6 |
+| 2 | W8b pure core | `claude/<id>-w8b-collector-core` | W8a verdict "usable" | yes, own | opus, medium | 5-7 |
 | 3 | W8c Reddit connector | `claude/<id>-w8c-reddit-web` | W8b; probes P-R1 (before), P-R2..P-R5 (after) | yes, own | opus, medium | 3-5 |
 | 4 | W8e worker wiring | `claude/<id>-w8e-pc-worker` | W8b, W8c (or an existing W8 worker) | yes, own | opus, medium | 3-5 |
 | 5 | W8f Discovery wiring | `claude/<id>-w8f-discovery-wiring` | W8e, W8c | yes, own | opus, medium | 2-3 |
@@ -78,7 +80,7 @@ Context router: `process/context/all-context.md`; tests: `process/context/tests/
 | 7 | W8d X connector | `claude/<id>-w8d-xsearch-web` | W8b, W8e; owner probes P-X1..P-X7 passed and Q1 answered | yes, own, only after the probes | opus, high | 5-7 |
 | 8 | W8h owner guide and closeout | `claude/<id>-w8h-closeout` | W8c live (Reddit) and, when built, W8d | yes, own | sonnet, low | 1 |
 
-Total about 21-32 USD. W8c and W8d are independent after W8b; the order puts X last by the owner's decision. After W8g the Reddit source can be live while X does not exist yet.
+Total about 22-33 USD. W8c and W8d are independent after W8b; the order puts X last by the owner's decision. After W8g the Reddit source can be live while X does not exist yet.
 
 ### File ownership and collision proof
 
@@ -103,7 +105,9 @@ Slices touch disjoint new files except these shared edits, which are serialised 
 - **Red-first tests (must fail before the code exists), each named for its SPEC criterion:**
   - AC1: `test_exact_count_when_window_start_reached`, `test_capped_rate_24_times_n_over_span`, `test_span_floor_quarter_hour`, `test_pagecap_uses_k`, `test_below_n_min_is_missing`, `test_boundary_k_equals_n_is_continuous`, `test_no_value_before_window_end_2359_vs_0000`, `test_newest_never_today`.
   - AC3/AC4: `test_failed_collection_stores_nothing`, `test_zero_needs_canary_and_low_median`, `test_second_collection_does_not_change_day`, `test_evidence_row_has_all_fields`.
-  - AC8: `test_x_spacing_between_10_and_20_minutes_seeded`, `test_reddit_spacing_between_20_and_60_seconds_seeded`, `test_daily_caps_x100_reddit300`, `test_catch_up_same_pace`, `test_units_spread_over_day_not_front_loaded`, `test_yesterday_before_backfill`.
+  - AC8: `test_x_spacing_within_configured_min_max_seeded`, `test_x_spacing_follows_changed_config`, `test_reddit_spacing_between_20_and_60_seconds_seeded`, `test_reddit_daily_budget_300`, `test_catch_up_never_faster_than_min_delay`, `test_few_hours_uptime_runs_at_configured_pace`, `test_yesterday_before_backfill`, `test_pace_config_rejects_min_above_max_and_nonpositive`.
+  - AC21: `test_budget_counts_posts_loaded_including_dropped`, `test_page_load_refused_when_it_would_exceed_budget`, `test_unread_coin_days_missing_not_zero`, `test_unit_with_k_at_least_n_min_kept_when_budget_ends`, `test_budget_resets_at_utc_midnight`, `test_budget_count_survives_restart`.
+  - AC22: `test_warning_day_halves_next_day_budget_floor_one_unit`, `test_seven_clean_days_double_once_up_to_configured`, `test_warning_resets_clean_count`, `test_no_activity_day_changes_nothing`, `test_adaptive_state_survives_restart`.
   - AC10: `test_429_pauses_until_next_utc_midnight`, `test_pause_persists_over_restart`, `test_no_retry_after_warning`, `test_suspension_and_login_expired_stay_paused`, `test_other_source_keeps_running`.
   - AC11/AC12: `test_logs_contain_class_and_status_only_with_planted_secrets`, `test_profile_path_is_gitignored_and_outside_repo`.
   - AC15/AC20: `test_ambiguous_coin_is_missing`, `test_coin_set_is_narrative_placed_symbols_minus_ambiguous`.
@@ -126,7 +130,8 @@ Slices touch disjoint new files except these shared edits, which are serialised 
 ### W8e: worker wiring (opus)
 
 - **Files:** `api/data/attention_pc_refresh.py`, edit `api/main.py` (start in lifespan, stop in `finally`, same pattern as lines 48-58), edit `api/data/discovery.json` (`fetch_side` per source: `xsearch` and `reddit` `pc_side`, others `github`), tests `api/tests/data/test_attention_pc_refresh.py`.
-- **Red-first tests:** `test_flag_off_starts_no_thread`, `test_tests_and_runners_never_start_worker_by_default`, `test_behind_source_schedules_first_unit_20s_after_start`, `test_up_to_date_source_waits`, `test_pass_lock_prevents_overlap`, `test_worker_skips_github_side_sources`, `test_restart_keeps_pause_and_daily_counts`, `test_stop_worker_joins_thread`, `test_unit_failure_never_crashes_the_api`, `test_lifespan_starts_and_stops_worker`, `test_no_network_in_tests`.
+- **T133 additions:** the worker reads the collector config, runs X units only while budget remains, persists the effective budget and clean-day count with the pause state (cache `_pc_state`), and never starts a unit earlier than the configured minimum delay after the previous one, including right after a restart.
+- **Red-first tests:** `test_flag_off_starts_no_thread`, `test_tests_and_runners_never_start_worker_by_default`, `test_behind_source_schedules_first_unit_20s_after_start`, `test_up_to_date_source_waits`, `test_pass_lock_prevents_overlap`, `test_worker_skips_github_side_sources`, `test_restart_keeps_pause_and_daily_counts`, `test_restart_keeps_effective_budget_and_clean_day_count`, `test_no_unit_before_min_delay_after_restart`, `test_worker_with_two_hours_uptime_stops_cleanly`, `test_stop_worker_joins_thread`, `test_unit_failure_never_crashes_the_api`, `test_lifespan_starts_and_stops_worker`, `test_no_network_in_tests`.
 - **Gates:** pytest on the new file; `api/tests` routers and main-related tests unchanged; the two workflow guards green; G-file-set (only `api/main.py`, `discovery.json` and new files).
 - **Owner probe after build:** P-W1 `$env:SCREENER_ATTENTION_PC_WORKER="1"; python -m uvicorn api.main:app --port 8000` run for 1 hour with only Reddit built, then `python -m api.scripts.probe_pc_sources --source reddit --status` (prints stored days, last unit time, pause state, request counts for today). Pass: counts within the caps and spaced as locked.
 
@@ -143,14 +148,17 @@ Slices touch disjoint new files except these shared edits, which are serialised 
 
 ### W8d: X connector (opus, high; only after the owner probes)
 
-- **Preconditions:** W8a verdict usable; Q1 answered (dedicated account); P-X1 and P-X2 pasted; the owner then runs the probe below on W8b's tool before W8d code is accepted.
+- **Preconditions:** W8a verdict usable; Q1 answered (throwaway dedicated account created; never the main or Premium account); Q10 decided by the owner (rotation rule or fixed small set) and Q11 answered (PC hours); P-X1 and P-X2 pasted; the owner then runs the probe below on W8b's tool before W8d code is accepted.
 - **Files:** `api/data/attention/xsearch_web.py`, adapter wrapper for tier 3, additions to `probe_pc_sources.py` (`--source xsearch`), tests `api/tests/data/attention/test_xsearch_web.py`.
-- **Red-first tests:** `test_unit_is_one_coin_one_day_at_most_p_pages`, `test_query_has_cashtag_lang_and_filters_and_utc_window`, `test_dedupe_text_and_three_per_author`, `test_canary_failure_pauses_rest_of_day`, `test_login_expired_state_and_pause`, `test_suspension_state_stays_paused`, `test_layout_change_after_3_bad_shapes_attempts_one_repair`, `test_repair_refused_when_cap_spent`, `test_no_value_written_for_today`, `test_value_matches_density_formula`, `test_hidden_flag_passed_to_adapter`, `test_logs_class_and_status_only`.
+- **Red-first tests:** `test_unit_is_one_coin_one_day_at_most_p_pages`, `test_query_has_cashtag_lang_and_filters_and_utc_window`, `test_dedupe_text_and_three_per_author`, `test_canary_failure_pauses_rest_of_day`, `test_login_expired_state_and_pause`, `test_suspension_state_stays_paused`, `test_layout_change_after_3_bad_shapes_attempts_one_repair`, `test_repair_refused_when_cap_spent`, `test_no_value_written_for_today`, `test_value_matches_density_formula`, `test_hidden_flag_passed_to_adapter`, `test_logs_class_and_status_only`, `test_sample_n_40_min_20_page_cap_3_from_config`, `test_every_loaded_post_counts_against_daily_budget`, `test_budget_spent_stops_x_and_leaves_coins_missing`, `test_warning_halves_next_day_budget`, `test_canary_posts_count_against_budget`, `test_rotation_hook_off_by_default_no_discovery_change`.
+- **Acceptance (W8d):** AC1 (with N 40, N_min 20, P 3), AC3, AC9, AC10, AC19, AC21, AC22 and the owner probes P-X3..P-X7; the official X counts route is NOT built (option D); no rotation rule is implemented (Q10 is the owner's SPEC change).
 - **Owner probes (PowerShell, repo root):**
   - P-X3 `python -m api.scripts.probe_pc_sources --source xsearch --symbol SOL --login` once, then `python -m api.scripts.probe_pc_sources --source xsearch --symbol SOL`
   - P-X4 `python -m api.scripts.probe_pc_sources --source xsearch --symbol SOL --hidden` (owner states whether any window appeared)
   - P-X5 `python -m api.scripts.probe_pc_sources --source xsearch --symbol SOL --days-back 1,7,14` (depth beyond 14 days is not needed under the short-backfill decision)
-  - P-X6 `python -m api.scripts.probe_pc_sources --source xsearch --symbols SOL,ETH,BTC --paced` (paced at the locked 10-20 min: takes about 45 minutes; the owner leaves it running)
+  - P-X6 `python -m api.scripts.probe_pc_sources --source xsearch --symbols SOL,ETH,BTC --paced` (paced at the configured 3-6 min: takes about 15 minutes; prints the number of posts read, which counts against the daily budget)
+  - P-X8 (optional, option D) the one-call counts test of SPEC Annex E, prints a status code only
+  - P-W2 `Get-WinEvent -FilterHashtable @{LogName='System'; Id=6005,6006; StartTime=(Get-Date).AddDays(-7)} | Select-Object TimeCreated,Id` and `(Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime` (typical PC hours, Q11)
   - P-X7 rerun the second line of P-X3 after 3 days idle
   - Probes P-X3..P-X7 need the W8b probe tool and a connector, so they run after W8b (tool) and, for the full flow, W8d; P-X1 and P-X2 run first.
 
@@ -177,11 +185,11 @@ Slices touch disjoint new files except these shared edits, which are serialised 
 - Any use, install or mention as a dependency of `xscrape`, `kloxeld` or `gunkonchi`: stop and report.
 - Installing or running API Anything before W8a's verdict is accepted by the owner and the SHA is pinned: stop.
 - A test, tool or log that prints an exception message, header, cookie, token, URL query or response body: stop and report.
-- A speed-up of the locked pace (spacing below 10 min for X, below 20 s for Reddit, caps raised) or a stored same-day value: stop and report.
+- A speed-up of the locked pace (spacing below the configured minimum delay, a default faster than 180 s for X or 20 s for Reddit, a daily budget or sample size above the config values, or a halved budget not applied after a warning) or a stored same-day value: stop and report.
 - A baseline on fresh main differs from section 8 by anything other than a merged earlier PR: stop and report the numbers.
 - `needs_input`: stop; do not merge; never merge any PR. Slice cost at 7 USD: ask; hard cap 15 USD.
 
-## 8. Acceptance criteria mapping (SPEC AC1..AC20 to slices)
+## 8. Acceptance criteria mapping (SPEC AC1..AC22 to slices)
 
 | AC | Slice | Strategy |
 |---|---|---|
@@ -195,6 +203,8 @@ Slices touch disjoint new files except these shared edits, which are serialised 
 | AC17 | W8c, W8d, W8h | Agent-Probe (owner output) |
 | AC18 | W8e plus owner probe P-X7 | Hybrid |
 | AC19 | W8b, W8d | Fully-Automated |
+| AC21 | W8b (counter and enforcement), W8d (spends it), W8e (persists) | Fully-Automated |
+| AC22 | W8b (state machine), W8e (persists) | Fully-Automated |
 
 ## Implementation Checklist
 
@@ -227,7 +237,8 @@ Runtime: only when the flag is on, on the owner's PC. Tests: new files per slice
 | Gate / Scenario | Strategy | Proves SPEC criterion |
 |---|---|---|
 | Density, window and no-same-day tests (W8b) | Fully-Automated | AC1, AC3, AC4 |
-| Trickle spacing, caps, catch-up, priority tests (W8b, W8e) | Fully-Automated | AC8 |
+| Trickle spacing, config pace, catch-up, priority tests (W8b, W8e) | Fully-Automated | AC8 |
+| Daily read budget and adaptive halving tests (W8b, W8d, W8e) | Fully-Automated | AC21, AC22 |
 | Pause-on-warning and persistence tests (W8b, W8e) | Fully-Automated | AC10, AC9 |
 | Discovery wiring, rescale, point-in-time tests (W8f) | Fully-Automated | AC5, AC6, AC14 |
 | Log scrub, secrets, banned-name and pin guards (W8b) | Fully-Automated | AC11, AC12, AC16 |
@@ -274,7 +285,7 @@ Scope of this gate: the PLAN and the amended SPEC as documents. Per-slice code g
 | V4 banned names | `grep -niE "xscrape\|kloxeld\|gunkonchi" process/general-plans/active/narrative-baskets_02-10-26/narrative-baskets-xreddit-collector_{SPEC,PLAN}_21-10-26.md` | every hit is inside a "banned/never/malware/guard" sentence (reviewed by hand, listed in the record) |
 | V5 secret scan | `git diff -U0 origin/main...HEAD \| grep -nE "^\+.*(Bearer [A-Za-z0-9._-]{12,}\|(API_?KEY\|SECRET\|TOKEN\|PASSWORD)[A-Z_]* *[:=] *[\"'][A-Za-z0-9+/_-]{12,})"` | prints nothing |
 | V6 whitespace | `git diff --check origin/main...HEAD` | exit 0 |
-| V7 AC count and mapping | `grep -c "^- AC" <SPEC>` and every AC1..AC20 appears in section 8 | count 20 (max 20); each AC mapped |
+| V7 AC count and mapping | `grep -c "^- AC" <SPEC>` and every AC1..AC22 appears in section 8 | count 22 (above the skill's usual 20 by the planner's T133 instruction); each AC mapped |
 | V8 slice coverage | the eight slices W8a..W8h appear in sections 4 and 5, each with files, tests or doc gate, model, USD, probes (where relevant), branch, dependencies | all present |
 | V9 cites | `ls api/main.py api/data/equities_refresh.py api/data/attention/store.py api/analytics/attention/sources.py api/data/discovery.json api/data/attention_narratives.json` and `grep -n "PASS_LOCK\|def _behind\|def start_from_env\|def stop_worker" api/data/equities_refresh.py` | all exist; lines 56, 231, 361, 388 as cited |
 | V10 W8 existence | `git ls-tree -r origin/main --name-only \| grep -c attention_pc_refresh` and `grep -rn SCREENER_ATTENTION_PC_WORKER api --include=*.py \| wc -l` | both 0 (as stated in Overview) |
@@ -307,3 +318,7 @@ session (T131 worker, 21-10-26, docs only), on the planner's envelope; the owner
 ## Validation record (T131, 21-10-26)
 
 Gates run in this session on branch `claude/t126-xreddit-collector-spec` (base `main` 007d53c; `origin/main` had moved to 24b1d5e, not merged in, docs only): V1 `"failures": []` (first run failed: no implementation checklist; fixed by adding the Implementation Checklist section); V2 prints nothing; V3 prints 0; V4 hits reviewed by hand, all inside ban or guard sentences (SPEC AC16, Safety constraint and supply-chain risk row; PLAN W8a gate, W8b AC16 test, section 6 gate row, section 7 stop, V4 row); V5 prints nothing; V6 exit 0; V7 count 20 and AC1..AC20 all mapped in section 8; V8 eight slices present; V9 files exist, lines 56, 231, 361, 388 as cited; V10 both 0. Verdict: Gate: PASS for the PLAN artifact.
+
+## Validation record (T133, 21-10-26)
+
+Re-validation after the T133 amendment (config pace, daily read budget, sample N 40, adaptive budget, throwaway account, option D recorded). Gates re-run on branch `claude/t126-xreddit-collector-spec`: V1 plan validator failures [] ; V2 prints nothing; V3 prints 0; V4 hits reviewed by hand, all in ban or guard sentences; V5 prints nothing; V6 exit 0; V7 count 22 and AC1..AC22 mapped in section 8; V8 eight slices present, W8b USD 5-7, total 22-33; V9 and V10 unchanged (cites and absence of the generic W8 worker re-checked). No code exists, so no code gate ran. Verdict: Gate: PASS for the PLAN artifact. Not proven: the 1,000 posts per day figure is third-party and unofficial; whether a 3-6 minute pace at 800 posts per day triggers warnings is exactly what the adaptive rule and the owner probes are for.
