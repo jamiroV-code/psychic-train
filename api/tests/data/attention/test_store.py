@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 import pandas as pd
+import pytest
 
 from api.data import cache
 from api.data.attention import store
@@ -77,3 +78,70 @@ def test_stored_frame_has_one_row_per_day(attention_cache):
     store.write_series(_s([(d, 1.0)]), today=TODAY)
     df = pd.read_parquet(store.store_path("wikipedia", "BTC"))
     assert len(df) == 1
+
+
+# --- T100b: mode="replace-series" (Trends only); the default mode stays first-write-wins. ---
+
+def _run_of(n, value=1.0, end=TODAY - timedelta(days=1)):
+    return [(end - timedelta(days=n - 1 - i), float(value)) for i in range(n)]
+
+
+def test_replace_series_drops_old_rows(attention_cache):
+    old = _run_of(95, 1.0, end=TODAY - timedelta(days=10))
+    store.write_series(_s(old, source="trends"), today=TODAY)
+    new = _run_of(92, 2.0)
+    assert store.write_series(_s(new, source="trends"), today=TODAY, mode="replace-series") == 92
+    assert store.read_points("trends", "BTC") == new
+
+
+def test_replace_series_ignores_today_and_future(attention_cache):
+    pts = _run_of(91, 3.0) + [(TODAY, 9.0), (TODAY + timedelta(days=1), 9.0)]
+    assert store.write_series(_s(pts, source="trends"), today=TODAY, mode="replace-series") == 91
+    assert all(d < TODAY for d, _ in store.read_points("trends", "BTC"))
+
+
+def test_replace_series_short_pull_keeps_old_series(attention_cache):
+    old = _run_of(92, 1.0)
+    store.write_series(_s(old, source="trends"), today=TODAY, mode="replace-series")
+    assert store.write_series(_s(_run_of(89, 5.0), source="trends"), today=TODAY, mode="replace-series") == 0
+    short = _run_of(89, 5.0) + [(TODAY, 5.0)]  # 90 rows, only 89 complete days
+    assert store.write_series(_s(short, source="trends"), today=TODAY, mode="replace-series") == 0
+    assert store.read_points("trends", "BTC") == old
+    assert store.write_series(_s(_run_of(10), source="other"), today=TODAY, mode="replace-series") == 0
+    assert not store.store_path("other", "BTC").exists()
+
+
+def test_replace_series_is_atomic_on_write_error(attention_cache, monkeypatch):
+    old = _run_of(92, 1.0)
+    store.write_series(_s(old, source="trends"), today=TODAY, mode="replace-series")
+
+    def broken(df, path):
+        raise OSError("disk full")
+    monkeypatch.setattr(cache, "_atomic_to_parquet", broken)
+    with pytest.raises(OSError):
+        store.write_series(_s(_run_of(95, 7.0), source="trends"), today=TODAY, mode="replace-series")
+    assert store.read_points("trends", "BTC") == old
+
+
+def test_default_mode_unchanged_first_wins(attention_cache):
+    store.write_series(_s(_run_of(3, 1.0)), today=TODAY)
+    assert store.write_series(_s(_run_of(95, 2.0)), today=TODAY) == 92
+    assert store.write_series(_s(_run_of(96, 3.0)), today=TODAY, mode="first") == 1
+    got = dict(store.read_points("wikipedia", "BTC"))
+    assert [got[d] for d, _ in _run_of(3)] == [1.0] * 3 and got[TODAY - timedelta(days=96)] == 3.0
+    assert len(got) == 96
+
+
+def test_replace_series_sorted_and_returns_count(attention_cache):
+    pts = list(reversed(_run_of(95, 4.0)))
+    pts.append((pts[0][0], 99.0))  # a repeated day: the first row of the pull wins
+    assert store.write_series(_s(pts, source="trends"), today=TODAY, mode="replace-series") == 95
+    got = store.read_points("trends", "BTC")
+    assert [d for d, _ in got] == sorted(d for d, _ in got) and got[-1][1] == 4.0
+    assert len(pd.read_parquet(store.store_path("trends", "BTC"))) == 95
+
+
+def test_replace_mode_rejects_unknown_mode(attention_cache):
+    with pytest.raises(ValueError):
+        store.write_series(_s(_run_of(95)), today=TODAY, mode="replace-window")
+    assert not store.store_path("wikipedia", "BTC").exists()

@@ -226,3 +226,60 @@ def test_client_start_failure_exits_1_and_prints_class_only(capsys, caplog):
     assert "ConnectionError" in text
     for bad in (planted, SECRET, "trends.google.com", "Traceback", "HTTPSConnectionPool"):
         assert bad not in text
+
+
+# --- T100b: --alone, one request per symbol with only that term (owner probe P-RES). ---
+
+def _kw(sym):
+    return k.load().keyword_for(sym)
+
+
+def test_alone_one_request_per_symbol():
+    a, i = _kw("AAVE"), _kw("INJ")
+    sleeps = []
+    code, _, client = _run([daily_frame([a]), daily_frame([i])], ["--alone", "AAVE,INJ"], sleeps=sleeps)
+    assert code == 0
+    assert client.payloads == [([a], "today 3-m"), ([i], "today 3-m")]
+    assert sleeps == [p.INTERVAL_SECONDS]
+    tf = "2026-07-13 2026-10-20"
+    _, _, client = _run([daily_frame([a], days=100)], ["--alone", "AAVE", "--timeframe", tf])
+    assert client.payloads == [([a], tf)]
+
+
+def test_alone_prints_stats_and_verdict():
+    a, i = _kw("AAVE"), _kw("INJ")
+    vals = [0] * 10 + [1] * 5 + [4] * 75
+    code, text, _ = _run([daily_frame([a], values={a: vals}), daily_frame([i], values={i: 0})],
+                         ["--alone", "AAVE,INJ"])
+    assert code == 0
+    assert (f"AAVE ({a}) | step daily | days 90 | min 0 | median 4 | max 4 | at 0: 10 | at 0 or 1: 15 | "
+            "distinct 3 | zero share 11.1% | verdict: ok") in text
+    assert f"INJ ({i}) | step daily | days 90 | min 0 | median 0 | max 0 | at 0: 90 | at 0 or 1: 90 | " in text
+    assert "verdict: too-little-interest" in text
+    assert "rule: median >= 3 and zero share < 40%" in text
+
+
+def test_alone_rejects_bad_symbol_list():
+    for argv in (["--alone", "aave;rm"], ["--alone", ""], ["--alone", ","]):
+        code, text, client = _run([daily_frame(["Aave"])], argv)
+        assert code == 2 and client.payloads == [] and "--alone" in text
+    code, text, client = _run([daily_frame(["Aave"])], ["--alone", "NOPE_NOT_THERE"])
+    assert code == 0 and client.payloads == [] and "NOPE_NOT_THERE: no keyword" in text
+
+
+def test_alone_429_stops_and_reports():
+    a = _kw("AAVE")
+    code, text, client = _run([too_many(), daily_frame([a])], ["--alone", "AAVE,INJ"])
+    assert code == 0 and len(client.payloads) == 1
+    assert "outcome: TooManyRequestsError (HTTP 429)" in text
+    assert "INJ: skipped after HTTP 429" in text
+
+
+def test_alone_output_has_no_message_or_header():
+    a = _kw("AAVE")
+    _, text, _ = _run([forbidden(), too_many()], ["--alone", "AAVE,INJ"])
+    assert "ResponseError (HTTP 403)" in text
+    for bad in FORBIDDEN_IN_OUTPUT:
+        assert bad not in text
+    _, text, _ = _run([RuntimeError("x " + SECRET)], ["--alone", "AAVE"])
+    assert SECRET not in text and "outcome: RuntimeError" in text and a

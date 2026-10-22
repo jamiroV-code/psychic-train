@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 import httpx
-import pytest
 
-from api.data import ccxt_adapter, pytrends_adapter
-from api.data.attention import reddit, store, trends
+from api.data import ccxt_adapter
+from api.data.attention import reddit
 from api.data.attention.types import SourceSeries
 from api.scripts import attention_extra, refresh_attention
 from api.tests.data.attention.conftest import TODAY
@@ -13,80 +12,41 @@ from api.tests.data.attention.conftest import TODAY
 SYMS = [f"S{i}" for i in range(20)]
 
 
-def _trend(status="ok", value=5.0, as_of=None):
-    as_of = as_of or (TODAY.replace(day=TODAY.day - 1)).isoformat()
-    return pytrends_adapter.TrendResult(keyword="k", value=value if status == "ok" else None,
-                                        as_of=as_of if status == "ok" else None, status=status)
-
-
-def _patch_fetch(monkeypatch, fake):
-    monkeypatch.setitem(trends.fetch_series.__kwdefaults__, "fetch", fake)
-
-
-def test_trends_breaker_stops_after_5_blocks_and_keeps_earlier_series(isolated_cache, monkeypatch, capsys):
+def _guarded(results):
+    """A fake fetch for _collect_guarded (shared by the opt-in sources) returning scripted SourceSeries."""
     calls = []
 
-    def fake(keyword):
-        calls.append(keyword)
-        return _trend() if len(calls) <= 3 else _trend("unavailable")
-    _patch_fetch(monkeypatch, fake)
-    series = refresh_attention._run_trends(SYMS, None, TODAY, lambda s: None)
+    def fetch(sym):
+        calls.append(sym)
+        state, reason = results(len(calls))
+        return SourceSeries("reddit", sym, [(TODAY, 1.0)] if state == "ok" else [], state, reason)
+    return fetch, calls
+
+
+def test_guarded_breaker_stops_after_5_blocks_and_keeps_earlier_series():
+    fetch, calls = _guarded(lambda n: ("ok", "") if n <= 3 else ("unavailable", "HTTP 503"))
+    series = refresh_attention._collect_guarded(SYMS, fetch, "reddit")
     assert len(calls) == 3 + 5 and len(series) == len(SYMS)
-    assert [s.state for s in series[:3]] == ["insufficient-history"] * 3
-    skipped = series[8:]
-    assert all(s.state == "capped" and "skipped" in s.reason and s.points == [] for s in skipped)
+    assert [s.state for s in series[:3]] == ["ok"] * 3
+    assert all(s.state == "capped" and "skipped" in s.reason and s.points == [] for s in series[8:])
 
 
-def test_trends_partial_results_are_stored_and_line_is_not_failed(isolated_cache, monkeypatch, capsys):
-    n = []
-
-    def fake(keyword):
-        n.append(1)
-        return _trend() if len(n) <= 2 else _trend("unavailable")
-    _patch_fetch(monkeypatch, fake)
-    rc = refresh_attention.main(["--sources", "trends", "--symbols", ",".join(SYMS)],
-                                client=httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(404))),
-                                today=TODAY, sleep=lambda s: None)
-    out = capsys.readouterr().out
-    assert len(store.read_points("trends", "S0")) == 1 and len(store.read_points("trends", "S1")) == 1
-    assert store.read_points("trends", "S9") == []
-    line = [ln for ln in out.splitlines() if ln.startswith("trends:")][0]
-    assert line.startswith("trends: 0/20 ok, 2 rows written")
-    assert attention_extra.classify("trends", line).status == "ok"  # rows written; freshness judged later
-    assert rc in (0, 2)
-
-
-def test_trends_code_errors_do_not_trip_breaker(isolated_cache, monkeypatch):
-    calls = []
-
-    def boom(keyword):
-        calls.append(1)
-        raise TypeError("bad")
-    _patch_fetch(monkeypatch, boom)
-    series = refresh_attention._run_trends(SYMS, None, TODAY, lambda s: None)
+def test_guarded_code_errors_do_not_trip_breaker():
+    fetch, calls = _guarded(lambda n: ("unavailable", "fetch-failed: TypeError"))
+    series = refresh_attention._collect_guarded(SYMS, fetch, "reddit")
     assert len(calls) == len(SYMS) and all(s.reason == "fetch-failed: TypeError" for s in series)
 
 
-def test_trends_all_blocked_line_is_unavailable_never_zero_rows(isolated_cache, monkeypatch, capsys):
-    _patch_fetch(monkeypatch, lambda k: _trend("unavailable"))
-    refresh_attention.main(["--sources", "trends", "--symbols", ",".join(SYMS)],
-                           client=httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(404))),
-                           today=TODAY, sleep=lambda s: None)
-    line = [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("trends:")][0]
-    assert "rate-limited 15" in line and attention_extra.classify("trends", line).status == "unavailable"
-
-
-def test_time_budget_stops_cleanly_and_keeps_fetched(isolated_cache, monkeypatch):
+def test_time_budget_stops_cleanly_and_keeps_fetched(monkeypatch):
     t = [0.0]
 
-    def fake(keyword):
+    def results(n):
         t[0] += 100.0
-        return _trend()
-    _patch_fetch(monkeypatch, fake)
+        return "ok", ""
+    fetch, _ = _guarded(results)
     monkeypatch.setattr(refresh_attention, "_clock", lambda: t[0])
-    series = refresh_attention._run_trends(SYMS, None, TODAY, lambda s: None)
-    done = [s for s in series if s.state == "insufficient-history"]
-    assert len(done) == 4 and len(series) == len(SYMS)  # 360 s budget: stops after the 4th (400 s)
+    series = refresh_attention._collect_guarded(SYMS, fetch, "reddit")
+    assert len([s for s in series if s.state == "ok"]) == 4 and len(series) == len(SYMS)  # 360 s: stops after 400 s
     assert all(s.state == "capped" and "time budget" in s.reason for s in series[4:])
     assert attention_extra.classify("trends", "trends: 0/20 ok, 4 rows written [x] reasons: time budget reached x16").status == "ok"
 

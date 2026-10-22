@@ -1,8 +1,9 @@
 """Per-source, per-symbol daily attention store (Parquet under the cache root).
 
 Only COMPLETED UTC days (date < today) are kept: a partial day would freeze a
-wrong value. One row per day; the first observation wins. Paths resolve at
-call time so tests can redirect `cache.CACHE_ROOT`.
+wrong value. One row per day; the first observation wins, except for Trends, whose
+daily pull replaces the whole series (mode "replace-series") and is also frozen per
+pull date. Paths resolve at call time so tests can redirect `cache.CACHE_ROOT`.
 """
 from __future__ import annotations
 
@@ -38,9 +39,37 @@ def read_points(source: str, symbol: str) -> list[tuple[date, float]]:
         raise StoreReadError(f"unreadable store file {path.name}") from exc
 
 
-def write_series(series: SourceSeries, today: date | None = None) -> int:
-    """Merge completed days into the store; return the number of new rows."""
+WRITE_MODES = ("first", "replace-series")
+# A replace-series pull shorter than this never replaces (a short pull must not shrink a good series).
+MIN_REPLACE_DAYS = 90
+
+
+def _write_frame(path: Path, days: list[date], values: list[float]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    cache._atomic_to_parquet(pd.DataFrame({"date": pd.to_datetime(days), "value": values}), path)
+
+
+def write_series(series: SourceSeries, today: date | None = None, mode: str = "first") -> int:
+    """Store completed days; return the number of new rows.
+
+    mode "first": merge, the first observation of a day wins (every source but Trends).
+    mode "replace-series": the stored series becomes exactly this pull's completed days (one request
+    scale, nothing stitched); a pull of fewer than MIN_REPLACE_DAYS completed days changes nothing.
+    """
+    if mode not in WRITE_MODES:
+        raise ValueError(f"unknown store mode {mode!r}")
     today = today or _utc_today()
+    path = store_path(series.source, series.symbol)
+    if mode == "replace-series":
+        pulled: dict[date, float] = {}
+        for d, v in series.points:
+            if d < today and d not in pulled:
+                pulled[d] = float(v)
+        if len(pulled) < MIN_REPLACE_DAYS:
+            return 0
+        days = sorted(pulled)
+        _write_frame(path, days, [pulled[d] for d in days])
+        return len(days)
     merged: dict[date, float] = dict(read_points(series.source, series.symbol))
     existing = len(merged)
     for d, v in series.points:
@@ -49,9 +78,47 @@ def write_series(series: SourceSeries, today: date | None = None) -> int:
     added = len(merged) - existing
     if added == 0:
         return 0
-    path = store_path(series.source, series.symbol)
-    path.parent.mkdir(parents=True, exist_ok=True)
     days = sorted(merged)
-    df = pd.DataFrame({"date": pd.to_datetime(days), "value": [merged[d] for d in days]})
+    _write_frame(path, days, [merged[d] for d in days])
+    return added
+
+
+def pull_archive_path(source: str, pull_date: date) -> Path:
+    return cache.CACHE_ROOT / "attention" / f"{source}_pulls" / f"{pull_date.isoformat()}.parquet"
+
+
+def read_pull_archive(source: str, pull_date: date) -> dict[str, list[tuple[date, float]]]:
+    """symbol -> points of the pull dated `pull_date` ({} when there is none)."""
+    path = pull_archive_path(source, pull_date)
+    if not path.exists():
+        return {}
+    df = pd.read_parquet(path)
+    out: dict[str, list[tuple[date, float]]] = {}
+    for sym, d, v in zip(df["symbol"], df["date"], df["value"]):
+        out.setdefault(str(sym), []).append((pd.Timestamp(d).date(), float(v)))
+    return {s: sorted(p) for s, p in out.items()}
+
+
+def write_pull_archive(source: str, pull_date: date, series_list) -> int:
+    """Freeze one pull for point-in-time reads: the `ok` series' completed days, by pull date. A second run on
+    the same pull date adds only symbols not archived yet (first write per symbol and pull date wins).
+    Returns the number of rows added."""
+    archived = read_pull_archive(source, pull_date)
+    rows = {s: p for s, p in archived.items()}
+    added = 0
+    for s in series_list:
+        if s.state != "ok" or s.symbol in rows:
+            continue
+        pts = sorted({d: float(v) for d, v in reversed(s.points) if d < pull_date}.items())
+        if pts:
+            rows[s.symbol] = pts
+            added += len(pts)
+    if added == 0:
+        return 0
+    flat = [(sym, d, v) for sym in sorted(rows) for d, v in rows[sym]]
+    df = pd.DataFrame({"symbol": [r[0] for r in flat], "date": pd.to_datetime([r[1] for r in flat]),
+                       "value": [r[2] for r in flat]})
+    path = pull_archive_path(source, pull_date)
+    path.parent.mkdir(parents=True, exist_ok=True)
     cache._atomic_to_parquet(df, path)
     return added

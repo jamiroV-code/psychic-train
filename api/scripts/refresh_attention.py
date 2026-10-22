@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import re
 import sys
 import time
@@ -22,9 +23,10 @@ if __package__ in (None, ""):  # direct invocation
 from api.data import cache  # noqa: E402
 from api.data.attention.http_retry import describe_exc  # noqa: E402
 from api.data.attention import (  # noqa: E402
-    coingecko_attention, exchange_volume, reddit, registry, store, trends, universe_store, categories_store, wikipedia,
-    xsearch)
+    coingecko_attention, exchange_volume, reddit, registry, store, trends, trends_keywords, universe_store,
+    categories_store, wikipedia, xsearch)
 from api.scripts.attention_extra import reason_kind  # noqa: E402
+from api.scripts.trends_cli_common import PytrendsMissing, make_trendreq  # noqa: E402
 
 WIKI_ARTICLES_PATH = Path(__file__).resolve().parents[1] / "data" / "wiki_articles.json"
 DEFAULT_SYMBOLS = ("BTC", "ETH")
@@ -35,6 +37,21 @@ CIRCUIT_BREAKER_AFTER = 5
 # Soft wall-clock per opt-in source (workflow step timeout is 8 min): stop cleanly, keep what was fetched.
 SOURCE_TIME_BUDGET_S = 360
 _clock = time.monotonic
+# Trends (T100b): one request per coin, TRENDS_INTERVAL_S plus 0-2 s jitter apart; on HTTP 429 wait 30, 60, 120 s
+# for the same coin, then it is capped; TRENDS_BREAKER_AFTER capped coins in a row stop the source. Its own budget:
+# up to 75 coins do not fit SOURCE_TIME_BUDGET_S.
+TRENDS_INTERVAL_S = 3.0
+TRENDS_BACKOFF_S = (30, 60, 120)
+TRENDS_BREAKER_AFTER = 3
+TRENDS_TIME_BUDGET_S = 540
+TRENDS_OUTCOMES = ("ok", "too-little-interest", "name-ambiguous", "no-keyword", "non-daily", "rate-limited",
+                   "insufficient-history", "time-budget")
+_TRENDS_REASON_OUTCOME = {trends.TOO_LITTLE_INTEREST: "too-little-interest", trends.NAME_AMBIGUOUS: "name-ambiguous",
+                          "no keyword mapped": "no-keyword", "non-daily": "non-daily"}
+# Store mode per source; every source not listed keeps first-write-wins.
+WRITE_MODES = {"trends": "replace-series"}
+TRENDREQ_FACTORY = make_trendreq  # pytrends is imported on first use only; tests inject a fake
+_jitter = lambda: random.uniform(0.0, 2.0)  # noqa: E731
 OUTCOME_ORDER = ("ok", "no-article", "no-id", "rate-limited", "http-error", "insufficient-history", "other")
 
 
@@ -174,8 +191,93 @@ def _run_hyperliquid_volume(symbols, client, today, sleep):
     return [exchange_volume.fetch_hyperliquid_series(s, today=today, snapshot=lambda _ex: snap) for s in symbols]
 
 
+def _trends_outcome(s) -> str:
+    if s.state in ("ok", "insufficient-history"):
+        return s.state
+    if s.state == "capped":
+        return "time-budget" if s.reason == "time budget reached" else "rate-limited"
+    r = s.reason or ""
+    if r in _TRENDS_REASON_OUTCOME:
+        return _TRENDS_REASON_OUTCOME[r]
+    m = re.match(r"fetch-failed: (\w+)", r)
+    return f"failed({m.group(1) if m else r})"
+
+
+def trends_summary(series) -> str:
+    """'ok 40, too-little-interest 3, ...' in TRENDS_OUTCOMES order, then the failures."""
+    counts: dict[str, int] = {}
+    for s in series:
+        k = _trends_outcome(s)
+        counts[k] = counts.get(k, 0) + 1
+    order = lambda k: (TRENDS_OUTCOMES.index(k) if k in TRENDS_OUTCOMES else len(TRENDS_OUTCOMES), k)  # noqa: E731
+    return ", ".join(f"{k} {counts[k]}" for k in sorted(counts, key=order))
+
+
+def _trends_fetch_429(sym, term, client, today, sleep):
+    """fetch_alone with the 429 backoff: TRENDS_BACKOFF_S waits for the same coin, then `capped`."""
+    item = trends.fetch_alone(sym, term, client, today=today)
+    for wait in TRENDS_BACKOFF_S:
+        if item.state != "capped":
+            break
+        sleep(wait)
+        item = trends.fetch_alone(sym, term, client, today=today)
+    return item
+
+
 def _run_trends(symbols, client, today, sleep):
-    return _collect_guarded(symbols, lambda s: trends.fetch_series(s, s.lower(), today=today), "trends")
+    """One request per coin with only its keyword; writes the per-pull archive; the store write
+    (replace-series) is done by main(). No-keyword, name-risk terms and a bad keyword file cost no request."""
+    from api.data.attention.types import SourceSeries
+    km, bad = trends_keywords.safe_load()
+    out: dict[str, SourceSeries] = {}
+    todo: list[tuple[str, str]] = []
+    for s in (x.upper() for x in symbols):
+        entry = km.entries.get(s) if km else None
+        kw = km.keyword_for(s) if km else None
+        if km is None:
+            out[s] = SourceSeries("trends", s, [], "unavailable", bad)
+        elif not kw:
+            out[s] = SourceSeries("trends", s, [], "unavailable", "no keyword mapped")
+        elif s in trends.NAME_RISK_SYMBOLS and "topic" not in entry:
+            out[s] = SourceSeries("trends", s, [], "unavailable", trends.NAME_AMBIGUOUS)
+        else:
+            todo.append((s, kw))
+    if todo:
+        start = today.toordinal() % len(todo)  # rotate so a budget stop does not always starve the same coins
+        todo = todo[start:] + todo[:start]
+        trendreq = None
+        try:
+            trendreq = TRENDREQ_FACTORY()
+        except PytrendsMissing:
+            why = "pytrends not installed"
+        except Exception as exc:  # noqa: BLE001 - the class is reported, never the message
+            why = f"session-failed: {trends.error_class(exc)}"
+        if trendreq is None:
+            for s, _ in todo:
+                out[s] = SourceSeries("trends", s, [], "unavailable", why)
+            todo = []
+        t0, streak, stop, sent = _clock(), 0, None, False
+        for s, kw in todo:
+            if stop is None and _clock() - t0 >= TRENDS_TIME_BUDGET_S:
+                stop = "time budget reached"
+            if stop is None and streak >= TRENDS_BREAKER_AFTER:
+                stop = "skipped after repeated HTTP 429"
+            if stop:
+                out[s] = SourceSeries("trends", s, [], "capped", stop)
+                continue
+            if sent:
+                sleep(TRENDS_INTERVAL_S + _jitter())
+            sent = True
+            item = _trends_fetch_429(s, kw, trendreq, today, sleep)
+            streak = streak + 1 if item.state == "capped" else 0
+            out[s] = item
+    series = [out[s] for s in dict.fromkeys(x.upper() for x in symbols)]
+    try:
+        store.write_pull_archive("trends", today, series)
+    except Exception as exc:  # the archive must not cost the live series
+        print(f"trends archive: not written {trends.error_class(exc)}", file=sys.stderr)
+    print(f"trends detail: {trends_summary(series)}")
+    return series
 
 
 def _run_universe(symbols, client, today, sleep):
@@ -287,7 +389,9 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
                 if not args.dry_run:
                     for s in series:
                         if s.state in ("ok", "insufficient-history"):
-                            written += store.write_series(s, today=today)
+                            mode = WRITE_MODES.get(name)
+                            written += (store.write_series(s, today=today, mode=mode) if mode
+                                        else store.write_series(s, today=today))
                 ok = sum(1 for s in series if s.state == "ok")
                 failed = series and all(
                     s.state == "unavailable" and s.reason != "empty response" for s in series)

@@ -1,12 +1,17 @@
-"""Google Trends source: wraps pytrends_adapter (partial rows already dropped there).
+"""Google Trends source.
 
-One latest value per refresh, kept only if its date is a completed UTC day. Cross-coin
-comparability is decided in slice G; without a probe record the reader reports it
-not-probed. Never raises; reasons carry the exception type only.
+`fetch_alone` (T100b, used by the daily runner): one request per coin with only its keyword over an explicit
+100-day daily range; the runner replaces the stored series with each pull. `fetch_series` (superseded ticker
+path, kept for the registry and its tests) wraps pytrends_adapter: one latest value per refresh, kept only if
+its date is a completed UTC day. Without a probe record the reader reports not-probed. Never raises; reasons
+carry the exception class and HTTP status only. pytrends is never imported here: the client is injected.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+import math
+import statistics
+from datetime import date, datetime, timedelta, timezone
+from itertools import pairwise
 
 from api.data import pytrends_adapter
 from api.data.attention.types import SourceSeries
@@ -33,3 +38,95 @@ def fetch_series(symbol: str, keyword: str | None, *, fetch=pytrends_adapter.fet
     if day >= today:  # current-day row is partial
         return SourceSeries(SOURCE, sym, [], "unavailable", "partial row dropped")
     return SourceSeries(SOURCE, sym, [(day, float(res.value))], "insufficient-history", "1 days")
+
+
+# --- T100b: one coin per request (design 1 of the T144 PLAN) ---
+# A coin requested alone peaks at 100 (best resolution). Consumers only use per-coin ratios
+# (recent mean / longer mean), so no anchor term and no cross-coin scale is needed.
+TRENDS_RANGE_DAYS = 100  # explicit daily range: covers the widest compared span (7 + 90 days)
+MIN_COMPLETE_DAYS = 90
+# "Too little interest" on the coin's own complete days. PLACEHOLDERS: the owner sets both after probe P-RES.
+TRENDS_MIN_MEDIAN = 3
+TRENDS_MAX_ZERO_DAY_PCT = 40
+TOO_LITTLE_INTEREST = "too-little-interest"
+NAME_AMBIGUOUS = "name-ambiguous: needs topic"
+# Bare names that collect unrelated searches (T125 review list): fetched by topic id only, never by term.
+NAME_RISK_SYMBOLS = frozenset(
+    {"TRX", "ONDO", "MORPHO", "ICP", "SHIB", "PEPE", "BNB", "CRO", "HBAR", "LINK", "APT", "SOL"})
+
+
+def explicit_timeframe(today: date) -> str:
+    """'<start> <end>' over the TRENDS_RANGE_DAYS complete UTC days ending yesterday."""
+    end = today - timedelta(days=1)
+    return f"{(end - timedelta(days=TRENDS_RANGE_DAYS - 1)).isoformat()} {end.isoformat()}"
+
+
+def http_status(exc: BaseException) -> int | None:
+    code = getattr(getattr(exc, "response", None), "status_code", None)
+    return code if isinstance(code, int) and not isinstance(code, bool) else None
+
+
+def error_class(exc: BaseException) -> str:
+    """Class name plus HTTP status; never the message (pytrends puts the whole response on it)."""
+    status = http_status(exc)
+    return f"{type(exc).__name__}(HTTP {status})" if status is not None else type(exc).__name__
+
+
+def is_rate_limited(exc: BaseException) -> bool:
+    return type(exc).__name__ == "TooManyRequestsError" or http_status(exc) == 429
+
+
+def interest_verdict(values: list[float]) -> str:
+    """'ok' or TOO_LITTLE_INTEREST: all zero, median under TRENDS_MIN_MEDIAN, or zero days at least
+    TRENDS_MAX_ZERO_DAY_PCT percent of the days."""
+    if not values or not any(values):
+        return TOO_LITTLE_INTEREST
+    zero_pct = 100.0 * sum(1 for v in values if v == 0) / len(values)
+    if statistics.median(values) < TRENDS_MIN_MEDIAN or zero_pct >= TRENDS_MAX_ZERO_DAY_PCT:
+        return TOO_LITTLE_INTEREST
+    return "ok"
+
+
+def _partial(value) -> bool:
+    return value.strip().lower() == "true" if isinstance(value, str) else bool(value)
+
+
+def complete_days(frame, term: str, today: date) -> tuple[list[tuple[date, float]] | None, str]:
+    """(points, "") on a daily frame, else (None, reason). Drops isPartial rows and days >= today."""
+    if frame is None or len(frame) == 0:
+        return None, "empty response"
+    if term not in frame.columns:
+        return None, "missing-column"
+    idx = list(frame.index)
+    if any((b - a).total_seconds() != 86400 for a, b in pairwise(idx)):
+        return None, "non-daily"
+    flags = frame["isPartial"].tolist() if "isPartial" in frame.columns else [False] * len(idx)
+    points = []
+    for ts, v, partial in zip(idx, frame[term].tolist(), flags):
+        d = ts.date() if hasattr(ts, "date") else ts
+        if _partial(partial):
+            continue
+        if d >= today or v is None or math.isnan(v):  # today is partial; NaN is a gap, never 0
+            continue
+        points.append((d, float(v)))
+    return points, ""
+
+
+def fetch_alone(symbol: str, term: str, client, *, today: date, timeframe: str | None = None) -> SourceSeries:
+    """One request with only `term`. Never raises; a reason carries the exception class and HTTP status only."""
+    sym = symbol.upper()
+    try:
+        client.build_payload([term], timeframe=timeframe or explicit_timeframe(today), geo="")
+        frame = client.interest_over_time()
+    except Exception as exc:  # noqa: BLE001 - the class is reported, never the message
+        if is_rate_limited(exc):
+            return SourceSeries(SOURCE, sym, [], "capped", f"rate-limited: {error_class(exc)}")
+        return SourceSeries(SOURCE, sym, [], "unavailable", f"fetch-failed: {error_class(exc)}")
+    points, reason = complete_days(frame, term, today)
+    if points is None:
+        return SourceSeries(SOURCE, sym, [], "unavailable", reason)
+    if len(points) < MIN_COMPLETE_DAYS:
+        return SourceSeries(SOURCE, sym, [], "insufficient-history", f"{len(points)} days")
+    if interest_verdict([v for _, v in points]) != "ok":
+        return SourceSeries(SOURCE, sym, [], "unavailable", TOO_LITTLE_INTEREST)  # missing, never 0
+    return SourceSeries(SOURCE, sym, points, "ok", "")
