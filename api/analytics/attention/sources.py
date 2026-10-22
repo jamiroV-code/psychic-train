@@ -129,6 +129,11 @@ def build_sources(today: date, *, probe_path: Path | None = None, universe_path:
     members: dict[str, tuple] = {m: series(m, ser) for m, ser in EXCHANGE_SERIES.items()}
     fallback = series(FALLBACK_SERIES, FALLBACK_SERIES)
     for sid, w in cfg["source_weights"].items():
+        if w <= 0:   # parked (T130): not fetched, not failing, not counted
+            out.append(DiscoverySourceRow(id=sid, label=LABELS[sid], kind="weighted", weight=w, state="off",
+                                          newest=None, history_days=0, coins_with_data=0, eligible_size=n,
+                                          note="parked: weight 0, not fetched"))
+            continue
         if sid != SLOT:
             out.append(row(sid, "weighted", w, *series(sid, sid)))
             continue
@@ -148,7 +153,7 @@ def build_sources(today: date, *, probe_path: Path | None = None, universe_path:
     out.append(_helper("universe", universe_store.read_latest(), "coins", "top-100 snapshot"))
     out.append(_narratives_row())
 
-    weighted = [r for r in out if r.kind == "weighted"]
+    weighted = [r for r in out if r.kind == "weighted" and (r.weight or 0) > 0]
     live = [r for r in weighted if r.state == "ok"]
     return DiscoverySourcesResponse(
         as_of=end.isoformat(), universe_size=len(rows), eligible_size=n, live_sources=len(live),

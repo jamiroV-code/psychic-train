@@ -81,3 +81,11 @@ def test_wiki_articles_json_complete_and_clean():
     assert all(k == k.upper() and k.strip() for k in m)
     assert all(t.strip() and t == t.strip() and " " not in t for t in titles)
     assert [t for t, n in Counter(titles).items() if n > 1] == []
+
+
+def test_wiki_articles_inj_resolved_and_unverified_stay_empty():
+    import json
+    from pathlib import Path
+    m = json.loads((Path(wikipedia.__file__).parents[1] / "wiki_articles.json").read_text())
+    assert m["INJ"] == "Injective_(blockchain)"
+    assert all(m[s] is None for s in ("SUI", "APT", "ARB", "TAO", "RENDER", "QNT"))
