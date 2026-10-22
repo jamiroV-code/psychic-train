@@ -40,7 +40,8 @@ def test_coin_payload_shape(wired):
                       "min_covered_weight", "history_days", "days"}
     assert b["min_covered_weight"] == 30
     assert len(b["days"]) == 30
-    assert set(b["days"][-1]) == {"date", "score", "covered_weight", "rising_weight", "trigger", "thin"}
+    assert set(b["days"][-1]) == {"date", "score", "covered_weight", "rising_weight", "trigger", "thin",
+                                 "weights_version"}
     assert b["days"][-1]["date"] == b["as_of"]
 
 
@@ -49,7 +50,8 @@ def test_category_payload_shape(wired):
     assert r.status_code == 200
     b = r.json()
     assert (b["kind"], b["id"], b["status"]) == ("category", "ai", "ok")
-    assert set(b["days"][-1]) == {"date", "score", "coins_used", "triggered_count", "triggered_share"}
+    assert set(b["days"][-1]) == {"date", "score", "coins_used", "triggered_count", "triggered_share",
+                                 "weights_version"}
     assert b["days"][-1]["coins_used"] == 2
 
 

@@ -31,6 +31,7 @@ Discovery today says a coin is "gaining" when 2 independent source groups rise (
 ## Locked decisions (owner, 18-10-26)
 
 1. **Weights.** Each source has a weight in percent in `api/data/discovery.json` (key `source_weights`), owner-editable. Starting (revised twice by the planner, 18-10-26): wikipedia 25, trends 25, reddit 15, xsearch 10, exchange_activity 10, github_dev 8, defillama 7 (sum 100). github_dev, defillama and exchange_activity are new, unbuilt (exchange_activity only partly), and inert until each has data. `coingecko` has no weight of its own: it stays for universe/eligibility and as the fallback volume source (decision 9). `min_independent_sources` and `source_groups` are removed.
+   **Revised by T130 (21-10-26, owner-locked, weights v2):** trends 25, reddit 20, xsearch 15, exchange_activity 15, wikipedia 10, defillama 5, github_dev 0 (parked: not fetched, not counted). Weights no longer need to sum to 100. A new `source_groups` (search = trends + wikipedia) votes once. `early_sources` (trends, reddit, xsearch) gate the trigger. Days up to `weights_history[].until` keep v1. See `narrative-baskets-weights-v2-t130_PLAN_21-10-26.md`.
 2. **Rescale.** A source with no usable value for a coin drops out; remaining weights are rescaled to that coin's available weight. Missing is never 0.
 3. **Rising.** Source change over the window >= `rising_threshold_pct` (10).
 4. **Trigger.** `rising_weight / covered_weight >= trigger_pct` (60) AND `covered_weight >= min_covered_weight` (30), where covered_weight is in points of the 100.

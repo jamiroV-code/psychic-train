@@ -1,7 +1,8 @@
 """Discovery history (T103 W2): the live weighted score rebuilt for each past day, point in time.
 
 Day D is scored exactly like live scoring (`discovery._coin`) with end = D, from points dated <= D only.
-The 90-day gate is evaluated per day: a series counts on D only if it has at least `min_history_days`
+Each day is scored with the weights version in force that day (`discovery.weights_for_day`, T130), so a weights
+change never rescores past days. The 90-day gate is evaluated per day: a series counts on D only if it has at least `min_history_days`
 points dated <= D (never the total stored length, so no availability lookahead). Each stored series is read
 once and sliced by date. Days with no usable source are omitted (missing is never 0).
 
@@ -17,7 +18,8 @@ from pathlib import Path
 from statistics import mean
 
 from api.analytics.attention import narratives
-from api.analytics.attention.discovery import (_coin, _percentile, eligibility, load_config, series_names)
+from api.analytics.attention.discovery import (_coin, _percentile, eligibility, load_config, series_names,
+                                               weights_for_day)
 from api.analytics.attention.universe import load_universe_rows
 from api.data.attention import registry, store
 from api.data.attention.types import SourceSeries
@@ -125,7 +127,8 @@ def coin_history(symbol: str, window: int, *, today: date, probe_path: Path | No
             c = _score_day(sym, day, cfg, stored, window)
             if c is not None:
                 days.append(DiscoveryHistoryDay(date=day.isoformat(), score=c[0], covered_weight=c[1],
-                                                rising_weight=c[2], trigger=c[3], thin=c[1] < floor))
+                                                rising_weight=c[2], trigger=c[3], thin=c[1] < floor,
+                                                weights_version=c[5]))
         counts = {src: s.count(end) for (src, _), s in sorted(stored.items())}
         return DiscoveryCoinHistory(**base, status="ok" if days else "no-data",
                                     reason="" if days else NO_DATA, history_days=counts, days=days)
@@ -164,7 +167,8 @@ def category_history(category_id: str, window: int, *, today: date, probe_path: 
             triggered = sum(c[3] for c in scored)
             days.append(DiscoveryCategoryDay(date=day.isoformat(), score=mean(min(r, cap) for r in raws),
                                              coins_used=len(scored), triggered_count=triggered,
-                                             triggered_share=triggered / len(scored)))
+                                             triggered_share=triggered / len(scored),
+                                             weights_version=weights_for_day(cfg, day)["weights_version"]))
         return DiscoveryCategoryHistory(**base, status="ok" if days else "no-data",
                                         reason="" if days else NO_DATA, days=days)
 
