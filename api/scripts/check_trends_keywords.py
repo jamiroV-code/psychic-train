@@ -2,20 +2,28 @@
 
 Run from the repo root: uv run --project api --with pytrends python -m api.scripts.check_trends_keywords
 Reads a symbol -> name JSON map (default: the labels of api/data/trends_keywords.json), prints one line per
-coin and a paste-ready JSON of PASS entries. Writes nothing. Exit 0 (also after a 429 stop), 1 if the Trends
+coin, a paste-ready JSON of PASS entries and a 'needs a decision' block (each AMBIGUOUS coin with its first
+exact-name candidate and a Trends link to check it by eye). Writes nothing. Exit 0 (also after a 429 stop), 1 if the Trends
 session cannot start, 2 if the input is unreadable, 3 if pytrends is not installed.
 Starting the session sends one cookie request to Google before the per-coin calls.
 PowerShell: quote comma lists, e.g. --symbols 'LINK,AAVE'.
+PASS needs exactly one crypto-typed candidate whose title equals the name. Failing that, the only crypto-typed
+candidate passes when it is the name plus a generic word ("Kaspa Network") or a 4+ character start of the name
+before one ("NEAR" for NEAR Protocol); "Ethereum Classic" for Ethereum never does. A label that is only the
+ticker passes only on a title equal to the ticker; there is no display name to try.
+Eyeball every PASS line (title against the coin name) before pasting the block.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 from api.data.attention import trends_keywords as tk
 from api.scripts.trends_cli_common import (
@@ -27,8 +35,25 @@ from api.scripts.trends_cli_common import (
 
 INTERVAL_SECONDS = 3.0
 MAX_CONSECUTIVE_429 = 3
-CRYPTO_TYPE_WORDS = ("cryptocurrency", "blockchain", "token", "coin", "digital currency", "virtual currency",
-                     "protocol", "decentralized")
+# Google `type` strings seen in the owner's run of 21-10-26 (T134): Currency, Coin, Chain, Blockchain,
+# Blockchain platform, Distributed ledger, Payment network, Cryptocurrency, Cryptocurrency exchange company.
+# Generic types (Topic, Software, Company, Website, Computer program) stay out: a hit there needs the owner.
+# CRYPTO_SUBSTRINGS may sit anywhere in the type, CRYPTO_WORDS only as whole words ("Tokenization company" is
+# out), and CRYPTO_PHRASES only as the whole type ("Chain" is in, "Restaurant chain" and "Internet protocol" out).
+CRYPTO_SUBSTRINGS = ("cryptocurrency", "blockchain")
+CRYPTO_WORDS = ("token", "coin", "digital currency", "virtual currency")
+CRYPTO_PHRASES = ("currency", "chain", "distributed ledger", "payment network", "decentralized finance",
+                  "decentralized finance protocol", "decentralized exchange", "defi protocol")
+CRYPTO_TYPE_WORDS = CRYPTO_SUBSTRINGS + CRYPTO_WORDS + CRYPTO_PHRASES + (
+    "blockchain platform", "cryptocurrency exchange company")
+PREFIX_MIN = 4
+# What may follow a prefix title in the name: "World" -> Worldcoin, "NEAR" -> NEAR Protocol; never "Bitcoin" ->
+# Bitcoin Cash or "Ethereum" -> Ethereum Classic.
+PREFIX_SUFFIXES = ("coin", "protocol", "network", "token", "chain", "blockchain", "finance")
+# What may follow the name in a longer title: "Kaspa Network"; never "Ethereum Classic", "Bitcoin SV",
+# "Sky Mavis", "Sky Protocol" or "Polygon zkEVM" (other coins or companies).
+CONTAINED_SUFFIXES = ("coin", "token", "network", "blockchain", "cryptocurrency")
+VERIFY_URL = "https://trends.google.com/trends/explore?q={}"
 PASTE_HEADER = "--- paste-ready JSON (PASS entries) ---"
 DECISION_HEADER = "--- needs a decision ---"
 NOT_RUN_REASON = f"stopped after {MAX_CONSECUTIVE_429} consecutive HTTP 429"
@@ -56,6 +81,31 @@ def _usable(raw) -> list[dict]:
     return out
 
 
+def _norm(text: str) -> str:
+    return " ".join(re.sub(r"[^0-9a-z]+", " ", text.casefold()).split())
+
+
+def is_crypto_type(type_: str) -> bool:
+    t = _norm(type_)
+    return (t in CRYPTO_PHRASES or any(w in t for w in CRYPTO_SUBSTRINGS)
+            or any(f" {w} " in f" {t} " for w in CRYPTO_WORDS))
+
+
+def _exact_match(title: str, name: str) -> bool:
+    n = _norm(name)
+    return bool(n) and _norm(title) == n
+
+
+def _contained_match(title: str, name: str) -> bool:
+    t, n = _norm(title), _norm(name)
+    return bool(n) and t.startswith(n + " ") and t[len(n):].strip() in CONTAINED_SUFFIXES
+
+
+def _prefix_match(title: str, name: str) -> bool:
+    t, n = _norm(title), _norm(name)
+    return len(t) >= PREFIX_MIN and n.startswith(t) and n[len(t):].strip() in PREFIX_SUFFIXES
+
+
 def _fallback(name: str) -> str:
     return "falls back to term" if tk.is_valid_term(name) else "needs a human"
 
@@ -69,13 +119,21 @@ def check_name(client, symbol: str, name: str) -> Result:
         res.reason = f"request failed: {error_class(exc)}; {_fallback(name)}"
         return res
     res.candidates = _usable(raw)
-    crypto = [c for c in res.candidates if any(w in c["type"].lower() for w in CRYPTO_TYPE_WORDS)]
-    if len(crypto) == 1 and name == symbol:
-        res.verdict, res.reason = "AMBIGUOUS", "label is only the ticker"
-    elif len(crypto) == 1 and name.casefold() not in crypto[0]["title"].casefold():
-        res.verdict, res.reason = "AMBIGUOUS", "title does not contain the name"
+    crypto = [c for c in res.candidates if is_crypto_type(c["type"])]
+    ticker = name == symbol
+    if ticker:
+        hits = [c for c in crypto if c["title"].strip() == symbol]
+    else:
+        hits = [c for c in crypto if _exact_match(c["title"], name)]
+        if not hits and len(crypto) == 1 and (_contained_match(crypto[0]["title"], name)
+                                              or _prefix_match(crypto[0]["title"], name)):
+            hits = crypto
+    if len(hits) == 1:
+        res.verdict, res.proposed = "PASS", hits[0]
+    elif ticker and crypto and not hits:
+        res.verdict, res.reason = "AMBIGUOUS", "label is only the ticker; no display name in narratives/universe"
     elif len(crypto) == 1:
-        res.verdict, res.proposed = "PASS", crypto[0]
+        res.verdict, res.reason = "AMBIGUOUS", "title does not contain the name"
     elif len(crypto) > 1:
         res.verdict, res.reason = "AMBIGUOUS", "several crypto-typed candidates"
     elif res.candidates:
@@ -98,6 +156,11 @@ def _demote_duplicate_topics(results: list[Result]) -> None:
 
 def _cand(c: dict) -> str:
     return f'{c["mid"]} "{c["title"]}" ({c["type"]})'
+
+
+def _verify_hint(r: Result) -> str | None:
+    exact = next((c for c in r.candidates if _exact_match(c["title"], r.name)), None)
+    return f"    verify {_cand(exact)}: {VERIFY_URL.format(quote(exact['mid'], safe=''))}" if exact else None
 
 
 def run(mapping: dict, *, client, sleep=time.sleep, out=None, now=None) -> list[Result]:
@@ -139,6 +202,9 @@ def run(mapping: dict, *, client, sleep=time.sleep, out=None, now=None) -> list[
     for r in results:
         if r.verdict in ("AMBIGUOUS", "FAIL"):
             print(f"{r.symbol} | {r.verdict} | {r.reason}", file=out)
+            hint = _verify_hint(r) if r.verdict == "AMBIGUOUS" else None
+            if hint:
+                print(hint, file=out)
     return results
 
 

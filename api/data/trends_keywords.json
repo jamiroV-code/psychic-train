@@ -5,12 +5,14 @@
     "note": "placeholder: the owner picks the anchor (Bitcoin or Ethereum) from the probe_trends evidence"
   },
   "AAVE": {
-    "term": "Aave",
-    "label": "Aave"
+    "topic": "/g/11w1qyc8h6",
+    "label": "Aave",
+    "note": "checker PASS 21-10-26"
   },
   "ADA": {
-    "term": "Cardano",
-    "label": "Cardano"
+    "topic": "/g/11gf2dcwbj",
+    "label": "Cardano",
+    "note": "checker PASS 21-10-26"
   },
   "AERO": {
     "term": "Aerodrome Finance",
@@ -30,8 +32,9 @@
     "label": "Aptos"
   },
   "ARB": {
-    "term": "Arbitrum",
-    "label": "Arbitrum"
+    "topic": "/g/11w99dbsyz",
+    "label": "Arbitrum",
+    "note": "checker PASS 21-10-26"
   },
   "ASTER": {
     "no-keyword": true,
@@ -49,8 +52,9 @@
     "note": "common word (Cosmos, Avalanche, UNUS SED LEO); needs topic id"
   },
   "BCH": {
-    "term": "Bitcoin Cash",
-    "label": "Bitcoin Cash"
+    "topic": "/g/11d_wtvc5k",
+    "label": "Bitcoin Cash",
+    "note": "checker PASS 21-10-26"
   },
   "BGB": {
     "term": "Bitget Token",
@@ -61,8 +65,9 @@
     "label": "BNB"
   },
   "BTC": {
-    "term": "Bitcoin",
-    "label": "Bitcoin"
+    "topic": "/m/05p0rrx",
+    "label": "Bitcoin",
+    "note": "checker PASS 21-10-26"
   },
   "BTW": {
     "no-keyword": true,
@@ -83,12 +88,14 @@
     "label": "Cronos"
   },
   "DOGE": {
-    "term": "Dogecoin",
-    "label": "Dogecoin"
+    "topic": "/m/0zmxk9t",
+    "label": "Dogecoin",
+    "note": "checker PASS 21-10-26"
   },
   "DOT": {
-    "term": "Polkadot",
-    "label": "Polkadot"
+    "topic": "/g/11f3mbgrgj",
+    "label": "Polkadot",
+    "note": "checker PASS 21-10-26"
   },
   "ENA": {
     "term": "Ethena",
@@ -134,8 +141,9 @@
     "label": "Internet Computer"
   },
   "INJ": {
-    "term": "Injective",
-    "label": "Injective"
+    "topic": "/g/11ldr16mw_",
+    "label": "Injective",
+    "note": "checker PASS 21-10-26"
   },
   "JST": {
     "no-keyword": true,
@@ -161,8 +169,9 @@
     "note": "common word (Cosmos, Avalanche, UNUS SED LEO); needs topic id"
   },
   "LINK": {
-    "term": "Chainlink",
-    "label": "Chainlink"
+    "topic": "/g/11qn04qyw9",
+    "label": "Chainlink",
+    "note": "checker PASS 21-10-26"
   },
   "LIT": {
     "no-keyword": true,
@@ -170,8 +179,9 @@
     "note": "unidentified ticker (UNVERIFIED), owner names it"
   },
   "LTC": {
-    "term": "Litecoin",
-    "label": "Litecoin"
+    "topic": "/m/0t544l4",
+    "label": "Litecoin",
+    "note": "checker PASS 21-10-26"
   },
   "MNT": {
     "no-keyword": true,
@@ -248,8 +258,9 @@
     "note": "common word; needs topic id"
   },
   "SHIB": {
-    "term": "Shiba Inu",
-    "label": "Shiba Inu"
+    "topic": "/g/11q1jsfvsn",
+    "label": "Shiba Inu",
+    "note": "checker PASS 21-10-26"
   },
   "SKY": {
     "no-keyword": true,
@@ -257,8 +268,9 @@
     "note": "common word; needs topic id"
   },
   "SOL": {
-    "term": "Solana",
-    "label": "Solana"
+    "topic": "/g/11qh5y640t",
+    "label": "Solana",
+    "note": "checker PASS 21-10-26"
   },
   "STABLE": {
     "no-keyword": true,
