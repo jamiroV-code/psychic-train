@@ -7,9 +7,11 @@ exact-name candidate and a Trends link to check it by eye). Writes nothing. Exit
 session cannot start, 2 if the input is unreadable, 3 if pytrends is not installed.
 Starting the session sends one cookie request to Google before the per-coin calls.
 PowerShell: quote comma lists, e.g. --symbols 'LINK,AAVE'.
-PASS needs exactly one crypto-typed candidate whose title equals or contains the name (or, when it is the only
-crypto-typed candidate, a title of 4+ characters that starts the name before a generic suffix, e.g. NEAR for NEAR Protocol). A label
-that is only the ticker passes only on a title equal to the ticker; there is no display name to try.
+PASS needs exactly one crypto-typed candidate whose title equals the name. Failing that, the only crypto-typed
+candidate passes when it is the name plus a generic word ("Kaspa Network") or a 4+ character start of the name
+before one ("NEAR" for NEAR Protocol); "Ethereum Classic" for Ethereum never does. A label that is only the
+ticker passes only on a title equal to the ticker; there is no display name to try.
+Eyeball every PASS line (title against the coin name) before pasting the block.
 """
 from __future__ import annotations
 
@@ -36,16 +38,21 @@ MAX_CONSECUTIVE_429 = 3
 # Google `type` strings seen in the owner's run of 21-10-26 (T134): Currency, Coin, Chain, Blockchain,
 # Blockchain platform, Distributed ledger, Payment network, Cryptocurrency, Cryptocurrency exchange company.
 # Generic types (Topic, Software, Company, Website, Computer program) stay out: a hit there needs the owner.
-# CRYPTO_SUBSTRINGS may sit inside a longer type; the other words count only as the whole type
-# ("Chain" is crypto-typed, "Restaurant chain" is not).
-CRYPTO_SUBSTRINGS = ("cryptocurrency", "blockchain", "token", "coin", "digital currency", "virtual currency",
-                     "protocol", "decentralized")
-CRYPTO_TYPE_WORDS = CRYPTO_SUBSTRINGS + ("currency", "chain", "blockchain platform", "distributed ledger",
-                                         "payment network", "cryptocurrency exchange company")
+# CRYPTO_SUBSTRINGS may sit anywhere in the type, CRYPTO_WORDS only as whole words ("Tokenization company" is
+# out), and CRYPTO_PHRASES only as the whole type ("Chain" is in, "Restaurant chain" and "Internet protocol" out).
+CRYPTO_SUBSTRINGS = ("cryptocurrency", "blockchain")
+CRYPTO_WORDS = ("token", "coin", "digital currency", "virtual currency")
+CRYPTO_PHRASES = ("currency", "chain", "distributed ledger", "payment network", "decentralized finance",
+                  "decentralized finance protocol", "decentralized exchange", "defi protocol")
+CRYPTO_TYPE_WORDS = CRYPTO_SUBSTRINGS + CRYPTO_WORDS + CRYPTO_PHRASES + (
+    "blockchain platform", "cryptocurrency exchange company")
 PREFIX_MIN = 4
 # What may follow a prefix title in the name: "World" -> Worldcoin, "NEAR" -> NEAR Protocol; never "Bitcoin" ->
 # Bitcoin Cash or "Ethereum" -> Ethereum Classic.
 PREFIX_SUFFIXES = ("coin", "protocol", "network", "token", "chain", "blockchain", "finance")
+# What may follow the name in a longer title: "Kaspa Network"; never "Ethereum Classic", "Bitcoin SV",
+# "Sky Mavis", "Sky Protocol" or "Polygon zkEVM" (other coins or companies).
+CONTAINED_SUFFIXES = ("coin", "token", "network", "blockchain", "cryptocurrency")
 VERIFY_URL = "https://trends.google.com/trends/explore?q={}"
 PASTE_HEADER = "--- paste-ready JSON (PASS entries) ---"
 DECISION_HEADER = "--- needs a decision ---"
@@ -80,12 +87,18 @@ def _norm(text: str) -> str:
 
 def is_crypto_type(type_: str) -> bool:
     t = _norm(type_)
-    return t in CRYPTO_TYPE_WORDS or any(w in t for w in CRYPTO_SUBSTRINGS)
+    return (t in CRYPTO_PHRASES or any(w in t for w in CRYPTO_SUBSTRINGS)
+            or any(f" {w} " in f" {t} " for w in CRYPTO_WORDS))
 
 
-def _names_match(title: str, name: str) -> bool:
+def _exact_match(title: str, name: str) -> bool:
+    n = _norm(name)
+    return bool(n) and _norm(title) == n
+
+
+def _contained_match(title: str, name: str) -> bool:
     t, n = _norm(title), _norm(name)
-    return bool(n) and f" {n} " in f" {t} "
+    return bool(n) and t.startswith(n + " ") and t[len(n):].strip() in CONTAINED_SUFFIXES
 
 
 def _prefix_match(title: str, name: str) -> bool:
@@ -111,8 +124,9 @@ def check_name(client, symbol: str, name: str) -> Result:
     if ticker:
         hits = [c for c in crypto if c["title"].strip() == symbol]
     else:
-        hits = [c for c in crypto if _names_match(c["title"], name)]
-        if not hits and len(crypto) == 1 and _prefix_match(crypto[0]["title"], name):
+        hits = [c for c in crypto if _exact_match(c["title"], name)]
+        if not hits and len(crypto) == 1 and (_contained_match(crypto[0]["title"], name)
+                                              or _prefix_match(crypto[0]["title"], name)):
             hits = crypto
     if len(hits) == 1:
         res.verdict, res.proposed = "PASS", hits[0]
@@ -145,7 +159,7 @@ def _cand(c: dict) -> str:
 
 
 def _verify_hint(r: Result) -> str | None:
-    exact = next((c for c in r.candidates if _norm(c["title"]) == _norm(r.name)), None)
+    exact = next((c for c in r.candidates if _exact_match(c["title"], r.name)), None)
     return f"    verify {_cand(exact)}: {VERIFY_URL.format(quote(exact['mid'], safe=''))}" if exact else None
 
 

@@ -54,7 +54,7 @@ def test_pass_single_crypto_candidate():
 
 
 def test_ambiguous_several_crypto_candidates():
-    client = FakeTrendReq({"Sui": [candidate("/g/11sui", "Sui", "Blockchain"), candidate("/g/11suit", "Sui token", "Token")]})
+    client = FakeTrendReq({"Sui": [candidate("/g/11sui", "Sui", "Blockchain"), candidate("/g/11suit", "Sui", "Token")]})
     res, text = _run({"SUI": "Sui"}, client)
     assert res[0].verdict == "AMBIGUOUS" and res[0].proposed is None
     assert "/g/11sui" in text and "/g/11suit" in text
@@ -292,10 +292,42 @@ def test_v2_xmr_prefers_the_name_matching_candidate():
         assert res[0].verdict == "PASS" and res[0].proposed["mid"] == "/m/0xmr1", coin_type
 
 
-def test_v2_several_name_matches_stay_ambiguous():
-    client = FakeTrendReq({"Litecoin": _cands([("/m/0lt1", "Litecoin", "Currency"), ("/m/0lt2", "Litecoin Cash", "Coin")])})
+def test_v2_exact_title_tier_beats_contained_siblings():
+    script = {"Litecoin": _cands([("/m/0lt1", "Litecoin", "Currency"), ("/m/0lt2", "Litecoin Cash", "Coin")]),
+              "Bitcoin": _cands([("/m/05p0rrx", "Bitcoin", "Cryptocurrency"), ("/m/0bch", "Bitcoin Cash", "Cryptocurrency")]),
+              "Zcash": _cands([("/m/0zec", "Zcash", "Cryptocurrency"), ("/m/0zecf", "Zcash Foundation", "Coin")])}
+    res, _ = _run({"LTC": "Litecoin", "BTC": "Bitcoin", "ZEC": "Zcash"}, FakeTrendReq(script))
+    assert [(r.verdict, r.proposed["mid"]) for r in res] == [("PASS", "/m/0lt1"), ("PASS", "/m/05p0rrx"), ("PASS", "/m/0zec")]
+
+
+def test_v2_two_exact_titles_stay_ambiguous():
+    client = FakeTrendReq({"Litecoin": _cands([("/m/0lt1", "Litecoin", "Currency"), ("/m/0lt2", "Litecoin", "Coin")])})
     res, _ = _run({"LTC": "Litecoin"}, client)
     assert res[0].verdict == "AMBIGUOUS" and res[0].reason == "several crypto-typed candidates"
+
+
+def test_v2_contained_title_of_a_longer_coin_is_not_passed():
+    cases = {"ETH": ("Ethereum", "Ethereum Classic"), "BTC": ("Bitcoin", "Bitcoin SV"),
+             "SKY": ("Sky", "Sky Mavis"), "POL": ("Polygon", "Polygon zkEVM")}
+    script = {name: _cands([("/m/0x" + sym.lower(), title, "Cryptocurrency")]) for sym, (name, title) in cases.items()}
+    res, _ = _run({sym: name for sym, (name, _) in cases.items()}, FakeTrendReq(script))
+    assert {r.symbol: r.verdict for r in res} == {s: "AMBIGUOUS" for s in cases}
+
+
+def test_v2_eth_software_and_algo_topic_stay_ambiguous():
+    script = {"Ethereum": _cands([("/m/0eth", "Ethereum", "Software")]), "Algorand": _cands([("/g/11algo", "Algorand", "Topic")])}
+    res, _ = _run({"ETH": "Ethereum", "ALGO": "Algorand"}, FakeTrendReq(script))
+    assert [(r.verdict, r.reason) for r in res] == [("AMBIGUOUS", "no crypto-typed candidate")] * 2
+
+
+def test_v2_protocol_and_token_words_need_a_crypto_phrase():
+    for t in ("Internet protocol", "Network protocol", "Tokenization company", "Communication protocol"):
+        assert not c.is_crypto_type(t), t
+    for t in ("Currency", "Coin", "Chain", "Distributed ledger", "Payment network", "Cryptocurrency exchange company",
+              "Decentralized finance protocol", "Token"):
+        assert c.is_crypto_type(t), t
+    res, _ = _run({"ATOM": "Cosmos"}, FakeTrendReq({"Cosmos": _cands([("/m/0cos", "Cosmos", "Internet protocol")])}))
+    assert res[0].verdict == "AMBIGUOUS"
 
 
 def test_v2_prefix_rule_needs_one_candidate_and_four_chars():
