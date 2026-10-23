@@ -64,21 +64,22 @@ file and this report. No `.github/`, `api/pyproject.toml`, `api/uv.lock` or `api
 ## 5 Commits
 
 Round 1: e1c73fe (core), 6c94380 and ee56a53 (report), 2146853 (first review fixes). Round 2: 0e789ef (merge
-commit of `origin/main` 9d38000 into the branch; no rebase, no force-push), then the T147 fix commit that also
-carries this report (SHA in the PR).
+commit of `origin/main` 9d38000), 04c7f90 (T147 fixes), 0c29206 (merge commit of `origin/main` 9c128cc),
+then this report and a trailing-blank-line fix. No rebase, no force-push.
 
 ## 6 Tests run
 
-All `UV_FROZEN=1 uv run --project api pytest ... -q`. Baselines: fresh `origin/main` 9d38000, measured on
-22-10-26 in a separate worktree. Round-2 gate run started RUN_TIME on the final tree.
+All `UV_FROZEN=1 uv run --project api pytest ... -q`. Baselines: fresh `origin/main` 9c128cc (PR #153 now merged),
+measured on 23-10-26 in a separate worktree. Round-2 gate run started 2026-10-23T09:19:37Z on the final tree
+(main 9c128cc merged in). An earlier round-2 run against main 9d38000 gave the same deltas (+118 everywhere).
 
-| Gate | Fresh main 9d38000 | This branch (main merged + fixes) |
+| Gate | Fresh main 9c128cc | This branch (main merged + fixes) |
 |---|---|---|
 | Red first, round 2 (7 slice files, new tests before the fixes) | n/a | 24 failed, 94 passed |
-| Slice tests | n/a | SLICE_RESULT |
-| `api/tests/analytics/attention` | 280 passed, 1 failed (known) | ATT_RESULT |
-| `api/tests/scripts api/tests/data/attention api/tests/tooling_guards` | 590 passed | SDG_RESULT |
-| Full API (once) | 1861 passed, 1 skipped, 5 deselected, 1 failed (known) | FULL_RESULT |
+| Slice tests | n/a | 118 passed (98 + 20 round-2 tests) |
+| `api/tests/analytics/attention` | 280 passed, 1 failed (known) | 280 passed, 1 failed (same known test) |
+| `api/tests/scripts api/tests/data/attention api/tests/tooling_guards` | 603 passed | 721 passed (603 + 118) |
+| Full API (once) | 1874 passed, 1 skipped, 5 deselected, 1 failed (known) | 1992 passed (1874 + 118), 1 skipped, 5 deselected, 1 failed (same known test) |
 | File set `git diff --name-only origin/main...HEAD` | | the 14 files plus this report; forbidden paths 0 |
 | `git diff --check origin/main...HEAD`, secret scan (G8 pattern), banned-name grep, no-network-import grep | | all print nothing |
 | `ruff check --line-length 120` on the 13 Python files | | all checks passed |
@@ -126,8 +127,8 @@ None for W8b. Risks:
 
 DEFERRED from T147 (as the planner listed them; details in the T147 review): L3, L5, L6 (W8d provenance), L9,
 L11, and L10: the coin names and ambiguity lists in `api/data/attention_queries.json` need the owner's review;
-on Reddit ETC, LINK, NEAR, HYPE, PI, PUMP, GT and CC are ordinary words. W8c can start on this core. PR #153
-must merge before or with these slices so the PLAN and SPEC are on main.
+on Reddit ETC, LINK, NEAR, HYPE, PI, PUMP, GT and CC are ordinary words. W8c can start on this core. PR #153 has
+merged, so the PLAN and SPEC are on main.
 
 ## 11 Context and cost
 
