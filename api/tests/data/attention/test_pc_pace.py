@@ -515,4 +515,3 @@ def test_unknown_missing_or_bad_state_fields_fail_closed():
             x_source(Clock())
     write_state(json.dumps(base))
     assert x_source(Clock()).used == 10
-
