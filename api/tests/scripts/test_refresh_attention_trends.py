@@ -239,3 +239,54 @@ def test_pytrends_missing_marks_fetchable_coins_unavailable(monkeypatch, capsys)
     assert out["AAVE"].reason == "pytrends not installed" and out["USDX"].reason == "no keyword mapped"
     line = "trends: 0/2 ok, 0 rows written [other 2] reasons: no keyword mapped x1; pytrends not installed x1"
     assert attention_extra.classify("trends", line).status == "unavailable"
+
+
+def test_summary_counts_quiet_then_surge(monkeypatch, capsys):
+    surge = fx.daily_frame(["Aave"], 100, values={"Aave": [0] * 93 + [80] * 7})
+    out, _, _, _ = _run(monkeypatch, ["AAVE", "INJ"], {"Aave": [surge]})
+    assert out["AAVE"].reason == trends.QUIET_THEN_SURGE and out["AAVE"].points == []
+    lines = [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("trends detail:")]
+    assert lines == ["trends detail: ok 1, quiet-then-surge 1"]
+    assert store.read_pull_archive("trends", fx.TODAY).keys() == {"INJ"}  # missing coins are never archived
+
+
+def test_replace_mode_pinned_to_trends_only(monkeypatch, isolated_cache):
+    """Only the Trends source writes with replace-series; every other source keeps first-write-wins."""
+    from api.tests.data.attention.conftest import wiki_payload
+    assert refresh_attention.WRITE_MODES == {"trends": "replace-series"}
+    calls = []
+    real = store.write_series
+
+    def spy(s, today=None, **kw):
+        calls.append((s.source, kw.get("mode", "first")))
+        return real(s, today=today, **kw)
+    monkeypatch.setattr(refresh_attention.store, "write_series", spy)
+    _install(monkeypatch, TermClient())
+
+    def handler(r):
+        return httpx.Response(200, json=wiki_payload(100, end=fx.TODAY - timedelta(days=1)))
+    c = httpx.Client(transport=httpx.MockTransport(handler))
+    refresh_attention.main(["--sources", "wikipedia,trends", "--symbols", "BTC,AAVE"], client=c, today=fx.TODAY,
+                           sleep=lambda s: None)
+    assert ("wikipedia", "first") in calls and ("trends", "replace-series") in calls
+    assert {m for src, m in calls if src != "trends"} == {"first"}
+    assert {m for src, m in calls if src == "trends"} == {"replace-series"}
+
+
+def test_time_budget_checked_inside_backoff(monkeypatch):
+    """A backoff wait that would end past the budget is not started: the coin and the rest are capped."""
+    t = [0.0]
+    monkeypatch.setattr(refresh_attention, "_clock", lambda: t[0])
+    monkeypatch.setattr(refresh_attention, "TRENDS_TIME_BUDGET_S", 100)
+    client = TermClient({"Aave": [fx.too_many()]})
+    _install(monkeypatch, client)
+    sleeps = []
+
+    def sleep(s):
+        sleeps.append(s)
+        t[0] += s
+    series = refresh_attention._run_trends(["AAVE", "INJ"], None, _day(0, 2), sleep)
+    out = {s.symbol: s for s in series}
+    assert sleeps == [30, 60] and client.terms() == ["Aave"] * 3  # 90 + 120 > 100: the third wait never starts
+    assert out["AAVE"].state == "capped" and out["AAVE"].reason == "time budget reached"
+    assert out["INJ"].state == "capped" and out["INJ"].reason == "time budget reached"

@@ -242,11 +242,11 @@ def test_alone_one_request_per_symbol():
     sleeps = []
     code, _, client = _run([daily_frame([a]), daily_frame([i])], ["--alone", "AAVE,INJ"], sleeps=sleeps)
     assert code == 0
-    assert client.payloads == [([a], "today 3-m"), ([i], "today 3-m")]
+    tf = "2026-07-13 2026-10-20"  # default for --alone: the daily run's explicit range, ending yesterday
+    assert client.payloads == [([a], tf), ([i], tf)]
     assert sleeps == [p.INTERVAL_SECONDS]
-    tf = "2026-07-13 2026-10-20"
-    _, _, client = _run([daily_frame([a], days=100)], ["--alone", "AAVE", "--timeframe", tf])
-    assert client.payloads == [([a], tf)]
+    _, _, client = _run([daily_frame([a], days=100)], ["--alone", "AAVE", "--timeframe", "today 3-m"])
+    assert client.payloads == [([a], "today 3-m")]
 
 
 def test_alone_prints_stats_and_verdict():

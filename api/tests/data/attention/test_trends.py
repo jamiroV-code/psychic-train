@@ -1,5 +1,5 @@
 """Trends source wraps pytrends_adapter; fixtures only, no live call."""
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 
@@ -83,12 +83,43 @@ def test_fetch_alone_builds_single_term_payload():
 
 
 def test_fetch_alone_drops_partial_and_today():
-    s, _ = _fetch(fx.frame_with_today(["Aave"], days=101))
-    assert len(s.points) == 100 and all(d < fx.TODAY for d, _ in s.points)
-    s, _ = _fetch(_alone(days=101, partial_last=True))
-    assert len(s.points) == 100 and s.points[-1][0] == fx.TODAY - timedelta(days=2)
-    s, _ = _fetch(_alone(days=102, end=fx.TODAY + timedelta(days=1)))  # today and tomorrow not flagged partial
-    assert len(s.points) == 100 and s.points[-1][0] == fx.TODAY - timedelta(days=1)
+    s, _ = _fetch(fx.frame_with_today(["Aave"], days=101))  # today's row flagged partial: dropped
+    assert s.state == "ok" and len(s.points) == 100 and s.points[-1][0] == fx.TODAY - timedelta(days=1)
+    s, _ = _fetch(_alone(days=101, partial_last=True))  # yesterday partial: the pull is not current
+    assert (s.state, s.reason, s.points) == ("unavailable", trends.NOT_CURRENT, [])
+
+
+def test_fetch_alone_unflagged_today_row_fails_closed():
+    s, _ = _fetch(_alone(days=101, end=fx.TODAY))  # a today row NOT flagged partial lies outside the range
+    assert (s.state, s.reason, s.points) == ("unavailable", trends.OUT_OF_RANGE, [])
+    s, _ = _fetch(_alone(days=102, end=fx.TODAY + timedelta(days=1)))
+    assert (s.state, s.reason) == ("unavailable", trends.OUT_OF_RANGE)
+
+
+def test_fetch_alone_pull_ending_10_days_ago_fails_closed():
+    s, _ = _fetch(_alone(days=100, end=fx.TODAY - timedelta(days=11)))
+    assert (s.state, s.reason, s.points) == ("unavailable", trends.NOT_CURRENT, [])
+
+
+def test_fetch_alone_150_rows_fails_closed():
+    s, _ = _fetch(_alone(days=150))  # rows before the requested 100-day start
+    assert (s.state, s.reason, s.points) == ("unavailable", trends.OUT_OF_RANGE, [])
+
+
+def test_fetch_alone_duplicate_dates_and_gaps_fail_closed():
+    frame = _alone(days=100)
+    s, _ = _fetch(frame.iloc[[*range(50), 49, *range(50, 100)]])  # one date twice
+    assert (s.state, s.reason) == ("unavailable", "non-daily")
+    s, _ = _fetch(_alone([10.0] * 50 + [float("nan")] + [10.0] * 49))  # a missing value inside the range
+    assert (s.state, s.reason, s.points) == ("unavailable", "gap", [])
+
+
+def test_fetch_alone_range_rule_follows_explicit_timeframe_only():
+    client = fx.FakeTrendReq(frames=[_alone(days=120)])
+    s = trends.fetch_alone("aave", "Aave", client, today=fx.TODAY, timeframe="today 3-m")
+    assert s.state == "ok" and len(s.points) == 120  # no start bound for a relative window; last row still checked
+    assert trends.requested_range("today 3-m") is None
+    assert trends.requested_range("2026-07-13 2026-10-20") == (date(2026, 7, 13), date(2026, 10, 20))
 
 
 def test_fetch_alone_rejects_non_daily_step():
@@ -138,6 +169,16 @@ def test_many_zero_days_too_little_interest():
     assert (s.state, s.reason) == ("unavailable", trends.TOO_LITTLE_INTEREST)
     s, _ = _fetch(_alone([0] * 39 + [50] * 61))
     assert s.state == "ok"
+
+
+def test_quiet_then_surge_distinct_reason():
+    for vals in ([0] * 93 + [80] * 7, [0] * 60 + [2] * 33 + [80] * 7):
+        s, _ = _fetch(_alone(vals))
+        assert (s.state, s.reason, s.points) == ("unavailable", trends.QUIET_THEN_SURGE, [])
+    s, _ = _fetch(_alone([0] * 93 + [80] * 6 + [0]))  # a zero inside the last 7 days: no surge, plain sparse
+    assert s.reason == trends.TOO_LITTLE_INTEREST
+    assert trends.interest_verdict([0] * 93 + [80] * 7) == trends.QUIET_THEN_SURGE
+    assert trends.interest_verdict([50] * 100) == "ok"
 
 
 def test_interest_rule_never_writes_zero(isolated_cache):

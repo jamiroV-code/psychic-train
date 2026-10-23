@@ -8,7 +8,7 @@ Writes nothing; prints an exception's class and HTTP status only. Exit 0 when a 
 3 pytrends not installed. Starting the session sends one cookie request to Google, outside the 3 data
 requests counted above. PowerShell: quote comma lists, e.g. --coins 'SOL,LINK,AAVE,INJ,MORPHO'.
 --alone 'LINK,AAVE' (T100b, probe P-RES): instead of the requests above, one request per coin with only its
-keyword; prints days, min, median, max, days at 0 and at 0 or 1, distinct values, zero share and the verdict of
+keyword, by default over the daily run's explicit 100-day range ending yesterday; prints days, min, median, max, days at 0 and at 0 or 1, distinct values, zero share and the verdict of
 the daily run's too-little-interest rule. Stops at the first HTTP 429.
 """
 from __future__ import annotations
@@ -186,11 +186,11 @@ def _pick_coins(km: tk.KeywordMap, requested: list[str], anchors: set[str], out)
 
 
 def _alone_stats(sym: str, kw: str, frame, day: date, out) -> None:
-    points, reason = trends.complete_days(frame, kw, day)
+    points, reason = trends.complete_days(frame, kw)
     if points is None:
         print(f"  {sym} ({kw}) | {reason}", file=out)
         return
-    vals = [v for _, v in points]
+    vals = [v for d, v in points if d < day]
     if not vals:
         print(f"  {sym} ({kw}) | step {_step(frame)} | days 0 | verdict: {trends.TOO_LITTLE_INTEREST}", file=out)
         return
@@ -235,7 +235,8 @@ def _parse(argv, km: tk.KeywordMap):
     ap.add_argument("--coins", default=",".join(DEFAULT_COINS))
     ap.add_argument("--anchor-a", default=None, help="default: the BTC entry's keyword")
     ap.add_argument("--anchor-b", default=None, help="default: the ETH entry's keyword")
-    ap.add_argument("--timeframe", default=DEFAULT_TIMEFRAME)
+    ap.add_argument("--timeframe", default=None, help=f'default "{DEFAULT_TIMEFRAME}"; with --alone the daily '
+                    "run's explicit 100-day range ending yesterday")
     ap.add_argument("--no-evidence", action="store_true")
     ap.add_argument("--alone", default=None, help="comma list of symbols: one request per coin, only its keyword")
     try:
@@ -254,7 +255,9 @@ def _parse(argv, km: tk.KeywordMap):
         if not alone or not all(tk.SYMBOL_RE.fullmatch(s) for s in alone):
             raise ArgError(f"--alone must be comma-separated symbols matching {tk.SYMBOL_RE.pattern}")
         args.alone = list(dict.fromkeys(alone))
-    if not TIMEFRAME_RE.fullmatch(args.timeframe):
+    if args.timeframe is None and args.alone is None:
+        args.timeframe = DEFAULT_TIMEFRAME
+    if args.timeframe is not None and not TIMEFRAME_RE.fullmatch(args.timeframe):
         raise ArgError('--timeframe must look like "today 3-m"')
     return args, coins, a, b
 
@@ -281,7 +284,9 @@ def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep
     if args.alone is not None:
         print("probe_trends: read-only, writes nothing", file=out)
         print(f"pytrends version: {version()}", file=out)
-        return _run_alone(client, km, args.alone, args.timeframe, today(), sleep, clock, out)
+        day = today()
+        return _run_alone(client, km, args.alone, args.timeframe or trends.explicit_timeframe(day), day, sleep,
+                          clock, out)
 
     anchor = km.anchor_keyword()
     sample = _pick_coins(km, requested, {anchor.casefold(), anchor_a.casefold(), anchor_b.casefold()}, out)

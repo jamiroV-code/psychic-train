@@ -8,6 +8,7 @@ pull date. Paths resolve at call time so tests can redirect `cache.CACHE_ROOT`.
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from itertools import pairwise
 from pathlib import Path
 
 import pandas as pd
@@ -49,27 +50,31 @@ def _write_frame(path: Path, days: list[date], values: list[float]) -> None:
     cache._atomic_to_parquet(pd.DataFrame({"date": pd.to_datetime(days), "value": values}), path)
 
 
+def _replaceable(points: list[tuple[date, float]]) -> bool:
+    """A replace-series pull is stored only when it has at least MIN_REPLACE_DAYS rows, one per consecutive day
+    in increasing order (no duplicate, gap or reversal), and not all zero. Guarded here so no caller can bypass it."""
+    if len(points) < MIN_REPLACE_DAYS or not any(v for _, v in points):
+        return False
+    return all((b[0] - a[0]).days == 1 for a, b in pairwise(points))
+
+
 def write_series(series: SourceSeries, today: date | None = None, mode: str = "first") -> int:
     """Store completed days; return the number of new rows.
 
     mode "first": merge, the first observation of a day wins (every source but Trends).
     mode "replace-series": the stored series becomes exactly this pull's completed days (one request
-    scale, nothing stitched); a pull of fewer than MIN_REPLACE_DAYS completed days changes nothing.
+    scale, nothing stitched); a pull that fails `_replaceable` changes nothing.
     """
     if mode not in WRITE_MODES:
         raise ValueError(f"unknown store mode {mode!r}")
     today = today or _utc_today()
     path = store_path(series.source, series.symbol)
     if mode == "replace-series":
-        pulled: dict[date, float] = {}
-        for d, v in series.points:
-            if d < today and d not in pulled:
-                pulled[d] = float(v)
-        if len(pulled) < MIN_REPLACE_DAYS:
+        pulled = [(d, float(v)) for d, v in series.points if d < today]
+        if not _replaceable(pulled):
             return 0
-        days = sorted(pulled)
-        _write_frame(path, days, [pulled[d] for d in days])
-        return len(days)
+        _write_frame(path, [d for d, _ in pulled], [v for _, v in pulled])
+        return len(pulled)
     merged: dict[date, float] = dict(read_points(series.source, series.symbol))
     existing = len(merged)
     for d, v in series.points:

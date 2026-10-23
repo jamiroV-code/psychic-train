@@ -133,12 +133,28 @@ def test_default_mode_unchanged_first_wins(attention_cache):
 
 
 def test_replace_series_sorted_and_returns_count(attention_cache):
-    pts = list(reversed(_run_of(95, 4.0)))
-    pts.append((pts[0][0], 99.0))  # a repeated day: the first row of the pull wins
-    assert store.write_series(_s(pts, source="trends"), today=TODAY, mode="replace-series") == 95
+    assert store.write_series(_s(_run_of(95, 4.0), source="trends"), today=TODAY, mode="replace-series") == 95
     got = store.read_points("trends", "BTC")
-    assert [d for d, _ in got] == sorted(d for d, _ in got) and got[-1][1] == 4.0
+    assert [d for d, _ in got] == sorted(d for d, _ in got) and len(got) == 95
     assert len(pd.read_parquet(store.store_path("trends", "BTC"))) == 95
+
+
+@pytest.mark.parametrize("case", ["all-zero", "duplicate", "unsorted", "gap"])
+def test_replace_series_rejects_bad_series_itself(attention_cache, case):
+    """The store guards replace-series on its own, so no caller can bypass fetch_alone's checks."""
+    old = _run_of(92, 1.0)
+    store.write_series(_s(old, source="trends"), today=TODAY, mode="replace-series")
+    pts = _run_of(95, 6.0)
+    if case == "all-zero":
+        pts = _run_of(95, 0.0)
+    elif case == "duplicate":
+        pts = pts[:50] + [pts[49]] + pts[50:]
+    elif case == "unsorted":
+        pts = list(reversed(pts))
+    else:
+        pts = pts[:40] + pts[41:]
+    assert store.write_series(_s(pts, source="trends"), today=TODAY, mode="replace-series") == 0
+    assert store.read_points("trends", "BTC") == old
 
 
 def test_replace_mode_rejects_unknown_mode(attention_cache):

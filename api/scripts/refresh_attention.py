@@ -44,10 +44,11 @@ TRENDS_INTERVAL_S = 3.0
 TRENDS_BACKOFF_S = (30, 60, 120)
 TRENDS_BREAKER_AFTER = 3
 TRENDS_TIME_BUDGET_S = 540
-TRENDS_OUTCOMES = ("ok", "too-little-interest", "name-ambiguous", "no-keyword", "non-daily", "rate-limited",
+TRENDS_OUTCOMES = ("ok", "too-little-interest", "quiet-then-surge", "name-ambiguous", "no-keyword", "non-daily", "rate-limited",
                    "insufficient-history", "time-budget")
-_TRENDS_REASON_OUTCOME = {trends.TOO_LITTLE_INTEREST: "too-little-interest", trends.NAME_AMBIGUOUS: "name-ambiguous",
-                          "no keyword mapped": "no-keyword", "non-daily": "non-daily"}
+_TRENDS_REASON_OUTCOME = {trends.TOO_LITTLE_INTEREST: "too-little-interest", trends.QUIET_THEN_SURGE: "quiet-then-surge",
+                          trends.NAME_AMBIGUOUS: "name-ambiguous", "no keyword mapped": "no-keyword",
+                          "non-daily": "non-daily"}
 # Store mode per source; every source not listed keeps first-write-wins.
 WRITE_MODES = {"trends": "replace-series"}
 TRENDREQ_FACTORY = make_trendreq  # pytrends is imported on first use only; tests inject a fake
@@ -213,12 +214,16 @@ def trends_summary(series) -> str:
     return ", ".join(f"{k} {counts[k]}" for k in sorted(counts, key=order))
 
 
-def _trends_fetch_429(sym, term, client, today, sleep):
-    """fetch_alone with the 429 backoff: TRENDS_BACKOFF_S waits for the same coin, then `capped`."""
+def _trends_fetch_429(sym, term, client, today, sleep, deadline):
+    """fetch_alone with the 429 backoff: TRENDS_BACKOFF_S waits for the same coin, then `capped`. A wait that would
+    end after `deadline` (the source's time budget) is not started: the coin is capped "time budget reached"."""
+    from api.data.attention.types import SourceSeries
     item = trends.fetch_alone(sym, term, client, today=today)
     for wait in TRENDS_BACKOFF_S:
         if item.state != "capped":
             break
+        if _clock() + wait > deadline:
+            return SourceSeries("trends", sym, [], "capped", "time budget reached")
         sleep(wait)
         item = trends.fetch_alone(sym, term, client, today=today)
     return item
@@ -268,7 +273,9 @@ def _run_trends(symbols, client, today, sleep):
             if sent:
                 sleep(TRENDS_INTERVAL_S + _jitter())
             sent = True
-            item = _trends_fetch_429(s, kw, trendreq, today, sleep)
+            item = _trends_fetch_429(s, kw, trendreq, today, sleep, t0 + TRENDS_TIME_BUDGET_S)
+            if item.reason == "time budget reached":
+                stop = item.reason
             streak = streak + 1 if item.state == "capped" else 0
             out[s] = item
     series = [out[s] for s in dict.fromkeys(x.upper() for x in symbols)]

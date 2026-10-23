@@ -49,6 +49,14 @@ MIN_COMPLETE_DAYS = 90
 TRENDS_MIN_MEDIAN = 3
 TRENDS_MAX_ZERO_DAY_PCT = 40
 TOO_LITTLE_INTEREST = "too-little-interest"
+# Quiet baseline (median of the days before the last week < TRENDS_MIN_MEDIAN) but a live last week (every day > 0,
+# median >= TRENDS_MIN_MEDIAN): still missing, never 0, but
+# reported apart so the owner sees it. Whether "rising from nothing" counts as rising is an open SPEC question.
+QUIET_THEN_SURGE = "quiet-then-surge"
+SURGE_DAYS = 7
+# Fail-closed pull checks: a row outside [requested start, yesterday], or a last row that is not yesterday.
+OUT_OF_RANGE = "out-of-range"
+NOT_CURRENT = "not-current"
 NAME_AMBIGUOUS = "name-ambiguous: needs topic"
 # Bare names that collect unrelated searches (T125 review list): fetched by topic id only, never by term.
 NAME_RISK_SYMBOLS = frozenset(
@@ -59,6 +67,15 @@ def explicit_timeframe(today: date) -> str:
     """'<start> <end>' over the TRENDS_RANGE_DAYS complete UTC days ending yesterday."""
     end = today - timedelta(days=1)
     return f"{(end - timedelta(days=TRENDS_RANGE_DAYS - 1)).isoformat()} {end.isoformat()}"
+
+
+def requested_range(timeframe: str) -> tuple[date, date] | None:
+    """(start, end) of an explicit 'YYYY-MM-DD YYYY-MM-DD' timeframe; None for a relative one ('today 3-m')."""
+    parts = timeframe.split(" ")
+    try:
+        return (date.fromisoformat(parts[0]), date.fromisoformat(parts[1])) if len(parts) == 2 else None
+    except ValueError:
+        return None
 
 
 def http_status(exc: BaseException) -> int | None:
@@ -77,22 +94,26 @@ def is_rate_limited(exc: BaseException) -> bool:
 
 
 def interest_verdict(values: list[float]) -> str:
-    """'ok' or TOO_LITTLE_INTEREST: all zero, median under TRENDS_MIN_MEDIAN, or zero days at least
-    TRENDS_MAX_ZERO_DAY_PCT percent of the days."""
-    if not values or not any(values):
-        return TOO_LITTLE_INTEREST
-    zero_pct = 100.0 * sum(1 for v in values if v == 0) / len(values)
-    if statistics.median(values) < TRENDS_MIN_MEDIAN or zero_pct >= TRENDS_MAX_ZERO_DAY_PCT:
-        return TOO_LITTLE_INTEREST
-    return "ok"
+    """'ok', TOO_LITTLE_INTEREST (all zero, median under TRENDS_MIN_MEDIAN, or zero days at least
+    TRENDS_MAX_ZERO_DAY_PCT percent of the days) or QUIET_THEN_SURGE (too little, but a live last week)."""
+    if values and any(values):
+        zero_pct = 100.0 * sum(1 for v in values if v == 0) / len(values)
+        if statistics.median(values) >= TRENDS_MIN_MEDIAN and zero_pct < TRENDS_MAX_ZERO_DAY_PCT:
+            return "ok"
+    base, last = values[:-SURGE_DAYS], values[-SURGE_DAYS:]
+    if (base and len(last) == SURGE_DAYS and statistics.median(base) < TRENDS_MIN_MEDIAN
+            and all(v > 0 for v in last) and statistics.median(last) >= TRENDS_MIN_MEDIAN):
+        return QUIET_THEN_SURGE
+    return TOO_LITTLE_INTEREST
 
 
 def _partial(value) -> bool:
     return value.strip().lower() == "true" if isinstance(value, str) else bool(value)
 
 
-def complete_days(frame, term: str, today: date) -> tuple[list[tuple[date, float]] | None, str]:
-    """(points, "") on a daily frame, else (None, reason). Drops isPartial rows and days >= today."""
+def complete_days(frame, term: str) -> tuple[list[tuple[date, float]] | None, str]:
+    """(points, "") on a daily frame without its isPartial rows, else (None, reason). A missing value is a gap
+    (never 0). Dates are not filtered here: fetch_alone rejects rows outside the requested range."""
     if frame is None or len(frame) == 0:
         return None, "empty response"
     if term not in frame.columns:
@@ -103,12 +124,11 @@ def complete_days(frame, term: str, today: date) -> tuple[list[tuple[date, float
     flags = frame["isPartial"].tolist() if "isPartial" in frame.columns else [False] * len(idx)
     points = []
     for ts, v, partial in zip(idx, frame[term].tolist(), flags):
-        d = ts.date() if hasattr(ts, "date") else ts
         if _partial(partial):
             continue
-        if d >= today or v is None or math.isnan(v):  # today is partial; NaN is a gap, never 0
-            continue
-        points.append((d, float(v)))
+        if v is None or math.isnan(v):
+            return None, "gap"
+        points.append((ts.date() if hasattr(ts, "date") else ts, float(v)))
     return points, ""
 
 
@@ -122,11 +142,22 @@ def fetch_alone(symbol: str, term: str, client, *, today: date, timeframe: str |
         if is_rate_limited(exc):
             return SourceSeries(SOURCE, sym, [], "capped", f"rate-limited: {error_class(exc)}")
         return SourceSeries(SOURCE, sym, [], "unavailable", f"fetch-failed: {error_class(exc)}")
-    points, reason = complete_days(frame, term, today)
+    points, reason = complete_days(frame, term)
     if points is None:
         return SourceSeries(SOURCE, sym, [], "unavailable", reason)
+    # Fail closed: every row inside [requested start, yesterday] and the last row is yesterday, or nothing is
+    # stored (a stale or oversized pull would otherwise replace the whole stored series).
+    yesterday = today - timedelta(days=1)
+    rng = requested_range(timeframe or explicit_timeframe(today))
+    if any(d > yesterday for d, _ in points):
+        return SourceSeries(SOURCE, sym, [], "unavailable", OUT_OF_RANGE)
+    if points and points[-1][0] != yesterday:
+        return SourceSeries(SOURCE, sym, [], "unavailable", NOT_CURRENT)
+    if rng is not None and points and points[0][0] < rng[0]:
+        return SourceSeries(SOURCE, sym, [], "unavailable", OUT_OF_RANGE)
     if len(points) < MIN_COMPLETE_DAYS:
         return SourceSeries(SOURCE, sym, [], "insufficient-history", f"{len(points)} days")
-    if interest_verdict([v for _, v in points]) != "ok":
-        return SourceSeries(SOURCE, sym, [], "unavailable", TOO_LITTLE_INTEREST)  # missing, never 0
+    verdict = interest_verdict([v for _, v in points])
+    if verdict != "ok":
+        return SourceSeries(SOURCE, sym, [], "unavailable", verdict)  # missing, never 0
     return SourceSeries(SOURCE, sym, points, "ok", "")
