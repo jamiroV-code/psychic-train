@@ -8,12 +8,19 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
-
-from api.analytics.attention import discovery as disc, discovery_history as hist, signal_snapshots as snaps
+from api.analytics.attention import discovery as disc
+from api.analytics.attention import discovery_history as hist
+from api.analytics.attention import signal_snapshots as snaps
 from api.analytics.attention import sources as src_mod
 from api.data.attention.types import SourceSeries
 from api.tests.analytics.attention.conftest import TODAY
-from api.tests.analytics.attention.test_discovery import END, SUB, WEIGHTS, put_change, world
+from api.tests.analytics.attention.test_discovery import (
+    END,
+    SUB,
+    WEIGHTS,
+    put_change,
+    world,
+)
 
 V2 = {"trends": 25, "reddit": 20, "xsearch": 15, "exchange_activity": 15, "wikipedia": 10, "defillama": 5,
       "github_dev": 0}
@@ -199,22 +206,63 @@ def test_shipped_config_is_v2_with_v1_history():
     assert (new["weights_version"], new["source_weights"]) == (2, V2)
 
 
+def frozen_mismatches(cfg: dict, records: list[dict]) -> list[str]:
+    """Frozen records not scored with the weights `weights_for_day(cfg, day)` gives for their day.
+
+    What a record was scored with is its `weights` (T150), else its OWN config's version for its day (pre-T130 configs have no history, so
+    that is their top-level weights), its `weights_version` (1 when absent), and, as evidence from the rows, each
+    row's covered weight = the sum of those weights over the sources it lists."""
+    out = []
+    for rec in records:
+        day, name = date.fromisoformat(rec["date"]), f"{rec['date']}_w{rec['window']}"
+        want = disc.weights_for_day(cfg, day)
+        used = rec.get("weights") or disc.weights_for_day(rec["config"], day)
+        if used["source_weights"] != want["source_weights"]:
+            out.append(f"{name}: weights")
+        elif rec.get("weights_version", 1) != want["weights_version"]:
+            out.append(f"{name}: version")
+        elif any(abs(r["covered_weight"] - sum(want["source_weights"][SLOT_OF.get(x["source"], x["source"])]
+                                               for x in r["sources"])) > 1e-9 for r in rec["rows"]):
+            out.append(f"{name}: rows")
+    return out
+
+
+SLOT_OF = {disc.FALLBACK_SERIES: disc.SLOT}   # a row lists the CoinGecko fallback in the exchange slot's place
+
+
+def _frozen(day: str, config: dict, version: int | None, covered=(35.0,), sources=("wikipedia", "coingecko")):
+    rec = {"date": day, "window": 30, "config": config,
+           "rows": [{"covered_weight": c, "sources": [{"source": s} for s in sources]} for c in covered]}
+    return rec if version is None else {**rec, "weights_version": version}
+
+
+SHIPPED_LIKE = {"weights_version": 2, "source_weights": V2, "source_groups": GROUPS, "early_sources": EARLY,
+                "weights_history": [HIST1]}
+OLD_CODE_CFG = {"source_weights": dict(WEIGHTS)}   # a record frozen by pre-T130 code: v1 weights, no history
+
+
+@pytest.mark.parametrize("rec, bad", [
+    (_frozen("2026-10-20", OLD_CODE_CFG, None), False),                 # pre-T130 code, v1 day
+    (_frozen("2026-10-21", SHIPPED_LIKE, 1), False),                    # T130 code, v1 day: full config stored
+    (_frozen("2026-10-22", SHIPPED_LIKE, 2, covered=(25.0,)), False),   # T130 code, v2 day
+    (_frozen("2026-10-22", OLD_CODE_CFG, None), True),                  # the race: old code froze a v2 day
+    (_frozen("2026-10-21", SHIPPED_LIKE, 2), True),                     # version disagrees with the table
+    (_frozen("2026-10-21", SHIPPED_LIKE, 1, covered=(25.0,)), True),    # rows were not scored with v1
+])
+def test_frozen_mismatch_check(rec, bad):
+    """T150: the guard must read the weights a record was SCORED with (its own config's version for its day),
+    not the stored top-level `source_weights`, which since T130 is the current version."""
+    assert bool(frozen_mismatches(disc.load_config() | {"weights_history": [HIST1]}, [rec])) is bad
+
+
 def test_committed_frozen_snapshots_match_their_days_weights():
-    """D10 guard: a frozen day must keep the weights it was scored with. If main froze a later day under v1
-    before this config merged, move weights_history[-1].until to that day."""
-    c = disc.load_config()
+    """D10 guard: every committed frozen day keeps the weights it was scored with. A refresh by pre-change code
+    that freezes a day after `weights_history[-1].until` fails here; then move `until` to that day."""
     folder = Path(disc.CONFIG_PATH).parent / "cache" / "attention" / "signals"
-    files = sorted(folder.glob("*_w*.json"))
-    assert files
-    for p in files:
-        rec = json.loads(p.read_text())
-        day = date.fromisoformat(rec["date"])
-        w = disc.weights_for_day(c, day)
-        assert rec["config"]["source_weights"] == w["source_weights"], p.name
-        assert rec.get("weights_version", 1) == w["weights_version"], p.name
+    records = [json.loads(p.read_text()) for p in sorted(folder.glob("*_w*.json"))]
+    assert records
+    assert frozen_mismatches(disc.load_config(), records) == []
 
-
-# ---- history and snapshots --------------------------------------------------------------------
 
 HIST_TEST = {"weights_version": 1, "until": (END - timedelta(days=3)).isoformat(),
              "source_weights": dict(WEIGHTS), "source_groups": {}, "early_sources": []}
@@ -269,6 +317,21 @@ def test_new_snapshot_records_weights_version(isolated_cache, tmp_path, monkeypa
     rec = json.loads((isolated_cache / "attention" / "signals" / f"{END.isoformat()}_w7.json").read_text())
     assert rec["weights_version"] == 2
     assert {r["weights_version"] for r in snaps.read_snapshots(END, END)} == {2}
+
+
+@pytest.mark.parametrize("offset, version", [(-1, 1), (0, 1), (1, 2)])   # day before, boundary day, day after
+def test_snapshot_records_the_weights_it_was_scored_with(isolated_cache, tmp_path, monkeypatch, offset, version):
+    """T150: a new record stores the weights version USED for its day (`weights`), its label equals that version,
+    and its rows' covered weights are sums of those weights (wikipedia + CoinGecko slot: v1 35, v2 25)."""
+    _vworld(tmp_path, monkeypatch, weights_history=[HIST_TEST])
+    day = date.fromisoformat(HIST_TEST["until"]) + timedelta(days=offset)
+    snaps.take_snapshot(day + timedelta(days=1))
+    rec = json.loads((isolated_cache / "attention" / "signals" / f"{day.isoformat()}_w7.json").read_text())
+    used = WEIGHTS if version == 1 else V2
+    assert rec["weights_version"] == rec["weights"]["weights_version"] == version
+    assert rec["weights"]["source_weights"] == used
+    assert [r["covered_weight"] for r in rec["rows"]] == [used["wikipedia"] + used["exchange_activity"]]
+    assert frozen_mismatches(disc.load_config(), [rec]) == []
 
 
 def test_frozen_v1_snapshot_is_not_rewritten_and_reads_as_v1(isolated_cache, tmp_path, monkeypatch):
