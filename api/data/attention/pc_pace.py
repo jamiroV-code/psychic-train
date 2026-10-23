@@ -7,10 +7,13 @@
   (X: halved after a warning day, floor one unit; doubled once after 7 clean days, up to the configured value),
   and the pause (rest of the UTC day on any warning; until the owner acts on suspension or login-expired).
 - `build_queue`: yesterday for every coin first, then older missing days newest first; never today.
-- `run_x_unit`: one coin-day through an `XAdapter`, checking pause and budget before every page load and never
-  retrying after a warning.
+- `run_x_unit`: one coin-day through an `XAdapter`: refused before the minimum delay since the last unit (also
+  across a restart), pause and budget checked before every page load, never a retry after a warning.
 
-The clock is injected everywhere; nothing here compares the clock to a fixed hour of the day.
+The clock is injected everywhere; nothing here compares the clock to a fixed hour of the day. A clock moved back
+never reopens a day's budget or shortens a pause: the counted day is never earlier than the newest one seen.
+A state file that exists but is unreadable or invalid raises `PcStateError` (fail closed): the worker (W8e)
+must then pause that source and leave the file alone, never delete or reset it.
 """
 from __future__ import annotations
 
@@ -32,10 +35,53 @@ SOURCE_DELAYS = {"xsearch_web": ("x_query_delay_min_s", "x_query_delay_max_s"),
                  "reddit_web": ("reddit_request_delay_min_s", "reddit_request_delay_max_s")}
 
 
+STATE_KEYS = ("budget_day", "used", "spent_day", "effective", "clean_days", "activity", "pause_until",
+              "pause_reason", "last_unit_at")
+
+
+class PcStateError(ValueError):
+    """A state file exists but is unreadable or invalid; the message never holds the path or the content."""
+
+
 def _utc(now: datetime) -> datetime:
     if now.tzinfo is None:
         raise ValueError("clock must be timezone-aware UTC")
     return now.astimezone(timezone.utc)
+
+
+def _iso_day(v) -> bool:
+    try:
+        return isinstance(v, str) and date.fromisoformat(v).isoformat() == v
+    except ValueError:
+        return False
+
+
+def _iso_aware(v) -> bool:
+    try:
+        return isinstance(v, str) and datetime.fromisoformat(v).tzinfo is not None
+    except ValueError:
+        return False
+
+
+def _count(v, low: int = 0) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool) and v >= low
+
+
+def _valid_state(s) -> bool:
+    if not isinstance(s, dict) or set(s) != set(STATE_KEYS):
+        return False
+    act, reason = s["activity"], s["pause_reason"]
+    return all((
+        s["budget_day"] is None or _iso_day(s["budget_day"]),
+        s["spent_day"] is None or _iso_day(s["spent_day"]),
+        _count(s["used"]), _count(s["effective"], 1), _count(s["clean_days"]),
+        act is None or (isinstance(act, dict) and set(act) == {"day", "units", "warned"} and _iso_day(act["day"])
+                        and _count(act["units"]) and isinstance(act["warned"], bool)),
+        reason is None or reason in pa.WARNING_REASONS,
+        s["pause_until"] is None or _iso_aware(s["pause_until"]),
+        reason is None or reason in pa.OWNER_ACTION_REASONS or s["pause_until"] is not None,
+        s["last_unit_at"] is None or _iso_aware(s["last_unit_at"]),
+    ))
 
 
 class Trickle:
@@ -117,17 +163,18 @@ class PcSource:
 
     # --- persistence ---
     def _load(self) -> dict:
-        s = json.loads(self.path.read_text(encoding="utf-8")) if self.path.exists() else {}
-        s.setdefault("budget_day", None)
-        s.setdefault("used", 0)
-        s.setdefault("spent_day", None)
-        s.setdefault("effective", self.configured)
-        s.setdefault("clean_days", 0)
-        s.setdefault("activity", None)  # {"day", "units", "warned"} for the newest day with activity
-        s.setdefault("pause_until", None)
-        s.setdefault("pause_reason", None)
-        s.setdefault("last_unit_at", None)
-        s["effective"] = max(self.floor, min(int(s["effective"]), self.configured))
+        if not self.path.exists():
+            # "activity": {"day", "units", "warned"} for the newest day with activity
+            return {"budget_day": None, "used": 0, "spent_day": None, "effective": self.configured,
+                    "clean_days": 0, "activity": None, "pause_until": None, "pause_reason": None,
+                    "last_unit_at": None}
+        try:
+            s = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            raise PcStateError("state file unreadable") from None
+        if not _valid_state(s):
+            raise PcStateError("state file invalid")
+        s["effective"] = max(self.floor, min(s["effective"], self.configured))
         return s
 
     def _save(self) -> None:
@@ -135,7 +182,10 @@ class PcSource:
         cache._atomic_write_json(self._s, self.path)
 
     def _today(self) -> str:
-        return _utc(self.clock()).date().isoformat()
+        """The UTC day being counted: never earlier than the newest day already counted (a clock moved back)."""
+        today = _utc(self.clock()).date().isoformat()
+        last = self._s["budget_day"]
+        return max(today, last) if last else today
 
     def _roll(self) -> None:
         """Close the last activity day once a later UTC day starts; reset the day's budget count."""
@@ -222,6 +272,11 @@ class PcSource:
         v = self._s["last_unit_at"]
         return datetime.fromisoformat(v) if v else None
 
+    def earliest_next(self, min_s: float) -> datetime | None:
+        """When the next unit may start: the end of the last unit or attempt plus the minimum delay."""
+        last = self.last_unit_at()
+        return None if last is None else last + timedelta(seconds=min_s)
+
     def warn(self, reason: str) -> None:
         """Pause on a warning: rest of the UTC day, or until `owner_reset` for suspension and login-expired.
 
@@ -237,7 +292,7 @@ class PcSource:
         if reason in pa.OWNER_ACTION_REASONS:
             until = None
         else:
-            until = datetime.combine(_utc(self.clock()).date() + timedelta(days=1), datetime.min.time(),
+            until = datetime.combine(date.fromisoformat(self._today()) + timedelta(days=1), datetime.min.time(),
                                      tzinfo=timezone.utc).isoformat()
         self._s["pause_until"], self._s["pause_reason"] = until, reason
         self._save()
@@ -268,12 +323,25 @@ class UnitOutcome:
     result: density.DayResult | None
     posts_loaded: int
     pages: int
-    stop: str  # "done", "pagecap", "budget_spent", "paused", or a CollectorError reason
+    # "done", "pagecap", "budget_spent", "paused", "too_early", "page_overrun", or a CollectorError reason
+    stop: str
 
 
 def run_x_unit(adapter: pa.XAdapter, src: PcSource, config: CollectorConfig, *, symbol: str, day: date, query: str,
                rng: random.Random, sleep: Callable[[float], None]) -> UnitOutcome:
-    """Collect one X coin-day (SPEC A.1): at most `x_page_cap` pages, 5-15 s apart, inside the daily budget."""
+    """Collect one X coin-day (SPEC A.1): at most `x_page_cap` pages, 5-15 s apart, inside the daily budget.
+
+    Nothing is sent when the source is paused or the minimum delay since the last unit has not passed. A page
+    with more posts than the adapter's declared `page_size` is counted in full and stops X for the UTC day.
+    """
+    size = adapter.page_size
+    if not isinstance(size, int) or isinstance(size, bool) or size < 1:
+        raise ValueError("adapter page_size must be a positive int")
+    if src.is_paused():
+        return UnitOutcome(None, 0, 0, "paused")
+    due = src.earliest_next(config.x_query_delay_min_s)
+    if due is not None and _utc(src.clock()) < due:
+        return UnitOutcome(None, 0, 0, "too_early")
     start, end = density.window(day)
     raw: list[pa.Post] = []
     loaded = pages = 0
@@ -283,7 +351,7 @@ def run_x_unit(adapter: pa.XAdapter, src: PcSource, config: CollectorConfig, *, 
         if src.is_paused():
             stop = "paused"
             break
-        if not src.can_spend(adapter.page_size):
+        if not src.can_spend(size):
             src.mark_spent()
             limit, stop = True, "budget_spent"
             break
@@ -302,6 +370,10 @@ def run_x_unit(adapter: pa.XAdapter, src: PcSource, config: CollectorConfig, *, 
         pages += 1
         loaded += len(got.posts)
         src.record_loaded(len(got.posts))
+        if len(got.posts) > size:
+            src.mark_spent()
+            src.stamp_attempt()
+            return UnitOutcome(None, loaded, pages, "page_overrun")
         raw += got.posts
         if len(_kept(raw, start, end)) >= config.x_sample_n:
             break

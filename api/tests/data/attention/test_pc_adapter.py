@@ -200,3 +200,75 @@ def test_fake_adapter_scripted_pages_and_errors():
     with pytest.raises(pa.LayoutChanged):
         fake.search_page("q", now, now, 2)        # script exhausted reads as a shape failure, never data
     assert fake.calls == 3
+
+
+# --- review T147: meter clock moved back (M2), repair that raises (L2), meter file (L4), never-raising logs (L7) --
+
+def test_meter_clock_moved_back_keeps_the_later_month(attention_cache):
+    clock = Clock(datetime(2026, 11, 1, 0, 30, tzinfo=timezone.utc))
+    meter = pa.CostMeter(clock=clock)
+    meter.charge(15.0)
+    clock.now = datetime(2026, 10, 31, 23, 0, tzinfo=timezone.utc)
+    assert meter.spent() == 15.0 and not meter.can_repair()
+    meter.charge(1.0)
+    clock.now = datetime(2026, 11, 20, tzinfo=timezone.utc)
+    assert meter.spent() == 16.0
+    clock.now = datetime(2026, 12, 1, tzinfo=timezone.utc)
+    assert meter.spent() == 0.0 and meter.can_repair()
+
+
+def test_self_repair_that_raises_spends_the_cap(attention_cache):
+    class Failing(pa.FakeAdapter):
+        def self_repair(self):
+            self.repairs += 1
+            raise RuntimeError
+
+    meter = pa.CostMeter(clock=Clock(datetime(2026, 10, 3, tzinfo=timezone.utc)))
+    adapter = Failing(pages=[])
+    with pytest.raises(RuntimeError):
+        pa.attempt_self_repair(adapter, meter)
+    assert adapter.repairs == 1 and meter.spent() == 15.0 and not meter.can_repair()
+    with pytest.raises(pa.SelfRepairRefused):
+        pa.attempt_self_repair(adapter, meter)
+    assert adapter.repairs == 1
+
+
+def test_unreadable_meter_file_fails_closed(attention_cache):
+    clock = Clock(datetime(2026, 10, 3, tzinfo=timezone.utc))
+    for text in ("{bad", "[]", "{}", '{"month": "2026-10", "spent_usd": -3}', '{"month": "x", "spent_usd": 1}',
+                 '{"month": "2026-10", "spent_usd": "1"}', '{"month": "2026-10", "spent_usd": NaN}'):
+        path = pa.CostMeter.path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        meter = pa.CostMeter(clock=clock)
+        assert not meter.can_repair() and meter.spent() >= 15.0, text
+
+
+def test_describe_error_and_log_failure_never_raise(caplog):
+    class WeirdStatus(Exception):
+        @property
+        def status(self):
+            raise RuntimeError(PLANTED[3])
+
+    class SneakyInt(int):
+        def __str__(self):
+            return PLANTED[0]
+
+        __repr__ = __str__
+
+        def __format__(self, spec):
+            return PLANTED[1]
+
+    class BrokenLogger:
+        def warning(self, *a, **k):
+            raise RuntimeError(PLANTED[2])
+
+    assert pa.describe_error(WeirdStatus()) == "WeirdStatus status=none"
+    assert pa.describe_error(ValueError(), status=SneakyInt(429)) == "ValueError status=429"
+    log = logging.getLogger("api.data.attention.pc_test")
+    caplog.set_level(logging.DEBUG)
+    pa.log_failure(log, "xsearch_web", WeirdStatus())
+    pa.log_failure(log, None, ValueError(PLANTED[3]), status=SneakyInt(403))
+    pa.log_failure(BrokenLogger(), "xsearch_web", ValueError())
+    assert "PLANTED" not in caplog.text
+    assert "WeirdStatus status=none" in caplog.text and "ValueError status=403" in caplog.text

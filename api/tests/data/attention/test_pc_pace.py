@@ -4,6 +4,7 @@ Injected clock and seeded RNG throughout; the fake adapter stands in for the tra
 """
 from __future__ import annotations
 
+import json
 import random
 from datetime import date, datetime, timedelta, timezone
 from itertools import pairwise
@@ -330,8 +331,9 @@ def test_no_retry_after_warning(attention_cache):
 
 
 def test_suspension_and_login_expired_stay_paused(attention_cache):
-    for exc, reason in ((pa.AccountSuspended(403), "x_account_suspended"), (pa.LoginRequired(401), "x_login_required")):
-        clock = Clock()
+    cases = ((pa.AccountSuspended(403), "x_account_suspended"), (pa.LoginRequired(401), "x_login_required"))
+    for i, (exc, reason) in enumerate(cases):
+        clock = Clock(T0 + timedelta(days=10 * i))     # one state file: a later day, past the min delay
         src = x_source(clock)
         src.owner_reset()
         run_unit(pa.FakeAdapter(pages=[exc]), src, clock)
@@ -377,8 +379,8 @@ def test_other_source_keeps_running(attention_cache):
 
 
 def test_offline_and_layout_change_do_not_pause(attention_cache):
-    for exc in (pa.Offline(), pa.LayoutChanged()):
-        clock = Clock()
+    for i, exc in enumerate((pa.Offline(), pa.LayoutChanged())):
+        clock = Clock(T0 + timedelta(hours=i))        # one state file: past the min delay of the previous attempt
         src = x_source(clock)
         out = run_unit(pa.FakeAdapter(pages=[exc]), src, clock)
         assert out.result is None and out.stop == exc.reason and not src.is_paused()
@@ -393,3 +395,124 @@ def test_state_file_under_cache_pc_state(attention_cache):
 def test_unknown_warning_reason_rejected(attention_cache):
     with pytest.raises(ValueError):
         x_source(Clock()).warn("whatever")
+
+
+# --- review T147: page overrun (M1), clock moved back (M2), min delay inside the core (M3), state file (L4) ------
+
+def test_page_above_declared_size_counts_real_posts_and_stops_x():
+    clock = Clock()
+    src = x_source(clock)
+    end = datetime(2026, 10, 21, tzinfo=timezone.utc)
+    adapter = pa.FakeAdapter(pages=[pa.SearchPage(posts(50, end - timedelta(minutes=1), 1), has_more=True)],
+                             page_size=20)
+    out = run_unit(adapter, src, clock)
+    assert out.stop == "page_overrun" and out.result is None and out.posts_loaded == 50
+    assert src.used == 50 and src.budget_spent()
+    clock.advance(hours=1)
+    later = pa.FakeAdapter(pages=[pa.SearchPage(posts(5, end, 1), has_more=False)])
+    assert run_unit(later, src, clock, symbol="ETH").stop == "budget_spent" and later.calls == 0
+
+
+def test_bad_page_size_rejected_before_any_load():
+    for bad in (0, -1, True, "20", 2.5, None):
+        adapter = pa.FakeAdapter(pages=[], page_size=bad)
+        with pytest.raises(ValueError):
+            run_unit(adapter, x_source(Clock()), None)
+        assert adapter.calls == 0
+
+
+def test_clock_moved_back_never_reopens_the_day_budget():
+    clock = Clock(datetime(2026, 10, 22, 10, 0, tzinfo=timezone.utc))
+    src = x_source(clock)
+    src.spend(800)
+    clock.now = datetime(2026, 10, 21, 23, 0, tzinfo=timezone.utc)
+    assert src.remaining() == 0 and src.budget_spent() and not src.can_spend(1)
+    assert x_source(clock).remaining() == 0                  # also after a restart
+    clock.now = datetime(2026, 10, 22, 23, 59, tzinfo=timezone.utc)
+    assert src.remaining() == 0
+    clock.now = datetime(2026, 10, 23, 0, 0, tzinfo=timezone.utc)
+    assert src.remaining() == 800
+
+
+def test_clock_moved_back_pause_runs_to_the_later_day_end():
+    clock = Clock(datetime(2026, 10, 22, 10, 0, tzinfo=timezone.utc))
+    src = x_source(clock)
+    src.spend(1)
+    clock.now = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
+    src.warn("rate_limited")
+    clock.now = datetime(2026, 10, 22, 23, 59, tzinfo=timezone.utc)
+    assert src.is_paused()
+    clock.now = datetime(2026, 10, 23, 0, 0, tzinfo=timezone.utc)
+    assert not src.is_paused()
+
+
+def test_three_back_to_back_units_respect_min_delay():
+    clock = Clock()
+    src = x_source(clock)
+    end = datetime(2026, 10, 21, tzinfo=timezone.utc)
+    adapter = pa.FakeAdapter(pages=[pa.SearchPage(posts(3, end - timedelta(minutes=1), 1, c), has_more=False)
+                                    for c in "abc"])
+    assert pp.PcSource.earliest_next(src, 180) is None
+    assert run_unit(adapter, src, clock).stop == "done" and adapter.calls == 1
+    assert src.earliest_next(180) == T0 + timedelta(seconds=180)
+    assert run_unit(adapter, src, clock, symbol="ETH").stop == "too_early"
+    clock.advance(seconds=179)
+    assert run_unit(adapter, src, clock, symbol="BTC").stop == "too_early" and adapter.calls == 1
+    assert run_unit(adapter, x_source(clock), clock, symbol="BTC").stop == "too_early"   # persisted
+    clock.advance(seconds=1)
+    assert run_unit(adapter, src, clock, symbol="BTC").stop == "done" and adapter.calls == 2
+
+
+def test_min_delay_follows_config():
+    clock = Clock()
+    src = x_source(clock)
+    end = datetime(2026, 10, 21, tzinfo=timezone.utc)
+    adapter = pa.FakeAdapter(pages=[pa.SearchPage(posts(3, end - timedelta(minutes=1), 1, c), has_more=False)
+                                    for c in "ab"])
+    slow = cfg(x_query_delay_min_s=600, x_query_delay_max_s=900)
+    run_unit(adapter, src, clock, c=slow)
+    clock.advance(seconds=599)
+    assert run_unit(adapter, src, clock, c=slow).stop == "too_early"
+    clock.advance(seconds=1)
+    assert run_unit(adapter, src, clock, c=slow).stop == "done"
+
+
+def write_state(text: str) -> None:
+    path = pp.state_path("xsearch_web")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def valid_state() -> dict:
+    x_source(Clock()).spend(10)
+    return json.loads(pp.state_path("xsearch_web").read_text(encoding="utf-8"))
+
+
+def test_empty_or_unreadable_state_file_fails_closed():
+    for text in ("{}", "{not json", "[]", ""):
+        write_state(text)
+        with pytest.raises(pp.PcStateError):
+            x_source(Clock())
+
+
+def test_bad_used_counter_fails_closed():
+    base = valid_state()
+    for bad in (-5, "3", True, 1.5, None):
+        write_state(json.dumps({**base, "used": bad}))
+        with pytest.raises(pp.PcStateError):
+            x_source(Clock())
+
+
+def test_unknown_missing_or_bad_state_fields_fail_closed():
+    base = valid_state()
+    bad_docs = [{**base, "extra": 1}, {k: v for k, v in base.items() if k != "pause_reason"},
+                {**base, "pause_reason": "whatever"}, {**base, "pause_reason": "rate_limited", "pause_until": None},
+                {**base, "budget_day": "21-10-2026"}, {**base, "effective": 0}, {**base, "clean_days": -1},
+                {**base, "last_unit_at": "2026-10-21T10:00:00"}, {**base, "activity": {"day": "2026-10-21"}}]
+    for doc in bad_docs:
+        write_state(json.dumps(doc))
+        with pytest.raises(pp.PcStateError):
+            x_source(Clock())
+    write_state(json.dumps(base))
+    assert x_source(Clock()).used == 10
+

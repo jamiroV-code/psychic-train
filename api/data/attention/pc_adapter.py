@@ -30,6 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 # API Anything features the wrapper never reaches: registry pull, publish, cookie import.
 _REFUSED = re.compile(r"registry|publish|cookie", re.IGNORECASE)
 _SHIPPED_RECIPE = re.compile(r"x\..+")
+_MONTH_RE = re.compile(r"[0-9]{4}-(0[1-9]|1[0-2])")
 
 
 class CollectorError(Exception):
@@ -181,16 +182,26 @@ def profile_dir() -> Path:
 
 
 def describe_error(exc: BaseException, status: object = None) -> str:
-    """`<ClassName> status=<int|none>`: the only failure text a collector log line or probe line carries."""
+    """`<ClassName> status=<int|none>`: the only failure text a collector log line or probe line carries.
+
+    Never raises: a `status` attribute that raises reads as none, and an int subclass prints as a plain int.
+    """
     if status is None:
-        status = getattr(exc, "status", None)
-    ok = isinstance(status, int) and not isinstance(status, bool)
-    return f"{type(exc).__name__} status={status if ok else 'none'}"
+        try:
+            status = getattr(exc, "status", None)
+        except Exception:  # noqa: BLE001 - a broken status attribute is just "no status"
+            status = None
+    code = int.__int__(status) if isinstance(status, int) and not isinstance(status, bool) else None
+    return f"{type(exc).__name__} status={'none' if code is None else code}"
 
 
 def log_failure(logger, source: str, exc: BaseException, status: object = None) -> None:
-    logger.warning("%s collector failed: %s", source if re.fullmatch(r"[a-z0-9_]{1,40}", source) else "source",
-                   describe_error(exc, status))
+    """Log one failure as class name and status only; never raises (logging must not break a collector)."""
+    label = source if isinstance(source, str) and re.fullmatch(r"[a-z0-9_]{1,40}", source) else "source"
+    try:
+        logger.warning("%s collector failed: %s", label, describe_error(exc, status))
+    except Exception:  # noqa: BLE001, S110 - a broken logger must not stop the collector
+        pass
 
 
 class CostMeter:
@@ -207,13 +218,25 @@ class CostMeter:
     def _month(self) -> str:
         return self.clock().astimezone(timezone.utc).strftime("%Y-%m")
 
-    def _read(self) -> dict:
-        p = self.path()
-        return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    def _current(self) -> tuple[str, float]:
+        """(month, spent) to count against. A clock moved back keeps the later stored month; a file that exists
+        but is unreadable or invalid counts as the cap already spent this month (fail closed)."""
+        month, p = self._month(), self.path()
+        if not p.exists():
+            return month, 0.0
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+            stored, spent = d["month"], d["spent_usd"]
+            if not (isinstance(stored, str) and _MONTH_RE.fullmatch(stored) and valid_cost(spent)):
+                raise ValueError
+        except Exception:  # noqa: BLE001 - any unreadable meter file fails closed
+            return month, self.cap_usd
+        if stored >= month:
+            return stored, float(spent)
+        return month, 0.0
 
     def spent(self) -> float:
-        d = self._read()
-        return float(d.get("spent_usd", 0.0)) if d.get("month") == self._month() else 0.0
+        return self._current()[1]
 
     def can_repair(self) -> bool:
         return self.spent() < self.cap_usd
@@ -221,16 +244,18 @@ class CostMeter:
     def charge(self, usd: float) -> None:
         if not valid_cost(usd):
             raise ValueError("cost must be a finite non-negative number")
-        self._write(self.spent() + float(usd))
+        month, spent = self._current()
+        self._write(month, spent + float(usd))
 
     def exhaust(self) -> None:
         """Mark the month's cap as spent (an unknown repair cost fails closed)."""
-        self._write(max(self.spent(), self.cap_usd))
+        month, spent = self._current()
+        self._write(month, max(spent, self.cap_usd))
 
-    def _write(self, spent_usd: float) -> None:
+    def _write(self, month: str, spent_usd: float) -> None:
         p = self.path()
         p.parent.mkdir(parents=True, exist_ok=True)
-        cache._atomic_write_json({"month": self._month(), "spent_usd": spent_usd}, p)
+        cache._atomic_write_json({"month": month, "spent_usd": spent_usd}, p)
 
 
 def valid_cost(usd: object) -> bool:
@@ -240,11 +265,16 @@ def valid_cost(usd: object) -> bool:
 def attempt_self_repair(adapter: XAdapter, meter: CostMeter) -> float:
     """One self-repair while the monthly cap is not spent; refused (source stays `layout_changed`) otherwise.
 
-    A repair that reports no usable cost spends the rest of the month's cap: the meter never under-counts.
+    A repair that raises or reports no usable cost spends the rest of the month's cap: the meter never
+    under-counts.
     """
     if not meter.can_repair():
         raise SelfRepairRefused()
-    cost = adapter.self_repair()
+    try:
+        cost = adapter.self_repair()
+    except BaseException:
+        meter.exhaust()
+        raise
     if not valid_cost(cost):
         meter.exhaust()
         raise SelfRepairRefused()
