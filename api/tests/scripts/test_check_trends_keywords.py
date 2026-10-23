@@ -426,16 +426,19 @@ def test_v3_variant_queries_are_the_name_plus_three_variants_deduplicated_and_ca
     assert c.queries_for("AVAX", "Avalanche") == ["Avalanche", "Avalanche crypto", "Avalanche coin", "AVAX crypto"]
     assert c.queries_for("AKE", "AKE") == ["AKE", "AKE crypto", "AKE coin"]  # ticker label: one duplicate dropped
     assert c.queries_for("PEPE", "Pepe coin") == ["Pepe coin", "Pepe coin crypto", "PEPE crypto"]  # no "coin coin"
-    assert c.queries_for("ZZZ", "Zzz Crypto") == ["Zzz Crypto", "Zzz Crypto coin", "ZZZ crypto"]
+    assert c.queries_for("ZZZ", "Zzz Crypto") == ["Zzz Crypto", "Zzz Crypto coin"]  # "ZZZ crypto" is the name
     assert all(len(c.queries_for(s, n)) <= c.MAX_QUERIES_PER_COIN for s, n in (("AVAX", "Avalanche"), ("A", "a")))
     assert c.MAX_QUERIES_PER_COIN == 4
 
 
 def test_v3_default_run_is_still_one_query_per_coin():
     client = FakeTrendReq({"Chainlink": [LINK_TOPIC]})
-    res, text = _run({"LINK": "Chainlink", "AVAX": "Avalanche"}, client)
+    _, text = _run({"LINK": "Chainlink", "AVAX": "Avalanche"}, client)
     assert client.suggestion_calls == ["Chainlink", "Avalanche"]
     assert c.QUALIFIED_HEADER not in text and " via '" not in text
+    # The ticker and bracket rules are variant-run only: a default run keeps the v2 verdicts.
+    res, _ = _run({"ETC": "Ethereum Classic"}, FakeTrendReq({"Ethereum Classic": _cands([("/g/11etc", "ETC", "Coin")])}))
+    assert res[0].verdict == "AMBIGUOUS"
 
 
 AVAX_BASE = _cands([("/m/0avx1", "Colorado Avalanche", "Ice hockey team"), ("/m/0avx3", "Avalanche", "Topic"),
@@ -532,7 +535,7 @@ def test_v3_a_failed_variant_query_blocks_a_pass():
 def test_v3_spacing_is_three_seconds_between_every_request_and_the_count_is_printed():
     clock = Clock()
     client = TimedClient({}, clock)
-    res, text = _run3({"AVAX": "Avalanche", "AKE": "AKE"}, client, sleep=clock.sleep)
+    _, text = _run3({"AVAX": "Avalanche", "AKE": "AKE"}, client, sleep=clock.sleep)
     assert len(client.times) == 7
     assert all(b - a >= 3.0 for a, b in zip(client.times, client.times[1:]))
     assert clock.sleeps == [c.INTERVAL_SECONDS] * 6 and c.INTERVAL_SECONDS == 3.0
@@ -560,11 +563,12 @@ def test_v3_breaker_stops_mid_coin_and_marks_the_rest_not_run():
 
 
 def test_v3_breaker_skips_the_rest_of_a_coin_once_tripped():
-    script = {"Aaa": too_many(), "Aaa crypto": too_many(), "Aaa coin": too_many(), "AAA crypto": [LINK_TOPIC]}
+    script = {"Aaa": too_many(), "Aaa crypto": too_many(), "Aaa coin": too_many(), "ZZZ crypto": [LINK_TOPIC]}
     client = FakeTrendReq(script)
-    res, _ = _run3({"AAA": "Aaa", "BBB": "Bbb"}, client)
+    res, _ = _run3({"ZZZ": "Aaa", "BBB": "Bbb"}, client)
     assert client.suggestion_calls == ["Aaa", "Aaa crypto", "Aaa coin"]
     assert [r.verdict for r in res] == ["FAIL", "NOT-RUN"]
+    assert res[0].reason.startswith("request failed: TooManyRequestsError(HTTP 429)") and "1 of 4" not in res[0].reason
 
 
 def test_v3_ctrl_c_prints_partial_results_and_exits_130():
@@ -581,6 +585,10 @@ def test_v3_ctrl_c_prints_partial_results_and_exits_130():
     code = c.main(["--symbols", "AVAX,SUI", "--variants"], trendreq_factory=factory(InterruptAt(script, "Sui coin")),
                   sleep=lambda s: None, out=out, now=STAMP_23)
     assert code == 130 and c.PASTE_HEADER in out.getvalue()
+    # Ctrl-C on the last coin after only failed queries still exits 130.
+    late = InterruptAt({"Sui": forbidden()}, "Sui crypto")
+    assert c.main(["--symbols", "SUI", "--variants"], trendreq_factory=factory(late), sleep=lambda s: None,
+                  out=io.StringIO()) == 130
 
 
 def test_v3_qualified_term_proposals_are_valid_loader_entries():
@@ -595,7 +603,7 @@ def test_v3_qualified_term_proposals_are_valid_loader_entries():
     script = {"Jupiter": _cands([("/m/0jup", "Jupiter", "Planet")]),
               "Avalanche crypto": _cands([("/g/11avaxc", "Avalanche", "Cryptocurrency")])}
     mapping = {"JUP": "Jupiter", "AVAX": "Avalanche", "PEPE": "Pepe coin", "AKE": "AKE", "LEO": "UNUS SED LEO"}
-    res, text = _run3(mapping, NoiseClient(script))
+    _, text = _run3(mapping, NoiseClient(script))
     proposals = _qualified(text)
     assert proposals == {
         "JUP": {"term": "jupiter crypto", "label": "Jupiter", "note": "qualified-term fallback 23-10-26, not checker PASS"},
@@ -614,7 +622,7 @@ def test_v3_qualified_term_skips_a_term_another_coin_already_uses():
     seed_terms = {e["term"].casefold(): s for s, e in k.load().entries.items() if "term" in e}
     assert "pepe coin" in seed_terms and seed_terms["pepe coin"] == "PEPE"
     # PEPE replacing its own term is fine; another symbol with the same name is not.
-    res, text = _run3({"PEPE": "Pepe coin", "PEPX": "Pepe coin"}, NoiseClient())
+    _, text = _run3({"PEPE": "Pepe coin", "PEPX": "Pepe coin"}, NoiseClient())
     tail = text.split(c.QUALIFIED_HEADER)[1]
     assert set(_qualified(text)) == {"PEPE"}
     assert "PEPX | no qualified term: 'pepe coin' is already used" in tail
