@@ -216,3 +216,14 @@ def test_http_429_reason_has_status():
 def test_name_risk_symbols_match_t125_list():
     assert trends.NAME_RISK_SYMBOLS == frozenset(
         {"TRX", "ONDO", "MORPHO", "ICP", "SHIB", "PEPE", "BNB", "CRO", "HBAR", "LINK", "APT", "SOL"})
+
+
+@pytest.mark.parametrize("term, ok", [
+    ("Tron", False), ("TRON", False), ("  tron  ", False), ("TRX", False), ("Crypto", False), ("Aptos", False),
+    ("tron crypto", True), ("Aptos crypto", True), ("Ondo Finance", True), ("Cronos chain", True),
+    ("pepe coin", True), ("Hedera network", True), ("Morpho protocol", True), ("tron token", True),
+    ("tron swap", True), ("tron classic", False),
+])
+def test_qualified_term_rule(term, ok):
+    """A risky symbol's term is pulled only with a qualifier word beside the name (checker v3 fallback)."""
+    assert trends.is_qualified_term(term) is ok

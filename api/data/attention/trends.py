@@ -57,10 +57,18 @@ SURGE_DAYS = 7
 # Fail-closed pull checks: a row outside [requested start, yesterday], or a last row that is not yesterday.
 OUT_OF_RANGE = "out-of-range"
 NOT_CURRENT = "not-current"
-NAME_AMBIGUOUS = "name-ambiguous: needs topic"
-# Bare names that collect unrelated searches (T125 review list): fetched by topic id only, never by term.
+NAME_AMBIGUOUS = "name-ambiguous: needs topic or qualified term"
+# Bare names that collect unrelated searches (T125 review list): fetched by topic id or a qualified term only.
 NAME_RISK_SYMBOLS = frozenset(
     {"TRX", "ONDO", "MORPHO", "ICP", "SHIB", "PEPE", "BNB", "CRO", "HBAR", "LINK", "APT", "SOL"})
+# A risky symbol's `term` is pulled only when qualified: a qualifier word beside the name ("tron crypto", the checker
+# v3 "qualified-term fallback"). A bare name or ticker is skipped; a `topic` entry is always pulled.
+QUALIFIER_WORDS = frozenset({"crypto", "coin", "token", "network", "protocol", "finance", "swap", "chain"})
+
+
+def is_qualified_term(term: str) -> bool:
+    words = term.casefold().split()
+    return any(w in QUALIFIER_WORDS for w in words) and any(w not in QUALIFIER_WORDS for w in words)
 
 
 def explicit_timeframe(today: date) -> str:

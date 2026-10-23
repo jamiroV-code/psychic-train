@@ -209,7 +209,7 @@ def test_summary_line_counts_every_outcome(monkeypatch, capsys):
               "Celestia": [RuntimeError("boom " + fx.SECRET)]}
     _run(monkeypatch, ["AAVE", "INJ", "ARB", "OP", "SOL", "TIA", "LINK", "USDX"], script)
     lines = [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("trends detail:")]
-    assert lines == [("trends detail: ok 1, too-little-interest 1, name-ambiguous 1, no-keyword 1, non-daily 1, "
+    assert lines == [("trends detail: ok 1, too-little-interest 1, skipped-unqualified 1, no-keyword 1, non-daily 1, "
                       "rate-limited 1, insufficient-history 1, failed(RuntimeError) 1")]
     assert fx.SECRET not in lines[0]
 
@@ -290,3 +290,20 @@ def test_time_budget_checked_inside_backoff(monkeypatch):
     assert sleeps == [30, 60] and client.terms() == ["Aave"] * 3  # 90 + 120 > 100: the third wait never starts
     assert out["AAVE"].state == "capped" and out["AAVE"].reason == "time budget reached"
     assert out["INJ"].state == "capped" and out["INJ"].reason == "time budget reached"
+
+
+@pytest.mark.parametrize("trx, apt, fetched", [
+    ("Tron", "Aptos", []),                                    # bare names: skipped, no request
+    ("tron crypto", "Aptos Crypto", ["tron crypto", "Aptos Crypto"]),   # qualified-term fallback: pulled
+])
+def test_risky_symbol_bare_term_skipped_qualified_term_fetched(monkeypatch, _env, capsys, trx, apt, fetched):
+    kw = dict(KEYWORDS, TRX={"term": trx, "label": "TRON", "note": "qualified-term fallback"},
+              APT={"term": apt, "label": "Aptos"})
+    _env.write_text(json.dumps(kw))
+    out, client, _, _ = _run(monkeypatch, ["TRX", "APT", "SOL"], today=_day(0, len(fetched) + 1))
+    assert client.terms() == fetched + ["/m/0sol"]  # a topic entry is always fetched
+    for s in ("TRX", "APT"):
+        assert (out[s].state == "ok") == bool(fetched)
+        assert bool(fetched) or out[s].reason == trends.NAME_AMBIGUOUS
+    line = next(ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("trends detail:"))
+    assert line == ("trends detail: ok 3" if fetched else "trends detail: ok 1, skipped-unqualified 2")

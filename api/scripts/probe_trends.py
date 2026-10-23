@@ -214,8 +214,8 @@ def _run_alone(client, km: tk.KeywordMap, symbols: list[str], timeframe: str, da
         if sent:
             sleep(INTERVAL_SECONDS)
         sent = True
-        risk = " (name-risk term: the daily run skips it until a topic is set)" if (
-            sym in trends.NAME_RISK_SYMBOLS and not tk.is_valid_topic(kw)) else ""
+        risk = " (bare name-risk term: the daily run skips it until a topic or qualified term is set)" if (
+            sym in trends.NAME_RISK_SYMBOLS and not tk.is_valid_topic(kw) and not trends.is_qualified_term(kw)) else ""
         print(f"\nalone request: {sym} [{kw}]{risk}", file=out)
         frame, error, latency = _fetch(client, [kw], timeframe, clock)
         print(f"outcome: {_outcome(error)}", file=out)

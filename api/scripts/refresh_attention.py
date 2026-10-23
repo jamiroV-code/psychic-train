@@ -44,10 +44,11 @@ TRENDS_INTERVAL_S = 3.0
 TRENDS_BACKOFF_S = (30, 60, 120)
 TRENDS_BREAKER_AFTER = 3
 TRENDS_TIME_BUDGET_S = 540
-TRENDS_OUTCOMES = ("ok", "too-little-interest", "quiet-then-surge", "name-ambiguous", "no-keyword", "non-daily", "rate-limited",
-                   "insufficient-history", "time-budget")
-_TRENDS_REASON_OUTCOME = {trends.TOO_LITTLE_INTEREST: "too-little-interest", trends.QUIET_THEN_SURGE: "quiet-then-surge",
-                          trends.NAME_AMBIGUOUS: "name-ambiguous", "no keyword mapped": "no-keyword",
+TRENDS_OUTCOMES = ("ok", "too-little-interest", "quiet-then-surge", "skipped-unqualified", "no-keyword", "non-daily",
+                   "rate-limited", "insufficient-history", "time-budget")
+_TRENDS_REASON_OUTCOME = {trends.TOO_LITTLE_INTEREST: "too-little-interest",
+                          trends.QUIET_THEN_SURGE: "quiet-then-surge",
+                          trends.NAME_AMBIGUOUS: "skipped-unqualified", "no keyword mapped": "no-keyword",
                           "non-daily": "non-daily"}
 # Store mode per source; every source not listed keeps first-write-wins.
 WRITE_MODES = {"trends": "replace-series"}
@@ -231,7 +232,8 @@ def _trends_fetch_429(sym, term, client, today, sleep, deadline):
 
 def _run_trends(symbols, client, today, sleep):
     """One request per coin with only its keyword; writes the per-pull archive; the store write
-    (replace-series) is done by main(). No-keyword, name-risk terms and a bad keyword file cost no request."""
+    (replace-series) is done by main(). No-keyword, bare (unqualified) name-risk terms and a bad keyword
+    file cost no request."""
     from api.data.attention.types import SourceSeries
     km, bad = trends_keywords.safe_load()
     out: dict[str, SourceSeries] = {}
@@ -243,7 +245,7 @@ def _run_trends(symbols, client, today, sleep):
             out[s] = SourceSeries("trends", s, [], "unavailable", bad)
         elif not kw:
             out[s] = SourceSeries("trends", s, [], "unavailable", "no keyword mapped")
-        elif s in trends.NAME_RISK_SYMBOLS and "topic" not in entry:
+        elif s in trends.NAME_RISK_SYMBOLS and "topic" not in entry and not trends.is_qualified_term(kw):
             out[s] = SourceSeries("trends", s, [], "unavailable", trends.NAME_AMBIGUOUS)
         else:
             todo.append((s, kw))
