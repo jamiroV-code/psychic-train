@@ -23,7 +23,10 @@ candidate passes when it is the name plus a generic word ("Kaspa Network") or a 
 before one ("NEAR" for NEAR Protocol); "Ethereum Classic" for Ethereum never does. A label that is only the
 ticker passes only on a title equal to the ticker; there is no display name to try. A named coin's only
 crypto-typed candidate also passes when its title is the ticker in any case ("ETC") or the name with a crypto
-qualifier in brackets ("Stacks (cryptocurrency)").
+qualifier in brackets ("Stacks (cryptocurrency)"). Such a PASS is a LEAD, not a match: another coin can share the
+ticker (ONE, COMP, LIT, S), so its line names the rule and a Trends link, and its note says "(ticker-title)" or
+"(bracket)": open the link and confirm the coin before pasting. A coin named from its CoinGecko id has a guessed
+name; its notes say "name from CoinGecko id". A symbol that already holds a topic never gets a qualified term.
 Eyeball every PASS line (title against the coin name) before pasting the block.
 """
 from __future__ import annotations
@@ -81,7 +84,12 @@ MAX_QUERIES_PER_COIN = 4
 QUALIFIER_WORDS = ("crypto", "coin", "token")
 BRACKET_QUALIFIERS = ("crypto", "cryptocurrency", "coin", "token", "blockchain")
 QUALIFIED_HEADER = "--- qualified term proposals (lower confidence than topics) ---"
-OUTSIDE_HEADER = "--- outside the narrative-placed set (T156) ---"
+OUTSIDE_HEADER = "--- outside the narrative-placed set ---"
+LEAD_RULES = ("ticker-title", "bracket")
+LEAD_NOTE = ("a ticker-title or bracket PASS is a LEAD: open its Trends link and confirm the coin before pasting;"
+             " notes marked 'name from CoinGecko id' carry a guessed name")
+DERIVED_MARK = "name from CoinGecko id"
+COVERAGE_KINDS = ("topic", "qualified-term", "term", "nothing", "not checked")
 
 
 @dataclass
@@ -97,6 +105,7 @@ class Result:
     failed: list[str] = field(default_factory=list)
     queries: int = 1
     done: int = 0
+    rule: str = ""
 
     @property
     def complete(self) -> bool:
@@ -179,17 +188,20 @@ def _verdict(res: Result, loose: bool) -> None:
     symbol, name = res.symbol, res.name
     crypto = [c for c in res.candidates if is_crypto_type(c["type"])]
     ticker = name == symbol
+    rule = "ticker" if ticker else "exact"
     if ticker:
         hits = [c for c in crypto if c["title"].strip() == symbol]
     else:
         hits = [c for c in crypto if _exact_match(c["title"], name)]
-        if not hits and len(crypto) == 1 and (_contained_match(crypto[0]["title"], name)
-                                              or _prefix_match(crypto[0]["title"], name)
-                                              or loose and (_bracket_match(crypto[0]["title"], name)
-                                                            or _ticker_match(crypto[0]["title"], symbol))):
-            hits = crypto
+        if not hits and len(crypto) == 1:
+            title = crypto[0]["title"]
+            # Bracket first: "Stacks (cryptocurrency)" also passes the v2 contained rule, but a variant run marks it.
+            rule = ("bracket" if loose and _bracket_match(title, name)
+                    else "contained" if _contained_match(title, name) else "prefix" if _prefix_match(title, name)
+                    else "ticker-title" if loose and _ticker_match(title, symbol) else "")
+            hits = crypto if rule else []
     if len(hits) == 1:
-        res.verdict, res.proposed = "PASS", hits[0]
+        res.verdict, res.proposed, res.rule = "PASS", hits[0], rule
     elif ticker and crypto and not hits:
         res.verdict, res.reason = "AMBIGUOUS", "label is only the ticker; no display name in narratives/universe"
     elif len(crypto) == 1:
@@ -303,15 +315,18 @@ def _cand_via(r: Result, c: dict, variants: bool) -> str:
     return _cand(c) + " via " + ", ".join(f"'{q}'" for q in r.found_by.get(c["mid"], []))
 
 
-def _print_qualified(results: list[Result], stamp: str, out) -> dict:
-    taken = {e["term"].casefold(): s for s, e in tk.load().entries.items() if "term" in e}
+def _print_qualified(results: list[Result], stamp: str, out, derived: dict) -> dict:
+    entries = tk.load().entries
+    taken = {e["term"].casefold(): s for s, e in entries.items() if "term" in e}
     block: dict[str, dict] = {}
     skipped: list[str] = []
     for r in results:
         if r.verdict != "AMBIGUOUS" or not r.complete:
             continue
         term = qualified_term(r.symbol, r.name)
-        if term is None:
+        if "topic" in entries.get(r.symbol, {}):
+            skipped.append(f"{r.symbol} | no qualified term: already has a topic")
+        elif term is None:
             why = ("label is only the ticker; the owner names it" if r.name == r.symbol
                    else "the name is not a safe ASCII term; the owner picks one")
             skipped.append(f"{r.symbol} | no qualified term: {why}")
@@ -320,7 +335,8 @@ def _print_qualified(results: list[Result], stamp: str, out) -> dict:
         else:
             taken[term.casefold()] = r.symbol
             block[r.symbol] = {"term": term, "label": r.name if tk.is_valid_label(r.name) else r.symbol,
-                               "note": f"qualified-term fallback {stamp}, not checker PASS"}
+                               "note": f"qualified-term fallback {stamp}, not checker PASS"
+                                       + (f", {DERIVED_MARK}" if r.symbol in derived else "")}
     print(f"\n{QUALIFIED_HEADER}\n{json.dumps(block, indent=2)}", file=out)
     for line in skipped:
         print(line, file=out)
@@ -328,6 +344,7 @@ def _print_qualified(results: list[Result], stamp: str, out) -> dict:
 
 
 def _print_scope(proposed: set[str], eligible: list[str], results: list[Result], terms: set[str], out) -> None:
+    """A coin this run did not check and with no keyword is 'not checked', never 'nothing'."""
     """Symbols the blocks propose that no narrative places, and where every eligible coin stands after the run."""
     keywords = tk.load().entries
     placed = {c["symbol"] for n in narratives.load_narratives()["narratives"] for c in n["coins"]}
@@ -337,13 +354,20 @@ def _print_scope(proposed: set[str], eligible: list[str], results: list[Result],
         print("    the keyword loader takes them with a 'not a placed coin' warning when given the placed set;"
               " the Trends pull reads only the coins its caller passes", file=out)
     passed = {r.symbol for r in results if r.verdict == "PASS"}
+    checked = {r.symbol for r in results if r.verdict != "NOT-RUN"}
     status = {}
     for s in eligible:
         e = keywords.get(s, {})
         status[s] = ("topic" if "topic" in e or s in passed else "qualified-term" if s in terms
-                     else "term" if "term" in e else "nothing")
-    counts = {k: sum(v == k for v in status.values()) for k in ("topic", "qualified-term", "term", "nothing")}
-    print(f"discovery eligible: {len(eligible)} | " + " | ".join(f"{k}: {n}" for k, n in counts.items()), file=out)
+                     else "term" if "term" in e else "nothing" if s in checked else "not checked")
+    counts = {k: sum(v == k for v in status.values()) for k in COVERAGE_KINDS}
+    print(f"discovery eligible: {len(eligible)} | " + " | ".join(f"{k}: {n}" for k, n in counts.items())
+          + f" (this run checked {len(checked & set(eligible))} of them)", file=out)
+
+
+def _pass_note(r: Result, stamp: str, derived: bool) -> str:
+    rule = f" ({r.rule})" if r.rule in LEAD_RULES else ""
+    return f"checker PASS{rule} {stamp}" + (f", {DERIVED_MARK}" if derived else "")
 
 
 def run(mapping: dict, *, client, sleep=time.sleep, out=None, now=None, variants: bool = False,
@@ -364,7 +388,13 @@ def run(mapping: dict, *, client, sleep=time.sleep, out=None, now=None, variants
             continue
         proposed = f"proposed {_cand_via(r, r.proposed, variants)}" if r.proposed else "-"
         tail = f" ({r.reason})" if r.reason else ""
+        if r.verdict == "PASS" and r.rule in LEAD_RULES:
+            tail += f" [rule: {r.rule}; LEAD: open the Trends link and confirm the coin]"
+        if r.symbol in names:
+            tail += f" ({DERIVED_MARK}, a guess)"
         print(f"{r.symbol} | {r.name} | {len(r.candidates)} candidates | {proposed} | {r.verdict}{tail}", file=out)
+        if r.verdict == "PASS" and r.rule in LEAD_RULES:
+            print(f"    verify {_cand(r.proposed)}: {VERIFY_URL.format(quote(r.proposed['mid'], safe=''))}", file=out)
         if r.verdict == "AMBIGUOUS":
             for c in r.candidates:
                 print(f"    {_cand_via(r, c, variants)}", file=out)
@@ -374,16 +404,17 @@ def run(mapping: dict, *, client, sleep=time.sleep, out=None, now=None, variants
 
     stamp = now().strftime("%d-%m-%y")
     block = {r.symbol: {"topic": r.proposed["mid"], "label": r.name if tk.is_valid_label(r.name) else r.symbol,
-                        "note": f"checker PASS {stamp}"}
+                        "note": _pass_note(r, stamp, r.symbol in names)}
              for r in results if r.verdict == "PASS"}
-    print(f"\n{PASTE_HEADER}\n{json.dumps(block, indent=2)}\n{DECISION_HEADER}", file=out)
+    print(f"\n{LEAD_NOTE}" if variants or names else "", file=out)
+    print(f"{PASTE_HEADER}\n{json.dumps(block, indent=2)}\n{DECISION_HEADER}", file=out)
     for r in results:
         if r.verdict in ("AMBIGUOUS", "FAIL"):
             print(f"{r.symbol} | {r.verdict} | {r.reason}", file=out)
             hint = _verify_hint(r) if r.verdict == "AMBIGUOUS" else None
             if hint:
                 print(hint, file=out)
-    terms = _print_qualified(results, stamp, out) if variants else {}
+    terms = _print_qualified(results, stamp, out, names) if variants else {}
     if eligible is not None:
         _print_scope(set(block) | set(terms), eligible, results, set(terms), out)
     return results
@@ -430,9 +461,13 @@ def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep
         args = ap.parse_args(argv)
     except SystemExit as exc:
         return 0 if exc.code == 0 else 2
-    if universe_rows is None:
-        universe_rows, _ = load_universe_rows()
-    eligible, names = eligible_coins(universe_rows) if universe_rows else ([], {})
+    try:
+        if universe_rows is None:
+            universe_rows, _ = load_universe_rows()
+        eligible, names = eligible_coins(universe_rows) if universe_rows else ([], {})
+    except Exception as exc:  # noqa: BLE001 - the class is reported, never the message
+        print(f"cannot read the Discovery universe: {type(exc).__name__}", file=err)
+        return 1
     derived: dict = {}
     try:
         if args.file is None:
