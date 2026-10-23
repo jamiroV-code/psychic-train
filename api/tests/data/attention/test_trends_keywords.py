@@ -44,8 +44,24 @@ def test_shipped_file_validates_against_placed_symbols():
     m = k.load(placed_symbols=_placed())
     assert m.warnings == []
     assert m.anchor["term"] == "Bitcoin"
-    raw = k.KEYWORDS_PATH.read_text(encoding="utf-8")
-    assert '"topic"' not in raw  # seed carries no topic id: those come only from the owner's checker run
+    topics = {s: e["topic"] for s, e in m.entries.items() if "topic" in e}
+    assert topics == OWNER_PASS_TOPICS  # topic ids come only from the owner's checker run (T134)
+
+
+OWNER_PASS_TOPICS = {
+    "AAVE": "/g/11w1qyc8h6", "ADA": "/g/11gf2dcwbj", "ARB": "/g/11w99dbsyz", "BCH": "/g/11d_wtvc5k",
+    "BTC": "/m/05p0rrx", "DOGE": "/m/0zmxk9t", "DOT": "/g/11f3mbgrgj", "INJ": "/g/11ldr16mw_",
+    "LINK": "/g/11qn04qyw9", "LTC": "/m/0t544l4", "SHIB": "/g/11q1jsfvsn", "SOL": "/g/11qh5y640t",
+}
+
+
+def test_seeded_topics_carry_checker_note_and_name_label():
+    m = k.load()
+    labels = {"AAVE": "Aave", "ADA": "Cardano", "ARB": "Arbitrum", "BCH": "Bitcoin Cash", "BTC": "Bitcoin",
+              "DOGE": "Dogecoin", "DOT": "Polkadot", "INJ": "Injective", "LINK": "Chainlink", "LTC": "Litecoin",
+              "SHIB": "Shiba Inu", "SOL": "Solana"}
+    for sym, label in labels.items():
+        assert m.entries[sym] == {"topic": OWNER_PASS_TOPICS[sym], "label": label, "note": "checker PASS 21-10-26"}
 
 
 def test_seed_term_labels_equal_terms():
@@ -53,6 +69,8 @@ def test_seed_term_labels_equal_terms():
     for sym, e in m.entries.items():
         if "term" in e:
             assert e["label"] == e["term"], sym
+        elif "topic" in e:
+            assert e["note"] == "checker PASS 21-10-26", sym
         else:
             assert e.get("no-keyword") is True and e["note"], sym
 

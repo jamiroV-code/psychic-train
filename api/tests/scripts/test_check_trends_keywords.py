@@ -54,7 +54,7 @@ def test_pass_single_crypto_candidate():
 
 
 def test_ambiguous_several_crypto_candidates():
-    client = FakeTrendReq({"Sui": [candidate("/g/11sui", "Sui", "Blockchain"), candidate("/g/11suit", "Sui token", "Token")]})
+    client = FakeTrendReq({"Sui": [candidate("/g/11sui", "Sui", "Blockchain"), candidate("/g/11suit", "Sui", "Token")]})
     res, text = _run({"SUI": "Sui"}, client)
     assert res[0].verdict == "AMBIGUOUS" and res[0].proposed is None
     assert "/g/11sui" in text and "/g/11suit" in text
@@ -219,3 +219,138 @@ def test_client_start_failure_exits_1_and_prints_class_only(capsys, caplog):
     assert "ConnectionError" in text
     for bad in (planted, SECRET, "trends.google.com", "Traceback", "HTTPSConnectionPool"):
         assert bad not in text
+
+
+# --- T134: checker v2, fixtures from the owner's run of 21-10-26 (id, title, Google type) ---
+
+OWNER_PASS = {
+    "BGB": ("Bitget Token", "/g/11xgyky_2b", "Bitget Token", "Currency"),
+    "GT": ("GateToken", "/g/11n3zc6c3t", "GateToken", "Currency"),
+    "KCS": ("KuCoin Token", "/g/11ydr7tg_8", "KuCoin Token", "Currency"),
+    "VVV": ("Venice token", "/g/11xv_6jggk", "Venice Token", "Currency"),
+    "XAUT": ("Tether Gold", "/g/11n3zb_gpq", "Tether Gold", "Currency"),
+    "XRP": ("XRP", "/g/11ggfsh1hd", "XRP", "Currency"),
+    "CAKE": ("PancakeSwap", "/g/11vb5nyrj6", "PancakeSwap", "Chain"),
+    "UNI": ("Uniswap", "/g/11h1dsqb_m", "Uniswap", "Chain"),
+    "HBAR": ("Hedera", "/g/11hbsyfq3f", "Hedera", "Distributed ledger"),
+    "XLM": ("Stellar", "/m/0121k_50", "Stellar", "Payment network"),
+    "HTX": ("HTX", "/m/012vj2d4", "HTX", "Cryptocurrency exchange company"),
+    "NEAR": ("NEAR Protocol", "/g/11q3ypz8pd", "NEAR", "Blockchain platform"),
+    "WLD": ("Worldcoin", "/g/11t_vkgtjf", "World", "Blockchain"),
+}
+OWNER_AMBIGUOUS = {
+    "ETH": ("Ethereum", [("/m/0108bn2x", "Ethereum", "Software")]),
+    "ALGO": ("Algorand", [("/g/11algo1", "Algorand", "Topic")]),
+    "AVAX": ("Avalanche", [("/m/0avx1", "Colorado Avalanche", "Ice hockey team"),
+                           ("/m/0avx2", "Chevrolet Avalanche", "Pickup truck")]),
+    "ATOM": ("Cosmos", [("/m/0cosm", "Cosmos", "Topic")]),
+    "APT": ("Aptos", [("/g/11apt1", "Aptos", "Community in California")]),
+    "SUI": ("Sui", [("/g/11sui1", "Sui", "Topic")]),
+    "TRX": ("TRON", [("/m/0tron", "Tron", "Topic")]),
+    "JUP": ("Jupiter", [("/m/0jup", "Jupiter", "Planet")]),
+    "BNB": ("BNB", [("/g/11bnb1", "Binance Coin", "Coin")]),
+}
+
+
+def _cands(rows):
+    return [candidate(mid, title, type_) for mid, title, type_ in rows]
+
+
+def test_v2_type_words_broadened_but_not_generic():
+    for w in ("currency", "coin", "chain", "blockchain", "blockchain platform", "distributed ledger",
+              "payment network", "cryptocurrency exchange company", "virtual currency", "cryptocurrency"):
+        assert w in c.CRYPTO_TYPE_WORDS, w
+    for generic in ("topic", "software", "company", "site", "computer program"):
+        assert generic not in c.CRYPTO_TYPE_WORDS
+    assert all(c.is_crypto_type(t) for t in ("Currency", "Chain", "Payment network", "Blockchain platform",
+                                             "Cryptocurrency exchange company", "Decentralized finance protocol"))
+    for t in ("Restaurant chain", "Software", "Topic", "Company", "Website", "Computer program", "Planet"):
+        assert not c.is_crypto_type(t), t
+
+
+def test_v2_owner_pass_list():
+    script = {name: _cands([(mid, title, type_)]) for name, mid, title, type_ in OWNER_PASS.values()}
+    res, text = _run({s: v[0] for s, v in OWNER_PASS.items()}, FakeTrendReq(script))
+    assert {r.symbol: r.verdict for r in res} == {s: "PASS" for s in OWNER_PASS}
+    block = _block(text)
+    assert {s: e["topic"] for s, e in block.items()} == {s: v[1] for s, v in OWNER_PASS.items()}
+    assert block["NEAR"]["label"] == "NEAR Protocol" and block["WLD"]["label"] == "Worldcoin"
+
+
+def test_v2_owner_ambiguous_list():
+    script = {name: _cands(rows) for name, rows in OWNER_AMBIGUOUS.values()}
+    res, text = _run({s: v[0] for s, v in OWNER_AMBIGUOUS.items()}, FakeTrendReq(script))
+    assert {r.symbol: r.verdict for r in res} == {s: "AMBIGUOUS" for s in OWNER_AMBIGUOUS}
+    assert _block(text) == {}
+    assert next(r for r in res if r.symbol == "BNB").reason.startswith("label is only the ticker")
+
+
+def test_v2_xmr_prefers_the_name_matching_candidate():
+    for coin_type in ("Topic", "Coin"):
+        client = FakeTrendReq({"Monero": _cands([("/m/0xmr1", "Monero", "Cryptocurrency"), ("/m/0coin", "Coin", coin_type)])})
+        res, _ = _run({"XMR": "Monero"}, client)
+        assert res[0].verdict == "PASS" and res[0].proposed["mid"] == "/m/0xmr1", coin_type
+
+
+def test_v2_exact_title_tier_beats_contained_siblings():
+    script = {"Litecoin": _cands([("/m/0lt1", "Litecoin", "Currency"), ("/m/0lt2", "Litecoin Cash", "Coin")]),
+              "Bitcoin": _cands([("/m/05p0rrx", "Bitcoin", "Cryptocurrency"), ("/m/0bch", "Bitcoin Cash", "Cryptocurrency")]),
+              "Zcash": _cands([("/m/0zec", "Zcash", "Cryptocurrency"), ("/m/0zecf", "Zcash Foundation", "Coin")])}
+    res, _ = _run({"LTC": "Litecoin", "BTC": "Bitcoin", "ZEC": "Zcash"}, FakeTrendReq(script))
+    assert [(r.verdict, r.proposed["mid"]) for r in res] == [("PASS", "/m/0lt1"), ("PASS", "/m/05p0rrx"), ("PASS", "/m/0zec")]
+
+
+def test_v2_two_exact_titles_stay_ambiguous():
+    client = FakeTrendReq({"Litecoin": _cands([("/m/0lt1", "Litecoin", "Currency"), ("/m/0lt2", "Litecoin", "Coin")])})
+    res, _ = _run({"LTC": "Litecoin"}, client)
+    assert res[0].verdict == "AMBIGUOUS" and res[0].reason == "several crypto-typed candidates"
+
+
+def test_v2_contained_title_of_a_longer_coin_is_not_passed():
+    cases = {"ETH": ("Ethereum", "Ethereum Classic"), "BTC": ("Bitcoin", "Bitcoin SV"),
+             "SKY": ("Sky", "Sky Mavis"), "POL": ("Polygon", "Polygon zkEVM")}
+    script = {name: _cands([("/m/0x" + sym.lower(), title, "Cryptocurrency")]) for sym, (name, title) in cases.items()}
+    res, _ = _run({sym: name for sym, (name, _) in cases.items()}, FakeTrendReq(script))
+    assert {r.symbol: r.verdict for r in res} == {s: "AMBIGUOUS" for s in cases}
+
+
+def test_v2_eth_software_and_algo_topic_stay_ambiguous():
+    script = {"Ethereum": _cands([("/m/0eth", "Ethereum", "Software")]), "Algorand": _cands([("/g/11algo", "Algorand", "Topic")])}
+    res, _ = _run({"ETH": "Ethereum", "ALGO": "Algorand"}, FakeTrendReq(script))
+    assert [(r.verdict, r.reason) for r in res] == [("AMBIGUOUS", "no crypto-typed candidate")] * 2
+
+
+def test_v2_protocol_and_token_words_need_a_crypto_phrase():
+    for t in ("Internet protocol", "Network protocol", "Tokenization company", "Communication protocol"):
+        assert not c.is_crypto_type(t), t
+    for t in ("Currency", "Coin", "Chain", "Distributed ledger", "Payment network", "Cryptocurrency exchange company",
+              "Decentralized finance protocol", "Token"):
+        assert c.is_crypto_type(t), t
+    res, _ = _run({"ATOM": "Cosmos"}, FakeTrendReq({"Cosmos": _cands([("/m/0cos", "Cosmos", "Internet protocol")])}))
+    assert res[0].verdict == "AMBIGUOUS"
+
+
+def test_v2_prefix_rule_needs_one_candidate_and_four_chars():
+    res, _ = _run({"ARX": "Arx Protocol"}, FakeTrendReq({"Arx Protocol": _cands([("/g/11arx", "Arx", "Blockchain")])}))
+    assert res[0].verdict == "AMBIGUOUS"  # "Arx" is shorter than 4
+    for sym, name, title in (("BCH", "Bitcoin Cash", "Bitcoin"), ("ETC", "Ethereum Classic", "Ethereum")):
+        res, _ = _run({sym: name}, FakeTrendReq({name: _cands([("/m/0x1", title, "Cryptocurrency")])}))
+        assert res[0].verdict == "AMBIGUOUS", sym  # the rest of the name is not a generic suffix
+    two = _cands([("/g/11w1", "World", "Blockchain"), ("/g/11w2", "World Chain", "Chain")])
+    res, _ = _run({"WLD": "Worldcoin"}, FakeTrendReq({"Worldcoin": two}))
+    assert res[0].verdict == "AMBIGUOUS"
+
+
+def test_v2_ticker_label_passes_only_on_exact_ticker_title():
+    script = {"OKB": _cands([("/g/11okb", "OKB", "Currency")]), "RAIN": _cands([("/g/11rain", "Rain", "Currency")])}
+    res, _ = _run({"OKB": "OKB", "RAIN": "RAIN"}, FakeTrendReq(script))
+    assert [r.verdict for r in res] == ["PASS", "AMBIGUOUS"]
+
+
+def test_v2_ambiguous_coin_gets_exact_name_candidate_and_verify_hint():
+    script = {name: _cands(rows) for name, rows in OWNER_AMBIGUOUS.values()}
+    _, text = _run({"ETH": "Ethereum", "AVAX": "Avalanche"}, FakeTrendReq(script))
+    decision = text.split(c.DECISION_HEADER)[1]
+    assert 'ETH | AMBIGUOUS | no crypto-typed candidate' in decision
+    assert '    verify /m/0108bn2x "Ethereum" (Software): https://trends.google.com/trends/explore?q=%2Fm%2F0108bn2x' in decision
+    assert "AVAX | AMBIGUOUS" in decision and "verify /m/0avx" not in decision  # no exact-name candidate
