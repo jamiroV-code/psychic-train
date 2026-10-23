@@ -1,6 +1,6 @@
 ---
 name: report:narrative-baskets-trends-t149-t100b-r2
-description: "T149 round 2: fixes from the independent review T152 on PR #162 (M3 fail-closed pulls and store guard, M2 quiet-then-surge, M-pin, LOW items). M1 (point-in-time chart) is characterized by a test but not fixed: the fix needs an api/analytics change, so it needs the owner's input."
+description: "T149 round 2: fixes from the independent review T152 on PR #162 (M3 fail-closed pulls and store guard, M2 quiet-then-surge, M-pin, LOW items) plus the planner's qualified-term rule for risky symbols. M1 (point-in-time chart) is characterized by a test but not fixed: the fix needs an api/analytics change, so it needs the owner's input."
 date: 23-10-26
 feature: narrative-baskets
 metadata:
@@ -34,23 +34,26 @@ T149 round 2. Fixes from review T152 (verdict MERGE AFTER SMALL FIXES) on PR #16
 - **LOW, done.**
   - (a) `probe_trends --alone` now defaults to the daily run's explicit 100-day range ending yesterday. The owner no longer types dates; `--timeframe` still overrides.
   - (b) The 540 s budget is now checked before every 429 backoff wait. A wait that would end past the budget is not started; that coin and the rest are capped `time budget reached`.
+- **Qualified terms for risky symbols (planner, after T155), done.** `NAME_RISK_SYMBOLS` now skips a `term` entry only when it is unqualified: the bare name or ticker. A qualified term is pulled: one with a qualifier word (`crypto`, `coin`, `token`, `network`, `protocol`, `finance`, `swap`, `chain`) beside the name, as produced by the checker v3 "qualified-term fallback". For example, `tron crypto` and `Aptos Crypto` are pulled; `Tron`, `TRX`, `Aptos`, `Crypto` alone and `tron classic` are skipped. Topic entries are always pulled. The status-line bucket is now `skipped-unqualified`, and the reason reads `name-ambiguous: needs topic or qualified term`. The probe's risk note follows the same rule. Commit 7f91951.
 - **M1 (point-in-time), characterized, NOT fixed.** A truncate-and-recompute test shows which past chart days change after a replace. The fix needs an `api/analytics/` edit, which is a hard stop of this slice. Options are in heading 9.
 
 ## 4 Files changed
 
 Within the nine PLAN paths only (round 2 adds no new file except this report):
-- `api/data/attention/trends.py`: `requested_range`, `OUT_OF_RANGE`, `NOT_CURRENT`, `QUIET_THEN_SURGE`, `SURGE_DAYS`, fail-closed checks in `fetch_alone`. `complete_days(frame, term)` no longer filters dates and rejects NaN values as `gap`.
+- `api/data/attention/trends.py`: `QUALIFIER_WORDS`, `is_qualified_term`, `requested_range`, `OUT_OF_RANGE`, `NOT_CURRENT`, `QUIET_THEN_SURGE`, `SURGE_DAYS`, fail-closed checks in `fetch_alone`. `complete_days(frame, term)` no longer filters dates and rejects NaN values as `gap`.
 - `api/data/attention/store.py`: `_replaceable` guard for replace-series.
-- `api/scripts/refresh_attention.py`: the `quiet-then-surge` bucket; the budget deadline passed into `_trends_fetch_429`.
+- `api/scripts/refresh_attention.py`: the qualified-term check in `_run_trends`; the `skipped-unqualified` and `quiet-then-surge` buckets; the budget deadline passed into `_trends_fetch_429`.
 - `api/scripts/probe_trends.py`: the `--alone` default timeframe; `--timeframe` defaults to None and resolves per mode.
-- Tests: `test_trends.py` (+6, 1 rewritten), `test_store.py` (+1 with 4 cases, 1 rewritten), `test_trends_pull.py` (+1, the M1 characterization), `test_refresh_attention_trends.py` (+3), `test_probe_trends.py` (1 rewritten).
+- Tests: `test_trends.py` (+6, 1 rewritten), `test_store.py` (+1 with 4 cases, 1 rewritten), `test_trends_pull.py` (+1, the M1 characterization), `test_refresh_attention_trends.py` (+3, plus the qualified-term test with 2 cases), `test_trends.py` also gains `test_qualified_term_rule` (16 cases), `test_probe_trends.py` (1 rewritten).
 - This report.
 
 ## 5 Commits
 
 Branch `claude/t149-t100b-trends-fetch`:
 - `7f1692c`: merge of origin/main 9c128cc
-- the round-2 fix commit and this report (see the PR)
+- `112d5a6`: T152 fixes plus this report
+- `7f91951`: qualified terms for risky symbols
+- `534e949`: merge of origin/main 7c73d3f (includes #163, the weights-guard fix)
 
 ## 6 Tests run
 
@@ -68,6 +71,10 @@ All runs used `UV_FROZEN=1`, from the repo root, on 23-10-26 UTC.
 | G10 imports; no network or pytrends import | | import exit 0; the grep printed nothing | PASS |
 | G11 default store mode | | 38 passed | PASS |
 | ruff on the touched files | | only the BLE001 in the old `fetch_series` remains (it was already there) | |
+
+**After the qualified-term change and the merge of main 7c73d3f** (#163 merged): G1 119 passed. Full API: **1961 passed, 0 failed**, 1 skipped, 5 deselected. Baseline on main 7c73d3f: 1884 passed, 0 failed. +77 = round 1 +45, round 2 +14, qualified terms +18. G7 3x OK, `git diff --check` clean. The weights-guard failure is gone.
+
+**Red first, qualified terms:** 19 failed before the code (16 rule cases, 2 runner cases, and the summary bucket rename). **Mutations:** dropping the qualified-term check in the runner was killed by `test_risky_symbol_bare_term_skipped_qualified_term_fetched`; dropping the "a word besides the qualifier" condition was killed by `test_qualified_term_rule`.
 
 **Red first.** The new and rewritten tests on the fix-free code (same G1 command) gave `14 failed, 87 passed`. Two new tests were green before any code change, by design:
 - `test_replace_mode_pinned_to_trends_only` pins correct current behaviour; the mutation check below proves it.
@@ -132,7 +139,7 @@ Recommendation: **A**, as its own small task after this PR merges, before T100c 
 
 **Owner question (M2b, SPEC/signal rule):** should "rising from nothing" (a `quiet-then-surge` coin) count as rising? The default for now is **NO**: the coin stays missing, Discovery is unchanged (`base_mean <= 0` already gives None), and the coin is only counted in the `trends detail:` line. A YES needs a SPEC change to the trigger rule.
 
-**CI:** red only on the `test_weights_v2` guard that already fails on main. I commented on the PR. PR #163 fixes it but touches `api/analytics/`, so it was not ported. Merge main again after #163 lands.
+**CI:** #163 has merged and main is merged into the branch (534e949). The full API suite is green locally (1961 passed, 0 failed); CI re-runs on the push.
 
 **Registry update request:** T149 round 2 done except M1 (needs_input); propose T100b-PIT (option A).
 
@@ -141,7 +148,7 @@ Recommendation: **A**, as its own small task after this PR merges, before T100c 
 **Owner probes (PowerShell, repo root).** No dates needed now: `--alone` defaults to the 100-day range ending yesterday.
 
 ```
-# P-CHK  topic ids for the risky names still on a bare term
+# P-CHK  topic ids (or a qualified-term fallback) for the risky names still on a bare term
 uv run --project api --with pytrends python -m api.scripts.check_trends_keywords --symbols 'TRX,ONDO,MORPHO,ICP,PEPE,BNB,CRO,HBAR,APT'
 
 # P-RES  single-term resolution over the daily run's own range (ends yesterday automatically)
