@@ -141,6 +141,8 @@ Recommendation: **A**, as its own small task after this PR merges, before T100c 
 
 **CI:** #163 has merged and main is merged into the branch (534e949). The full API suite is green locally (1961 passed, 0 failed); CI re-runs on the push.
 
+**Owner decisions, 23-10-26 (relayed by the planner):** M1 = option A as a separate task T100b-PIT after #162 merges; nothing more for M1 in #162. M2b = NO for now: `quiet-then-surge` stays shown but not scored.
+
 **Registry update request:** T149 round 2 done except M1 (needs_input); propose T100b-PIT (option A).
 
 ## 10 Follow-up
