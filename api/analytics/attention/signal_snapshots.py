@@ -25,6 +25,8 @@ through the id map ON READ (`narrative_ids`, unmapped ones in `retired_ids`) and
 
 Weights versions (T130): new records carry `weights_version`, the version scoring that day
 (`discovery.weights_for_day`). Records written before carry none and read back as version 1 (in memory only).
+`config` is the WHOLE config of the run, so its top-level `source_weights` is the current version even on a day an
+older version scored; new records (T150) also store `weights`, the version actually used, to say so explicitly.
 
 LIMITATION: the snapshot is taken at the end of the `refresh` job, so it cannot include sources fed later the same
 day by `refresh-extra` (Binance, Hyperliquid, Trends, Reddit), nor the category snapshot refreshed after the
@@ -65,6 +67,7 @@ def snapshot_hash(cfg: dict, narratives_sha: str) -> str:
 
 
 def _record(res, day: date, window: int, cfg: dict, h: str, nsha: str) -> dict:
+    used = discovery.weights_for_day(cfg, day)
     coins: dict[str, dict] = {}
     for cat in res.categories:
         for c in cat.coins:
@@ -78,7 +81,7 @@ def _record(res, day: date, window: int, cfg: dict, h: str, nsha: str) -> dict:
         row["category_ids"].sort()
     return {"date": day.isoformat(), "window": window, "categories_as_of": res.categories_as_of,
             "config_hash": h, "config": cfg, "membership_definition": narratives.DEFINITION, "narratives_sha": nsha,
-            "weights_version": discovery.weights_for_day(cfg, day)["weights_version"],
+            "weights_version": used["weights_version"], "weights": used,
             "categories": [{"id": c.id, "score": c.score, "median": c.median, "coins_used": c.coins_used,
                             "gaining_count": c.gaining_count} for c in res.categories],
             "rows": [coins[s] for s in sorted(coins)]}
