@@ -25,9 +25,12 @@ from api.tests.trends_fixtures import (
     weekly_frame,
 )
 
-R1 = ["Bitcoin", "Solana", "Chainlink", "Aave", "Injective"]
-R2 = ["Bitcoin", "Ethereum", "Solana", "Chainlink", "Aave"]
-R3 = ["Bitcoin", "Ethereum", "Injective", "Morpho"]
+# Default keywords come from the keyword file (topic ids since T134 seeded the owner's checker PASS entries).
+_KW = k.load()
+BTC, ETH, SOL, LINK, AAVE, INJ = (_KW.keyword_for(s) for s in ("BTC", "ETH", "SOL", "LINK", "AAVE", "INJ"))
+R1 = [_KW.anchor_keyword(), SOL, LINK, AAVE, INJ]
+R2 = [BTC, ETH, SOL, LINK, AAVE]
+R3 = [BTC, ETH, INJ, _KW.keyword_for("MORPHO")]
 
 
 @pytest.fixture(autouse=True)
@@ -132,15 +135,15 @@ def test_evidence_uses_two_requests_with_both_anchors_and_five_coins():
 
 
 def test_evidence_prints_raw_stats_and_percent_of_each_anchor():
-    vals2 = {"Bitcoin": [100] * 90, "Ethereum": [40] * 90, "Solana": [20] * 90, "Chainlink": [1] * 89 + [50], "Aave": 0}
+    vals2 = {BTC: [100] * 90, ETH: [40] * 90, SOL: [20] * 90, LINK: [1] * 89 + [50], AAVE: 0}
     _, text, _ = _run([daily_frame(R1), daily_frame(R2, values=vals2), daily_frame(R3)])
     ev = text.split("evidence request 2")[1].split("evidence request 3")[0]
-    assert "Bitcoin | days 90 | min 100 | median 100 | max 100 | last 100 | at 100: 90 | at 0 or 1: 0" in ev
-    assert "Chainlink | days 90 | min 1 | median 1 | max 50 | last 50 | at 100: 0 | at 0 or 1: 89" in ev
-    assert "Solana: median 20% of A (Bitcoin), 50% of B (Ethereum)" in ev
-    assert "Aave: median 0% of A (Bitcoin), 0% of B (Ethereum)" in ev
-    assert "A (Bitcoin): a coin is above it on 0 days; every coin is at 0 or 1 on 0 days" in ev
-    assert "B (Ethereum): a coin is above it on 1 days" in ev
+    assert f"{BTC} | days 90 | min 100 | median 100 | max 100 | last 100 | at 100: 90 | at 0 or 1: 0" in ev
+    assert f"{LINK} | days 90 | min 1 | median 1 | max 50 | last 50 | at 100: 0 | at 0 or 1: 89" in ev
+    assert f"{SOL}: median 20% of A ({BTC}), 50% of B ({ETH})" in ev
+    assert f"{AAVE}: median 0% of A ({BTC}), 0% of B ({ETH})" in ev
+    assert f"A ({BTC}): a coin is above it on 0 days; every coin is at 0 or 1 on 0 days" in ev
+    assert f"B ({ETH}): a coin is above it on 1 days" in ev
     assert "recommend" not in text.lower()
 
 
@@ -150,7 +153,7 @@ def test_failure_of_one_evidence_request_still_prints_the_other():
     r2 = text.split("evidence request 2")[1].split("evidence request 3")[0]
     r3 = text.split("evidence request 3")[1]
     assert "ResponseError (HTTP 403)" in r2
-    assert "Injective | days 90" in r3
+    assert f"{INJ} | days 90" in r3
 
 
 def test_probe_writes_nothing(tmp_path, monkeypatch):
@@ -186,7 +189,7 @@ def test_defaults_come_from_keyword_file_and_pytrends_missing_exits_3(monkeypatc
     assert client.payloads[0][0][0] == m.anchor_keyword()
     assert client.payloads[1][0][:2] == [m.keyword_for("BTC"), m.keyword_for("ETH")]
     _, text, client = _run([daily_frame(R1)], ["--coins", "ATOM,SOL", "--no-evidence"])
-    assert "skip ATOM" in text and client.payloads[0][0][1] == "Solana"
+    assert "skip ATOM" in text and client.payloads[0][0][1] == SOL
     monkeypatch.setitem(sys.modules, "pytrends", None)
     monkeypatch.setitem(sys.modules, "pytrends.request", None)
     out, err = io.StringIO(), io.StringIO()

@@ -128,3 +128,5 @@ Order: probes (owner, after T100a) then T100b then T100c; W8 only if the probes 
 3. History: revised (simple, recommended first) or first-seen column too (honest backtests, more code)?
 4. Run location: decide after probes; are you willing to run the PC probe and keep the API running on that PC if B wins?
 5. If both probes fail: accept Trends as permanently `unavailable` (weight 25 rescaled away per the weighted rule) or fund a paid data source?
+
+**Follow-up T134 (21-10-26).** Question 2 is answered by evidence for 12 coins: the owner's checker run gave 12 topic ids (AAVE ADA ARB BCH BTC DOGE DOT INJ LINK LTC SHIB SOL), seeded in `trends_keywords.json`. Checker v2 widens the accepted Google types (Currency, Coin, Chain, Blockchain platform, Distributed ledger, Payment network, Cryptocurrency exchange company) and adds name-match and prefix rules; coins still AMBIGUOUS after the owner's re-run are the name-fallback candidates for T100b.
