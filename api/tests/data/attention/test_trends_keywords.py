@@ -45,7 +45,8 @@ def test_shipped_file_validates_against_placed_symbols():
     assert m.warnings == []
     assert m.anchor["term"] == "Bitcoin"
     topics = {s: e["topic"] for s, e in m.entries.items() if "topic" in e}
-    assert topics == OWNER_PASS_TOPICS  # topic ids come only from the owner's checker run (T134)
+    assert topics == ALL_TOPICS  # topic ids come only from the owner (checker runs 21-10-26, 22-10-26; T134, T154)
+    assert len(topics) == 41
 
 
 OWNER_PASS_TOPICS = {
@@ -53,6 +54,25 @@ OWNER_PASS_TOPICS = {
     "BTC": "/m/05p0rrx", "DOGE": "/m/0zmxk9t", "DOT": "/g/11f3mbgrgj", "INJ": "/g/11ldr16mw_",
     "LINK": "/g/11qn04qyw9", "LTC": "/m/0t544l4", "SHIB": "/g/11q1jsfvsn", "SOL": "/g/11qh5y640t",
 }
+PASS_22 = {
+    "BGB": ("/g/11xgyky_2b", "Bitget Token"), "CAKE": ("/g/11vb5nyrj6", "PancakeSwap"),
+    "GT": ("/g/11n3zc6c3t", "GateToken"), "HBAR": ("/g/11hbsyfq3f", "Hedera"), "HTX": ("/m/012vj2d4", "HTX"),
+    "KCS": ("/g/11ydr7tg_8", "KuCoin Token"), "NEAR": ("/g/11q3ypz8pd", "NEAR Protocol"),
+    "UNI": ("/g/11h1dsqb_m", "Uniswap"), "VVV": ("/g/11xv_6jggk", "Venice token"),
+    "WLD": ("/g/11t_vkgtjf", "Worldcoin"), "XAUT": ("/g/11n3zb_gpq", "Tether Gold"),
+    "XLM": ("/m/0121k_50", "Stellar"), "XMR": ("/m/0130q41b", "Monero"), "XRP": ("/g/11ggfsh1hd", "XRP"),
+}
+OWNER_ACCEPTED_22 = {
+    "ETH": ("/m/0108bn2x", "Ethereum"), "BNB": ("/g/11mjf91p7c", "Binance Coin"),
+    "ALGO": ("/g/11rgg857l7", "Algorand"), "FIL": ("/g/11g9ngp3p7", "Filecoin"),
+    "KAS": ("/g/11dxd52vfh", "Kaspa"), "ZEC": ("/g/11c1tqqpyq", "Zcash"),
+    "TAO": ("/g/11n9szvdlj", "Bittensor"), "HYPE": ("/g/11z3m2dkm4", "Hyperliquid"),
+    "ICP": ("/g/11q1mbrj5p", "Internet Computer"), "NEXO": ("/g/113nvt4wp", "Nexo"),
+    "PI": ("/g/11kzq2y5bk", "Pi Network"), "PUMP": ("/g/11wr7k80z3", "pump.fun"),
+    "XDC": ("/g/11h1y76mtz", "XDC Network"), "WLFI": ("/g/11lp7f_05g", "World Liberty Financial"),
+    "AERO": ("/g/11mrd65ng5", "Aerodrome Finance"),
+}
+ALL_TOPICS = {**OWNER_PASS_TOPICS, **{s: v[0] for s, v in {**PASS_22, **OWNER_ACCEPTED_22}.items()}}
 
 
 def test_seeded_topics_carry_checker_note_and_name_label():
@@ -70,7 +90,8 @@ def test_seed_term_labels_equal_terms():
         if "term" in e:
             assert e["label"] == e["term"], sym
         elif "topic" in e:
-            assert e["note"] == "checker PASS 21-10-26", sym
+            assert e["note"] in ("checker PASS 21-10-26", "checker PASS 22-10-26",
+                                 "owner-accepted 22-10-26, not checker PASS"), sym
         else:
             assert e.get("no-keyword") is True and e["note"], sym
 
@@ -247,3 +268,12 @@ def test_validate_does_not_mutate_input():
     before = copy.deepcopy(doc)
     k.validate(doc, {"SOL"})
     assert doc == before
+
+
+def test_t154_topics_carry_owner_notes_and_labels():
+    m = k.load()
+    for sym, (topic, label) in PASS_22.items():
+        assert m.entries[sym] == {"topic": topic, "label": label, "note": "checker PASS 22-10-26"}, sym
+    for sym, (topic, label) in OWNER_ACCEPTED_22.items():
+        assert m.entries[sym] == {"topic": topic, "label": label,
+                                  "note": "owner-accepted 22-10-26, not checker PASS"}, sym
