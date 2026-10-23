@@ -740,7 +740,7 @@ def test_ext_outside_block_and_coverage_line():
     assert set(_qualified(text)) == {"AVAX", "NEWB"} and _qualified(text)["NEWB"]["term"] == "beta chain crypto"
     tail = text.split(c.OUTSIDE_HEADER)[1]
     assert tail.splitlines()[1] == "NEWA, NEWB"
-    assert "discovery eligible: 5 | topic: 2 | qualified-term: 2 | term: 0 | nothing: 1" in tail
+    assert "discovery eligible: 5 | topic: 2 | qualified-term: 2 | term: 0 | nothing: 1 | not checked: 0" in tail
     # The loader takes the merged blocks today; the outside symbols only raise the placed-set warning.
     seed = json.loads(k.KEYWORDS_PATH.read_text(encoding="utf-8"))
     merged = {**seed, **_block(text), **_qualified(text)}
@@ -754,3 +754,82 @@ def test_ext_file_input_is_not_widened_by_the_universe(tmp_path):
     client = FakeTrendReq()
     assert _main(["--file", str(tmp_path / "m.json")], client) == 0
     assert client.suggestion_calls == ["Solana"]
+
+
+# --- T157 review fixes (planner, 23-10-26) ---
+
+
+def test_rev_ticker_and_bracket_pass_are_marked_leads():
+    script = {"ETC crypto": _cands([("/g/11etc", "ETC", "Cryptocurrency")]),
+              "Stacks crypto": _cands([("/g/11stx", "Stacks (cryptocurrency)", "Coin")]),
+              "Avalanche crypto": _cands([("/g/11avaxc", "Avalanche", "Cryptocurrency")])}
+    res, text = _run3({"ETC": "Ethereum Classic", "STX": "Stacks", "AVAX": "Avalanche"}, FakeTrendReq(script))
+    assert {r.symbol: r.rule for r in res} == {"ETC": "ticker-title", "STX": "bracket", "AVAX": "exact"}
+    etc = next(line for line in text.splitlines() if line.startswith("ETC |"))
+    assert '/g/11etc "ETC" (Cryptocurrency)' in etc and "[rule: ticker-title; LEAD: open the Trends link" in etc
+    assert "[rule: bracket; LEAD" in next(line for line in text.splitlines() if line.startswith("STX |"))
+    assert "LEAD" not in next(line for line in text.splitlines() if line.startswith("AVAX |"))
+    assert "    verify /g/11etc" in text and "q=%2Fg%2F11etc" in text
+    block = _block(text)
+    assert block["ETC"]["note"] == "checker PASS (ticker-title) 23-10-26"
+    assert block["STX"]["note"] == "checker PASS (bracket) 23-10-26"
+    assert block["AVAX"]["note"] == "checker PASS 23-10-26"
+    assert c.LEAD_NOTE in text.split(c.PASTE_HEADER)[0].splitlines()[-1]
+    assert "ticker-title" in c.LEAD_NOTE and "LEAD" in c.__doc__ and "confirm the coin" in c.__doc__
+
+
+def test_rev_derived_name_pass_is_marked_a_guess():
+    script = {"New Alpha crypto": _cands([("/g/11newa", "New Alpha", "Cryptocurrency")])}
+    out = io.StringIO()
+    assert _main(["--only-unresolved", "--symbols", "NEWA,NEWB"], NoiseClient(script), out) == 0
+    text = out.getvalue()
+    assert _block(text)["NEWA"]["note"] == "checker PASS 23-10-26, name from CoinGecko id"
+    assert _qualified(text)["NEWB"]["note"] == "qualified-term fallback 23-10-26, not checker PASS, name from CoinGecko id"
+    newa = next(line for line in text.splitlines() if line.startswith("NEWA |"))
+    assert "name from CoinGecko id, a guess" in newa
+
+
+def test_rev_no_qualified_term_for_a_symbol_that_holds_a_topic():
+    topics = [s for s, e in k.load().entries.items() if "topic" in e]
+    assert "SOL" in topics
+    mapping = {s: k.load().entries[s]["label"] for s in topics}
+    _, text = _run3(mapping, NoiseClient())  # every coin AMBIGUOUS, in a plain --variants run
+    assert _qualified(text) == {}
+    assert "SOL | no qualified term: already has a topic" in text.split(c.QUALIFIED_HEADER)[1]
+
+
+def test_rev_coverage_with_symbols_counts_unchecked_coins_apart():
+    script = {"New Alpha crypto": _cands([("/g/11newa", "New Alpha", "Cryptocurrency")])}
+    out = io.StringIO()
+    assert _main(["--only-unresolved", "--symbols", "NEWA"], NoiseClient(script), out) == 0
+    tail = out.getvalue().split(c.OUTSIDE_HEADER)[1]
+    assert ("discovery eligible: 5 | topic: 2 | qualified-term: 0 | term: 0 | nothing: 0 | not checked: 3"
+            " (this run checked 1 of them)") in tail
+    assert "T156" not in c.OUTSIDE_HEADER
+
+
+def test_rev_qualifier_words_are_whole_words():
+    assert c.qualified_term("WLD", "Worldcoin") == "worldcoin crypto"
+    assert c.qualified_term("BCH", "Bitcoin Cash") == "bitcoin cash crypto"
+    assert c.qualified_term("KCS", "KuCoin Token") == "kucoin token"
+    assert "Worldcoin coin" in c.queries_for("WLD", "Worldcoin")
+    assert "Bitcoin Cash coin" in c.queries_for("BCH", "Bitcoin Cash")
+
+
+def test_rev_universe_or_config_failure_exits_1_with_class_only(monkeypatch, capsys):
+    from api.analytics.attention import discovery
+
+    def _bad(*_a, **_k):
+        raise ValueError("discovery config " + SECRET)
+
+    monkeypatch.setattr(discovery, "load_config", _bad)
+    client = FakeTrendReq()
+    assert c.main(["--only-unresolved"], trendreq_factory=factory(client), sleep=lambda s: None,
+                  universe_rows=UNIVERSE) == 1
+    monkeypatch.undo()
+    monkeypatch.setattr(c, "load_universe_rows", _bad)
+    assert c.main([], trendreq_factory=factory(client), sleep=lambda s: None) == 1
+    cap = capsys.readouterr()
+    assert cap.err.count("cannot read the Discovery universe: ValueError") == 2
+    assert SECRET not in cap.out + cap.err and "discovery config" not in cap.out + cap.err
+    assert client.suggestion_calls == []
