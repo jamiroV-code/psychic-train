@@ -11,6 +11,7 @@ only when the pass's canary returned data and the coin's trailing median is belo
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 
@@ -96,8 +97,11 @@ def day_value(day: date, times: list[datetime], *, n_target: int, n_min: int, wi
 
 
 def finalize(result: DayResult | None, *, canary_ok: bool, trailing_median: float | None) -> float | None:
-    """The value to store, or None (failed or missing). A zero needs canary data and a trailing median below 5."""
-    if result is None:
+    """The value to store, or None (failed or missing). A zero needs canary data and a trailing median below 5.
+
+    A non-finite or negative value is never a count: None.
+    """
+    if result is None or not math.isfinite(result.value) or result.value < 0:
         return None
     if result.value == 0 and not (canary_ok and trailing_median is not None and trailing_median < ZERO_MEDIAN_MAX):
         return None
