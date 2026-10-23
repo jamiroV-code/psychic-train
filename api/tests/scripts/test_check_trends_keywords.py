@@ -172,9 +172,10 @@ def test_unreadable_or_non_object_file_exits_2_and_empty_map_exits_0(tmp_path, c
     assert c.main(["--symbols", "lower"], trendreq_factory=fac, sleep=lambda s: None) == 2
 
 
-def test_default_map_comes_from_keyword_file_labels():
+def test_default_map_comes_from_keyword_file_labels(capsys):
     client = FakeTrendReq()
-    assert c.main([], trendreq_factory=factory(client), sleep=lambda s: None, now=NOW) == 0
+    assert c.main([], trendreq_factory=factory(client), sleep=lambda s: None, now=NOW, universe_rows=[]) == 0
+    assert "no universe snapshot: checking the keyword file only" in capsys.readouterr().err
     m = k.load()
     assert client.suggestion_calls == [e["label"] for e in m.entries.values()]
     assert m.anchor["label"] not in client.suggestion_calls
@@ -631,18 +632,18 @@ def test_v3_qualified_term_skips_a_term_another_coin_already_uses():
 def test_v3_only_unresolved_checks_coins_without_a_topic_and_uses_variants():
     m = k.load()
     unresolved = [s for s, e in m.entries.items() if "topic" not in e]
-    assert c.unresolved_symbols(m) == unresolved and "SOL" not in unresolved and "AVAX" in unresolved
+    assert c.unresolved_symbols(m, m.entries) == unresolved and "SOL" not in unresolved and "AVAX" in unresolved
     client = FakeTrendReq()
     out = io.StringIO()
     assert c.main(["--only-unresolved"], trendreq_factory=factory(client), sleep=lambda s: None, out=out,
-                  now=STAMP_23) == 0
+                  now=STAMP_23, universe_rows=[]) == 0
     expected = [q for s in unresolved for q in c.queries_for(s, m.entries[s]["label"])]
     assert client.suggestion_calls == expected
     assert "Solana" not in client.suggestion_calls
     assert out.getvalue().startswith(f"plan: {len(unresolved)} coins, {len(expected)} requests")
     client2 = FakeTrendReq()
     assert c.main(["--only-unresolved", "--symbols", "SOL,AVAX"], trendreq_factory=factory(client2),
-                  sleep=lambda s: None, out=io.StringIO()) == 0
+                  sleep=lambda s: None, out=io.StringIO(), universe_rows=[]) == 0
     assert client2.suggestion_calls == c.queries_for("AVAX", "Avalanche")
 
 
@@ -677,3 +678,79 @@ def test_v3_docstring_keeps_the_eyeball_rule_and_powershell_examples():
     assert "Eyeball every PASS line" in doc
     assert "--only-unresolved" in doc and "--symbols 'AVAX,SUI'" in doc
     assert "qualified" in doc and "130" in doc
+
+
+# --- T155 scope extension (planner, 23-10-26): every Discovery-eligible coin, not only the narrative-placed ones.
+# Fixture universe: BTC and AVAX are placed; NEWA and NEWB are in no narrative (unassigned); NOID is eligible with no
+# CoinGecko id (a symbol-only row); USDT is a stablecoin class and never eligible. ---
+
+UNIVERSE = [{"symbol": "BTC", "id": "bitcoin"}, {"symbol": "USDT", "id": "tether"},
+            {"symbol": "AVAX", "id": "avalanche-2"}, {"symbol": "NEWA", "id": "new-alpha"},
+            {"symbol": "NEWB", "id": "beta-chain-2"}, {"symbol": "NOID"}]
+
+
+def _main(argv, client, out=None, err=None):
+    return c.main(argv, trendreq_factory=factory(client), sleep=lambda s: None, out=out or io.StringIO(),
+                  err=err or io.StringIO(), now=STAMP_23, universe_rows=UNIVERSE)
+
+
+def test_ext_fixture_universe_is_what_discovery_sees():
+    from api.analytics.attention import discovery, narratives
+    eligible, names = c.eligible_coins(UNIVERSE)
+    assert eligible == discovery.eligibility(discovery.load_config(), UNIVERSE).eligible
+    assert eligible == ["BTC", "AVAX", "NEWA", "NEWB", "NOID"]
+    assert set(narratives.memberships(eligible, 1).unassigned) >= {"NEWA", "NEWB", "NOID"}
+    assert names == {"BTC": "Bitcoin", "AVAX": "Avalanche", "NEWA": "New Alpha", "NEWB": "Beta Chain", "NOID": "NOID"}
+
+
+def test_ext_name_from_coingecko_id():
+    assert c.name_from_id("ether-fi", "ETHFI") == "Ether Fi"
+    assert c.name_from_id("pearl-2", "PEARL") == "Pearl"
+    assert c.name_from_id("vechain", "VET") == "Vechain"
+    assert c.name_from_id(None, "NOID") == "NOID" and c.name_from_id("", "X1") == "X1"
+    assert c.name_from_id("caf\u00e9", "CAF") == "CAF"
+
+
+def test_ext_default_run_is_keyword_file_then_eligible_coins_without_an_entry():
+    client = FakeTrendReq()
+    out = io.StringIO()
+    assert _main([], client, out) == 0
+    labels = [e["label"] for e in k.load().entries.values()]
+    assert client.suggestion_calls == labels + ["New Alpha", "Beta Chain", "NOID"]
+    assert "Tether" not in client.suggestion_calls and "USDT" not in client.suggestion_calls
+    assert "names from the CoinGecko id (check them): NEWA=New Alpha, NEWB=Beta Chain, NOID=NOID" in out.getvalue()
+
+
+def test_ext_only_unresolved_takes_eligible_coins_with_no_entry():
+    m = k.load()
+    client = FakeTrendReq()
+    assert _main(["--only-unresolved"], client) == 0
+    want = [s for s, e in m.entries.items() if "topic" not in e] + ["NEWA", "NEWB", "NOID"]
+    names = {**{s: e["label"] for s, e in m.entries.items()}, "NEWA": "New Alpha", "NEWB": "Beta Chain", "NOID": "NOID"}
+    assert client.suggestion_calls == [q for s in want for q in c.queries_for(s, names[s])]
+    assert "Bitcoin" not in client.suggestion_calls  # BTC has a topic
+
+
+def test_ext_outside_block_and_coverage_line():
+    script = {"New Alpha crypto": _cands([("/g/11newa", "New Alpha", "Cryptocurrency")])}
+    out = io.StringIO()
+    assert _main(["--only-unresolved", "--symbols", "AVAX,NEWA,NEWB,NOID"], NoiseClient(script), out) == 0
+    text = out.getvalue()
+    assert set(_block(text)) == {"NEWA"}
+    assert set(_qualified(text)) == {"AVAX", "NEWB"} and _qualified(text)["NEWB"]["term"] == "beta chain crypto"
+    tail = text.split(c.OUTSIDE_HEADER)[1]
+    assert tail.splitlines()[1] == "NEWA, NEWB"
+    assert "discovery eligible: 5 | topic: 2 | qualified-term: 2 | term: 0 | nothing: 1" in tail
+    # The loader takes the merged blocks today; the outside symbols only raise the placed-set warning.
+    seed = json.loads(k.KEYWORDS_PATH.read_text(encoding="utf-8"))
+    merged = {**seed, **_block(text), **_qualified(text)}
+    res = k.validate(merged, set(k.load().entries))
+    assert res["entries"]["NEWA"]["topic"] == "/g/11newa"
+    assert res["warnings"] == ["keywords: NEWA is not a placed coin", "keywords: NEWB is not a placed coin"]
+
+
+def test_ext_file_input_is_not_widened_by_the_universe(tmp_path):
+    (tmp_path / "m.json").write_text('{"SOL": "Solana"}', encoding="utf-8")
+    client = FakeTrendReq()
+    assert _main(["--file", str(tmp_path / "m.json")], client) == 0
+    assert client.suggestion_calls == ["Solana"]

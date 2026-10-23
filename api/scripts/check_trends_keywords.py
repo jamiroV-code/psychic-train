@@ -1,13 +1,14 @@
 """Check coin names against Google Trends suggestions and propose topic ids (T100a, v3 T155).
 
 Run from the repo root: uv run --project api --with pytrends python -m api.scripts.check_trends_keywords
-Reads a symbol -> name JSON map (default: the labels of api/data/trends_keywords.json), prints one line per
-coin, a paste-ready JSON of PASS entries and a 'needs a decision' block (each AMBIGUOUS coin with its first
+Reads a symbol -> name JSON map (default, T155: every coin in api/data/trends_keywords.json with its label, then
+every Discovery-eligible coin of the latest universe snapshot that has no entry, named from its CoinGecko id;
+those names are listed first, check them), prints one line per coin, a paste-ready JSON of PASS entries and a 'needs a decision' block (each AMBIGUOUS coin with its first
 exact-name candidate and a Trends link to check it by eye). Writes nothing. Exit 0 (also after a 429 stop), 1 if the Trends
 session cannot start, 2 if the input is unreadable, 3 if pytrends is not installed, 130 after Ctrl-C.
 Starting the session sends one cookie request to Google before the per-coin calls.
 PowerShell: quote comma lists, e.g. --symbols 'LINK,AAVE'.
---only-unresolved checks only coins with no `topic` entry in trends_keywords.json and turns on --variants: each
+--only-unresolved checks only those coins with no `topic` entry (or no entry at all) and turns on --variants: each
 coin is also queried as '<name> crypto', '<name> coin' and '<ticker> crypto' (at most 4 queries per coin, 3 s
 apart; the expected request count and minutes print first). Candidates are merged by topic id, each tagged with
 the query that found it. Examples:
@@ -15,7 +16,8 @@ the query that found it. Examples:
   uv run --project api --with pytrends python -m api.scripts.check_trends_keywords --only-unresolved --symbols 'AVAX,SUI'
 With variants, a coin still AMBIGUOUS gets a paste-ready qualified term ('avalanche crypto') in a 'qualified term
 proposals' block: lower confidence than a topic, never a checker PASS. A coin with a failed query cannot PASS and
-gets no term; re-run it. Ctrl-C stops the run, prints the partial results and exits 130.
+gets no term; re-run it. Ctrl-C stops the run, prints the partial results and exits 130. A last block lists
+the proposed symbols outside the narrative-placed set (the loader only warns on them) and the Discovery coverage.
 PASS needs exactly one crypto-typed candidate whose title equals the name. Failing that, the only crypto-typed
 candidate passes when it is the name plus a generic word ("Kaspa Network") or a 4+ character start of the name
 before one ("NEAR" for NEAR Protocol); "Ethereum Classic" for Ethereum never does. A label that is only the
@@ -36,6 +38,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 
+from api.analytics.attention import discovery, narratives
+from api.analytics.attention.universe import load_universe_rows
 from api.data.attention import trends_keywords as tk
 from api.scripts.trends_cli_common import (
     error_class,
@@ -77,6 +81,7 @@ MAX_QUERIES_PER_COIN = 4
 QUALIFIER_WORDS = ("crypto", "coin", "token")
 BRACKET_QUALIFIERS = ("crypto", "cryptocurrency", "coin", "token", "blockchain")
 QUALIFIED_HEADER = "--- qualified term proposals (lower confidence than topics) ---"
+OUTSIDE_HEADER = "--- outside the narrative-placed set (T156) ---"
 
 
 @dataclass
@@ -298,7 +303,7 @@ def _cand_via(r: Result, c: dict, variants: bool) -> str:
     return _cand(c) + " via " + ", ".join(f"'{q}'" for q in r.found_by.get(c["mid"], []))
 
 
-def _print_qualified(results: list[Result], stamp: str, out) -> None:
+def _print_qualified(results: list[Result], stamp: str, out) -> dict:
     taken = {e["term"].casefold(): s for s, e in tk.load().entries.items() if "term" in e}
     block: dict[str, dict] = {}
     skipped: list[str] = []
@@ -319,13 +324,37 @@ def _print_qualified(results: list[Result], stamp: str, out) -> None:
     print(f"\n{QUALIFIED_HEADER}\n{json.dumps(block, indent=2)}", file=out)
     for line in skipped:
         print(line, file=out)
+    return block
 
 
-def run(mapping: dict, *, client, sleep=time.sleep, out=None, now=None, variants: bool = False) -> list[Result]:
+def _print_scope(proposed: set[str], eligible: list[str], results: list[Result], terms: set[str], out) -> None:
+    """Symbols the blocks propose that no narrative places, and where every eligible coin stands after the run."""
+    keywords = tk.load().entries
+    placed = {c["symbol"] for n in narratives.load_narratives()["narratives"] for c in n["coins"]}
+    outside = sorted(proposed - placed)
+    print(f"\n{OUTSIDE_HEADER}\n{', '.join(outside) or '-'}", file=out)
+    if outside:
+        print("    the keyword loader takes them with a 'not a placed coin' warning when given the placed set;"
+              " the Trends pull reads only the coins its caller passes", file=out)
+    passed = {r.symbol for r in results if r.verdict == "PASS"}
+    status = {}
+    for s in eligible:
+        e = keywords.get(s, {})
+        status[s] = ("topic" if "topic" in e or s in passed else "qualified-term" if s in terms
+                     else "term" if "term" in e else "nothing")
+    counts = {k: sum(v == k for v in status.values()) for k in ("topic", "qualified-term", "term", "nothing")}
+    print(f"discovery eligible: {len(eligible)} | " + " | ".join(f"{k}: {n}" for k, n in counts.items()), file=out)
+
+
+def run(mapping: dict, *, client, sleep=time.sleep, out=None, now=None, variants: bool = False,
+        eligible: list[str] | None = None, derived: dict | None = None) -> list[Result]:
     out = out or sys.stdout
     now = now or (lambda: datetime.now(timezone.utc))
     planned = sum(len(queries_for(s, n)) if variants else 1 for s, n in mapping.items())
     print(_plan_line(len(mapping), planned), file=out, flush=True)
+    names = {s: n for s, n in (derived or {}).items() if s in mapping}
+    if names:
+        print("names from the CoinGecko id (check them): " + ", ".join(f"{s}={n}" for s, n in names.items()), file=out)
     results, sent, _ = _query_coins(mapping, client, sleep, variants)
     _demote_duplicate_topics(results)
 
@@ -354,21 +383,42 @@ def run(mapping: dict, *, client, sleep=time.sleep, out=None, now=None, variants
             hint = _verify_hint(r) if r.verdict == "AMBIGUOUS" else None
             if hint:
                 print(hint, file=out)
-    if variants:
-        _print_qualified(results, stamp, out)
+    terms = _print_qualified(results, stamp, out) if variants else {}
+    if eligible is not None:
+        _print_scope(set(block) | set(terms), eligible, results, set(terms), out)
     return results
 
 
-def unresolved_symbols(keyword_map) -> list[str]:
-    return [s for s, e in keyword_map.entries.items() if "topic" not in e]
+def unresolved_symbols(keyword_map, symbols) -> list[str]:
+    """The symbols with no `topic` entry, including those with no entry at all."""
+    return [s for s in symbols if "topic" not in keyword_map.entries.get(s, {})]
 
 
-def _default_mapping() -> dict:
-    return {sym: e["label"] for sym, e in tk.load().entries.items()}
+def name_from_id(cg_id, symbol: str) -> str:
+    """'ether-fi' -> 'Ether Fi', 'pearl-2' -> 'Pearl'; the ticker when there is no usable id."""
+    if not isinstance(cg_id, str):
+        return symbol
+    words = re.sub(r"-\d+$", "", cg_id.strip()).replace("-", " ").split()
+    name = " ".join(w[:1].upper() + w[1:] for w in words)
+    return name if name.isascii() and tk.is_valid_label(name) else symbol
+
+
+def eligible_coins(rows: list[dict]) -> tuple[list[str], dict[str, str]]:
+    """Discovery's eligible set (the same classes and tradeability rules) and a name per coin from its CoinGecko id."""
+    eligible = discovery.eligibility(discovery.load_config(), rows).eligible
+    ids = {str(r.get("symbol", "")).upper(): r.get("id") for r in rows}
+    return eligible, {s: name_from_id(ids.get(s), s) for s in eligible}
+
+
+def _default_mapping(eligible: list[str], names: dict[str, str]) -> tuple[dict, dict]:
+    """(keyword-file labels then eligible coins without an entry, the names derived for those coins)."""
+    mapping = {sym: e["label"] for sym, e in tk.load().entries.items()}
+    derived = {s: names[s] for s in eligible if s not in mapping}
+    return {**mapping, **derived}, derived
 
 
 def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep=time.sleep, out=None,
-         err=None, now=None) -> int:
+         err=None, now=None, universe_rows: list[dict] | None = None) -> int:
     out, err = out or sys.stdout, err or sys.stderr
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--file", type=Path, default=None, help="symbol -> name JSON map")
@@ -380,9 +430,13 @@ def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep
         args = ap.parse_args(argv)
     except SystemExit as exc:
         return 0 if exc.code == 0 else 2
+    if universe_rows is None:
+        universe_rows, _ = load_universe_rows()
+    eligible, names = eligible_coins(universe_rows) if universe_rows else ([], {})
+    derived: dict = {}
     try:
         if args.file is None:
-            mapping = _default_mapping()
+            mapping, derived = _default_mapping(eligible, names)
         else:
             mapping = json.loads(args.file.read_bytes().decode("utf-8"))
         if not isinstance(mapping, dict) or not all(isinstance(v, str) for v in mapping.values()):
@@ -397,13 +451,16 @@ def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep
             return 2
         mapping = {s: mapping[s] for s in wanted if s in mapping}
     if args.only_unresolved:
-        keep = set(unresolved_symbols(tk.load()))
+        keep = set(unresolved_symbols(tk.load(), mapping))
         mapping = {s: n for s, n in mapping.items() if s in keep}
     client, code = start_client(trendreq_factory, "check_trends_keywords", err)
     if client is None:
         return code
+    if not universe_rows:
+        print("no universe snapshot: checking the keyword file only", file=err)
     results = run(mapping, client=client, sleep=sleep, out=out, now=now,
-                  variants=args.variants or args.only_unresolved)
+                  variants=args.variants or args.only_unresolved, eligible=eligible if universe_rows else None,
+                  derived=derived)
     return INTERRUPTED_EXIT if any(INTERRUPTED_REASON in r.reason for r in results) else 0
 
 
