@@ -42,6 +42,8 @@ _clock = time.monotonic
 # up to 75 coins do not fit SOURCE_TIME_BUDGET_S.
 TRENDS_INTERVAL_S = 3.0
 TRENDS_BACKOFF_S = (30, 60, 120)
+# At the production constants the breaker cannot fire: three coins of full backoff need 3 x 210 s > the 540 s
+# budget, which stops the source first. It still bounds the loss if the budget or the waits change.
 TRENDS_BREAKER_AFTER = 3
 TRENDS_TIME_BUDGET_S = 540
 TRENDS_OUTCOMES = ("ok", "too-little-interest", "quiet-then-surge", "skipped-unqualified", "no-keyword", "non-daily",
@@ -238,7 +240,7 @@ def _run_trends(symbols, client, today, sleep):
     km, bad = trends_keywords.safe_load()
     out: dict[str, SourceSeries] = {}
     todo: list[tuple[str, str]] = []
-    for s in (x.upper() for x in symbols):
+    for s in dict.fromkeys(x.upper() for x in symbols):  # a repeated symbol costs one request
         entry = km.entries.get(s) if km else None
         kw = km.keyword_for(s) if km else None
         if km is None:
@@ -252,7 +254,7 @@ def _run_trends(symbols, client, today, sleep):
     if todo:
         start = today.toordinal() % len(todo)  # rotate so a budget stop does not always starve the same coins
         todo = todo[start:] + todo[:start]
-        trendreq = None
+        trendreq, why = None, "session-failed: no client"
         try:
             trendreq = TRENDREQ_FACTORY()
         except PytrendsMissing:
@@ -394,20 +396,30 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
                     results[name] = "ok"
                     print(f"{name}: snapshot written")
                     continue
-                written = 0
+                written, store_failed = 0, []
                 if not args.dry_run:
-                    for s in series:
+                    for i, s in enumerate(series):
                         if s.state in ("ok", "insufficient-history"):
                             mode = WRITE_MODES.get(name)
-                            written += (store.write_series(s, today=today, mode=mode) if mode
-                                        else store.write_series(s, today=today))
+                            try:  # one failed write must not stop the others (a Trends pull costs minutes)
+                                written += (store.write_series(s, today=today, mode=mode) if mode
+                                            else store.write_series(s, today=today))
+                            except Exception as exc:  # noqa: BLE001 - class only, never the message
+                                from api.data.attention.types import SourceSeries
+                                why = f"store-failed: {trends.error_class(exc)}"
+                                store_failed.append(why)
+                                series[i] = SourceSeries(s.source, s.symbol, [], "unavailable", why)
                 ok = sum(1 for s in series if s.state == "ok")
                 failed = series and all(
                     s.state == "unavailable" and s.reason != "empty response" for s in series)
                 results[name] = "ok" if ok else ("error" if failed else "empty")
                 print(f"{name}: {ok}/{len(series)} ok, {written} rows written"
                       f"{' (dry run)' if args.dry_run else ''} [{outcome_summary(series)}]"
-                      f"{' reasons: ' + reason_summary(series) if not ok and series else ''}")
+                      f"{' reasons: ' + reason_summary(series) if (not ok or store_failed) and series else ''}")
+                if store_failed:  # the last line the verifier reads: a store failure is a code failure, red
+                    results[name] = "error"
+                    counts = {k: store_failed.count(k) for k in dict.fromkeys(store_failed)}
+                    print(f"{name}: error {'; '.join(f'{k} x{n}' for k, n in counts.items())}", file=sys.stderr)
             except Exception as exc:  # per-source isolation
                 results[name] = "error"
                 print(f"{name}: error {describe_exc(exc)}", file=sys.stderr)

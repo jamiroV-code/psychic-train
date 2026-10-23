@@ -307,3 +307,34 @@ def test_risky_symbol_bare_term_skipped_qualified_term_fetched(monkeypatch, _env
         assert bool(fetched) or out[s].reason == trends.NAME_AMBIGUOUS
     line = next(ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("trends detail:"))
     assert line == ("trends detail: ok 3" if fetched else "trends detail: ok 1, skipped-unqualified 2")
+
+
+def test_factory_returning_none_marks_coins_unavailable(monkeypatch):
+    monkeypatch.setattr(refresh_attention, "TRENDREQ_FACTORY", lambda: None)
+    series = refresh_attention._run_trends(["AAVE"], None, fx.TODAY, lambda s: None)
+    assert series[0].state == "unavailable" and series[0].reason == "session-failed: no client"
+
+
+def test_duplicate_symbols_cost_one_request(monkeypatch):
+    out, client, _, _ = _run(monkeypatch, ["AAVE", "aave", "Aave", "INJ"])
+    assert sorted(client.terms()) == ["Aave", "Injective"] and set(out) == {"AAVE", "INJ"}
+
+
+def test_one_store_failure_keeps_storing_the_others(monkeypatch, capsys):
+    real = store.write_series
+
+    def flaky(s, today=None, **kw):
+        if s.symbol == "INJ":
+            raise OSError("disk " + fx.SECRET)
+        return real(s, today=today, **kw)
+    monkeypatch.setattr(refresh_attention.store, "write_series", flaky)
+    rc, _ = _main(monkeypatch, ["AAVE", "INJ", "ARB"])
+    assert len(store.read_points("trends", "AAVE")) == 100 and len(store.read_points("trends", "ARB")) == 100
+    assert store.read_points("trends", "INJ") == []
+    out = capsys.readouterr()
+    text = out.out + out.err
+    lines = [ln for ln in text.splitlines() if ln.startswith("trends:")]
+    assert lines[0].startswith("trends: 2/3 ok, 200 rows written") and "store-failed: OSError x1" in lines[0]
+    assert lines[-1] == "trends: error store-failed: OSError x1"
+    assert attention_extra.classify("trends", lines[-1]).status == "failed" and rc == 1
+    assert fx.SECRET not in text

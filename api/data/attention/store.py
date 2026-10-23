@@ -7,6 +7,7 @@ pull date. Paths resolve at call time so tests can redirect `cache.CACHE_ROOT`.
 """
 from __future__ import annotations
 
+import math
 from datetime import date, datetime, timezone
 from itertools import pairwise
 from pathlib import Path
@@ -52,8 +53,11 @@ def _write_frame(path: Path, days: list[date], values: list[float]) -> None:
 
 def _replaceable(points: list[tuple[date, float]]) -> bool:
     """A replace-series pull is stored only when it has at least MIN_REPLACE_DAYS rows, one per consecutive day
-    in increasing order (no duplicate, gap or reversal), and not all zero. Guarded here so no caller can bypass it."""
+    in increasing order (no duplicate, gap or reversal), finite and not negative, and not all zero. Guarded here
+    so no caller can bypass it."""
     if len(points) < MIN_REPLACE_DAYS or not any(v for _, v in points):
+        return False
+    if not all(math.isfinite(v) and v >= 0 for _, v in points):
         return False
     return all((b[0] - a[0]).days == 1 for a, b in pairwise(points))
 

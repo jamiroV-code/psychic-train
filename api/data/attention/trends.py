@@ -54,6 +54,7 @@ TOO_LITTLE_INTEREST = "too-little-interest"
 # reported apart so the owner sees it. Whether "rising from nothing" counts as rising is an open SPEC question.
 QUIET_THEN_SURGE = "quiet-then-surge"
 SURGE_DAYS = 7
+SURGE_RATIO = 3  # the last-week median must also be at least this many times the baseline median
 # Fail-closed pull checks: a row outside [requested start, yesterday], or a last row that is not yesterday.
 OUT_OF_RANGE = "out-of-range"
 NOT_CURRENT = "not-current"
@@ -110,7 +111,8 @@ def interest_verdict(values: list[float]) -> str:
             return "ok"
     base, last = values[:-SURGE_DAYS], values[-SURGE_DAYS:]
     if (base and len(last) == SURGE_DAYS and statistics.median(base) < TRENDS_MIN_MEDIAN
-            and all(v > 0 for v in last) and statistics.median(last) >= TRENDS_MIN_MEDIAN):
+            and all(v > 0 for v in last)
+            and statistics.median(last) >= max(TRENDS_MIN_MEDIAN, SURGE_RATIO * statistics.median(base))):
         return QUIET_THEN_SURGE
     return TOO_LITTLE_INTEREST
 
@@ -120,8 +122,9 @@ def _partial(value) -> bool:
 
 
 def complete_days(frame, term: str) -> tuple[list[tuple[date, float]] | None, str]:
-    """(points, "") on a daily frame without its isPartial rows, else (None, reason). A missing value is a gap
-    (never 0). Dates are not filtered here: fetch_alone rejects rows outside the requested range."""
+    """(points, "") on a daily frame without its isPartial rows, else (None, reason). A missing value, or a
+    partial row inside the series, is a gap (never 0); a value outside 0..100 is a bad value. Dates are not
+    filtered here: fetch_alone rejects rows outside the requested range."""
     if frame is None or len(frame) == 0:
         return None, "empty response"
     if term not in frame.columns:
@@ -136,7 +139,11 @@ def complete_days(frame, term: str) -> tuple[list[tuple[date, float]] | None, st
             continue
         if v is None or math.isnan(v):
             return None, "gap"
+        if not (math.isfinite(v) and 0 <= v <= 100):
+            return None, "bad-value"
         points.append((ts.date() if hasattr(ts, "date") else ts, float(v)))
+    if any((b[0] - a[0]).days != 1 for a, b in pairwise(points)):
+        return None, "gap"
     return points, ""
 
 
@@ -150,7 +157,10 @@ def fetch_alone(symbol: str, term: str, client, *, today: date, timeframe: str |
         if is_rate_limited(exc):
             return SourceSeries(SOURCE, sym, [], "capped", f"rate-limited: {error_class(exc)}")
         return SourceSeries(SOURCE, sym, [], "unavailable", f"fetch-failed: {error_class(exc)}")
-    points, reason = complete_days(frame, term)
+    try:
+        points, reason = complete_days(frame, term)
+    except Exception as exc:  # noqa: BLE001 - a malformed frame must not cost the other coins' pulls
+        return SourceSeries(SOURCE, sym, [], "unavailable", f"parse-failed: {error_class(exc)}")
     if points is None:
         return SourceSeries(SOURCE, sym, [], "unavailable", reason)
     # Fail closed: every row inside [requested start, yesterday] and the last row is yesterday, or nothing is

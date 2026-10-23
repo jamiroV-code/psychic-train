@@ -227,3 +227,56 @@ def test_name_risk_symbols_match_t125_list():
 def test_qualified_term_rule(term, ok):
     """A risky symbol's term is pulled only with a qualifier word beside the name (checker v3 fallback)."""
     assert trends.is_qualified_term(term) is ok
+
+
+# --- T158 re-review: fetch_alone never raises on a malformed frame, interior partial rows, bad values, surge edges ---
+
+class _Weird:
+    """Not a DataFrame: has columns and len but no usable index."""
+    columns = ("Aave",)
+
+    def __len__(self):
+        return 3
+
+
+@pytest.mark.parametrize("make", [
+    lambda: _Weird(),
+    lambda: _alone(days=100).reset_index(drop=True),                               # integer index
+    lambda: _alone(days=100).set_axis([str(i) for i in range(100)], axis=0),       # string index
+    lambda: __import__("pandas").concat([_alone(days=100)["Aave"]] * 2, axis=1),   # duplicate columns
+])
+def test_fetch_alone_malformed_frame_never_raises(make):
+    s, _ = _fetch(make())
+    assert s.state == "unavailable" and s.points == [] and s.reason.startswith(("parse-failed: ", "non-daily",
+                                                                                "missing-column"))
+    assert fx.SECRET not in s.reason
+
+
+def test_fetch_alone_interior_partial_row_is_a_gap():
+    frame = _alone(days=100)
+    frame.loc[frame.index[50], "isPartial"] = True
+    s, _ = _fetch(frame)
+    assert (s.state, s.reason, s.points) == ("unavailable", "gap", [])
+
+
+@pytest.mark.parametrize("bad", [float("inf"), -1.0, 101.0])
+def test_fetch_alone_rejects_out_of_scale_values(bad):
+    s, _ = _fetch(_alone([10.0] * 50 + [bad] + [10.0] * 49))
+    assert (s.state, s.reason, s.points) == ("unavailable", "bad-value", [])
+
+
+@pytest.mark.parametrize("last, verdict", [
+    ([3] * 7, "quiet-then-surge"),               # last-week median exactly TRENDS_MIN_MEDIAN
+    ([2] * 7, "too-little-interest"),            # just under
+    ([0, 0] + [80] * 5, "too-little-interest"),  # 5 live days of SURGE_DAYS 7: no surge
+    ([80] * 7, "quiet-then-surge"),              # all 7 live
+])
+def test_surge_boundaries(last, verdict):
+    assert trends.interest_verdict([0] * 93 + last) == verdict
+
+
+def test_surge_needs_a_ratio_over_the_baseline():
+    base = [0] * 40 + [2] * 53                      # baseline median 2: quiet
+    assert trends.interest_verdict(base + [5] * 7) == trends.TOO_LITTLE_INTEREST  # 5 < 3 x 2: no real surge
+    assert trends.interest_verdict(base + [6] * 7) == trends.QUIET_THEN_SURGE      # 6 = 3 x 2
+    assert trends.SURGE_RATIO == 3
