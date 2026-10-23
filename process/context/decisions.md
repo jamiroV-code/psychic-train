@@ -33,13 +33,14 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 | D-17 | Narrative baskets: groups are baskets, percentile attention score | 17-10-26 | active |
 | D-18 | Narrative baskets: sources and Discovery outlier rules | 17-10-26 | active |
 | D-19 | Narrative baskets: daily refresh workflow; trust_weight kept | 17-10-26 | active |
-| D-20 | Exchange-token exclusion list | 17-10-26 | active |
+| D-20 | Exchange-token exclusion list | 17-10-26 | superseded by D-27 |
 | D-21 | Planner session shell can break with E2BIG in long sessions | 17-10-26 | active |
 | D-22 | Weighted attention signal: sources, weights, rising rule | 18-10-26 | active |
 | D-23 | exchange_activity composite: four venues, blended by change | 18-10-26 | proposed |
 | D-24 | Frozen daily signal snapshots and the calibration plan | 18-10-26 | active |
 | D-25 | Tradeable universe and narratives rules | 18-10-26 | active |
 | D-26 | Return to full RIPER-5 for new slices; lapse note T96-T107 | 18-10-26 | active |
+| D-27 | Exchange tokens are IN as a narrative (supersedes D-20) | 18-10-26 | active |
 | D-0 | Original goal: one confidence level that sizes positions | 17-09-26 | superseded by D-1, D-2 |
 
 ## Entries
@@ -191,7 +192,7 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 ### D-20 Exchange-token exclusion list
 - **Decision:** owner confirmed 2026-10-17: BNB kept, LEO OKB CRO GT KCS BGB MX excluded (editable in `attention_universe.json` and `discovery.json`; BNB is allowed past the exchange-based-tokens category via `include_despite_category`).
 - **Date:** 17-10-26. **Reason:** exchange tokens track their venue, not a narrative. **Alternatives:** keep them all in (rejected for all but BNB).
-- **Status:** active.
+- **Status:** superseded by D-27.
 
 ### D-21 Planner session shell can break with E2BIG in long sessions
 - **Decision:** observed 2026-10-17. Every Bash call failed to start with `Could not start /bin/bash: ... exceed the OS exec argument limit (E2BIG)` (command line ~150-170 KB across 3 args), even for `git status`, for a whole long planner session (many compactions). The environment was ~8 KB, so the harness-built command line is the oversized part. Unconfirmed hypotheses: the shell wrapper/snapshot grows with session age, or the shell-init snapshot from the user profile.
@@ -222,11 +223,17 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 - **Decision:** (owner, 18-10-26; SPEC T108, PLAN T111) Discovery covers the top 100 coins with reasoned exclusions (closed reason list). No volume floor and no volume cut: volume under 20M USD only adds a label. 11 narratives with multi-membership and a 3-coin minimum; coins in no narrative go to an Unassigned bucket. Baskets stays on the old universe lists (Q-V1). The exchange-token question (D-20) is left untouched here; slice U6 writes its entry.
 - **Date:** 18-10-26. **Reason:** exclude by reason, not by a volume cut. **Alternatives:** keep the 20M floor (rejected).
 - **G-OWN review:** planner-reported (not verified by this task): on 2026-10-21 the owner passed the review of the 11-narrative coin list in `api/data/attention_narratives.json` as on main (75 placed; NEAR, ICP, INJ primary Layer 1 accepted; M left Unassigned; the UNVERIFIED placements RAIN, GRAM, BTW, WLFI, PRL, AKE, STABLE, NIGHT and NEXO DeFi membership accepted as is). The file's `status` field is still `proposed`; a separate small worker task flips it to `reviewed` (pending).
-- **Consequences:** slices U1 (T113, #145) and U4 (T114, #144) merged; U2 (T115, PR #146) is an open draft in review; U3, U5, U6 queued.
+- **Consequences:** slices U1 (T113, #145) and U4 (T114, #144) merged; U2 (T115, PR #146) is an open draft in review; U3 and U5 queued; U6 done in D-27.
 - **Status:** active.
 
 ### D-26 Return to full RIPER-5 for new slices; lapse note T96-T107
 - **Decision:** (owner, 18-10-26) new slices run SPEC, PLAN, VALIDATE (contract and /goal block), an explicit ENTER EXECUTE MODE, an independent review before the owner merges, and EVL gates after each slice. Opus for code slices, sonnet otherwise.
 - **Lapse note:** T96-T107 and part of T113 and T114 were merged by the owner before the independent review; T96-T107 skipped PLAN, VALIDATE and EVL.
 - **Date:** 18-10-26. **Reason:** speed cost review coverage. **Alternatives:** keep the fast lane (rejected).
+- **Status:** active.
+
+### D-27 Exchange tokens are IN as a narrative (supersedes D-20)
+- **Decision:** (owner, 18-10-26; slice U6 of the universe-narratives PLAN, T146) exchange tokens (BNB, WBT, LEO, CRO, OKB, HTX, BGB, GT, KCS and later ones) are IN the Discovery universe as the narrative "Exchange tokens"; HYPE, PUMP and NEXO have it as primary (placement in `api/data/attention_narratives.json`). There is no exchange-token exclusion, no volume floor and no volume cut: volume under `thin_volume_label_below_usd` 20000000 (in `universe_rules` of `api/data/discovery.json`) only adds a "thin volume" label. Exclusions stay the closed reason list of D-25 (per D-25: stablecoins, tokenized funds, wrapped/staked copies, coins with no market on Binance, Coinbase, Kraken or Hyperliquid); in code today `universe_rules` has the classes stablecoin, wrapped_staked and tokenized_fund and `not_tradeable` is empty. Each exclusion shows its reason.
+- **Date:** 18-10-26. **Reason:** the goal is attention on coins the owner can trade; exchange tokens are tradeable and have their own attention. **Alternatives:** keep the D-20 exclusion list (rejected by the owner); keep a 5M backup floor (rejected).
+- **Consequences:** thin exchange tokens will often read "low data". `exclude`, `exclude_category_ids`, `include_despite_category` and the volume floor are gone from `discovery.json`. The Baskets tab keeps the old universe lists of `attention_universe.json` for its reference (its scores are unchanged); moving Baskets to the new universe is a separate decision (Q-V1). Does not change D-22..D-26. The weight numbers listed in D-22 are superseded by weights v2 (PR #156, merged: trends 25, reddit 20, xsearch 15, exchange_activity 15, wikipedia 10, defillama 5, github_dev 0; trends and wikipedia count as one search group; early-source rule); D-22's text is kept as history. The X/Reddit PC-side collector is planned only: its SPEC (PR #153) is approved by the owner (21-10-26) and merged, but no collector code is shipped.
 - **Status:** active.
