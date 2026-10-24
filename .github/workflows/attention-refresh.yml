@@ -219,8 +219,7 @@ jobs:
           p = Path(os.environ["RUNNER_TEMP"]) / "extra-trends.log"
           lines = [ln for ln in (p.read_text() if p.exists() else "").splitlines() if ln.startswith("trends:")]
           r = attention_extra.classify("trends", lines[-1] if lines else None)
-          cls = {"ok": "none", "unavailable": "provider block (429/ConnectionError/capped)",
-                 "failed": "code error", "not-probed": "not probed"}.get(r.status, r.status)
+          cls = attention_extra.failure_class(r.status)
           print(f"trends failure-class: {cls} - {r.detail}")
           PY
           exit "$rc"

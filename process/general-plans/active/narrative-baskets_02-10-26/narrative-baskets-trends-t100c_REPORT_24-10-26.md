@@ -49,3 +49,10 @@ Paste the lines back. Then the owner records the probe (`probe_records.json`) as
 
 ## 11. Extra docs opened
 T100b PLAN (T100c sections), `attention_extra.py`, `refresh_attention.py` (Trends section), the two guard test files named in the envelope. No other docs.
+
+## 12. Fix round (T181, review T176: MERGE-AFTER-FIXES)
+- Finding: a Google refusal shows per coin as `fetch-failed: ConnectionError`; `attention_extra` called it a CODE error (red) while the workflow's failure-class line said "provider block".
+- Fix: `PROVIDER_CLASSES` now lists the requests/urllib3/builtin transport class names (ConnectionError, Timeout, SSLError, ProxyError, ChunkedEncodingError, TimeoutError, ...; names only). `fetch-failed` and `session-failed` with a network class, `capped`, `rate-limited: ...`, `time budget reached` are PROVIDER (yellow). `parse-failed` and `store-failed` are always CODE (red), as are fetch-failed with TypeError/KeyError/AttributeError/ValueError/unknown classes.
+- Single source: the workflow's failure-class label comes from `attention_extra.failure_class` (one `FAILURE_CLASS` table); a guard test fails if the step carries its own copy.
+- Exit code: new guard test runs the Trends step's shell with a fake `uv` and requires the step to exit with the fetcher's status (`exit "$rc"` -> `exit 0` is killed).
+- Tests: both directions of the classifier, class set shape, label table, step exit code.
