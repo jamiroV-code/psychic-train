@@ -30,7 +30,7 @@ PROVIDER_CLASSES = ("HTTPStatusError", "ConnectError", "ConnectTimeout", "ReadTi
 DATA_REASONS = ("no keyword mapped", "bad date", "partial row dropped", "empty response", "presumed-dead",
                 "symbol not listed or no volume", "snapshot unavailable")
 DATA_CLASSES = ("BadSymbol",)
-_CODE_REASON = re.compile(r"(?:fetch|parse)-failed: (\w+)")
+_CODE_REASON = re.compile(r"(?:fetch|parse|store)-failed: (\w+)")
 
 
 def reason_kind(reason: str) -> str:
