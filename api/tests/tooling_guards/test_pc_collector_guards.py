@@ -191,3 +191,69 @@ def test_no_machine_state_committed():
     ignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert "api/data/cache/*" in ignore
     assert not [ln for ln in ignore if ln.startswith("!api/data/cache/attention")]
+
+
+# --- W8d1: the X pure core for the X library (SPEC rules 17-20, AC41, AC53, AC55) --------------------------------
+
+X_MODULES = [API_DIR / "data" / "attention" / f for f in
+             ("x_window.py", "x_filters.py", "x_density.py", "x_raw.py", "x_reader.py", "x_pool.py")]
+# The X library, its optional HTTP backend and every network client stay out of the pure core (W8d2 wraps them).
+X_LIBRARY_ROOTS = ("twscrape", "curl_cffi")
+
+
+def x_library_offenders(source: str) -> list[str]:
+    bad = sorted(m for m in imported(source) if any(m == r or m.startswith(r + ".") for r in X_LIBRARY_ROOTS))
+    return bad + network_offenders(source)
+
+
+def lock_reset_or_debug_offenders(source: str) -> list[str]:
+    """A call to the library's `reset_locks` (it clears valid rate-limit locks) or any `debug=True` keyword."""
+    bad = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Attribute) and node.attr == "reset_locks":
+            bad.append(f"reset_locks line {node.lineno}")
+        elif isinstance(node, ast.Name) and node.id == "reset_locks":
+            bad.append(f"reset_locks line {node.lineno}")
+        elif isinstance(node, ast.keyword) and node.arg == "debug" and not (
+                isinstance(node.value, ast.Constant) and node.value.value is False):
+            bad.append("debug= keyword")
+    return bad
+
+
+def test_x_core_modules_exist_and_import_no_x_library_or_network():
+    assert all(p.exists() for p in X_MODULES)
+    offenders = {p.name: bad for p in X_MODULES if (bad := x_library_offenders(p.read_text(encoding="utf-8")))}
+    assert not offenders
+
+
+def test_x_library_guard_detects_planted_imports():
+    for src in ("import twscrape", "from twscrape import API", "from twscrape.cli import main", "import curl_cffi",
+                "from curl_cffi import requests", "import httpx"):
+        assert x_library_offenders(src), src
+    assert x_library_offenders("import json\nfrom api.data.attention import x_filters") == []
+
+
+def test_x_core_has_no_evasion_strings_no_fixed_hour_and_no_logger():
+    hits = [f"{p.name}:{n}" for p in X_MODULES for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
+            if EVASION.search(line)]
+    assert not hits
+    hours = {p.name: bad for p in X_MODULES if (bad := fixed_hour_offenders(p.read_text(encoding="utf-8")))}
+    assert not hours
+    logs = [p.name for p in X_MODULES if re.search(r"\blogg(ing|er)\b\.", p.read_text(encoding="utf-8"))]
+    assert not logs
+
+
+def test_x_core_never_resets_library_locks_or_uses_debug():
+    offenders = {p.name: bad for p in X_MODULES if (bad := lock_reset_or_debug_offenders(p.read_text(encoding="utf-8")))}
+    assert not offenders
+    for src in ("pool.reset_locks()", "await api.pool.reset_locks()", "API(db, debug=True)", "f(debug=1)"):
+        assert lock_reset_or_debug_offenders(src), src
+    assert lock_reset_or_debug_offenders("API(db, debug=False)\nreset = 1") == []
+
+
+def test_x_pin_is_a_full_sha_held_as_data_only():
+    text = (API_DIR / "data" / "attention" / "x_reader.py").read_text(encoding="utf-8")
+    assert re.search(r'^TWSCRAPE_PINNED_COMMIT = "63f61a518e576ea5c132f1156c03dda0520d76c1"$', text, re.M)
+    # The pin is not a dependency in this slice: the project files are W8d2's.
+    for dep in dependency_files():
+        assert "twscrape" not in dep.read_text(encoding="utf-8").lower(), dep.name
