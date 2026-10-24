@@ -14,10 +14,10 @@ metadata:
 
 Date: 21-10-26
 Complexity: COMPLEX (eight slices, two providers, a worker; each slice is one EXECUTE envelope)
-Status: VALIDATED: Gate: PASS (re-validated T139; the PLAN artifact; per-slice execution gates are the contract for later EXECUTE)
+Status: VALIDATED: Gate: PASS (re-validated T163; the PLAN artifact; per-slice execution gates are the contract for later EXECUTE)
 Validation: T131 (FAST MODE: SPEC amendment, PLAN, VALIDATE in one session), 21-10-26, branch base `main` 007d53c. Next step: the owner's separate ENTER EXECUTE MODE per slice, starting with W8a. This session builds nothing.
 
-**Summary:** **SPEC:** `narrative-baskets-xreddit-collector_SPEC_21-10-26.md` (T126, amended by T131, T133, T135, T136, T138, T139; status APPROVED (locked) by the owner on 21-10-26, recorded on the planner's message; each slice still needs the owner's own ENTER EXECUTE MODE). Config pace (X default one coin unit per 3-6 min, Reddit one request per 60-120 s from the public RSS feeds, 150 per day (T138)), daily X read budget 800 posts with sample N 40 (about 20 coins per day), adaptive halving, yesterday-only values, pause on any warning, narrative coins only, throwaway X account, Reddit first (amended T133). Every provider (X, Reddit, API Anything) is unreachable from the build container: live behaviour is UNVERIFIED and proven only by owner probes.
+**Summary:** **SPEC:** `narrative-baskets-xreddit-collector_SPEC_21-10-26.md` (T126, amended by T131, T133, T135, T136, T138, T139, T163; status APPROVED (locked) by the owner on 21-10-26, recorded on the planner's message; each slice still needs the owner's own ENTER EXECUTE MODE). Config pace (X default one coin unit per 3-6 min, Reddit one request per 60-120 s from the public RSS feeds, 150 per day (T138)), daily X read budget 800 posts with sample N 40 (about 20 coins per day), adaptive halving, yesterday-only values, pause on any warning, narrative coins only, throwaway X account, Reddit first (amended T133). Every provider (X, Reddit, API Anything) is unreachable from the build container: live behaviour is UNVERIFIED and proven only by owner probes.
 
 ## Overview and Context
 
@@ -75,15 +75,16 @@ Context router: `process/context/all-context.md`; tests: `process/context/tests/
 |---|---|---|---|---|---|---|
 | 1 | W8a vet API Anything (report only; gates X, W8d, only) | `claude/<id>-w8a-vet-apianything` | owner approves SPEC (done) | yes, own | sonnet, medium | 2-3 |
 | 2 | W8b pure core | `claude/<id>-w8b-collector-core` | none (can start now; W8a gates only W8d) | yes, own | opus, medium | 5-7 |
-| 3 | W8c Reddit connector | `claude/<id>-w8c-reddit-web` | W8b; none on W8a; probes P-R6, P-R3, P-R4 (before, owner runs now), P-R2, P-R5 (after) | yes, own | opus, medium | 2-3 |
-| 3b | W8c2 Reddit stream-and-count complement | `claude/<id>-w8c2-reddit-stream` | W8b, W8c (reuses its feed parser); none on W8a | yes, own | opus, medium | 2-3 |
+| 3 | W8c Reddit connector (incl. item ledger and mention metrics) | `claude/<id>-w8c-reddit-web` | W8b; none on W8a; probes P-R6, P-R3, P-R4, P-R7 (before, owner runs now), P-R2, P-R5 (after) | yes, own | opus, medium | 3-4 |
+| 3b | W8c2 Reddit stream-and-count complement (posts and comments feeds) | `claude/<id>-w8c2-reddit-stream` | W8b, W8c (reuses its feed parser and ledger); none on W8a; Q17 answered | yes, own | opus, medium | 3-4 |
+| 3c | W8c3 Reddit engagement enrichment via archive ids (optional) | `claude/<id>-w8c3-reddit-engagement` | W8c (posts); W8c2 for live comment enrichment; probe P-R8 passed; Q18 answered | yes, own | opus, medium | 3 |
 | 4 | W8e worker wiring | `claude/<id>-w8e-pc-worker` | W8b, W8c (or an existing W8 worker) | yes, own | opus, medium | 3-5 |
 | 5 | W8f Discovery wiring (incl. X rotation mode) | `claude/<id>-w8f-discovery-wiring` | W8e, W8c | yes, own | opus, medium | 3-4 |
 | 6 | W8g web status text | `claude/<id>-w8g-web-status` | W8f | yes, own | opus, low | 1-2 |
 | 7 | W8d X connector | `claude/<id>-w8d-xsearch-web` | W8b, W8e; owner probes P-X1..P-X7 passed and Q1 answered | yes, own, only after the probes | opus, high | 5-7 |
 | 8 | W8h owner guide and closeout | `claude/<id>-w8h-closeout` | W8c live (Reddit) and, when built, W8d | yes, own | sonnet, low | 1 |
 
-Total about 24-35 USD (nine slices: W8a..W8h and W8c2). W8b and W8c can start without waiting for W8a; W8a stays first only for X (W8d); W8c and W8d are independent after W8b; the order puts X last by the owner's decision. After W8g the Reddit source can be live while X does not exist yet.
+Total about 29-40 USD (ten slices: W8a..W8h, W8c2 and W8c3; T163 widened W8c and W8c2 and added W8c3). W8b and W8c can start without waiting for W8a; W8a stays first only for X (W8d); W8c and W8d are independent after W8b; the order puts X last by the owner's decision. After W8g the Reddit source can be live while X does not exist yet.
 
 ### File ownership and collision proof
 
@@ -141,29 +142,50 @@ The owner pastes the output only; it contains file names, line numbers and sourc
 - **Gates:** G-B1 `UV_FROZEN=1 uv run --project api pytest api/tests/data/attention api/tests/scripts/test_probe_pc_sources.py api/tests/tooling_guards/test_pc_collector_guards.py -q` (0 failed; at least baseline + the named tests); G-B2 attention suite unchanged; G-B3 file-set check (section 6, only the W8b files); G-B4 hygiene and secret scan; G-B5 no network import (`grep` for `requests|httpx|socket|urllib|playwright` import lines in the new pure modules prints nothing).
 - **Owner probes:** none (pure).
 
-### W8c: Reddit connector (opus), plain HTTP on the public RSS feeds (T138)
+### W8c: Reddit connector (opus), plain HTTP on the public RSS feeds (T138, widened T163)
 
-Does not depend on W8a: no API Anything, no adapter, no login, no browser. Honest descriptive user agent constant only; JSON endpoints are not used (403 on the owner's PC).
+Does not depend on W8a: no API Anything, no adapter, no login, no browser. Honest descriptive user agent constant only; JSON endpoints are not used (403 on the owner's PC); `old.reddit.com` is not usable (302 with no body).
 
-- **Files:** `api/data/attention/reddit_web.py`, additions to `probe_pc_sources.py` (`--source reddit`), tests `api/tests/data/attention/test_reddit_web.py`. Uses `httpx` (already a dependency, `api/data/attention/reddit.py` imports it) or stdlib; no new dependency, no `api/pyproject.toml` edit.
-- **Red-first tests:** `test_parse_atom_entries_with_updated_timestamps`, `test_exact_count_when_feed_reaches_window_start`, `test_feed_capped_uses_density_over_covered_span`, `test_day_not_reached_is_missing`, `test_entries_after_window_end_ignored`, `test_below_reddit_sample_min_is_missing`, `test_search_rss_url_form_and_subreddit_set`, `test_single_honest_user_agent_constant`, `test_no_browser_user_agent_string_in_module`, `test_html_block_page_is_not_parsed_and_pauses`, `test_403_pauses_rest_of_day_no_retry`, `test_429_pauses_rest_of_day_no_retry`, `test_feed_with_doctype_or_entity_rejected`, `test_oversize_body_rejected`, `test_ambiguity_list_skips_coin`, `test_value_written_only_for_completed_day`, `test_writes_reddit_web_store_not_reddit`, `test_evidence_row_written`, `test_budget_150_requests_per_day`, `test_logs_class_and_status_only_with_planted_secrets`, `test_no_json_endpoint_url_in_module`, `test_no_fixed_utc_hour_assumption_start_times_0030_0900_1700_2300`.
-- **Gates:** pytest on the new file and `api/tests/data/attention`; scripts suite; file-set check; hygiene; banned-name grep.
-- **Owner probes (PowerShell; the first three can run NOW, before any code; each prints counts and statuses only):**
-  - P-R6 (feed depth, three requests one minute apart): `$ua="attention-probe/0.1"; foreach ($u in @("https://www.reddit.com/r/CryptoCurrency/new/.rss","https://www.reddit.com/r/CryptoCurrency/new/.rss?limit=100","https://www.reddit.com/r/CryptoCurrency/search.rss?q=solana&restrict_sr=1&sort=new&limit=100")) { $x=[xml](curl.exe -s -A $ua $u); "{0} entries, newest {1}, oldest {2}" -f $x.feed.entry.Count, $x.feed.entry[0].updated, $x.feed.entry[-1].updated; Start-Sleep -Seconds 60 }`
+- **Files:** `api/data/attention/reddit_web.py` (per-coin `search.rss`, sort=new, t=day, over the subreddit set), `api/data/attention/reddit_items.py` (item ledger by Reddit id: `t3_` posts, `t1_` comments, author hash with a salt kept outside the repo, subreddit, created time, `collected_at`, feed kind, matched coins; dedupe by id), `api/data/attention/reddit_metrics.py` (pure functions: mention matching with `name_only`, author cap, unique authors, low-volume rule, engagement-weighted sum, controversy, deleted-later removal), config keys in `api/data/attention_queries.json` (`name_only` flag on ETC, LINK, NEAR, HYPE, PI, PUMP, GT, CC; `reddit_author_cap` 3, `reddit_min_mentions` 3), additions to `probe_pc_sources.py` (`--source reddit`), tests `api/tests/data/attention/test_reddit_web.py`, `test_reddit_items.py`, `test_reddit_metrics.py`, and the guard `api/tests/tooling_guards/test_reddit_collector_guards.py` over the explicit file list `reddit_web.py`, `reddit_items.py`, `reddit_metrics.py`, `reddit_stream.py`, `reddit_engagement.py` (a file that does not exist yet is skipped until its slice adds it). Uses `httpx` (already a dependency) or stdlib; no new dependency, no `api/pyproject.toml` edit.
+- **Red-first tests:** `test_parse_atom_entries_with_updated_timestamps`, `test_exact_count_when_feed_reaches_window_start`, `test_feed_capped_uses_density_over_covered_span`, `test_day_not_reached_is_missing`, `test_entries_after_window_end_ignored`, `test_below_reddit_sample_min_is_missing`, `test_search_rss_url_form_sort_new_t_day_and_subreddit_set`, `test_single_honest_user_agent_constant`, `test_no_browser_user_agent_string_in_module`, `test_html_block_page_is_not_parsed_and_pauses`, `test_403_pauses_rest_of_day_no_retry`, `test_429_pauses_rest_of_day_no_retry`, `test_feed_with_doctype_or_entity_rejected`, `test_oversize_body_rejected`, `test_ambiguity_list_skips_coin`, `test_value_written_only_for_completed_day`, `test_writes_reddit_web_store_not_reddit`, `test_evidence_row_written`, `test_budget_150_requests_per_day`, `test_logs_class_and_status_only_with_planted_secrets`, `test_no_json_endpoint_url_in_module`, `test_no_fixed_utc_hour_assumption_start_times_0030_0900_1700_2300`.
+  - AC29: `test_ledger_dedupes_by_reddit_id_across_feeds_and_polls`, `test_ledger_row_has_id_author_hash_subreddit_created_collected_feed_kind_coins`, `test_username_never_stored_or_logged`.
+  - AC31: `test_name_only_tickers_need_full_name_or_cashtag` (ETC, LINK, NEAR, HYPE, PI, PUMP, GT, CC), `test_bare_ticker_matches_for_other_coins`, `test_author_cap_three_per_coin_day`, `test_unique_authors_counts_distinct_hashes`.
+  - AC32: `test_low_volume_below_three_mentions_change_missing`, `test_exactly_three_mentions_change_computed`.
+  - AC35: `test_engagement_weighted_sum_posts_add_log1p_num_comments`, `test_comment_num_comments_not_added`, `test_controversy_boundaries_ratio_0_30_and_votes_9_10`, `test_deleted_later_removed_from_settled`.
+  - AC36 (part): `test_guard_fails_on_browser_ua_json_endpoint_or_archive_search_path`.
+- **Gates:** pytest on the new files and `api/tests/data/attention`; the guard test; scripts suite; file-set check; hygiene; banned-name grep.
+- **Owner probes (PowerShell; the first four can run NOW, before any code; each prints counts and statuses only):**
+  - P-R6 (feed depth, three requests one minute apart): `$ua="attention-probe/0.1"; foreach ($u in @("https://www.reddit.com/r/CryptoCurrency/new/.rss","https://www.reddit.com/r/CryptoCurrency/new/.rss?limit=100","https://www.reddit.com/r/CryptoCurrency/search.rss?q=solana&restrict_sr=1&sort=new&limit=100")) { $x=[xml](curl.exe -s -A $ua $u); "{0} entries, newest {1}, oldest {2}" -f $x.feed.entry.Count, $x.feed.entry[0].updated, $x.feed.entry[-1].updated; Start-Sleep -Seconds 60 }` (the owner's 24-10-26 run: new.rss?limit=100 = 100 entries spanning about 8 days)
   - P-R3 (feed rate, one request per minute): `1..10 | ForEach-Object { curl.exe -s -A "attention-probe/0.1" -o NUL -w "%{http_code}\n" "https://www.reddit.com/r/CryptoCurrency/search.rss?q=solana&restrict_sr=1&sort=new"; Start-Sleep -Seconds 60 }` (stop with Ctrl+C at the first 403 or 429 and paste the output)
   - P-R4 (multi-subreddit feed): `curl.exe -s -A "attention-probe/0.1" -o NUL -w "%{http_code} %{size_download}\n" "https://www.reddit.com/r/CryptoCurrency+CryptoMarkets+altcoin/search.rss?q=solana&restrict_sr=1&sort=new"`
+  - P-R7 (comments feed paging, two requests one minute apart; UNVERIFIED whether `after=` works): `$ua="attention-probe/0.1"; $u="https://www.reddit.com/r/CryptoCurrency/comments/.rss?limit=100"; $x=[xml](curl.exe -s -A $ua $u); $last=$x.feed.entry[-1].id; "page1 {0} entries, newest {1}, oldest {2}, last id {3}" -f $x.feed.entry.Count,$x.feed.entry[0].updated,$x.feed.entry[-1].updated,$last; Start-Sleep -Seconds 60; $y=[xml](curl.exe -s -A $ua ($u+"&after="+$last)); "page2 {0} entries, newest {1}, oldest {2}" -f $y.feed.entry.Count,$y.feed.entry[0].updated,$y.feed.entry[-1].updated`  PASS = page 2 newest is older than page 1 oldest; an empty page or an error means no paging.
   - P-R2 (after the build): `python -m api.scripts.probe_pc_sources --source reddit --symbol SOL --feed-depth`
   - P-R5 (after the build): `python -m api.scripts.probe_pc_sources --source reddit --symbol SOL --compare-scope`
-- **Owner answers (T139):** Q15 yes (stream-and-count is built, slice W8c2) and Q16 (PC hours vary, no UTC window); the busy-coin depth limit of SPEC Annex A.2 means some coin-days will be missing, never 0. W8c adds the test `test_no_fixed_utc_hour_assumption_start_times_0030_0900_1700_2300` (AC28).
+- **Owner answers carried (T139):** Q15 yes (stream-and-count, W8c2), Q16 (PC hours vary, no UTC window); the depth limit of SPEC Annex A.2 means some coin-days are missing, never 0. W8c carries `test_no_fixed_utc_hour_assumption_start_times_0030_0900_1700_2300` (AC28).
 
-### W8c2: Reddit stream-and-count complement (opus; owner answer Q15 yes, T139)
+### W8c2: Reddit stream-and-count complement incl. comments feeds (opus; Q15 yes T139, widened T163)
 
-Method id `reddit_stream`, stored apart from `reddit_web` and never spliced in one series (AC14). Plain HTTP on the public `new.rss` feeds, same honest user agent and pause rules as W8c; no API Anything. Reuses W8c's feed parser.
+Method id `reddit_stream`, stored apart from `reddit_web` and never spliced in one series (AC14); `reddit_impl_order` picks one method per window (default `reddit_stream`, `reddit_web`, so a day without comment coverage falls back to the posts-only series). Plain HTTP on the public `new.rss` and subreddit `comments/.rss` feeds, same honest user agent and pause rules as W8c; no API Anything. Reuses W8c's feed parser, item ledger and metric functions.
 
-- **Files:** `api/data/attention/reddit_stream.py` (poll scheduler core, entry store, mention counter, coverage rule), config keys in `api/data/attention_queries.json` (`reddit_stream_subreddits` 4-6, `reddit_stream_poll_interval_s` 3600, `reddit_stream_polls_per_day_cap` 6, `reddit_stream_min_coverage` 0.8, `reddit_impl_order`), tests `api/tests/data/attention/test_reddit_stream.py`; additions to `probe_pc_sources.py` (`--source reddit --stream-status`).
+- **Files:** `api/data/attention/reddit_stream.py` (poll scheduler core, comments and posts coverage rule, mention counter over the ledger), config keys in `api/data/attention_queries.json` (`reddit_stream_subreddits` 4-6, `reddit_stream_poll_interval_s` 3600, `reddit_stream_polls_per_day_cap` 6, `reddit_stream_min_coverage` 0.8, `reddit_comments_paging` false, `reddit_impl_order`), tests `api/tests/data/attention/test_reddit_stream.py`; additions to `probe_pc_sources.py` (`--source reddit --stream-status`).
 - **Red-first tests:** `test_poll_parses_feeds_and_stores_collected_at_and_timestamps`, `test_dedupe_by_entry_id_across_overlapping_polls`, `test_cross_feed_duplicate_entry_id_counted_once`, `test_mentions_counted_for_all_narrative_coins_from_same_entries`, `test_ambiguity_list_skips_coin`, `test_coverage_fraction_from_entry_timestamps`, `test_gap_uncovered_when_oldest_of_next_poll_newer_than_previous_newest`, `test_day_stored_at_coverage_0_80_flagged_partial`, `test_day_below_coverage_missing_not_zero`, `test_full_coverage_not_flagged_partial`, `test_newest_slice_bias_flag_in_evidence`, `test_stream_method_id_separate_store_from_reddit_web`, `test_methods_never_mixed_in_one_window_config_order`, `test_value_only_after_day_complete`, `test_poll_interval_and_daily_poll_cap`, `test_stream_requests_share_daily_budget_150`, `test_403_429_block_page_pauses_rest_of_day`, `test_stream_feed_count_must_be_4_to_6`, `test_pc_start_hours_vary_no_fixed_utc_window` (AC28).
-- **Gates:** pytest on the new file and `api/tests/data/attention`; scripts suite; file-set check; hygiene; banned-name grep.
-- **Owner probe after the build:** `python -m api.scripts.probe_pc_sources --source reddit --stream-status` (prints polls today, entries seen, coverage per recent day, partial and missing counts; numbers only). Pass: coverage per day is computed and the pace matches the config.
+  - AC30 (T163): `test_one_poll_per_day_comments_coverage_below_0_80_day_missing`, `test_two_polls_gap_under_feed_span_coverage_at_least_0_80`, `test_posts_plus_comments_day_needs_both_feed_kinds_covered`, `test_fallback_to_posts_only_series_when_comments_missing`, `test_paging_off_makes_no_after_request`, `test_paging_on_requests_after_t1_id_within_daily_budget`, `test_comments_feed_hundred_entries_over_fifteen_hours_fixture`.
+  - AC29 (T163): `test_comment_items_enter_ledger_with_t1_id_and_author_hash`.
+- **Gates:** pytest on the new file and `api/tests/data/attention`; guard test; scripts suite; file-set check; hygiene; banned-name grep.
+- **Owner probe after the build:** `python -m api.scripts.probe_pc_sources --source reddit --stream-status` (prints polls today, entries seen, coverage per recent day for posts and comments feeds, partial and missing counts; numbers only). Pass: coverage per day is computed and the pace matches the config.
+- **Open before it starts (owner):** Q17 (polling cadence versus PC uptime; recommended: run P-R7 first).
+
+### W8c3: Reddit engagement enrichment via archive ids (opus, about 3 USD; T163; optional)
+
+Method id `reddit_engagement`, a SETTLED series separate from the provisional counts (never overwrites them). Depends on W8c (ledger and metric functions; posts); live comment enrichment needs W8c2 (comments in the ledger). The core mention series works without it (Q18, recommended optional and off by default until P-R8 passes).
+
+- **Files:** `api/data/attention/reddit_engagement.py` (ID-only archive client with host and path allowlist, breaker, 3 s spacing, 40 requests per run, 500 ids per request, settled series writer by pull date, resolved-share rule), config keys in `api/data/attention_queries.json` (`reddit_engagement_enabled` false, `reddit_engagement_min_resolved` 0.8, `reddit_engagement_min_age_days` 2), tests `api/tests/data/attention/test_reddit_engagement.py`; additions to `probe_pc_sources.py` (`--source reddit --enrich-probe --n 10`, ids from the ledger).
+- **Red-first tests (AC33-AC36):** `test_only_items_at_least_two_days_old_are_enriched`, `test_ids_batched_at_most_500_per_request`, `test_settled_series_stored_apart_and_never_overwrites_provisional`, `test_day_value_only_from_pull_dated_at_least_d_plus_3`, `test_each_pull_stored_by_pull_date_and_latest_at_or_before_asof_is_read`, `test_truncate_and_recompute_identical_point_in_time`, `test_resolved_share_below_0_8_day_missing_not_zero`, `test_timeout_text_maybe_slow_down_is_failure`, `test_non_json_body_is_failure`, `test_5xx_is_failure`, `test_failure_means_enrichment_missing_never_zero`, `test_no_retry_loop_request_count_stays_one_per_failure`, `test_requests_spaced_three_seconds_and_capped_at_forty_per_run`, `test_three_consecutive_failures_open_breaker_for_rest_of_day`, `test_breaker_persists_over_restart`, `test_archive_down_leaves_core_mention_series_intact`, `test_client_calls_only_ids_endpoints_on_archive_host`, `test_search_and_aggregate_paths_refused`, `test_honest_user_agent_only`, `test_deleted_later_and_removal_type_excluded_from_settled`, `test_engagement_weighted_value_matches_metric_function`, `test_controversy_series_separate`, `test_logs_class_and_status_only`.
+- **Gates:** pytest on the new file, `api/tests/data/attention` and the guard test; scripts suite; file-set check; hygiene; banned-name grep.
+- **Owner probes (PowerShell, run NOW; requests 3 s apart; print counts and numbers only):**
+  - P-R8 (archive ID lookup; `comments/ids` is UNVERIFIED): `$ua="attention-probe/0.1"; $b="https://arctic-shift.photon-reddit.com"; $x=[xml](curl.exe -s -A $ua "https://www.reddit.com/r/CryptoCurrency/new/.rss?limit=100"); $ids=@($x.feed.entry | Where-Object { [datetime]$_.updated -lt (Get-Date).AddDays(-3) } | Select-Object -First 10 | ForEach-Object { $_.id -replace '^t3_','' }); "ids: " + ($ids -join ","); Start-Sleep -Seconds 3; $r=curl.exe -s -A $ua "$b/api/posts/ids?ids=$($ids -join ',')" | ConvertFrom-Json; "posts returned: " + $r.data.Count; $r.data | Select-Object id,score,num_comments,upvote_ratio,retrieved_on | Format-Table -AutoSize; Start-Sleep -Seconds 3; $a=(Get-Date).ToUniversalTime().AddDays(-5).ToString('yyyy-MM-dd'); $c=(curl.exe -s -A $ua "$b/api/comments/search?subreddit=CryptoCurrency&after=$a&limit=10" | ConvertFrom-Json).data; $cid=($c | ForEach-Object { $_.id }) -join ','; Start-Sleep -Seconds 3; $d=curl.exe -s -A $ua "$b/api/comments/ids?ids=$cid" | ConvertFrom-Json; "comments returned: " + $d.data.Count; $d.data | Select-Object id,score,link_id | Format-Table -AutoSize`
+  - After the build and 3 or more days of collected items: `python -m api.scripts.probe_pc_sources --source reddit --enrich-probe --n 10` (ids from the owner's own ledger; prints resolved count, scores and lag only).
+- **Open before it starts (owner):** Q18 (keep it optional; recommended yes).
 
 ### W8e: worker wiring (opus)
 
@@ -227,9 +249,10 @@ Method id `reddit_stream`, stored apart from `reddit_web` and never spliced in o
 - A test, tool or log that prints an exception message, header, cookie, token, URL query or response body: stop and report.
 - A speed-up of the locked pace (spacing below the configured minimum delay, a default faster than 180 s for X or 60 s for Reddit, a Reddit request with any user agent other than the single honest constant or through a proxy, a daily budget or sample size above the config values, or a halved budget not applied after a warning) or a stored same-day value: stop and report.
 - A baseline on fresh main differs from section 8 by anything other than a merged earlier PR: stop and report the numbers.
+- Any Reddit-archive call other than the ID endpoints (`/api/posts/ids`, `/api/comments/ids`), any search or aggregate call to it, any retry loop against it, any browser user-agent string, any reddit.com JSON endpoint, or storing a Reddit username: stop and report.
 - `needs_input`: stop; do not merge; never merge any PR. Slice cost at 7 USD: ask; hard cap 15 USD.
 
-## 8. Acceptance criteria mapping (SPEC AC1..AC28 to slices)
+## 8. Acceptance criteria mapping (SPEC AC1..AC36 to slices)
 
 | AC | Slice | Strategy |
 |---|---|---|
@@ -242,6 +265,14 @@ Method id `reddit_stream`, stored apart from `reddit_web` and never spliced in o
 | AC26 | W8c2 | Fully-Automated |
 | AC27 | W8b (wrapper and guards), W8d (use) | Fully-Automated |
 | AC28 | W8c (M1), W8c2 (stream) | Fully-Automated |
+| AC29 | W8c (ledger), W8c2 (comments into the ledger) | Fully-Automated |
+| AC30 | W8c2 | Fully-Automated |
+| AC31 | W8c (pure functions) | Fully-Automated |
+| AC32 | W8c (pure rule), W8f (Discovery missing rule) | Fully-Automated |
+| AC33 | W8c3 | Fully-Automated |
+| AC34 | W8c3 | Fully-Automated |
+| AC35 | W8c (pure functions), W8c3 (use) | Fully-Automated |
+| AC36 | W8c (guard over file lists), W8c3 (allowlist), owner probes P-R7 and P-R8 | Fully-Automated (probes: Agent-Probe) |
 | AC11, AC12, AC16 | W8b | Fully-Automated |
 | AC15, AC20 | W8b | Fully-Automated |
 | AC17 | W8c, W8d, W8h | Agent-Probe (owner output) |
@@ -259,7 +290,8 @@ Each item is its own EXECUTE envelope and needs the owner's separate ENTER EXECU
 - [x] 0. Owner approved the SPEC on 21-10-26 (recorded by T136 on the planner's message); Q13 and Q14 answered yes.
 - [ ] 1. W8a vet API Anything, report only (gates X only); owner pastes P-X1, P-X2.
 - [ ] 2. W8b pure core (red tests first, then code).
-- [ ] 3b. W8c2 Reddit stream-and-count complement (after W8c; no wait for W8a).
+- [ ] 3b. W8c2 Reddit stream-and-count complement incl. comments feeds (after W8c; no wait for W8a).
+- [ ] 3c. W8c3 engagement enrichment via archive ids (optional; after W8c; live comment enrichment needs W8c2); owner runs P-R7 and P-R8 now.
 - [ ] 3. W8c Reddit connector (plain HTTP, no wait for W8a); owner runs P-R6, P-R3, P-R4 now and P-R2, P-R5 after the build.
 - [ ] 4. W8e worker wiring (shell or plug into the T98 W8 worker); owner runs P-W1.
 - [ ] 5. W8f Discovery wiring.
@@ -290,7 +322,7 @@ Runtime: only when the flag is on, on the owner's PC. Tests: new files per slice
 | Pause-on-warning and persistence tests (W8b, W8e) | Fully-Automated | AC10, AC9 |
 | Discovery wiring, rescale, point-in-time tests (W8f) | Fully-Automated | AC5, AC6, AC14 |
 | Log scrub, secrets, banned-name and pin guards (W8b) | Fully-Automated | AC11, AC12, AC16 |
-| Owner probes P-R1 (recorded 403), P-R2..P-R6, P-X1..P-X7, P-W1 | Agent-Probe | AC17, AC18 |
+| Owner probes P-R1 (recorded 403), P-R2..P-R8, P-X1..P-X7, P-W1 | Agent-Probe | AC17, AC18, AC36 |
 
 Baselines measured on this checkout (base `main` 007d53c), `UV_FROZEN=1 uv sync --project api --frozen`, 21-10-26: attention suite 231 passed (28.4 s); scripts + data/attention + tooling_guards: 492 passed, 2 warnings, 62.0 s; rest of API: 1222 passed, 1 skipped, 5 deselected, 2 warnings, 132.2 s (the two groups total 1714 passed). Providers were not contacted; API Anything was not read or run.
 
@@ -333,8 +365,8 @@ Scope of this gate: the PLAN and the amended SPEC as documents. Per-slice code g
 | V4 banned names | `grep -niE "xscrape\|kloxeld\|gunkonchi" process/general-plans/active/narrative-baskets_02-10-26/narrative-baskets-xreddit-collector_{SPEC,PLAN}_21-10-26.md` | every hit is inside a "banned/never/malware/guard" sentence (reviewed by hand, listed in the record) |
 | V5 secret scan | `git diff -U0 origin/main...HEAD \| grep -nE "^\+.*(Bearer [A-Za-z0-9._-]{12,}\|(API_?KEY\|SECRET\|TOKEN\|PASSWORD)[A-Z_]* *[:=] *[\"'][A-Za-z0-9+/_-]{12,})"` | prints nothing |
 | V6 whitespace | `git diff --check origin/main...HEAD` | exit 0 |
-| V7 AC count and mapping | `grep -c "^- AC" <SPEC>` and every AC1..AC28 appears in section 8 | count 28 (above the skill's usual 20 by the planner's T133, T135, T138 and T139 instructions); each AC mapped |
-| V8 slice coverage | the nine slices W8a..W8h and W8c2 appear in sections 4 and 5, each with files, tests or doc gate, model, USD, probes (where relevant), branch, dependencies | all present |
+| V7 AC count and mapping | `grep -c "^- AC" <SPEC>` and every AC1..AC36 appears in section 8 | count 36 (above the skill's usual 20 by the planner's T133, T135, T138, T139 and T163 instructions); each AC mapped |
+| V8 slice coverage | the ten slices W8a..W8h, W8c2 and W8c3 appear in sections 4 and 5, each with files, tests or doc gate, model, USD, probes (where relevant), branch, dependencies | all present |
 | V9 cites | `ls api/main.py api/data/equities_refresh.py api/data/attention/store.py api/analytics/attention/sources.py api/data/discovery.json api/data/attention_narratives.json` and `grep -n "PASS_LOCK\|def _behind\|def start_from_env\|def stop_worker" api/data/equities_refresh.py` | all exist; lines 56, 231, 361, 388 as cited |
 | V10 W8 existence | `git ls-tree -r origin/main --name-only \| grep -c attention_pc_refresh` and `grep -rn SCREENER_ATTENTION_PC_WORKER api --include=*.py \| wc -l` | both 0 (as stated in Overview) |
 
@@ -386,3 +418,7 @@ Re-validation after the Reddit access change on the owner's probe evidence (P-R1
 ## Validation record (T139, 21-10-26)
 
 Re-validation after the owner's approval of the T138 changes (recorded on the planner's message) and the answers Q15 (stream-and-count built as a complement: new slice W8c2, method `reddit_stream`, coverage rule 0.8), Q16 (PC hours vary, no UTC window) and the API Anything adapter rules (pinned commit `20cb677039fcfe92d3d9c777aa9362e30ff1fdb8`, registry and publish OFF, shipped X recipe not trusted, `npm ci --ignore-scripts`; the owner's preliminary vetting facts are recorded as inputs in the W8a section, not as a verdict). Gates re-run on branch `claude/t126-xreddit-collector-spec`: V1 plan validator failures []; V2 prints nothing; V3 prints 0; V4 hits only in ban or guard sentences; V5 prints nothing; V6 exit 0; V7 count 28 and AC1..AC28 mapped; V8 nine slices (W8a..W8h and W8c2), total 24-35 USD. No code exists. Verdict: Gate: PASS for the PLAN artifact. Not proven: that the pinned commit is safe (W8a), that feeds return enough entries for a coverage of 0.8 on the days the PC is on (probes P-R6 and the stream status probe), or that the preliminary vetting facts hold (the owner's paste, not read by this session).
+
+## Validation record (T163, 24-10-26)
+
+Re-validation after widening Reddit to comments, votes and proper search without an official API, on the owner probe evidence of 24-10-26 (posts feed 100 entries about 8 days; comments feed 100 entries about 15 hours; `search.rss` works; `search.json` 403; `old.reddit.com` 302; the Arctic Shift archive answers `/api/comments/search` with a lag of about 36-48 h, `/api/posts/ids` works, `/api/posts/search` and `/aggregate` time out). SPEC Annex A.2b, rules 13-14, AC29-AC36, Q17-Q18, probes P-R7 and P-R8; PLAN W8c and W8c2 widened, new slice W8c3 (about 3 USD); total 29-40 USD; X unchanged. PR #153 was already merged, so this work is on a fresh branch `claude/t163-reddit-engagement-spec` from `origin/main` with one new draft PR. Gates re-run: V1 plan validator failures []; V2 prints nothing; V3 prints 0; V4 hits only in ban or guard sentences; V5 prints nothing; V6 exit 0; V7 count 36 and AC1..AC36 mapped; V8 ten slices. No code exists. Verdict: Gate: PASS for the PLAN artifact. Not proven: that `comments/.rss` accepts paging (P-R7), that `/api/comments/ids` works (P-R8), the archive's availability and legality, or that Reddit mention volumes are enough for a useful signal (the minimum-volume rule makes thin coins missing, not zero). The owner's approval of the T163 changes is not recorded in this session.
