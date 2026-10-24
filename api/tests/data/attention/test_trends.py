@@ -280,3 +280,11 @@ def test_surge_needs_a_ratio_over_the_baseline():
     assert trends.interest_verdict(base + [5] * 7) == trends.TOO_LITTLE_INTEREST  # 5 < 3 x 2: no real surge
     assert trends.interest_verdict(base + [6] * 7) == trends.QUIET_THEN_SURGE      # 6 = 3 x 2
     assert trends.SURGE_RATIO == 3
+
+
+def test_fetch_alone_rejects_bool_values():
+    frame = _alone(days=100)
+    frame["Aave"] = frame["Aave"].astype(object)
+    frame.loc[frame.index[50], "Aave"] = True
+    s, _ = _fetch(frame)
+    assert (s.state, s.reason, s.points) == ("unavailable", "bad-value", [])

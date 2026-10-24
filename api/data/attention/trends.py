@@ -139,7 +139,7 @@ def complete_days(frame, term: str) -> tuple[list[tuple[date, float]] | None, st
             continue
         if v is None or math.isnan(v):
             return None, "gap"
-        if not (math.isfinite(v) and 0 <= v <= 100):
+        if isinstance(v, bool) or not 0 <= v <= 100:  # NaN is handled above; inf fails the range
             return None, "bad-value"
         points.append((ts.date() if hasattr(ts, "date") else ts, float(v)))
     if any((b[0] - a[0]).days != 1 for a, b in pairwise(points)):

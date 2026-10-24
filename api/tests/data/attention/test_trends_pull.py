@@ -122,7 +122,7 @@ def test_replace_revises_past_chart_days_truncate_and_recompute(isolated_cache):
     assert gated == {d1 - timedelta(days=k) for k in range(1, 12)}  # only 11 chart days carry Trends at all
 
     # day 2, pure rescale: the same days on another scale, one row older dropped, one new day added
-    p2 = [(d, 2.0 * v) for d, v in p1[1:]] + [(d1, 60.0)]
+    p2 = [(d, 1.25 * v) for d, v in p1[1:]] + [(d1, 60.0)]  # stays inside Google's 0..100 scale
     store.write_series(_s("AAVE", p2), today=d1 + timedelta(days=1), mode="replace-series")
     after = {x: _chart(x) for x in days}
     changed = {x for x in days if (before[x] is None) != (after[x] is None)

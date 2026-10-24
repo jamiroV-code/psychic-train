@@ -338,3 +338,67 @@ def test_one_store_failure_keeps_storing_the_others(monkeypatch, capsys):
     assert lines[-1] == "trends: error store-failed: OSError x1"
     assert attention_extra.classify("trends", lines[-1]).status == "failed" and rc == 1
     assert fx.SECRET not in text
+
+
+# --- T159: a store failure must be the LAST line of its source even when stdout is block-buffered (CI pipes
+# `2>&1 | tee` without PYTHONUNBUFFERED), so the verifier, which reads the last `<source>:` line, goes red. ---
+
+_DRIVER = r'''
+import json, sys
+from pathlib import Path
+import httpx
+from api.data import cache
+from api.data.attention import http_retry, store, trends_keywords, wikipedia
+from api.scripts import refresh_attention as ra
+from api.tests import trends_fixtures as fx
+from api.tests.data.attention.conftest import wiki_payload
+source, root = sys.argv[1], Path(sys.argv[2])
+cache.CACHE_ROOT = root
+wikipedia.PACER = http_retry.Pacer(0)
+kw = root / "kw.json"
+kw.write_text(json.dumps({"_anchor": {"term": "Bitcoin", "label": "Bitcoin"},
+                          "AAVE": {"term": "Aave", "label": "Aave"}, "INJ": {"term": "Injective", "label": "Inj"}}))
+trends_keywords.KEYWORDS_PATH = kw
+ra._jitter = lambda: 0.0
+frames = {"Aave": fx.daily_frame(["Aave"], 100), "Injective": fx.daily_frame(["Injective"], 100)}
+class C:
+    def build_payload(self, kw_list, **k): self.t = kw_list[0]
+    def interest_over_time(self): return frames[self.t]
+ra.TRENDREQ_FACTORY = C
+real = store.write_series
+def flaky(s, today=None, **k):
+    if s.symbol in ("ETH", "INJ"):
+        raise OSError("disk full")
+    return real(s, today=today, **k)
+store.write_series = flaky
+end = fx.TODAY - __import__("datetime").timedelta(days=1)
+c = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=wiki_payload(100, end=end))))
+syms = "BTC,ETH" if source == "wikipedia" else "AAVE,INJ"
+sys.exit(ra.main(["--sources", source, "--symbols", syms], client=c, today=fx.TODAY, sleep=lambda s: None))
+'''
+
+
+@pytest.mark.parametrize("source", ["wikipedia", "trends"])
+def test_store_failure_is_last_line_with_block_buffered_stdout(tmp_path, source):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+    repo = Path(__file__).resolve().parents[3]
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONUNBUFFERED"}
+    proc = subprocess.run([sys.executable, "-c", _DRIVER, source, str(tmp_path)], cwd=repo, env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=120, check=False)
+    lines = [ln for ln in proc.stdout.splitlines() if ln.startswith(source + ":")]
+    assert len(lines) >= 2, proc.stdout[-2000:]
+    assert lines[-1] == f"{source}: error store-failed: OSError x1"
+    assert attention_extra.classify(source, lines[-1]).status == "failed"
+    assert proc.returncode == 1 and "disk full" not in proc.stdout
+    if source == "trends":  # the workflow verify step on this log
+        out, _, failed = attention_extra.verify({"trends": proc.stdout}, tmp_path / "attention", fx.TODAY)
+        assert "trends" in failed and any(o.startswith("summary trends: failed") for o in out)
+
+
+def test_store_failed_reason_is_a_code_reason():
+    assert attention_extra.reason_kind("store-failed: OSError") == "code"
+    line = "trends: 0/2 ok, 0 rows written [other 2] reasons: store-failed: OSError x2"
+    assert attention_extra.classify("trends", line).status == "failed"  # all stores failed: red, not a warning

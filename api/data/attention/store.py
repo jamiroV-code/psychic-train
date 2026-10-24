@@ -7,7 +7,6 @@ pull date. Paths resolve at call time so tests can redirect `cache.CACHE_ROOT`.
 """
 from __future__ import annotations
 
-import math
 from datetime import date, datetime, timezone
 from itertools import pairwise
 from pathlib import Path
@@ -53,11 +52,11 @@ def _write_frame(path: Path, days: list[date], values: list[float]) -> None:
 
 def _replaceable(points: list[tuple[date, float]]) -> bool:
     """A replace-series pull is stored only when it has at least MIN_REPLACE_DAYS rows, one per consecutive day
-    in increasing order (no duplicate, gap or reversal), finite and not negative, and not all zero. Guarded here
-    so no caller can bypass it."""
+    in increasing order (no duplicate, gap or reversal), within 0..100 (no NaN, inf or bool), and not all zero.
+    Guarded here so no caller can bypass it."""
     if len(points) < MIN_REPLACE_DAYS or not any(v for _, v in points):
         return False
-    if not all(math.isfinite(v) and v >= 0 for _, v in points):
+    if not all(not isinstance(v, bool) and 0 <= v <= 100 for _, v in points):  # NaN and inf fail the range too
         return False
     return all((b[0] - a[0]).days == 1 for a, b in pairwise(points))
 
@@ -74,10 +73,10 @@ def write_series(series: SourceSeries, today: date | None = None, mode: str = "f
     today = today or _utc_today()
     path = store_path(series.source, series.symbol)
     if mode == "replace-series":
-        pulled = [(d, float(v)) for d, v in series.points if d < today]
-        if not _replaceable(pulled):
+        pulled = [(d, v) for d, v in series.points if d < today]
+        if not _replaceable(pulled):  # checked on the raw values, so True is not taken as 1.0
             return 0
-        _write_frame(path, [d for d, _ in pulled], [v for _, v in pulled])
+        _write_frame(path, [d for d, _ in pulled], [float(v) for _, v in pulled])
         return len(pulled)
     merged: dict[date, float] = dict(read_points(series.source, series.symbol))
     existing = len(merged)

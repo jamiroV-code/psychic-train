@@ -419,7 +419,8 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
                 if store_failed:  # the last line the verifier reads: a store failure is a code failure, red
                     results[name] = "error"
                     counts = {k: store_failed.count(k) for k in dict.fromkeys(store_failed)}
-                    print(f"{name}: error {'; '.join(f'{k} x{n}' for k, n in counts.items())}", file=sys.stderr)
+                    # Same stream as the summary, so it stays last when stdout is block-buffered (CI pipes 2>&1).
+                    print(f"{name}: error {'; '.join(f'{k} x{n}' for k, n in counts.items())}", flush=True)
             except Exception as exc:  # per-source isolation
                 results[name] = "error"
                 print(f"{name}: error {describe_exc(exc)}", file=sys.stderr)

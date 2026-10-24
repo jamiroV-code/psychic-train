@@ -163,7 +163,7 @@ def test_replace_mode_rejects_unknown_mode(attention_cache):
     assert not store.store_path("wikipedia", "BTC").exists()
 
 
-@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -1.0])
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -1.0, 100.5, True])
 def test_replace_series_rejects_non_finite_or_negative(attention_cache, bad):
     old = _run_of(92, 1.0)
     store.write_series(_s(old, source="trends"), today=TODAY, mode="replace-series")
