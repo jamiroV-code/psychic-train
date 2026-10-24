@@ -3,8 +3,11 @@
 ## 1 Task ID
 
 T171, slice W8d1 "X pure core for twscrape (incl. account-pool logic)". Worker session. Branch
-`claude/t171-w8d1-x-core`, created from W8b (`claude/t140-w8b-collector-core`, draft PR #161, head `691c923`).
-The draft PR is stacked on #161 and must be retargeted to `main` after #161 merges. Approval: the owner's
+`claude/t171-w8d1-x-core`, created from W8b (`claude/t140-w8b-collector-core`, PR #161, head `691c923`). The planner
+reported #161 as merged and retargeted draft PR #173 to `main`; `origin/main` was merged into the branch with a merge
+commit (`833340a`, no conflicts, no rebase). Checked on GitHub at 22:2x UTC: #161 is still OPEN and NOT merged
+(head `691c923`), and `origin/main` (`d968e44`) does not contain the W8b modules. So #173 against `main` currently
+also carries W8b's 15 files (heading 9). Approval: the owner's
 ENTER EXECUTE MODE W8d1 of 24-10-26, relayed in the envelope.
 
 ## 2 Outcome
@@ -49,6 +52,11 @@ Six new pure modules under `api/data/attention/`, as the PLAN's W8d1 file list a
     `SearchTimeline` lock, or a server error.
   - The code-to-alert mapping, `fallback_decision`, `parse_drop`, `env_problems` (a pure check over a dict of
     environment variables) and `FakeXReader`.
+  - Per the owner decision relayed by the planner (T179, SPEC rule 19, AC46 and AC53 amended on PR #167), the
+    fallback is triggered by `Blocked by Cloudflare` OR `Blocked by HTML` on the default backend. This replaces
+    the envelope line "HTML blocks do NOT trigger the fallback". The trigger still needs the flag (default
+    false), gets one retry, and pauses the UTC day for the whole pool if still blocked. Each use is logged with
+    reason `cloudflare_block` or `html_block`. The change was made red first (heading 5).
 - `x_pool.py` (AC46, AC49-AC54):
   - Pool state persisted in `_pc_state/x_pool.json`, which survives a restart. A label that is not configured
     is refused.
@@ -98,16 +106,25 @@ File-set check: `git diff --stat 691c923..HEAD` lists exactly these files. There
 3. `6469d16` style: a trailing blank line in `x_pool.py`.
 4. `9475e94` test: boundary tests from the mutation check, and removal of an equivalent (dead) unit-wide drop
    check.
-5. This report (docs).
+5. `6f40425` docs: this report.
+6. `833340a` merge of `origin/main` (#161 merged).
+7. Red: HTML block triggers the fallback (T179), and an inconclusive canary sits out its accounts (planner QA).
+8. `f432b33` feat: green for 7.
+9. This report update (docs).
 
 ## 6 Tests run
 
 - New files: `test_x_window` 9 functions (24 cases with the parametrized config test), `test_x_filters` 14,
   `test_x_density` 5, `test_x_raw` 7, `test_x_reader` 38. All pass.
 - `api/tests/data/attention` + `api/tests/scripts` + `api/tests/tooling_guards`: 813 passed, 1 skipped.
-- Full `uv run --project api pytest api -q` at `9475e94`: 2084 passed, 1 failed, 2 skipped, 5 deselected. The W8b
-  base before any change had 1991 passed, 1 failed, 2 skipped and 5 deselected. The +93 equals the new tests
-  (88 cases in the five new files plus 5 guard tests). The one failure,
+- Full `uv run --project api pytest api -q` on the merged tree at `f432b33`: 2242 passed, 0 failed, 1 skipped,
+  5 deselected. On `origin/main` (`d968e44`, a separate worktree): 2028 passed, 1 skipped, 5 deselected. The +214
+  is W8b's 118 tests (main does not have #161 yet) plus this slice's 96 (91 cases in the five new files plus 5
+  guard tests). The earlier `test_weights_v2` failure came from the old base; it does not happen on main.
+- Before the merge, at `9475e94` on the W8b base: 2084 passed, 1 failed (that `test_weights_v2` failure), 2
+  skipped. The W8b base before any change had 1991 passed, 1 failed, 2 skipped.
+- After the merge, `api/tests/data/attention`, `api/tests/scripts` and `api/tests/tooling_guards` together gave
+  958 passed. The one failure,
   `analytics/attention/test_weights_v2.py::test_committed_frozen_snapshots_match_their_days_weights`, is
   pre-existing and unrelated to the X files.
 - Mutation check, done by hand by applying mutants to the decision logic and running the five new test files:
@@ -117,6 +134,8 @@ File-set check: `git diff --stat 691c923..HEAD` lists exactly these files. There
   - Four of the survivors were test gaps; boundary tests were added for each. The fifth was an equivalent mutant:
     a unit-wide rate above the threshold implies a page above it, so that check was dead code and was removed.
   - Second pass: 33 mutants, 33 killed, 0 survived.
+  - Third pass, after the T179 and QA changes on the merged tree: 35 mutants, 35 killed. It added mutants for the
+    HTML trigger, the inconclusive-canary lock, and the decision on whether any account is still usable.
   - Covered areas: selection, state machine and restarts, UTC-day lock, drift stop and reset, canary
     (tolerance, overlap, two-account rule, majority, account count, minimum results, gate before units), window
     and stop conditions, density (exact, floor, page cap), parse drop, fallback decision, NoAccountError cause,
@@ -158,13 +177,18 @@ overrule it.
 - D5: Alert mapping for an inactive row. 32, a bare 403 (no text) and text without a code map to
   `x_login_required`; 88, 326 and any other code map to `x_account_suspended`. Both are owner-action alerts.
 - D6: "Several" raw entries is 2 or more. The drop rate is checked per page (D-mutation note in heading 6).
-- D7: Canary details:
+- D7: Canary details (inconclusive case changed by the planner's QA decision, see heading 9):
   - One page per account. The result is the set of parsed tweet ids inside the last complete clock hour (the
     "fixed past hour", the same for every account; no fixed UTC hour, per the hour guard).
   - With three or more usable accounts, three are canaried. A suspect is an account that agrees with fewer than
     half of the others.
-  - An inconclusive result (two equal-size results that disagree, or no majority) pauses the day with the new
-    reason `canary_disagree` (fail closed).
+  - An inconclusive result (two equal-size results that disagree, or no majority) locks the canaried accounts
+    for the rest of the UTC day. They are not flagged suspect and get no alert, and they are back the next day.
+    The other usable accounts continue, with the canary marked passed and a health note. When no usable
+    account is left (for example a two-account pool), the day pauses with reason `canary_disagree`, and the
+    units are missing with no usable account.
+  - My reading of the planner's "pause that account's use" for an inconclusive result: the accounts that were
+    canaried are the ones that sit out the day.
   - A Cloudflare or HTML block during the canary pauses the day without the curl fallback.
   - Canary reads respect the global spacing and the global budget.
 - D8: Account age is measured at tweet time, so a re-parse gives the same result whenever it runs.
@@ -180,23 +204,28 @@ overrule it.
 
 ## 9 Blockers
 
-No blockers. Envelope owner questions answered with the SPEC's recommended value:
+Base question for the planner: #161 is not merged (checked on GitHub). With base `main`, #173 shows W8b plus
+W8d1 (27 files). Either retarget #173 back to `claude/t140-w8b-collector-core` until #161 merges, or keep `main` and
+merge #161 first. I did not change the base.
+
+Envelope owner questions answered with the SPEC's recommended value:
 
 - Q21: twscrape primary, API Anything not built.
 - Q22: `x_lang` defaults to `en`, with a per-coin override; empty means any language.
 - Q23: account age 30 days, 10 followers, protected and placeholder users excluded, author cap 3, more than 5
   cashtags excluded.
 - Q28: design A.
-- Q29: not needed for W8d1; the wheel hash is W8d2's.
+- Q29: decided by the owner as "both OS". W8d1 has no platform code; the wheel hashes are W8d2's.
 
-New questions for the owner or planner (the defaults chosen are in heading 8):
+My questions QA-QE were decided by the planner on 24-10-26 (recorded as decided-by-planner):
 
-- QA: Should an inconclusive canary pause the day (`canary_disagree`, the current behaviour), or should the day
-  proceed with an alert only? (D7)
-- QB: Is the D5 alert mapping right, in particular a bare 403 counting as login-required?
-- QC: Is "several" entries = 2 right for the zero-parsed rule? (D6)
-- QD: Should the exclusion reason for a non-matching cashtag coin be `no_coin_match`? (D4)
-- QE: Should the window start win over N on the same page (exact value)? (D3)
+- QA: an inconclusive canary sits the canaried accounts out for the day, and the units go missing, but not for
+  the whole pool unless fewer than 2 usable accounts remain. Implemented as described in D7.
+- QB: a bare 403 makes the account inactive with `x_login_required` and raises an alert. This was already the
+  behaviour.
+- QC: "several" means 2 or more. Already the behaviour.
+- QD: `no_coin_match` is accepted. Already the behaviour.
+- QE: the window start wins over N on the same page. Already the behaviour.
 
 ## 10 Follow-up
 
