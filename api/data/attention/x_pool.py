@@ -424,7 +424,6 @@ def _drift(pool: XPool) -> str:
 def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, query, rng, sleep, fallback, collected_at,
                  counts) -> _Attempt:
     out, kv = _Attempt(), x_window.search_kv()
-    entries = parsed_total = 0
     for page_no in range(config.x_page_cap):
         if pool.is_paused() or src.is_paused():
             return _Attempt("stop", "paused")
@@ -481,10 +480,8 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
         except Exception:  # noqa: BLE001 - a parse failure is drift, whatever the library raised
             src.stamp_attempt()
             return _Attempt("stop", _drift(pool))
-        entries, parsed_total = entries + n, parsed_total + len(tweets)
-        threshold = config.x_parse_drop_threshold
-        if (xr.parse_drop(entries=n, parsed=len(tweets), threshold=threshold)
-                or xr.parse_drop(entries=entries, parsed=parsed_total, threshold=threshold)):
+        # Per page; a unit-wide rate can only exceed the threshold when one of its pages does.
+        if xr.parse_drop(entries=n, parsed=len(tweets), threshold=config.x_parse_drop_threshold):
             pool.stop("layout_changed")
             src.stamp_attempt()
             return _Attempt("stop", "layout_changed")

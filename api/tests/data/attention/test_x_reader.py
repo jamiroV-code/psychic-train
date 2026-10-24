@@ -372,6 +372,8 @@ def test_rate_limit_lock_ends_at_day_boundary_not_inactive():
     assert pool.account_state("acct_a") == ("locked", "rate_limited") and pool.alerts() == []
     clock.advance(hours=1)  # the library's own lock is long gone; ours lasts the UTC day
     assert pool.account_state("acct_a")[0] == "locked"
+    clock.now = datetime(2026, 10, 21, 23, 59, 59, tzinfo=timezone.utc)
+    assert pool.account_state("acct_a")[0] == "locked"
     clock.now = datetime(2026, 10, 22, tzinfo=timezone.utc)
     assert pool.account_state("acct_a") == ("active", None)
 
@@ -450,6 +452,12 @@ def test_cross_account_canary_agree_passes():
     out = _canary(pool, src, {"acct_a": tws, "acct_b": tws[:16] + _hour_tweets(2)})
     assert out.passed and out.suspects == [] and pool.canary_passed_today()
     assert xp.compare_canary({"a": set(range(20)), "b": set(range(5, 21))}, ["a", "b"], 0.25, 0.6) == ([], False)
+    # Boundaries: exactly 25 percent apart agrees; overlap is measured on the SMALLER set (10 of 16 = 0.625).
+    assert xp.compare_canary({"a": set(range(20)), "b": set(range(5, 20))}, ["a", "b"], 0.25, 0.6) == ([], False)
+    assert xp.compare_canary({"a": set(range(20)), "b": set(range(10)) | set(range(100, 106))}, ["a", "b"],
+                             0.25, 0.6) == ([], False)
+    assert xp.compare_canary({"a": set(range(20)), "b": set(range(9)) | set(range(100, 107))}, ["a", "b"],
+                             0.25, 0.6) == (["b"], False)
 
 
 def test_cross_account_canary_disagree_flags_smaller_account_suspect():
@@ -577,6 +585,7 @@ def test_parse_drop_page_with_entries_and_zero_parsed_is_layout_changed():
     out = unit(pool, {"acct_a": reader("acct_a", [page(tws, broken=20)]), "acct_b": reader("acct_b")}, src)
     assert out.reason == "layout_changed" and pool.stopped_reason() == "layout_changed"
     assert xr.read_pages("SOL", DAY)[0]["entries"] == 20  # the raw page is archived with the dropped entries
+    assert xrd.parse_drop(entries=2, parsed=0, threshold=1.0)  # several entries, none parsed
     assert xrd.parse_drop(entries=2, parsed=0, threshold=0.2) and not xrd.parse_drop(entries=1, parsed=0,
                                                                                        threshold=1.0)
 
@@ -591,7 +600,8 @@ def test_parse_drop_rate_above_threshold_is_layout_changed():
     tws = tweets(40, END - timedelta(minutes=1))
     out = unit(pool, {"acct_a": reader("acct_a", [page(tws[:20], broken=3), page(tws[20:], broken=6)]),
                       "acct_b": reader("acct_b")}, src)
-    assert out.reason == "layout_changed"  # 9 of 40 dropped over the unit: 0.225 > 0.2
+    assert out.reason == "layout_changed"  # page 1 drops 3 of 20 (0.15), page 2 drops 6 of 20 (0.3 > 0.2)
+    assert xr.read_pages("SOL", DAY)[1]["entries"] == 20
 
 
 # --- AC55 environment guard (pure decision over a dict) -----------------------------------------------------------
