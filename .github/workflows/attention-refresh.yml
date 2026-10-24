@@ -199,12 +199,31 @@ jobs:
           set -o pipefail
           uv run --project api python api/scripts/refresh_attention.py --sources hyperliquid_volume 2>&1 | tee "$RUNNER_TEMP/extra-hyperliquid_volume.log"
 
+      # pytrends is installed per run (exact pin, api/pyproject.toml untouched). The fetcher's own
+      # budget is 540 s (TRENDS_TIME_BUDGET_S) plus install, one in-flight request and the store
+      # write, so the step limit is 14 min. A Google refusal is a provider block (yellow, other
+      # steps still run); the verify step below still turns red on a code error. The failure class
+      # line comes from the same classifier the verify step uses (attention_extra.classify).
       - name: Refresh Google Trends (HTTP 429 from cloud IPs is common)
         continue-on-error: true
-        timeout-minutes: 8
+        timeout-minutes: 14
         run: |
+          rc=0
           set -o pipefail
-          uv run --project api python api/scripts/refresh_attention.py --sources trends 2>&1 | tee "$RUNNER_TEMP/extra-trends.log"
+          uv run --project api --with pytrends==4.9.2 python api/scripts/refresh_attention.py --sources trends 2>&1 | tee "$RUNNER_TEMP/extra-trends.log" || rc=$?
+          grep '^trends detail:' "$RUNNER_TEMP/extra-trends.log" || echo "trends detail: not printed"
+          uv run --project api python - <<'PY'
+          import os
+          from pathlib import Path
+          from api.scripts import attention_extra
+          p = Path(os.environ["RUNNER_TEMP"]) / "extra-trends.log"
+          lines = [ln for ln in (p.read_text() if p.exists() else "").splitlines() if ln.startswith("trends:")]
+          r = attention_extra.classify("trends", lines[-1] if lines else None)
+          cls = {"ok": "none", "unavailable": "provider block (429/ConnectionError/capped)",
+                 "failed": "code error", "not-probed": "not probed"}.get(r.status, r.status)
+          print(f"trends failure-class: {cls} - {r.detail}")
+          PY
+          exit "$rc"
 
       - name: Check whether the Reddit credentials exist
         id: redditgate
