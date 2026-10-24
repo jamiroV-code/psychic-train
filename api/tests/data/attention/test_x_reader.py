@@ -178,14 +178,45 @@ def test_cloudflare_block_flag_false_pauses_day_no_backend_switch():
     assert out.restarts == 0  # a block pauses the whole pool, never a rotation
 
 
-def test_blocked_by_html_always_pauses_day_never_fallback():
+def test_blocked_by_html_flag_false_pauses_day_no_fallback():
     _, pool, src = setup()
     pass_canary(pool)
     calls = []
     a = reader("acct_a", [xrd.ReaderFailure("abort", text="Blocked by HTML")])
-    out = unit(pool, {"acct_a": a, "acct_b": reader("acct_b")}, src, config=cfg(x_allow_curl_backend=True),
+    out = unit(pool, {"acct_a": a, "acct_b": reader("acct_b")}, src,
                fallback=lambda *args: calls.append(args))
     assert out.reason == "html_block" and pool.pause_reason() == "html_block" and calls == []
+
+
+def test_blocked_by_html_flag_true_retries_once_in_fallback():
+    """T179 (owner, 24-10-26): an HTML block on the default backend also triggers the one fallback retry."""
+    _, pool, src = setup(("acct_a",))
+    pass_canary(pool)
+    pages_ = day_pages()
+    calls = []
+
+    def fallback(label, query, kv, page_no):
+        calls.append((label, page_no))
+        return pages_[0]
+
+    a = reader("acct_a", [xrd.ReaderFailure("abort", text="Blocked by HTML (403)"), pages_[1]])
+    out = unit(pool, {"acct_a": a}, src, config=cfg(x_allow_curl_backend=True), fallback=fallback)
+    assert out.result is not None and calls == [("acct_a", 0)]
+    assert out.row["backend_events"] == [{"backend": "curl", "reason": "html_block", "outcome": "ok"}]
+    assert pool.health()["curl_uses"] == 1
+
+
+def test_blocked_by_html_still_blocked_in_fallback_pauses_day():
+    _, pool, src = setup()
+    pass_canary(pool)
+
+    def still(*args):
+        raise xrd.ReaderFailure("abort", text="Blocked by HTML")
+
+    a = reader("acct_a", [xrd.ReaderFailure("abort", text="Blocked by HTML")])
+    out = unit(pool, {"acct_a": a, "acct_b": reader("acct_b", day_pages())}, src,
+               config=cfg(x_allow_curl_backend=True), fallback=still)
+    assert out.reason == "html_block" and pool.pause_reason() == "html_block" and out.restarts == 0
 
 
 def test_curl_fallback_decision_table():
@@ -193,7 +224,9 @@ def test_curl_fallback_decision_table():
     assert d("cloudflare", allow_curl=True, retried=False) == "curl_retry"
     assert d("cloudflare", allow_curl=True, retried=True) == "pause_day"
     assert d("cloudflare", allow_curl=False, retried=False) == "pause_day"
-    assert d("html", allow_curl=True, retried=False) == "pause_day"
+    assert d("html", allow_curl=True, retried=False) == "curl_retry"
+    assert d("html", allow_curl=True, retried=True) == "pause_day"
+    assert d("html", allow_curl=False, retried=False) == "pause_day"
     for kind in ("rate_limited", "x_login_required", "x_account_suspended", "no_account", "api", "other",
                  "gql_outdated", "xclid_parse", "not_found", "parse"):
         assert d(kind, allow_curl=True, retried=False) == "not_applicable", kind
@@ -485,10 +518,25 @@ def test_canary_majority_of_three_decides():
                              .25, .6) == ([], True)
 
 
-def test_canary_inconclusive_pauses_day():
+def test_canary_inconclusive_locks_those_accounts_for_the_day_pool_continues():
+    """Planner default QA: the canaried accounts sit out the UTC day (not suspect); other accounts continue."""
+    clock, pool, src = setup(("acct_a", "acct_b", "acct_c", "acct_d"))
+    out = _canary(pool, src, {"acct_a": _hour_tweets(20), "acct_b": _hour_tweets(10), "acct_c": _hour_tweets(3)})
+    assert out.passed and out.suspects == [] and out.reason == "canary_disagree"
+    assert [pool.account_state(x)[0] for x in ("acct_a", "acct_b", "acct_c")] == ["locked"] * 3
+    assert pool.account_state("acct_d") == ("active", None) and not pool.is_paused()
+    assert pool.health()["canary_note"] == "inconclusive: acct_a, acct_b, acct_c sit out the day"
+    assert pool.select().label == "acct_d"
+    clock.now = datetime(2026, 10, 22, tzinfo=timezone.utc)
+    assert pool.account_state("acct_a") == ("active", None)  # not suspect: back the next day
+
+
+def test_canary_inconclusive_with_two_accounts_leaves_no_usable_account_and_pauses_day():
     _, pool, src = setup()
     out = _canary(pool, src, {"acct_a": _hour_tweets(20), "acct_b": _hour_tweets(20)})
-    assert not out.passed and pool.pause_reason() == "canary_disagree" and out.suspects == []
+    assert not out.passed and out.suspects == [] and pool.pause_reason() == "canary_disagree"
+    assert pool.account_state("acct_a")[0] == pool.account_state("acct_b")[0] == "locked"
+    assert pool.alerts() == []
 
 
 def test_suspect_account_excluded_and_earlier_units_flagged_suspect_since():
