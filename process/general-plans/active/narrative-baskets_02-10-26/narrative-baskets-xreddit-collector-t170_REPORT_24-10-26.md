@@ -1,0 +1,22 @@
+## 1 Task ID
+T170 (apply the W8a2 twscrape vetting report to the SPEC and PLAN), docs only, same branch claude/t163-reddit-engagement-spec and draft PR #167.
+## 2 Outcome
+done (docs only). Source: `narrative-baskets-w8a2-twscrape-vetting_REPORT_24-10-26.md` (T169, PR #169, verdict VIABLE-WITH-CONDITIONS, SHA 63f61a518e576ea5c132f1156c03dda0520d76c1), read in full from its branch; static reading, nothing installed or run.
+## 3 Summary
+All ten T170 points applied: (1) pin by the full commit id via the package's direct_url commit, never the version string (it still reads 0.20.1, no 0.21.0 tag); (2) design A: one SQLite file and one API per account, one unit = one account, failover only in our code; (3) raise_when_no_account=True, wait_timeout=0, TWS_RAISE_WHEN_NO_ACCOUNT=1, NoAccountError cause read from the pool row; (4) read accounting from search_raw pages and entries and the x-rate-limit headers, "the library never sleeps" replaced by "the worker never waits for a locked account"; (5) LRU and UTC-day locks are ours, no reset_locks at start (rule 18b and 18k fixed); (6) parse-drop guard (raw entries vs parsed tweets) = layout_changed; (7) environment guard (TWS_TELEMETRY=0, DO_NOT_TRACK=1, no proxy variables, no TWS_HTTP_BACKEND outside the fallback process, WARNING log level, private TMPDIR with a cleaner for /tmp/twscrape*, never debug=True); (8) curl fallback in a separate process with TWS_HTTP_BACKEND=curl, curl_cffi==0.16.3 hash-pinned wheel only (sdist refused), flag x_allow_curl_backend, trigger only on "Blocked by Cloudflare"; (9) wrapped-surface list and cashtags without "$"; (10) P-X9 rewritten per report section 4. SPEC: rules 17-20 (new rule 20), AC41, AC43, AC46, AC47, AC49, AC50, AC52, AC53 reworded, AC54 (read accounting and parse-drop guard) and AC55 (environment, files, wrapped surface) added (55 ACs), Q28 (design A) and Q29 (host platform for the wheel hash), Annex A.1b rewritten against the code, Annex F row. PLAN: W8a2 marked DONE, W8d1 6-7 USD, W8d2 7-9 USD, total 45-59 USD, new tests, hard stops, P-X9 block replaced. Re-validated: Gate: PASS.
+## 4 Files changed
+SPEC (amended), PLAN (amended, T170 validation record), this report, in `process/general-plans/active/narrative-baskets_02-10-26/`.
+## 5 Commits
+Branch claude/t163-reddit-engagement-spec, PR #167 (SHA in the PR).
+## 6 Tests run
+No code. Docs gates 24-10-26 UTC: plan validator failures []; only the collector docs changed; no .github/; secret scan clean; git diff --check exit 0; 55 ACs, AC1..AC55 mapped; banned names only in ban sentences.
+## 7 Tests NOT run
+All code gates (no code). Not proven: every live behaviour (the vetting is static), the P-X9 script (API names found in the code, never run), the wheel hashes (read from PyPI JSON as text, not re-checked), the other session's reference report (never landed), and the owner's approval of the T166 to T170 changes.
+## 8 Deviations
+Design choices of mine: (1) the daily post budget now counts raw timeline entries read from search_raw pages (the same unit as before in spirit, but not the parsed count of search()); (2) the probe prints raw header numbers and a raw-entry heuristic (a text count of "entryId":"tweet-"), UNVERIFIED format; (3) a "Blocked by HTML" error always pauses the day and never triggers the fallback, because T170 limited the trigger to the Cloudflare prefix (the T168 text said Cloudflare or HTML block); (4) the probe venv installs twscrape with --no-deps plus the dependency versions the report lists (hash pinning is W8d2's job); (5) tests that only fit the old text were renamed (start-clears-old-locks became start-does-not-call-reset-locks).
+## 9 Blockers
+Owner: Q28 (confirm design A), Q29 (host platform and architecture for the curl_cffi wheel hash), Q21-Q23 and Q1's remainder (creating the two accounts). The owner runs the corrected P-X9 only after installing the dependencies in the throwaway venv. Registry request: T170 done; W8a2 recorded as done.
+## 10 Follow-up
+W8d1 (pure core), then W8d2 (reader; needs the owner's approval for api/pyproject.toml and api/uv.lock, now with a hash-pinned dependency set and curl_cffi 0.16.3); if upstream tags 0.21.0, the owner reviews 63f61a5..v0.21.0 before any new pin.
+## 11 Context cost
+Read the W8a2 report in full (about 25 KB) and the SPEC and PLAN sections being amended; about 90k tokens. Scripts and this report written with the file tool; no hook setting was changed.
