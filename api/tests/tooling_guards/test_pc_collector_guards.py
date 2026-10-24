@@ -210,9 +210,8 @@ def lock_reset_or_debug_offenders(source: str) -> list[str]:
     """A call to the library's `reset_locks` (it clears valid rate-limit locks) or any `debug=True` keyword."""
     bad = []
     for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Attribute) and node.attr == "reset_locks":
-            bad.append(f"reset_locks line {node.lineno}")
-        elif isinstance(node, ast.Name) and node.id == "reset_locks":
+        name = node.attr if isinstance(node, ast.Attribute) else getattr(node, "id", None)
+        if name == "reset_locks":
             bad.append(f"reset_locks line {node.lineno}")
         elif isinstance(node, ast.keyword) and node.arg == "debug" and not (
                 isinstance(node.value, ast.Constant) and node.value.value is False):
@@ -253,7 +252,7 @@ def test_x_core_never_resets_library_locks_or_uses_debug():
 
 def test_x_pin_is_a_full_sha_held_as_data_only():
     text = (API_DIR / "data" / "attention" / "x_reader.py").read_text(encoding="utf-8")
-    assert re.search(r'^TWSCRAPE_PINNED_COMMIT = "63f61a518e576ea5c132f1156c03dda0520d76c1"$', text, re.M)
+    assert re.search(r'^TWSCRAPE_PINNED_COMMIT = "63f61a518e576ea5c132f1156c03dda0520d76c1"$', text, re.MULTILINE)
     # The pin is not a dependency in this slice: the project files are W8d2's.
     for dep in dependency_files():
         assert "twscrape" not in dep.read_text(encoding="utf-8").lower(), dep.name

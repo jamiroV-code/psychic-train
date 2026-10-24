@@ -17,8 +17,8 @@ POLICY = xf.FilterPolicy()
 
 
 def user(uid: int = 1, **over) -> xf.XUser:
-    base = dict(id=uid, created=OLD, followers=500, statuses=900, profile_image_url="https://img/x.jpg",
-                protected=False)
+    base = {"id": uid, "created": OLD, "followers": 500, "statuses": 900, "profile_image_url": "https://img/x.jpg",
+            "protected": False}
     return xf.XUser(**{**base, **over})
 
 
@@ -26,7 +26,7 @@ _ids = iter(range(10_000, 10**9))
 
 
 def tw(text: str = "gm $SOL", *, uid: int = 1, when: datetime = NOON, **over) -> xf.Tweet:
-    base = dict(id=next(_ids), date=when, text=text, user=user(uid), lang="en", cashtags=("SOL",))
+    base = {"id": next(_ids), "date": when, "text": text, "user": user(uid), "lang": "en", "cashtags": ("SOL",)}
     return xf.Tweet(**{**base, **over})
 
 
@@ -135,7 +135,7 @@ def test_engagement_sum_log1p_like_reply_quote_retweet():
     expect = math.log1p(10) + math.log1p(2) + math.log1p(0) + math.log1p(3)
     assert xf.engagement_sum(tweets) == pytest.approx(expect)
     assert xf.engagement_sum([]) == 0.0
-    assert xf.ENGAGEMENT_SOURCE == "xsearch_engagement" != "xsearch_web"
+    assert xf.ENGAGEMENT_SOURCE == "xsearch_engagement"
 
 
 def test_missing_view_count_not_zero_and_median_views_stored():

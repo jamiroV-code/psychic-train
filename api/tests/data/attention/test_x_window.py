@@ -45,7 +45,7 @@ def test_out_of_window_tweet_excluded_by_timestamp():
     assert xw.in_window(datetime(2026, 10, 21, 1, 59, tzinfo=plus2), DAY)
     assert not xw.in_window(datetime(2026, 10, 21, 2, 0, tzinfo=plus2), DAY)
     with pytest.raises(ValueError):
-        xw.in_window(datetime(2026, 10, 20, 12), DAY)
+        xw.in_window(datetime(2026, 10, 20, 12), DAY)  # noqa: DTZ001 - naive on purpose
 
 
 def test_latest_order_only():

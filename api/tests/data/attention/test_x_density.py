@@ -18,7 +18,7 @@ def times(k: int, newest: datetime = END - timedelta(minutes=1), step_min: float
 
 
 def value(**kw):
-    base = dict(n_target=40, n_min=20, page_cap_hit=False, window_start_reached=False)
+    base = {"n_target": 40, "n_min": 20, "page_cap_hit": False, "window_start_reached": False}
     return xd.read_sample_value(DAY, **{**base, **kw})
 
 

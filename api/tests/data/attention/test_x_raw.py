@@ -133,7 +133,8 @@ def test_raw_retention_deletes_old_pages():
     # A stray non-date folder is never deleted.
     stray = xr.raw_root() / "notes"
     stray.mkdir()
-    assert xr.prune(now=AT, retention_days=1) == 2 and stray.exists()
+    assert xr.prune(now=AT, retention_days=1) == 1 and stray.exists()
+    assert xr.raw_dir(DAY, "SOL").exists()  # one day old: kept with a one-day retention
     with pytest.raises(ValueError):
         xr.prune(now=AT, retention_days=0)
 

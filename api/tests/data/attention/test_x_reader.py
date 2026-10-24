@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
+from api.data import cache
 from api.data.attention import pc_pace as pp
 from api.data.attention import web_queries as wq
 from api.data.attention import x_filters as xf
@@ -28,6 +29,12 @@ QUERY = '"$SOL" lang:en -filter:replies -filter:retweets'
 @pytest.fixture(autouse=True)
 def _isolated(attention_cache):
     return attention_cache
+
+
+def reset_state():
+    """Forget every persisted pool and source state (a loop below runs several fresh setups in one test)."""
+    for p in (cache.CACHE_ROOT / "attention" / "_pc_state").glob("*.json"):
+        p.unlink()
 
 
 class Clock:
@@ -117,6 +124,7 @@ def test_none_short_empty_exception_is_missing_never_zero():
         "failed": [xrd.ReaderFailure("api", status=500)],
     }
     for reason, items in cases.items():
+        reset_state()
         _, pool, src = setup(("acct_a",))
         pass_canary(pool)
         out = unit(pool, {"acct_a": reader("acct_a", items)}, src)
@@ -143,6 +151,7 @@ def test_codes_88_326_32_403_pause_day_and_alert():
     for msg, alert in (("(88) Rate limit exceeded", "x_account_suspended"),
                        ("(326) Authorization: Denied by access control", "x_account_suspended"),
                        ("(32) Could not authenticate you", "x_login_required"), (None, "x_login_required")):
+        reset_state()
         clock, pool, src = setup(("acct_a",))
         pass_canary(pool)
         r = reader("acct_a", [xrd.ReaderFailure("no_account")], inactive_row(msg))
@@ -217,7 +226,7 @@ def test_curl_fallback_flag_true_retries_once_then_pauses_and_logs():
     # Next unit: default backend first again; still blocked through the fallback pauses the day.
     clock.advance(minutes=10)
     a.items = [xrd.ReaderFailure("abort", text="Blocked by Cloudflare")]
-    still = lambda *args: (_ for _ in ()).throw(xrd.ReaderFailure("abort", text="Blocked by Cloudflare"))  # noqa: E731
+    still = lambda *args: (_ for _ in ()).throw(xrd.ReaderFailure("abort", text="Blocked by Cloudflare"))
     out2 = unit(pool, {"acct_a": a}, src, config=cfg(x_allow_curl_backend=True), fallback=still, symbol="ETH")
     assert a.calls[-1][2] == 0  # the default reader was called first for the new unit
     assert out2.reason == "cloudflare_block" and pool.pause_reason() == "cloudflare_block"
@@ -305,6 +314,7 @@ def test_pool_selection_least_recently_used_ties_by_registration_order_not_alpha
 def test_pool_selection_deterministic_and_logged_by_label():
     picks = []
     for _ in range(2):
+        reset_state()
         clock, pool, _src = setup(("acct_b", "acct_a"))
         seq = []
         for _i in range(4):
@@ -498,11 +508,12 @@ def test_single_account_skips_comparison_and_health_says_so():
 
 
 def test_canary_uses_two_least_recently_canaried_accounts():
-    clock, pool, src = setup(("acct_a", "acct_b", "acct_c", "acct_d"))
+    clock, pool, _ = setup(("acct_a", "acct_b", "acct_c", "acct_d"))
     assert pool.canary_accounts() == ["acct_a", "acct_b", "acct_c"]  # three or more: a majority of three
     pool.mark_canaried(["acct_a", "acct_b", "acct_c"])
     clock.advance(days=1)
     assert pool.canary_accounts() == ["acct_d", "acct_a", "acct_b"]
+    reset_state()
     _, pool2, _ = setup(("acct_a", "acct_b"))
     assert pool2.canary_accounts() == ["acct_a", "acct_b"]
 
@@ -525,7 +536,7 @@ def test_budget_and_spacing_global_across_pool():
 
 
 def test_no_reset_locks_and_library_lock_never_cleared():
-    clock, pool, _ = setup()
+    _, pool, _ = setup()
     assert not hasattr(pool, "reset_locks")
     r = reader("acct_a")
     assert not hasattr(r, "reset_locks")
