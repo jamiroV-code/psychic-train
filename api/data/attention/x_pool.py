@@ -13,6 +13,7 @@ unit across the pool. Pure logic over injected readers, clock, RNG and sleep; no
   the rest of the UTC day; budget, sample size and spacing are global (one `PcSource` for the whole pool).
 - Fail closed: a None, empty or short result, an exception or a block page is missing with a reason, never 0.
   Cloudflare and HTML blocks pause the day (the curl fallback of rule 19 first, once, when the owner flag is on);
+  an inconclusive canary sits the canaried accounts out for the UTC day while the others continue;
   three consecutive parse, 404 or transaction-id failures, or a parse drop, stop X with `layout_changed`.
 - Quality over speed: nothing is cut for a time budget; only the safety limits above stop reading.
 """
@@ -384,8 +385,14 @@ def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcS
         suspects, inconclusive = compare_canary(results, labels, config.x_canary_tolerance,
                                                 config.x_canary_min_overlap)
         if inconclusive:
-            pool.pause_day("canary_disagree")
-            return CanaryOutcome(False, reason="canary_disagree")
+            # No account can be blamed: those canaried sit out the UTC day (not suspect), the others continue.
+            for x in results:
+                pool.lock_for_day(x)
+            if not pool.usable():
+                pool.pause_day("canary_disagree")
+                return CanaryOutcome(False, reason="canary_disagree")
+            pool.set_canary_passed(f"inconclusive: {', '.join(results)} sit out the day")
+            return CanaryOutcome(True, reason="canary_disagree")
         for x in suspects:
             pool.flag_suspect(x)
     if max(len(results[x]) for x in results if x not in suspects) < config.x_canary_min_results:
@@ -439,14 +446,15 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
             src.stamp_attempt()
             decision = xr.fallback_decision(f.abort or f.kind, allow_curl=config.x_allow_curl_backend, retried=False)
             if decision == "curl_retry" and fallback is not None:
+                block = f"{f.abort}_block"
                 pool.note_curl()
                 try:
                     raw = fallback(label, query, kv, page_no)
                 except xr.ReaderFailure:
-                    out.events.append({"backend": "curl", "reason": "cloudflare_block", "outcome": "blocked"})
-                    pool.pause_day("cloudflare_block")
-                    return _Attempt("stop", "cloudflare_block", events=out.events)
-                out.events.append({"backend": "curl", "reason": "cloudflare_block", "outcome": "ok"})
+                    out.events.append({"backend": "curl", "reason": block, "outcome": "blocked"})
+                    pool.pause_day(block)
+                    return _Attempt("stop", block, events=out.events)
+                out.events.append({"backend": "curl", "reason": block, "outcome": "ok"})
                 backend = "curl"
             elif f.kind == "abort" and f.abort in ("cloudflare", "html"):
                 pool.pause_day(f"{f.abort}_block")

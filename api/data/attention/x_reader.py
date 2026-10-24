@@ -9,9 +9,10 @@ objects and exceptions onto `RawPage`, `PoolRow`, `ReaderFailure` and `x_filters
 - `no_account_cause`: a NoAccountError is ambiguous (ban, rate limit or server error), so the cause is read from
   that account's pool row: inactive is a ban or logout (codes 88, 326, 32 or a bare 403), active with a future
   search lock is a rate limit, anything else is a server error.
-- `fallback_decision`: the owner-allowed curl backend fallback (rule 19) applies only to an abort whose text starts
-  with `Blocked by Cloudflare`, only with `x_allow_curl_backend` true, and only once; it never applies to an HTML
-  block, a rate limit, a login or ban code, or anything else.
+- `fallback_decision`: the owner-allowed curl backend fallback (rule 19, amended by T179) applies only to an abort
+  whose text starts with `Blocked by Cloudflare` or `Blocked by HTML` on the default backend, only with
+  `x_allow_curl_backend` true, and only once; it never applies to a rate limit, a login or ban code, or anything
+  else.
 - `parse_drop`: raw timeline entries compared with parsed tweets (the library drops a tweet it cannot parse).
 - `env_problems`: the process environment check, a pure function over a dict of variables.
 """
@@ -139,10 +140,8 @@ def no_account_cause(row: PoolRow, now: datetime) -> tuple[str, str]:
 
 def fallback_decision(kind: str, *, allow_curl: bool, retried: bool) -> str:
     """`curl_retry`, `pause_day` or `not_applicable` (the failure is handled elsewhere, never by the fallback)."""
-    if kind == "cloudflare":
+    if kind in ("cloudflare", "html"):
         return "curl_retry" if allow_curl is True and not retried else "pause_day"
-    if kind == "html":
-        return "pause_day"
     return "not_applicable"
 
 
