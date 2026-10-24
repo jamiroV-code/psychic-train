@@ -14,10 +14,10 @@ metadata:
 
 Date: 21-10-26
 Complexity: COMPLEX (eight slices, two providers, a worker; each slice is one EXECUTE envelope)
-Status: VALIDATED: Gate: PASS (re-validated T163; the PLAN artifact; per-slice execution gates are the contract for later EXECUTE)
+Status: VALIDATED: Gate: PASS (re-validated T163 addenda; the PLAN artifact; per-slice execution gates are the contract for later EXECUTE)
 Validation: T131 (FAST MODE: SPEC amendment, PLAN, VALIDATE in one session), 21-10-26, branch base `main` 007d53c. Next step: the owner's separate ENTER EXECUTE MODE per slice, starting with W8a. This session builds nothing.
 
-**Summary:** **SPEC:** `narrative-baskets-xreddit-collector_SPEC_21-10-26.md` (T126, amended by T131, T133, T135, T136, T138, T139, T163; status APPROVED (locked) by the owner on 21-10-26, recorded on the planner's message; each slice still needs the owner's own ENTER EXECUTE MODE). Config pace (X default one coin unit per 3-6 min, Reddit one request per 60-120 s from the public RSS feeds, 150 per day (T138)), daily X read budget 800 posts with sample N 40 (about 20 coins per day), adaptive halving, yesterday-only values, pause on any warning, narrative coins only, throwaway X account, Reddit first (amended T133). Every provider (X, Reddit, API Anything) is unreachable from the build container: live behaviour is UNVERIFIED and proven only by owner probes.
+**Summary:** **SPEC:** `narrative-baskets-xreddit-collector_SPEC_21-10-26.md` (T126, amended by T131, T133, T135, T136, T138, T139, T163 and its two addenda; status APPROVED (locked) by the owner on 21-10-26, recorded on the planner's message; each slice still needs the owner's own ENTER EXECUTE MODE). Config pace (X default one coin unit per 3-6 min, Reddit one request per 60-120 s from the public RSS feeds, 150 per day (T138)), daily X read budget 800 posts with sample N 40 (about 20 coins per day), adaptive halving, yesterday-only values, pause on any warning, narrative coins only, throwaway X account, Reddit first (amended T133). Every provider (X, Reddit, API Anything) is unreachable from the build container: live behaviour is UNVERIFIED and proven only by owner probes.
 
 ## Overview and Context
 
@@ -39,6 +39,8 @@ Context router: `process/context/all-context.md`; tests: `process/context/tests/
 | 1b | Daily read budget `x_daily_post_budget` 800, sample `x_sample_n` 40, `x_sample_min` 20, `x_page_cap` 3; adaptive halving after a warning day, doubling after 7 clean days (T133) | W8b budget and adaptive state and tests (AC21, AC22); W8d spends it; W8e persists it |
 | 1e | Owner answers (T136): SPEC APPROVED (locked) on 21-10-26; Q13 yes (rotation score = newest of the latest 3 stored values against the mean of the other 2; `x_rotation_max_lag_days` 7); Q14 yes (X and Reddit concurrent, per-source locks) | W8e, W8f; no longer open |
 | 1d | Owner answers (T135): shorter 3-6 min delay confirmed; Q10 rotation mode for X (latest 3 stored values; locked, built in W8f); PC on about 1-3 h per day (pace and budget must fit; X about 90 min, Reddit concurrent); Reddit numbers unchanged. The owner is still reading the SPEC and has NOT approved it | W8b, W8e, W8f |
+| 1f | Owner decision 24-10-26 (T163 addendum 1): a spare laptop running 24/7 is the target host; baseline schedule (X units spread over the day at a 3-6 min minimum spacing, Reddit searches spread over the day with `t=week`, comments feeds every 2 h, posts feeds every 6 h, enrichment once a day); the T135 small-window behaviour is DEGRADED MODE for outages and the interim; the X read budget (800 posts, N 40) stays the binding limit | W8b scheduler modes, W8c, W8c2, W8c3, W8d, W8e; new slice W8e2 |
+| 1g | Owner principle 24-10-26 (T163 addendum 2): quality over speed; nothing dropped, shrunk, shortened or cut to fit a time budget; completeness reported per source-day; cross-source host profile is the separate audit task T164 | W8b evidence fields, W8e, W8e2, W8g; hard stop in section 7 |
 | 1c | Throwaway X account only; official X counts route is a recorded, unbuilt fallback (option D); Q10 rotation rule flagged to the owner, not implemented (T133) | W8d precondition; no code for option D or rotation |
 | 2 | Yesterday-only, one day late, today's partial day never stored or shown | W8b window rule; AC1 |
 | 3 | Rate-limit, login or suspension warning pauses that source for the rest of the day, no retries; pause persisted | W8b pause state; W8e restart test |
@@ -74,17 +76,18 @@ Context router: `process/context/all-context.md`; tests: `process/context/tests/
 | Order | Slice | Branch (proposed) | Depends on | Owner ENTER EXECUTE MODE | Model, effort | USD (ask at 7, cap 15) |
 |---|---|---|---|---|---|---|
 | 1 | W8a vet API Anything (report only; gates X, W8d, only) | `claude/<id>-w8a-vet-apianything` | owner approves SPEC (done) | yes, own | sonnet, medium | 2-3 |
-| 2 | W8b pure core | `claude/<id>-w8b-collector-core` | none (can start now; W8a gates only W8d) | yes, own | opus, medium | 5-7 |
+| 2 | W8b pure core | `claude/<id>-w8b-collector-core` | none (can start now; W8a gates only W8d) | yes, own | opus, medium | 6-8 |
 | 3 | W8c Reddit connector (incl. item ledger and mention metrics) | `claude/<id>-w8c-reddit-web` | W8b; none on W8a; probes P-R6, P-R3, P-R4, P-R7 (before, owner runs now), P-R2, P-R5 (after) | yes, own | opus, medium | 3-4 |
 | 3b | W8c2 Reddit stream-and-count complement (posts and comments feeds) | `claude/<id>-w8c2-reddit-stream` | W8b, W8c (reuses its feed parser and ledger); none on W8a; Q17 answered | yes, own | opus, medium | 3-4 |
 | 3c | W8c3 Reddit engagement enrichment via archive ids (optional) | `claude/<id>-w8c3-reddit-engagement` | W8c (posts); W8c2 for live comment enrichment; probe P-R8 passed; Q18 answered | yes, own | opus, medium | 3 |
-| 4 | W8e worker wiring | `claude/<id>-w8e-pc-worker` | W8b, W8c (or an existing W8 worker) | yes, own | opus, medium | 3-5 |
+| 4 | W8e worker wiring | `claude/<id>-w8e-pc-worker` | W8b, W8c (or an existing W8 worker) | yes, own | opus, medium | 4-6 |
 | 5 | W8f Discovery wiring (incl. X rotation mode) | `claude/<id>-w8f-discovery-wiring` | W8e, W8c | yes, own | opus, medium | 3-4 |
+| 5b | W8e2 server host guide and health line | `claude/<id>-w8e2-host-guide` | W8e, W8f | yes, own | sonnet for the guide, opus for the health code, medium | 3-4 |
 | 6 | W8g web status text | `claude/<id>-w8g-web-status` | W8f | yes, own | opus, low | 1-2 |
 | 7 | W8d X connector | `claude/<id>-w8d-xsearch-web` | W8b, W8e; owner probes P-X1..P-X7 passed and Q1 answered | yes, own, only after the probes | opus, high | 5-7 |
 | 8 | W8h owner guide and closeout | `claude/<id>-w8h-closeout` | W8c live (Reddit) and, when built, W8d | yes, own | sonnet, low | 1 |
 
-Total about 29-40 USD (ten slices: W8a..W8h, W8c2 and W8c3; T163 widened W8c and W8c2 and added W8c3). W8b and W8c can start without waiting for W8a; W8a stays first only for X (W8d); W8c and W8d are independent after W8b; the order puts X last by the owner's decision. After W8g the Reddit source can be live while X does not exist yet.
+Total about 34-46 USD (eleven slices: W8a..W8h, W8c2, W8c3 and W8e2; T163 widened W8c and W8c2, added W8c3, and its addenda added the 24/7 baseline, W8e2 and the quality-over-speed rule). W8b and W8c can start without waiting for W8a; W8a stays first only for X (W8d); W8c and W8d are independent after W8b; the order puts X last by the owner's decision. After W8g the Reddit source can be live while X does not exist yet.
 
 ### File ownership and collision proof
 
@@ -126,6 +129,8 @@ The owner pastes the output only; it contains file names, line numbers and sourc
 
 ### W8b: pure core (opus)
 
+- **T163 addenda (24/7 host, quality over speed):** the scheduler core has two modes with injected clocks: BASELINE (24/7: X units spread over the day with `x_spread_over_day`, never closer than `x_query_delay_min_s`; Reddit searches spread at max(60 s, 24 h / coins); comments feeds every 7200 s; posts feeds every 21600 s; enrichment once a day; Reddit budget 250) and DEGRADED (T135 small window, Reddit budget 150). Evidence sidecar gains completeness fields (attempted, fetched, missing with reason counts, sample sizes, cap flags, freshness). Config keys added to `api/data/attention_queries.json`: `x_spread_over_day`, `reddit_search_time_filter` (week), `reddit_comments_poll_interval_s`, `reddit_posts_poll_interval_s`, `reddit_daily_request_budget` (250), `reddit_degraded_request_budget` (150), `reddit_ledger_retention_days` (400). Tests (AC37, AC38, AC40): `test_baseline_x_units_never_closer_than_min_delay`, `test_baseline_x_units_spread_over_utc_day_when_flag_true`, `test_x_units_clustered_when_flag_false`, `test_baseline_reddit_search_spacing_at_least_max_60s_or_day_over_coins`, `test_baseline_comments_polled_every_7200s_twelve_per_day`, `test_baseline_posts_polled_every_21600s`, `test_baseline_enrichment_once_per_day`, `test_degraded_mode_matches_t135_behaviour_budget_150`, `test_mode_follows_uptime_not_fixed_utc_hour`, `test_slow_clock_pass_continues_next_window_nothing_dropped`, `test_sample_and_page_cap_never_shrunk_for_time`, `test_evidence_has_completeness_fields`, `test_state_bounded_over_ninety_simulated_days`.
+
 - **Files:** the W8b rows of section 3 plus tests `api/tests/data/attention/test_density.py`, `test_pc_pace.py`, `test_web_queries.py`, `test_web_evidence.py`, `test_pc_adapter.py`, `api/tests/scripts/test_probe_pc_sources.py`, `api/tests/tooling_guards/test_pc_collector_guards.py`.
 - **Red-first tests (must fail before the code exists), each named for its SPEC criterion:**
   - AC1: `test_exact_count_when_window_start_reached`, `test_capped_rate_24_times_n_over_span`, `test_span_floor_quarter_hour`, `test_pagecap_uses_k`, `test_below_n_min_is_missing`, `test_boundary_k_equals_n_is_continuous`, `test_no_value_before_window_end_2359_vs_0000`, `test_newest_never_today`.
@@ -143,6 +148,8 @@ The owner pastes the output only; it contains file names, line numbers and sourc
 - **Owner probes:** none (pure).
 
 ### W8c: Reddit connector (opus), plain HTTP on the public RSS feeds (T138, widened T163)
+
+- **T163 addenda:** per-coin `search.rss` requests are spread over the day (baseline) and use `reddit_search_time_filter` `week` (`t=day` reaches only 24 h back from the request and misses part of yesterday; P-R6 variant checks which `t` values are honoured). Tests: `test_search_request_uses_t_week_by_config`, `test_search_requests_spread_over_day_baseline`, `test_search_completeness_written_attempted_fetched_missing_reasons`, `test_budget_250_baseline_and_150_degraded` (the 150 test above is the degraded value). P-R6 variant (owner, PowerShell, one request): `curl.exe -s -A "attention-probe/0.1" -o NUL -w "%{http_code} %{size_download}\n" "https://www.reddit.com/r/CryptoCurrency/search.rss?q=solana&restrict_sr=1&sort=new&t=week&limit=100"`.
 
 Does not depend on W8a: no API Anything, no adapter, no login, no browser. Honest descriptive user agent constant only; JSON endpoints are not used (403 on the owner's PC); `old.reddit.com` is not usable (302 with no body).
 
@@ -165,6 +172,8 @@ Does not depend on W8a: no API Anything, no adapter, no login, no browser. Hones
 
 ### W8c2: Reddit stream-and-count complement incl. comments feeds (opus; Q15 yes T139, widened T163)
 
+- **T163 addenda:** BASELINE polling is subreddit `comments/.rss` every 2 hours and posts `new.rss` every 6 hours (config); the one-poll-per-day behaviour of AC30 is DEGRADED mode only. Extra tests: `test_baseline_two_hourly_comments_polls_give_full_coverage`, `test_degraded_one_poll_per_day_below_0_80`, `test_stream_completeness_fields_written`, `test_stream_continues_next_window_without_dropping_feeds`.
+
 Method id `reddit_stream`, stored apart from `reddit_web` and never spliced in one series (AC14); `reddit_impl_order` picks one method per window (default `reddit_stream`, `reddit_web`, so a day without comment coverage falls back to the posts-only series). Plain HTTP on the public `new.rss` and subreddit `comments/.rss` feeds, same honest user agent and pause rules as W8c; no API Anything. Reuses W8c's feed parser, item ledger and metric functions.
 
 - **Files:** `api/data/attention/reddit_stream.py` (poll scheduler core, comments and posts coverage rule, mention counter over the ledger), config keys in `api/data/attention_queries.json` (`reddit_stream_subreddits` 4-6, `reddit_stream_poll_interval_s` 3600, `reddit_stream_polls_per_day_cap` 6, `reddit_stream_min_coverage` 0.8, `reddit_comments_paging` false, `reddit_impl_order`), tests `api/tests/data/attention/test_reddit_stream.py`; additions to `probe_pc_sources.py` (`--source reddit --stream-status`).
@@ -176,6 +185,8 @@ Method id `reddit_stream`, stored apart from `reddit_web` and never spliced in o
 - **Open before it starts (owner):** Q17 (polling cadence versus PC uptime; recommended: run P-R7 first).
 
 ### W8c3: Reddit engagement enrichment via archive ids (opus, about 3 USD; T163; optional)
+
+- **T163 addenda:** baseline runs the enrichment once a day for items older than 2 days; a run that cannot finish inside its window continues in the next one (no ids dropped, quality over speed); tests `test_enrichment_runs_once_per_day_baseline` and `test_unfinished_enrichment_continues_next_window_no_ids_dropped`.
 
 Method id `reddit_engagement`, a SETTLED series separate from the provisional counts (never overwrites them). Depends on W8c (ledger and metric functions; posts); live comment enrichment needs W8c2 (comments in the ledger). The core mention series works without it (Q18, recommended optional and off by default until P-R8 passes).
 
@@ -189,12 +200,23 @@ Method id `reddit_engagement`, a SETTLED series separate from the provisional co
 
 ### W8e: worker wiring (opus)
 
+- **T163 addenda (24/7 host, quality over speed):** the worker is written to run unattended for weeks: log rotation (size cap and file count from config), bounded persisted state (pause state, counters, effective budget, ledger partitions with `reddit_ledger_retention_days`), no unbounded in-memory growth, restart or power cut resumes through `_behind` at the configured pace, UTC only. It runs the BASELINE schedule on a 24/7 host and DEGRADED mode otherwise. Tests (AC37, AC38, AC40): `test_log_rotation_size_and_count_from_config`, `test_state_files_bounded_after_ninety_simulated_days`, `test_memory_structures_do_not_grow_with_days`, `test_restart_at_any_tick_resumes_via_behind_no_burst`, `test_pass_that_cannot_finish_continues_in_next_window`, `test_no_coin_or_sample_dropped_to_fit_time`, `test_mode_switch_baseline_degraded`. The T135 uptime tests below are the DEGRADED-mode tests.
+
 - **Files:** `api/data/attention_pc_refresh.py`, edit `api/main.py` (start in lifespan, stop in `finally`, same pattern as lines 48-58), edit `api/data/discovery.json` (`fetch_side` per source: `xsearch` and `reddit` `pc_side`, others `github`), tests `api/tests/data/test_attention_pc_refresh.py`.
 - **T135 additions:** X and Reddit run as two concurrent streams with a per-source lock (locked by the owner's answer to Q14, T136); in rotation mode the X queue is ordered by oldest newest-stored day first; a coin-day unfinished when the PC stops stays queued for a later day; nothing is stored for PC-off time.
 - **T133 additions:** the worker reads the collector config, runs X units only while budget remains, persists the effective budget and clean-day count with the pause state (cache `_pc_state`), and never starts a unit earlier than the configured minimum delay after the previous one, including right after a restart.
 - **Red-first tests:** `test_flag_off_starts_no_thread`, `test_tests_and_runners_never_start_worker_by_default`, `test_behind_source_schedules_first_unit_20s_after_start`, `test_up_to_date_source_waits`, `test_pass_lock_prevents_overlap`, `test_worker_skips_github_side_sources`, `test_restart_keeps_pause_and_daily_counts`, `test_restart_keeps_effective_budget_and_clean_day_count`, `test_one_hour_uptime_runs_about_13_x_units_and_reddit_concurrently` (AC24), `test_three_hour_uptime_x_stops_at_budget`, `test_pc_off_stores_nothing`, `test_unfinished_coin_day_carries_over`, `test_rotation_queue_oldest_stored_first`, `test_x_and_reddit_streams_have_separate_locks`, `test_no_unit_before_min_delay_after_restart`, `test_worker_with_two_hours_uptime_stops_cleanly`, `test_stop_worker_joins_thread`, `test_unit_failure_never_crashes_the_api`, `test_lifespan_starts_and_stops_worker`, `test_no_network_in_tests`.
 - **Gates:** pytest on the new file; `api/tests` routers and main-related tests unchanged; the two workflow guards green; G-file-set (only `api/main.py`, `discovery.json` and new files).
 - **Owner probe after build:** P-W1 `$env:SCREENER_ATTENTION_PC_WORKER="1"; python -m uvicorn api.main:app --port 8000` run for 1 hour with only Reddit built, then `python -m api.scripts.probe_pc_sources --source reddit --status` (prints stored days, last unit time, pause state, request counts for today). Pass: counts within the caps and spaced as locked.
+
+### W8e2: server host guide and health line (T163 addendum 1; docs sonnet, code opus)
+
+After W8e and W8f (it edits the Sources data that W8f also touches). The generic worker must already run unattended (W8e).
+
+- **Files:** (docs, sonnet) `narrative-baskets-server-host-guide_<dd-mm-yy>.md` in the task folder, turning SPEC Annex J into steps the owner runs on the spare laptop (auto-start as a background task at startup or log-on under the user that holds the throwaway X session, no sleep or hibernate with `powercfg`, lid action, auto-logon trade-off, log and disk rotation, clock sync with `w32tm`, restart catch-up, remote viewing without a public port, UPS note, accounts and secrets stay only on that host); (code, opus) read-only health fields in `api/analytics/attention/sources.py` and `api/models/discovery.py`: last unit time, pause reason and its end, attempted and fetched counts, effective budget, stale flag, completeness text; tests `api/tests/analytics/attention/test_sources_health.py`.
+- **Red-first tests (AC38, AC39):** `test_health_payload_has_last_unit_pause_reason_attempted_fetched_budget`, `test_paused_source_shows_reason_code_and_end`, `test_stale_after_twice_the_expected_gap`, `test_completeness_text_attempted_fetched_missing_reasons_capped_newest_age`, `test_health_reads_files_only_no_network`, `test_existing_sources_rows_unchanged_when_no_worker_state`.
+- **Gates:** pytest on the new file and `api/tests/analytics/attention`; scripts suite; file-set check; hygiene; banned-name grep; doc check of the guide (no secrets, no real paths or cookie values, banned names absent).
+- **Owner steps (PowerShell on the laptop, examples from SPEC Annex J; nothing was run here):** `powercfg /change standby-timeout-ac 0`; `powercfg /change hibernate-timeout-ac 0`; `w32tm /query /status`; the Task Scheduler registration and the auto-logon choice are the owner's, confirmed by the guide.
 
 ### W8f: Discovery wiring (opus)
 
@@ -206,11 +228,15 @@ Method id `reddit_engagement`, a SETTLED series separate from the provisional co
 
 ### W8g: web status text (opus, low)
 
+- **T163 addenda:** the Sources panel text also shows the health line and the completeness text of SPEC rules 15-16 and AC38-AC39 (last unit time, pause reason, attempted/fetched/missing with reasons, capped count, newest age, stale flag); vitest cases for each text.
+
 - **Files (edits):** `web/components/narrative/` Sources/updating text for reason codes and the "one day late" note; vitest additions. Gates: `pnpm` vitest and `tsc` per `process/context/tests/all-tests.md`; no `.github/`. **Owner probe:** look at the Sources page once.
 
 ### W8d: X connector (opus, high; only after the owner probes)
 
-- **Preconditions:** W8a verdict usable; Q1 answered (throwaway dedicated account created; never the main or Premium account); Q10 decided by the owner (rotation rule or fixed small set) and Q11 answered (PC hours); P-X1 and P-X2 pasted; the owner then runs the probe below on W8b's tool before W8d code is accepted.
+- **T163 addenda:** the X units follow the baseline schedule (spread over the UTC day, never closer than `x_query_delay_min_s`) or degraded mode; the daily read budget stays the binding limit with a 24/7 host; completeness fields are written per source-day. Tests: `test_x_unit_schedule_baseline_spread_and_degraded_cluster`, `test_budget_binding_even_when_host_up_24_7`, `test_x_completeness_attempted_fetched_missing_reasons_cap_flags`. Raising `x_daily_post_budget` is an owner config change after clean weeks (P-X6 and P-X8 measure the real cap).
+
+- **Preconditions:** W8a verdict usable; Q1 answered (throwaway dedicated account created; never the main or Premium account); Q10 decided by the owner (rotation rule or fixed small set) and Q11 superseded by the 24/7 host decision (SPEC rule 15; degraded mode keeps the PC-hours rule); P-X1 and P-X2 pasted; the owner then runs the probe below on W8b's tool before W8d code is accepted.
 - **Files:** `api/data/attention/xsearch_web.py`, adapter wrapper for tier 3, additions to `probe_pc_sources.py` (`--source xsearch`), tests `api/tests/data/attention/test_xsearch_web.py`.
 - **Red-first tests:** `test_unit_is_one_coin_one_day_at_most_p_pages`, `test_query_has_cashtag_lang_and_filters_and_utc_window`, `test_dedupe_text_and_three_per_author`, `test_canary_failure_pauses_rest_of_day`, `test_login_expired_state_and_pause`, `test_suspension_state_stays_paused`, `test_layout_change_after_3_bad_shapes_attempts_one_repair`, `test_repair_refused_when_cap_spent`, `test_no_value_written_for_today`, `test_value_matches_density_formula`, `test_hidden_flag_passed_to_adapter`, `test_logs_class_and_status_only`, `test_sample_n_40_min_20_page_cap_3_from_config`, `test_every_loaded_post_counts_against_daily_budget`, `test_budget_spent_stops_x_and_leaves_coins_missing`, `test_warning_halves_next_day_budget`, `test_canary_posts_count_against_budget`, `test_rotation_hook_off_by_default_no_discovery_change`, `test_x_recipe_is_relearned_not_shipped`, `test_registry_and_publish_never_invoked` (AC27).
 - **Acceptance (W8d):** AC1 (with N 40, N_min 20, P 3), AC3, AC9, AC10, AC19, AC21, AC22 and the owner probes P-X3..P-X7; the official X counts route is NOT built (option D); no rotation rule is implemented (Q10 is the owner's SPEC change).
@@ -250,9 +276,10 @@ Method id `reddit_engagement`, a SETTLED series separate from the provisional co
 - A speed-up of the locked pace (spacing below the configured minimum delay, a default faster than 180 s for X or 60 s for Reddit, a Reddit request with any user agent other than the single honest constant or through a proxy, a daily budget or sample size above the config values, or a halved budget not applied after a warning) or a stored same-day value: stop and report.
 - A baseline on fresh main differs from section 8 by anything other than a merged earlier PR: stop and report the numbers.
 - Any Reddit-archive call other than the ID endpoints (`/api/posts/ids`, `/api/comments/ids`), any search or aggregate call to it, any retry loop against it, any browser user-agent string, any reddit.com JSON endpoint, or storing a Reddit username: stop and report.
+- Any pass, scheduler or config default that drops coins, shrinks `x_sample_n` or `x_page_cap`, shortens a window or cuts pages to fit a time budget (quality over speed, SPEC rule 16), or that lets the X daily read budget or the Reddit daily request budget be exceeded: stop and report.
 - `needs_input`: stop; do not merge; never merge any PR. Slice cost at 7 USD: ask; hard cap 15 USD.
 
-## 8. Acceptance criteria mapping (SPEC AC1..AC36 to slices)
+## 8. Acceptance criteria mapping (SPEC AC1..AC40 to slices)
 
 | AC | Slice | Strategy |
 |---|---|---|
@@ -273,6 +300,10 @@ Method id `reddit_engagement`, a SETTLED series separate from the provisional co
 | AC34 | W8c3 | Fully-Automated |
 | AC35 | W8c (pure functions), W8c3 (use) | Fully-Automated |
 | AC36 | W8c (guard over file lists), W8c3 (allowlist), owner probes P-R7 and P-R8 | Fully-Automated (probes: Agent-Probe) |
+| AC37 | W8b (scheduler modes), W8c, W8c2, W8c3, W8d, W8e (use) | Fully-Automated |
+| AC38 | W8b (completeness fields), W8e (continue-next-window), W8e2 and W8g (panel text) | Fully-Automated |
+| AC39 | W8e2 (payload), W8g (text) | Fully-Automated |
+| AC40 | W8e (bounded state, rotation, restart), W8b (state bounds) | Fully-Automated |
 | AC11, AC12, AC16 | W8b | Fully-Automated |
 | AC15, AC20 | W8b | Fully-Automated |
 | AC17 | W8c, W8d, W8h | Agent-Probe (owner output) |
@@ -293,7 +324,8 @@ Each item is its own EXECUTE envelope and needs the owner's separate ENTER EXECU
 - [ ] 3b. W8c2 Reddit stream-and-count complement incl. comments feeds (after W8c; no wait for W8a).
 - [ ] 3c. W8c3 engagement enrichment via archive ids (optional; after W8c; live comment enrichment needs W8c2); owner runs P-R7 and P-R8 now.
 - [ ] 3. W8c Reddit connector (plain HTTP, no wait for W8a); owner runs P-R6, P-R3, P-R4 now and P-R2, P-R5 after the build.
-- [ ] 4. W8e worker wiring (shell or plug into the T98 W8 worker); owner runs P-W1.
+- [ ] 4. W8e worker wiring (shell or plug into the T98 W8 worker; written to run unattended for weeks); owner runs P-W1.
+- [ ] 5b. W8e2 server host guide and health line (after W8f; before W8g).
 - [ ] 5. W8f Discovery wiring.
 - [ ] 6. W8g web status text.
 - [ ] 7. W8d X connector, only after the owner's X probes and Q1; owner runs P-X3..P-X7.
@@ -365,8 +397,8 @@ Scope of this gate: the PLAN and the amended SPEC as documents. Per-slice code g
 | V4 banned names | `grep -niE "xscrape\|kloxeld\|gunkonchi" process/general-plans/active/narrative-baskets_02-10-26/narrative-baskets-xreddit-collector_{SPEC,PLAN}_21-10-26.md` | every hit is inside a "banned/never/malware/guard" sentence (reviewed by hand, listed in the record) |
 | V5 secret scan | `git diff -U0 origin/main...HEAD \| grep -nE "^\+.*(Bearer [A-Za-z0-9._-]{12,}\|(API_?KEY\|SECRET\|TOKEN\|PASSWORD)[A-Z_]* *[:=] *[\"'][A-Za-z0-9+/_-]{12,})"` | prints nothing |
 | V6 whitespace | `git diff --check origin/main...HEAD` | exit 0 |
-| V7 AC count and mapping | `grep -c "^- AC" <SPEC>` and every AC1..AC36 appears in section 8 | count 36 (above the skill's usual 20 by the planner's T133, T135, T138, T139 and T163 instructions); each AC mapped |
-| V8 slice coverage | the ten slices W8a..W8h, W8c2 and W8c3 appear in sections 4 and 5, each with files, tests or doc gate, model, USD, probes (where relevant), branch, dependencies | all present |
+| V7 AC count and mapping | `grep -c "^- AC" <SPEC>` and every AC1..AC40 appears in section 8 | count 40 (above the skill's usual 20 by the planner's T133, T135, T138, T139 and T163 instructions); each AC mapped |
+| V8 slice coverage | the eleven slices W8a..W8h, W8c2, W8c3 and W8e2 appear in sections 4 and 5, each with files, tests or doc gate, model, USD, probes (where relevant), branch, dependencies | all present |
 | V9 cites | `ls api/main.py api/data/equities_refresh.py api/data/attention/store.py api/analytics/attention/sources.py api/data/discovery.json api/data/attention_narratives.json` and `grep -n "PASS_LOCK\|def _behind\|def start_from_env\|def stop_worker" api/data/equities_refresh.py` | all exist; lines 56, 231, 361, 388 as cited |
 | V10 W8 existence | `git ls-tree -r origin/main --name-only \| grep -c attention_pc_refresh` and `grep -rn SCREENER_ATTENTION_PC_WORKER api --include=*.py \| wc -l` | both 0 (as stated in Overview) |
 
@@ -422,3 +454,7 @@ Re-validation after the owner's approval of the T138 changes (recorded on the pl
 ## Validation record (T163, 24-10-26)
 
 Re-validation after widening Reddit to comments, votes and proper search without an official API, on the owner probe evidence of 24-10-26 (posts feed 100 entries about 8 days; comments feed 100 entries about 15 hours; `search.rss` works; `search.json` 403; `old.reddit.com` 302; the Arctic Shift archive answers `/api/comments/search` with a lag of about 36-48 h, `/api/posts/ids` works, `/api/posts/search` and `/aggregate` time out). SPEC Annex A.2b, rules 13-14, AC29-AC36, Q17-Q18, probes P-R7 and P-R8; PLAN W8c and W8c2 widened, new slice W8c3 (about 3 USD); total 29-40 USD; X unchanged. PR #153 was already merged, so this work is on a fresh branch `claude/t163-reddit-engagement-spec` from `origin/main` with one new draft PR. Gates re-run: V1 plan validator failures []; V2 prints nothing; V3 prints 0; V4 hits only in ban or guard sentences; V5 prints nothing; V6 exit 0; V7 count 36 and AC1..AC36 mapped; V8 ten slices. No code exists. Verdict: Gate: PASS for the PLAN artifact. Not proven: that `comments/.rss` accepts paging (P-R7), that `/api/comments/ids` works (P-R8), the archive's availability and legality, or that Reddit mention volumes are enough for a useful signal (the minimum-volume rule makes thin coins missing, not zero). The owner's approval of the T163 changes is not recorded in this session.
+
+## Validation record (T163 addenda, 24-10-26)
+
+Re-validation after two planner addenda to T163, both owner decisions of 24-10-26 relayed by the planner (not seen directly in this session and not yet approved there): (1) a spare laptop that runs 24/7 is the target host, so SPEC rule 15 sets a BASELINE schedule (X units spread over the UTC day at a 3-6 minute minimum spacing, Reddit per-coin searches spread over the day with `t=week`, comments feeds every 2 hours, posts feeds every 6 hours, enrichment once a day, Reddit budget 250) and rule 10 keeps the T135 small-window behaviour only as DEGRADED MODE; the X read budget stays the binding limit; Q11 superseded; AC24 and AC30 reworded; AC37-AC40; Annex J (server host requirements); Q19 (Trends on the server) and Q20 (spread reading and Reddit budget); new slice W8e2 (host guide and health line); W8b 6-8 USD, W8e 4-6 USD, total 34-46 USD; (2) 'quality over speed' (rule 16, AC38, hard stop; the cross-source host profile is the separate audit task T164). Gates re-run on branch `claude/t163-reddit-engagement-spec`: V1 plan validator failures []; V2 prints nothing; V3 prints 0; V4 hits only in ban or guard sentences; V5 prints nothing; V6 exit 0; V7 count 40 and AC1..AC40 mapped; V8 eleven slices. No code exists. Verdict: Gate: PASS for the PLAN artifact. Not proven: that the spare laptop will exist, that the Task Scheduler and power commands behave as written (examples, not run), that Reddit honours `t=week` on `search.rss`, or that a 24/7 pace stays inside X's unofficial caps (P-X6, P-X8).
