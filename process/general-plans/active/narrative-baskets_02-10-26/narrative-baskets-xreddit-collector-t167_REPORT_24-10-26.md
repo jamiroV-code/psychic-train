@@ -1,0 +1,22 @@
+## 1 Task ID
+T167 (X account pool and rotation; also the T166 amendment relayed earlier), docs only, same branch claude/t163-reddit-engagement-spec and draft PR #167.
+## 2 Outcome
+done (docs only). The twscrape reference file (branch claude/t165-twscrape-reference) was still pending; nothing from twscrape was installed or run.
+## 3 Summary
+The owner decision reverses my T166 "single account, no pool" line: the SPEC now has rule 18 (X account pool and rotation, 2-3 throwaway accounts to start, cookie login, never Premium or the main account). Selection is least-recently-used among active unlocked accounts, ties by registration order (not alphabetical), logged by label. A ban or logout code (88 with remaining above 0, 326, 32, bare 403) marks THAT account inactive and the pool continues with an owner alert; X pauses for the UTC day only at zero active accounts or on a Cloudflare block. One coin-day unit is fetched by one account end to end; the account label (never cookies) goes in the sidecar; a unit interrupted by a ban restarts once on another account, the aborted tweets are discarded (no double count) and the aborted reads still count against the budget; then `account_failed`. A daily cross-account canary (two accounts, same query and fixed past hour, tolerance 25 percent and id overlap 0.6) flags a disagreeing account suspect and excludes it. The 800-post budget, sample size and spacing stay GLOBAL across the pool. Locks older than 15 minutes are cleared at start. Health line shows active over total and per-account state. Kept: no proxy, no user-agent override, no curl backend, no auto-update (Q24 stays). AC41, AC46, AC47 reworded; AC49-AC52 added (52 ACs); Q25-Q27 added (pool size and who creates accounts, selection order, canary tolerance); P-X9 now probes each account separately (exact PowerShell in the PLAN, counts only, label printed); W8d1 5-6 USD, W8d2 5-7 USD, total 41-55 USD. Re-validated: Gate: PASS.
+## 4 Files changed
+SPEC (amended), PLAN (amended, T167 validation record), this report, in `process/general-plans/active/narrative-baskets_02-10-26/`.
+## 5 Commits
+Branch claude/t163-reddit-engagement-spec, PR #167 (SHA in the PR).
+## 6 Tests run
+No code. Docs gates 24-10-26 UTC: plan validator failures []; only the collector docs changed; no .github/; secret scan clean; git diff --check exit 0; 52 ACs, AC1..AC52 mapped; banned names only in ban sentences.
+## 7 Tests NOT run
+All code gates (no code). Not proven: rotation, locks and the canary on real accounts, that a shadow-limited account returns a measurably smaller result, and the twscrape API names in the probe (UNVERIFIED until W8a2).
+## 8 Deviations
+Flags for the planner and owner. (1) Honest risk note: a pool of throwaway accounts reads the same volume (the budget is global), so it adds resilience and lowers per-account load, but more accounts also means more accounts that can be banned, and X may link accounts used from one host; I wrote this into the validation record, and the pool is the owner's own accounts, never bought or fake. (2) The T126 and T133 instructions said no extra accounts and no proxy rotation; the later owner decision overrides the accounts part only; proxies stay out (the earlier T166 amendment text offered an optional per-account proxy, the T167 message said keep no proxy: I followed T167). (3) Design choices of mine: a rate-limit lock lasts to the UTC day boundary with no retry (consistent with the pause-on-warning rule); with two accounts a canary disagreement flags the account with the smaller result as suspect, with three the majority decides; a single active account skips the canary and the health line says so; the canary runs before the day's units so a suspect account fetches no further unit and its earlier units keep a suspect_since flag but stay stored (frozen values are never rewritten). (4) The owner's approval of the T166 and T167 changes is not recorded in this session.
+## 9 Blockers
+Owner: Q25 (how many accounts first, recommended 2 then a third after a clean fortnight, who creates them), Q26, Q27, Q21-Q24, Q20 still awaiting. W8a2 needs add_repo read access to vladkens/twscrape and the reference file. Registry request: T167 done.
+## 10 Follow-up
+W8a2 then W8d1 and W8d2; the owner runs P-X9 per account only after the W8a2 verdict and the pinned install.
+## 11 Context cost
+Re-read the amended sections; about 60k tokens. Scripts and this report written with the file tool; no hook setting was changed.
