@@ -879,7 +879,7 @@ def test_t161_three_failures_of_any_kind_stop_the_run(tmp_path):
     assert client.suggestion_calls == [f"Name{i}" for i in range(7)]
     res = [line.split(" | ")[-1] for line in text.splitlines() if line.startswith("S")]
     assert [r.split(" ")[0] for r in res[:10]] == ["FAIL"] * 7 + ["NOT-RUN"] * 3  # [] -> FAIL, then 3 refused
-    assert "stopped: Google is refusing connections after 7 requests; wait 30-60 minutes, then run again with" in text
+    assert "stopped: Google is refusing connections after 7 requests sent; wait 30-60 minutes, then re-run the NOT-RUN coins plus every coin whose request failed with: --symbols" in text
     assert "--symbols 'S4,S5,S6,S7,S8,S9'" in text
     assert "NOT-RUN: 3" in text and "requests sent: 7" in text
     for bad in FORBIDDEN_IN_OUTPUT + ("refused",):
@@ -940,7 +940,9 @@ def test_t161_pause_every_and_delay_with_an_injected_clock(tmp_path):
 
 
 def test_t161_bad_pacing_options_exit_2(tmp_path):
-    for argv in (["--delay", "2"], ["--delay", "x"], ["--pause-every", "-1"], ["--pause-s", "-5"]):
+    for argv in (["--delay", "2"], ["--delay", "x"], ["--pause-every", "-1"], ["--pause-s", "-5"],
+                 ["--delay", "inf"], ["--delay", "-inf"], ["--delay", "nan"], ["--delay", "1e308"],
+                 ["--pause-s", "inf"], ["--pause-s", "-inf"], ["--pause-s", "nan"], ["--pause-s", "1e308"]):
         client = FakeTrendReq()
         code, _, err = _cli(argv, client, tmp=tmp_path)
         assert code == 2 and client.suggestion_calls == [], argv
@@ -953,9 +955,74 @@ def test_t161_coverage_counts_not_run_apart_from_nothing():
     assert _main(["--only-unresolved", "--symbols", "AVAX,NEWA,NEWB,NOID"], client, out) == 4
     tail = out.getvalue().split(c.OUTSIDE_HEADER)[1]
     # AVAX answered [] (nothing), NEWA/NEWB/NOID refused: the streak ends on NOID, so NOID is FAIL, not NOT-RUN.
-    assert "discovery eligible: 5 | topic: 1 | qualified-term: 0 | term: 0 | nothing: 4 | not run: 0" in tail
+    assert "discovery eligible: 5 | topic: 1 | qualified-term: 0 | term: 0 | nothing: 1 | request failed: 3 | not run: 0" in tail
     client = RefuseAfter(0)
     out = io.StringIO()
     assert _main(["--only-unresolved", "--symbols", "AVAX,NEWA,NEWB,NOID"], client, out) == 4
     tail = out.getvalue().split(c.OUTSIDE_HEADER)[1]
-    assert "nothing: 3 | not run: 1 | not checked: 0" in tail
+    assert "nothing: 1 | request failed: 2 | not run: 1 | not checked: 0" in tail
+
+
+def test_t178_rerun_command_echoes_every_non_default_option(tmp_path):
+    path = tmp_path / "map.json"
+    mapping = {f"S{i}": f"Name{i}" for i in range(4)}
+    path.write_text(json.dumps(mapping), encoding="utf-8")
+    out = io.StringIO()
+    args = ["--file", str(path), "--variants", "--delay", "5", "--pause-every", "2", "--pause-s", "9"]
+    assert c.main(args, trendreq_factory=factory(RefuseAfter(0)), sleep=lambda s: None, out=out, err=io.StringIO(),
+                  now=STAMP_23, universe_rows=[]) == 4
+    line = next(x for x in out.getvalue().splitlines() if x.startswith("stopped:"))
+    assert line.endswith(f"--symbols 'S0,S1,S2,S3' --file '{path}' --variants --delay 5 --pause-every 2 --pause-s 9")
+    default = io.StringIO()
+    c.main(["--file", str(path)], trendreq_factory=factory(RefuseAfter(0)), sleep=lambda s: None, out=default,
+           err=io.StringIO(), now=STAMP_23, universe_rows=[])
+    line = next(x for x in default.getvalue().splitlines() if x.startswith("stopped:"))
+    assert "--variants" not in line and "--delay" not in line and "--pause" not in line
+
+
+def test_t178_rerun_quotes_for_powershell():
+    assert c._ps_quote("a b") == "'a b'"
+    assert c._ps_quote("it's") == "'it''s'"
+
+
+def test_t178_rerun_list_is_not_run_plus_every_failed_request(tmp_path):
+    # F S F F F over 7 coins: S1 answered, so it is not re-run; the 4 failed and 2 not-run coins are.
+    script = {"Name1": [], "Name0": ConnectionError("x"), "Name2": ConnectionError("x"),
+              "Name3": ConnectionError("x"), "Name4": ConnectionError("x")}
+    client = FakeTrendReq(script)
+    code, text, _ = _cli([], client, tmp=tmp_path, mapping={f"S{i}": f"Name{i}" for i in range(7)})
+    assert code == 4 and len(client.suggestion_calls) == 5
+    assert "--symbols 'S0,S2,S3,S4,S5,S6'" in text
+    assert "NOT-RUN coins plus every coin whose request failed" in text
+    assert "NOT-RUN coins plus every coin whose request failed" in c.__doc__
+
+
+def test_t178_run_again_wording_after_n_requests_sent():
+    client = RefuseAfter(0)
+    _, text = _run({"A": "Aa", "B": "Bb", "C": "Cc"}, client)
+    assert "after 3 requests sent" in text
+
+
+@pytest.mark.parametrize("value", ["inf", "-inf", "nan", "1e308"])
+def test_t178_non_finite_or_absurd_pacing_exits_2_with_the_same_message(tmp_path, value):
+    for flag in ("--delay", "--pause-s"):
+        client = FakeTrendReq()
+        code, out, err = _cli([flag, value], client, tmp=tmp_path)
+        assert code == 2 and client.suggestion_calls == [] and out == ""
+        assert "--delay must be >= 3" in err and "finite" in err
+
+
+def test_t178_request_failed_is_counted_apart_from_nothing_without_a_streak():
+    script = {"Beta Chain": forbidden(), "Avalanche": [], "New Alpha": forbidden(), "NOID": []}
+    client = FakeTrendReq(script)
+    out = io.StringIO()
+    assert _main(["--symbols", "AVAX,NEWA,NEWB,NOID"], client, out) == 0  # no 3-in-a-row streak: exit stays 0
+    tail = out.getvalue().split(c.OUTSIDE_HEADER)[1]
+    assert "nothing: 2 | request failed: 2 | not run: 0 | not checked: 1" in tail
+
+
+@pytest.mark.parametrize("n, minutes", [(39, 2), (40, 2), (41, 3), (79, 5), (80, 5), (81, 6)])
+def test_t178_plan_minutes_at_the_pause_boundaries(n, minutes):
+    # delay 3 s, pause 60 s every 40: the pause comes before request 41, so n=40 has none and n=80 has one.
+    pacing = c.Pacing(3.0, 40, 60.0)
+    assert f"about {minutes} min" in c._plan_line(n, n, pacing)
