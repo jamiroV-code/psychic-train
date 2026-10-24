@@ -42,7 +42,7 @@ def _err(doc, placed=None) -> str:
 
 def test_shipped_file_validates_against_placed_symbols():
     m = k.load(placed_symbols=_placed())
-    assert m.warnings == []
+    assert m.warnings == [f"keywords: {s} is not a placed coin" for s in sorted(DISCOVERY_EXTRA)]  # T160 extras
     assert m.anchor["term"] == "Bitcoin"
     topics = {s: e["topic"] for s, e in m.entries.items() if "topic" in e}
     assert topics == ALL_TOPICS  # topic ids come only from the owner (checker runs 21-10-26, 22-10-26; T134, T154)
@@ -88,7 +88,7 @@ def test_seed_term_labels_equal_terms():
     m = k.load()
     for sym, e in m.entries.items():
         if "term" in e:
-            assert e["label"] == e["term"], sym
+            assert e["term"].casefold().startswith(e["label"].casefold()), sym  # T160: label is the project name
         elif "topic" in e:
             assert e["note"] in ("checker PASS 21-10-26", "checker PASS 22-10-26",
                                  "owner-accepted 22-10-26, not checker PASS"), sym
@@ -277,3 +277,63 @@ def test_t154_topics_carry_owner_notes_and_labels():
     for sym, (topic, label) in OWNER_ACCEPTED_22.items():
         assert m.entries[sym] == {"topic": topic, "label": label,
                                   "note": "owner-accepted 22-10-26, not checker PASS"}, sym
+
+
+# T160: qualified terms for the coins the owner's checker could not resolve to a topic id.
+UNIDENTIFIED = {"AKE", "BTW", "GRAM", "LIT", "PRL", "RAIN", "STABLE"}
+# Eligible Discovery coins outside the narratives (cache snapshot 2026-10-24); the placed coins are read live.
+DISCOVERY_EXTRA = {"DASH", "ETHFI", "M", "PEARL", "VET", "BDX"}
+CHECKER_GIVEN = {"APT": "aptos crypto", "ATOM": "cosmos crypto", "AVAX": "avalanche crypto", "CC": "canton coin",
+                 "ETC": "ethereum classic crypto", "JST": "just crypto"}
+
+
+def test_t160_topics_unchanged_and_no_new_topic():
+    m = k.load()
+    assert {s: e["topic"] for s, e in m.entries.items() if "topic" in e} == ALL_TOPICS
+
+
+def test_t160_unidentified_stay_no_keyword():
+    m = k.load()
+    for sym in UNIDENTIFIED:
+        e = m.entries[sym]
+        assert e["no-keyword"] is True and "UNVERIFIED" in e["note"], sym
+
+
+def test_t160_name_risk_symbols_never_have_a_bare_term():
+    from api.data.attention import trends
+    m = k.load()
+    for sym in trends.NAME_RISK_SYMBOLS:
+        e = m.entries[sym]
+        assert "topic" in e or trends.is_qualified_term(e["term"]), sym
+        if "term" in e:
+            assert e["term"].casefold() != sym.casefold(), sym
+
+
+def test_t160_every_term_has_a_qualifier_word_and_a_note():
+    from api.data.attention import trends
+    m = k.load()
+    terms = {s: e for s, e in m.entries.items() if "term" in e}
+    assert terms
+    for sym, e in terms.items():
+        assert trends.is_qualified_term(e["term"]), sym
+        assert e.get("note"), sym
+
+
+def test_t160_checker_given_terms_exact():
+    m = k.load()
+    for sym, term in CHECKER_GIVEN.items():
+        assert m.entries[sym]["term"] == term, sym
+        assert "checker-given" in m.entries[sym]["note"], sym
+
+
+def test_t160_every_eligible_discovery_symbol_has_an_entry_except_unidentified():
+    m = k.load()
+    wanted = (_placed() | DISCOVERY_EXTRA) - UNIDENTIFIED
+    assert sorted(wanted - set(m.entries)) == []
+    for sym in wanted:
+        assert "topic" in m.entries[sym] or "term" in m.entries[sym], sym
+
+
+def test_t160_shipped_file_loads_with_safe_load():
+    loaded, reason = k.safe_load(placed_symbols=_placed())
+    assert loaded is not None and reason == ""

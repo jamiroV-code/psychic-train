@@ -803,7 +803,7 @@ def test_rev_coverage_with_symbols_counts_unchecked_coins_apart():
     out = io.StringIO()
     assert _main(["--only-unresolved", "--symbols", "NEWA"], NoiseClient(script), out) == 0
     tail = out.getvalue().split(c.OUTSIDE_HEADER)[1]
-    assert ("discovery eligible: 5 | topic: 2 | qualified-term: 0 | term: 0 | nothing: 0 | not checked: 3"
+    assert ("discovery eligible: 5 | topic: 2 | qualified-term: 0 | term: 1 | nothing: 0 | not checked: 2"
             " (this run checked 1 of them)") in tail
     assert "T156" not in c.OUTSIDE_HEADER
 

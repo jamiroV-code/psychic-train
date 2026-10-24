@@ -30,8 +30,9 @@
     "note": "owner-accepted 22-10-26, not checker PASS"
   },
   "APT": {
-    "term": "Aptos",
-    "label": "Aptos"
+    "term": "aptos crypto",
+    "label": "Aptos",
+    "note": "qualified term, checker-given (owner checker run, T160)"
   },
   "ARB": {
     "topic": "/g/11w99dbsyz",
@@ -39,24 +40,29 @@
     "note": "checker PASS 21-10-26"
   },
   "ASTER": {
-    "no-keyword": true,
+    "term": "aster crypto",
     "label": "Aster",
-    "note": "common word; needs topic id"
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "ATOM": {
-    "no-keyword": true,
+    "term": "cosmos crypto",
     "label": "Cosmos",
-    "note": "common word (Cosmos, Avalanche, UNUS SED LEO); needs topic id"
+    "note": "qualified term, checker-given (owner checker run, T160)"
   },
   "AVAX": {
-    "no-keyword": true,
+    "term": "avalanche crypto",
     "label": "Avalanche",
-    "note": "common word (Cosmos, Avalanche, UNUS SED LEO); needs topic id"
+    "note": "qualified term, checker-given (owner checker run, T160)"
   },
   "BCH": {
     "topic": "/g/11d_wtvc5k",
     "label": "Bitcoin Cash",
     "note": "checker PASS 21-10-26"
+  },
+  "BDX": {
+    "term": "beldex crypto",
+    "label": "Beldex",
+    "note": "qualified term: '<project name> crypto' (rule, T160); name from CoinGecko id beldex; eligible Discovery coin, not on the owner's list; not checker-verified"
   },
   "BGB": {
     "topic": "/g/11xgyky_2b",
@@ -84,13 +90,19 @@
     "note": "checker PASS 22-10-26"
   },
   "CC": {
-    "no-keyword": true,
+    "term": "canton coin",
     "label": "Canton Coin",
-    "note": "identity UNVERIFIED (Canton Coin, Midnight, Venice token, World Liberty Financial, XDC Network); needs topic id"
+    "note": "qualified term, checker-given (owner checker run, T160)"
   },
   "CRO": {
-    "term": "Cronos",
-    "label": "Cronos"
+    "term": "cronos crypto",
+    "label": "Cronos",
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
+  },
+  "DASH": {
+    "term": "dash crypto",
+    "label": "Dash",
+    "note": "qualified term: '<project name> crypto' (rule, T160); name from wiki_articles.json; not checker-verified"
   },
   "DOGE": {
     "topic": "/m/0zmxk9t",
@@ -103,17 +115,24 @@
     "note": "checker PASS 21-10-26"
   },
   "ENA": {
-    "term": "Ethena",
-    "label": "Ethena"
+    "term": "ethena crypto",
+    "label": "Ethena",
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "ETC": {
-    "term": "Ethereum Classic",
-    "label": "Ethereum Classic"
+    "term": "ethereum classic crypto",
+    "label": "Ethereum Classic",
+    "note": "qualified term, checker-given (owner checker run, T160)"
   },
   "ETH": {
     "topic": "/m/0108bn2x",
     "label": "Ethereum",
     "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "ETHFI": {
+    "term": "ether fi crypto",
+    "label": "Ether Fi",
+    "note": "qualified term: '<project name> crypto' (rule, T160); name from CoinGecko id ether-fi; not checker-verified"
   },
   "FIL": {
     "topic": "/g/11g9ngp3p7",
@@ -156,14 +175,14 @@
     "note": "checker PASS 21-10-26"
   },
   "JST": {
-    "no-keyword": true,
+    "term": "just crypto",
     "label": "JUST",
-    "note": "common word; needs topic id"
+    "note": "qualified term, checker-given (owner checker run, T160)"
   },
   "JUP": {
-    "no-keyword": true,
+    "term": "jupiter crypto",
     "label": "Jupiter",
-    "note": "common word; needs topic id"
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "KAS": {
     "topic": "/g/11dxd52vfh",
@@ -176,9 +195,9 @@
     "note": "checker PASS 22-10-26"
   },
   "LEO": {
-    "no-keyword": true,
+    "term": "unus sed leo crypto",
     "label": "UNUS SED LEO",
-    "note": "common word (Cosmos, Avalanche, UNUS SED LEO); needs topic id"
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "LINK": {
     "topic": "/g/11qn04qyw9",
@@ -195,14 +214,20 @@
     "label": "Litecoin",
     "note": "checker PASS 21-10-26"
   },
+  "M": {
+    "term": "memecore crypto",
+    "label": "Memecore",
+    "note": "qualified term: '<project name> crypto' (rule, T160); name from CoinGecko id memecore; not checker-verified"
+  },
   "MNT": {
-    "no-keyword": true,
+    "term": "mantle crypto",
     "label": "Mantle",
-    "note": "common word; needs topic id"
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "MORPHO": {
-    "term": "Morpho",
-    "label": "Morpho"
+    "term": "morpho crypto",
+    "label": "Morpho",
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "NEAR": {
     "topic": "/g/11q3ypz8pd",
@@ -215,26 +240,34 @@
     "note": "owner-accepted 22-10-26, not checker PASS"
   },
   "NIGHT": {
-    "no-keyword": true,
+    "term": "midnight crypto",
     "label": "Midnight",
-    "note": "identity UNVERIFIED (Canton Coin, Midnight, Venice token, World Liberty Financial, XDC Network); needs topic id"
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "OKB": {
-    "term": "OKB",
-    "label": "OKB"
+    "term": "okb token",
+    "label": "OKB",
+    "note": "qualified term: name equals ticker, so 'okb token' (rule exception, T160); not checker-verified"
   },
   "ONDO": {
-    "term": "Ondo",
-    "label": "Ondo"
+    "term": "ondo crypto",
+    "label": "Ondo",
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "PAXG": {
-    "no-keyword": true,
+    "term": "pax gold crypto",
     "label": "PAX Gold",
-    "note": "gold token; attention tracks gold, not the token"
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
+  },
+  "PEARL": {
+    "term": "pearl crypto",
+    "label": "Pearl",
+    "note": "qualified term: '<project name> crypto' (rule, T160); name from CoinGecko id pearl-2; not checker-verified"
   },
   "PEPE": {
     "term": "Pepe coin",
-    "label": "Pepe coin"
+    "label": "Pepe coin",
+    "note": "qualified term kept: already ends in the qualifier 'coin' (T160); not checker-verified"
   },
   "PI": {
     "topic": "/g/11kzq2y5bk",
@@ -242,9 +275,9 @@
     "note": "owner-accepted 22-10-26, not checker PASS"
   },
   "POL": {
-    "no-keyword": true,
+    "term": "polygon crypto",
     "label": "Polygon",
-    "note": "common word; needs topic id"
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "PRL": {
     "no-keyword": true,
@@ -257,9 +290,9 @@
     "note": "owner-accepted 22-10-26, not checker PASS"
   },
   "QNT": {
-    "no-keyword": true,
+    "term": "quant crypto",
     "label": "Quant",
-    "note": "common word; needs topic id"
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "RAIN": {
     "no-keyword": true,
@@ -267,9 +300,9 @@
     "note": "unidentified ticker (UNVERIFIED); common word; owner names it"
   },
   "RENDER": {
-    "no-keyword": true,
+    "term": "render crypto",
     "label": "Render",
-    "note": "common word; needs topic id"
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "SHIB": {
     "topic": "/g/11q1jsfvsn",
@@ -277,9 +310,9 @@
     "note": "checker PASS 21-10-26"
   },
   "SKY": {
-    "no-keyword": true,
+    "term": "sky crypto",
     "label": "Sky",
-    "note": "common word; needs topic id"
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "SOL": {
     "topic": "/g/11qh5y640t",
@@ -292,14 +325,14 @@
     "note": "unidentified ticker (UNVERIFIED), owner names it"
   },
   "STX": {
-    "no-keyword": true,
+    "term": "stacks crypto",
     "label": "Stacks",
-    "note": "common word; needs topic id"
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "SUI": {
-    "no-keyword": true,
+    "term": "sui crypto",
     "label": "Sui",
-    "note": "common word; needs topic id"
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "TAO": {
     "topic": "/g/11n9szvdlj",
@@ -307,13 +340,19 @@
     "note": "owner-accepted 22-10-26, not checker PASS"
   },
   "TRX": {
-    "term": "TRON",
-    "label": "TRON"
+    "term": "tron crypto",
+    "label": "TRON",
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "UNI": {
     "topic": "/g/11h1dsqb_m",
     "label": "Uniswap",
     "note": "checker PASS 22-10-26"
+  },
+  "VET": {
+    "term": "vechain crypto",
+    "label": "VeChain",
+    "note": "qualified term: '<project name> crypto' (rule, T160); name from wiki_articles.json; not checker-verified"
   },
   "VVV": {
     "topic": "/g/11xv_6jggk",
@@ -322,7 +361,8 @@
   },
   "WBT": {
     "term": "WhiteBIT Coin",
-    "label": "WhiteBIT Coin"
+    "label": "WhiteBIT Coin",
+    "note": "qualified term kept: already ends in the qualifier 'coin' (T160); not checker-verified"
   },
   "WLD": {
     "topic": "/g/11t_vkgtjf",
@@ -365,7 +405,8 @@
     "note": "owner-accepted 22-10-26, not checker PASS"
   },
   "ZRO": {
-    "term": "LayerZero",
-    "label": "LayerZero"
+    "term": "layerzero crypto",
+    "label": "LayerZero",
+    "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   }
 }
