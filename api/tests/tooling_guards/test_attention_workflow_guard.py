@@ -135,7 +135,8 @@ def test_each_extra_source_has_its_own_continue_on_error_step() -> None:
         assert len(steps) == 1, src
         assert steps[0]["continue-on-error"] is True
         assert "pipefail" in steps[0]["run"] and f"extra-{src}.log" in steps[0]["run"]
-        assert steps[0]["timeout-minutes"] <= 8
+        if src != "trends":  # Trends has its own, longer limit (test_trends_step_*)
+            assert steps[0]["timeout-minutes"] <= 8
 
 
 def test_reddit_step_is_gated_and_gets_secrets_only_there() -> None:
@@ -187,3 +188,79 @@ def test_git_diff_over_github_is_only_the_new_file() -> None:
         pytest.skip("origin/main not available")
     changed = {ln for ln in out.splitlines() if ln}
     assert changed <= {".github/workflows/" + NAME}, changed
+
+
+def _trends_step() -> dict:
+    steps = [s for s in _steps("refresh-extra") if "--sources trends " in s.get("run", "")]
+    assert len(steps) == 1
+    return steps[0]
+
+
+def test_trends_step_pins_pytrends_exactly_without_touching_pyproject() -> None:
+    run = _trends_step()["run"]
+    assert re.search(r"--with pytrends==\d+\.\d+\.\d+(?!\S)", run), run  # exact pin, never a range
+    assert not re.search(r"pytrends\s*[<>~!]|pytrends==[^\s]*[*,]", run)
+    assert "pytrends" not in (REPO_ROOT / "api" / "pyproject.toml").read_text(encoding="utf-8")
+
+
+def test_trends_step_timeout_fits_the_540s_budget_and_the_job_covers_all_steps() -> None:
+    from api.scripts.refresh_attention import TRENDS_TIME_BUDGET_S
+    step = _trends_step()
+    # budget + install + one in-flight request after the budget check + store write
+    assert step["timeout-minutes"] * 60 >= TRENDS_TIME_BUDGET_S + 120
+    job = _doc()["jobs"]["refresh-extra"]
+    total = sum(s.get("timeout-minutes", 0) for s in job["steps"])
+    assert total + 5 <= job["timeout-minutes"], total  # leaves room for install, verify, probe and commit
+
+
+def test_trends_step_never_aborts_the_other_extra_steps_and_logs_the_failure_class() -> None:
+    step = _trends_step()
+    assert step["continue-on-error"] is True
+    run = step["run"]
+    assert "extra-trends.log" in run and "pipefail" in run
+    assert "trends failure-class:" in run and "trends detail:" in run
+    assert "attention_extra" in run  # the class comes from the same classifier the verify step uses
+    assert "|| true" not in run
+    assert "exit" in run  # the step's own exit status is preserved, not swallowed
+
+
+def test_trends_code_failure_still_turns_the_verify_step_red() -> None:
+    from api.scripts import attention_extra
+    code = "trends: error store-failed: ValueError x3"
+    blocked = "trends: error HTTP 429: rate limited"
+    assert attention_extra.classify("trends", code).status == "failed"
+    assert attention_extra.classify("trends", blocked).status == "unavailable"
+    assert attention_extra.classify("trends", None).status == "failed"  # crash or timeout: no result line
+    verify = [s for s in _steps("refresh-extra") if "attention_extra.py" in s.get("run", "")]
+    assert len(verify) == 1 and "continue-on-error" not in verify[0] and verify[0]["if"] == "${{ !cancelled() }}"
+
+
+def _run_trends_step(tmp_path, fetcher_rc: int, line: str) -> int:
+    """Run the Trends step's shell with a fake `uv`: the fetcher (--with) prints `line` and exits fetcher_rc,
+    every other uv call (the failure-class snippet) exits 0. Returns the step's own exit status."""
+    import os
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    uv = bindir / "uv"
+    uv.write_text('#!/bin/bash\ncat >/dev/null </dev/stdin 2>/dev/null || true\n'
+                  'case "$*" in *--with*) echo "$FAKE_LINE"; exit "$FAKE_RC";; esac\nexit 0\n')
+    uv.chmod(0o755)
+    env = {**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", "RUNNER_TEMP": str(tmp_path),
+           "FAKE_LINE": line, "FAKE_RC": str(fetcher_rc)}
+    return subprocess.run(["bash", "-e", "-c", _trends_step()["run"]], env=env, capture_output=True, text=True,
+                          check=False).returncode
+
+
+def test_trends_step_propagates_the_fetcher_exit_code(tmp_path) -> None:
+    # `exit "$rc"` -> `exit 0` would hide a fetcher code failure behind a green step.
+    assert _run_trends_step(tmp_path, 3, "trends: error store-failed: ValueError x3") == 3
+    (tmp_path / "ok").mkdir()
+    assert _run_trends_step(tmp_path / "ok", 0, "trends: 3/75 ok, 3 rows written []") == 0
+
+
+def test_trends_failure_class_labels_come_from_attention_extra() -> None:
+    from api.scripts import attention_extra
+    run = _trends_step()["run"]
+    assert "attention_extra.failure_class" in run
+    assert "provider block (" not in run and '"code error"' not in run  # no second copy of the labels
+    assert attention_extra.failure_class("unavailable").startswith("provider block")
