@@ -8,10 +8,12 @@ import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from data_integration import adaptive, provenance, status
 from data_integration.normalise import normalise
-from data_integration.parse import ParseError, parse_table
+from data_integration import parse as _parse
+from data_integration.parse import ParseError, SelectorMatchedNothing, parse_table
 from data_integration.store_writer import TargetNotEmpty, existing, write_series
 from data_integration.types import Fetcher
 from data_integration.validate import validate_table
@@ -22,6 +24,7 @@ class PipelineResult:
     status: str
     detail: str = ""
     rows: int = 0
+    outline: tuple[str, ...] = ()
 
 
 def _same(a, b) -> bool:
@@ -55,10 +58,22 @@ def run(
         moved = adaptive.assess(outcome.body, selector, url=url, path=adaptive_path)
         if moved.has_baseline and moved.status != status.OK:
             return PipelineResult(moved.status, moved.detail)
-        return PipelineResult(status.INVALID, str(exc))
+        lines: tuple[str, ...] = ()
+        if isinstance(exc, SelectorMatchedNothing):
+            try:
+                lines = _parse.render_outline(_parse.outline(outcome.body, urlsplit(url).hostname))
+            except Exception:
+                lines = ()
+        return PipelineResult(status.INVALID, str(exc), outline=lines)
     problems = validate_table(table, min_rows)
     if problems:
-        return PipelineResult(status.INVALID, "; ".join(problems[:5]))
+        lines = ()
+        if problems[0].startswith("missing columns:"):
+            try:
+                lines = _parse.render_table_outline(_parse.table_outline(outcome.body, selector, table))
+            except Exception:
+                lines = ()
+        return PipelineResult(status.INVALID, "; ".join(problems[:5]), outline=lines)
     verdict = adaptive.assess(outcome.body, selector, url=url, path=adaptive_path)
     first_run = verdict.status == status.UNCERTAIN and accept_baseline
     if verdict.status != status.OK and not first_run:

@@ -1,0 +1,58 @@
+{
+  "weights_version": 2,
+  "source_weights": {
+    "trends": 25,
+    "reddit": 20,
+    "xsearch": 15,
+    "exchange_activity": 15,
+    "wikipedia": 10,
+    "defillama": 5,
+    "github_dev": 0
+  },
+  "source_groups": {
+    "search": ["trends", "wikipedia"]
+  },
+  "early_sources": ["trends", "reddit", "xsearch"],
+  "weights_history": [
+    {
+      "weights_version": 1,
+      "until": "2026-10-21",
+      "source_weights": {
+        "wikipedia": 25,
+        "trends": 25,
+        "reddit": 15,
+        "xsearch": 10,
+        "exchange_activity": 10,
+        "github_dev": 8,
+        "defillama": 7
+      },
+      "source_groups": {},
+      "early_sources": []
+    }
+  ],
+  "exchange_sub_weights": {
+    "binance": 40,
+    "coinbase": 25,
+    "kraken": 15,
+    "hyperliquid": 20
+  },
+  "rising_threshold_pct": 10,
+  "trigger_pct": 60,
+  "min_covered_weight": 30,
+  "min_history_days": 30,
+  "winsor_percentile": 95,
+  "recent_days": 7,
+  "max_source_lag_days": 3,
+  "universe_rules": {
+    "min_narrative_coins": 3,
+    "thin_volume_label_below_usd": 20000000,
+    "classes": {
+      "stablecoin": ["USDT", "USDC", "USDS", "USDE", "DAI", "USD1", "PYUSD", "USDD", "USDG", "RLUSD", "USDF", "BFUSD",
+                     "USDGO", "OUSD", "GHO", "U", "FDUSD", "TUSD"],
+      "wrapped_staked": ["WBTC", "WETH", "STETH", "WSTETH", "WEETH", "CBBTC", "WBETH", "BSC-USD", "WBNB"],
+      "tokenized_fund": ["USDY", "BUIDL", "USYC", "USTB", "EUTBL", "EURSAFO", "BCAP", "FIGR_HELOC"]
+    },
+    "not_tradeable": {},
+    "force_include": []
+  }
+}

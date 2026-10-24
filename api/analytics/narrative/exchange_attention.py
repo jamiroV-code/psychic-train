@@ -1,8 +1,8 @@
 """Exchange (Hyperliquid) attention proxy: per-category volume share and
 new-listing counts. Narrative dashboard RFC-2, ADR-6.
 
-DISPLAY-ONLY. Nothing here is imported by `trigger.py`, `screener_board.py`
-or the `/categories` router; it feeds `/history` only.
+DISPLAY-ONLY. Nothing here is imported by `screener_board.py`
+(the old `trigger.py` and `/categories` router are removed); it feeds `/history` only.
 
 Formulas (Stage 0 decisions D1/D3, 2026-09-24):
 - volume share(cat) = Σ 24h quote volume of active non-HIP-3 perps resolved

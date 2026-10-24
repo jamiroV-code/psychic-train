@@ -1142,6 +1142,279 @@
 }
 
 /* ---------------------------------------------------------------------------
+   T74 / S-E2: the My baskets tab. Shell tokens only; one muted ink for every
+   note, one quiet rule between table rows, no fills or badges. */
+.narrative-tabs__list {
+  display: flex;
+  gap: var(--sp-4);
+  border-bottom: 1px solid var(--sh-rule);
+  margin-bottom: var(--sp-4);
+}
+.app-main .narrative-tabs button.narrative-tabs__tab {
+  all: unset;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  padding: var(--sp-2) 0;
+  color: var(--ink-2);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  box-sizing: border-box;
+}
+.app-main .narrative-tabs button.narrative-tabs__tab[aria-selected="true"] {
+  color: var(--ink-1);
+  border-bottom-color: var(--accent);
+}
+.app-main .narrative-tabs button.narrative-tabs__tab:focus-visible,
+.app-main .basket-seg .basket-seg__btn:focus-visible,
+.app-main .basket-table button.basket-table__name:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.app-main .narrative-tabs button.narrative-tabs__tab:hover,
+.app-main .basket-table button.basket-table__name:hover {
+  background: none;
+  color: var(--ink-1);
+}
+.basket-chart {
+  margin-top: 0;
+}
+.basket-chart__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  margin-bottom: var(--sp-3);
+}
+.basket-chart__title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--ink-1);
+}
+.basket-seg {
+  display: inline-flex;
+  border: 1px solid var(--sh-rule);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.app-main .basket-seg .basket-seg__btn {
+  all: unset;
+  cursor: pointer;
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.app-main .basket-seg .basket-seg__btn + .basket-seg__btn {
+  border-left: 1px solid var(--sh-rule);
+}
+.app-main .basket-seg .basket-seg__btn[aria-pressed="true"] {
+  background: var(--sh-3);
+  color: var(--ink-1);
+}
+.basket-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0 0 var(--sp-3);
+}
+/* T85: the chart and its legend sit on the page's own dark surface. The shared
+   light plot is a documented contrast decision for the other charts; here the
+   series use the dark-validated slots in lib/attention-lines.ts (>= 3:1 on
+   --sh-1) and every word is shell ink (--ink-2 / --ink-1 clear 4.5:1 on it). */
+.app-main .basket-legend,
+.app-main .basket-legend.plot-legend {
+  display: flex;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+  background: none;
+  padding: 0;
+  margin: 0 0 var(--sp-3);
+  color: var(--ink-2);
+}
+.app-main .basket-legend .plot-legend__label {
+  color: var(--ink-1);
+  font-weight: 500;
+}
+.app-main .basket-legend .spaghetti-chart__toggle {
+  margin-right: 0;
+  border: 0;
+  padding: var(--sp-1) 0;
+  background: none;
+  color: var(--ink-1);
+  font-size: var(--fs-sm);
+  font-weight: 400;
+}
+.basket-chart .analytic-plot {
+  background: var(--sh-1);
+  color: var(--ink-2);
+  border: 1px solid var(--sh-rule);
+  box-shadow: none;
+}
+.basket-chart .simple-lines text {
+  fill: var(--ink-2);
+  stroke: none;
+  font-weight: 400;
+}
+.basket-chart .simple-lines .tick line,
+.basket-chart .simple-lines .tick-mark,
+.basket-chart .simple-lines .grid line {
+  stroke: var(--sh-rule-soft);
+}
+.basket-chart .simple-lines .rule {
+  stroke: var(--sh-rule);
+}
+.basket-chart .simple-lines__reset {
+  color: var(--ink-1);
+  background: var(--sh-2);
+  border-color: var(--sh-rule);
+}
+.basket-chart__axis {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.basket-note {
+  margin: var(--sp-2) 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.basket-note--error {
+  color: var(--sev-bad);
+}
+.basket-table {
+  width: 100%;
+  margin-top: var(--sp-5);
+  border-collapse: collapse;
+  font-size: var(--fs-md);
+}
+.basket-table th,
+.basket-table td {
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--sh-rule-soft);
+  text-align: left;
+}
+.basket-table th {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-3);
+  border-bottom-color: var(--sh-rule);
+}
+.basket-table .basket-table__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.app-main .basket-table button.basket-table__name {
+  all: unset;
+  appearance: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--ink-1);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.app-main .basket-table button.basket-table__name[aria-expanded="true"] {
+  color: var(--accent);
+}
+.basket-table__chev {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  color: var(--ink-3);
+}
+.app-main .basket-table button.basket-table__name:hover .basket-table__chev,
+.app-main .basket-table button.basket-table__name[aria-expanded="true"] .basket-table__chev {
+  color: currentColor;
+}
+.app-main .basket-table button.basket-table__name[aria-expanded="true"] .basket-table__chev {
+  transform: rotate(45deg);
+}
+.basket-table .basket-table__row:hover > td {
+  background: var(--sh-1);
+}
+.basket-empty-cats {
+  margin-top: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.basket-empty-cats > summary {
+  cursor: pointer;
+}
+.basket-table__coins > td {
+  background: var(--sh-1);
+}
+.basket-coins,
+.basket-coins__sources {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* A wide table must not pull a source's label and its value apart. */
+.basket-coins {
+  max-width: 34em;
+}
+.basket-coins__coin {
+  padding: var(--sp-2) 0;
+}
+.basket-coins__coin + .basket-coins__coin {
+  border-top: 1px solid var(--sh-rule-soft);
+}
+.basket-coins__head {
+  display: grid;
+  grid-template-columns: minmax(3.5em, 5em) 4.5em 1fr;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0 0 var(--sp-1);
+}
+.basket-coins__head > span:nth-child(2) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.basket-coins__symbol {
+  font-weight: 600;
+}
+.basket-coins__sources {
+  padding-left: var(--sp-3);
+}
+.basket-coins__sources li {
+  display: grid;
+  grid-template-columns: minmax(7em, 1fr) 5em 8em;
+  gap: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.basket-coins__sources li > span:nth-child(2) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* The chart block already says there are no baskets; one line, not two. */
+.basket-table-empty {
+  display: none;
+}
+.basket-coins__muted,
+.basket-coins__none {
+  color: var(--ink-3);
+}
+@media (max-width: 640px) {
+  .basket-table th,
+  .basket-table td {
+    padding: var(--sp-2) var(--sp-1);
+  }
+  .basket-table {
+    font-size: var(--fs-sm);
+  }
+}
+
+/* ---------------------------------------------------------------------------
    T43 / S11b: the freshness strip at the top of /screener. Shell ink on the
    shell surface; the height is reserved from the first render so the page
    below does not jump when the first answer arrives. Overdue is a border and
@@ -1193,4 +1466,258 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* T104 W3: Discovery history chart. Token colours only; the SVG scales to the panel width. */
+.discovery-history {
+  margin-top: var(--sp-5);
+}
+.discovery-history__plot {
+  border-radius: var(--radius-sm);
+}
+.discovery-history__plot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.discovery-history__plot {
+  min-width: 0;
+  max-width: 100%;
+}
+.discovery-history__panel + .discovery-history__panel {
+  margin-top: var(--sp-2);
+}
+.discovery-history__title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+.discovery-history__swatch {
+  margin-right: 2px;
+}
+.discovery-history__svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.discovery-history .basket-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0 0 var(--sp-2);
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+.basket-table .basket-table__row.is-selected > td,
+.basket-coins__coin.is-selected {
+  background: var(--sh-2);
+}
+.app-main .basket-coins button.basket-coins__pick {
+  all: unset;
+  appearance: none;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.app-main .basket-coins button.basket-coins__pick:hover {
+  background: none;
+  color: var(--ink-1);
+}
+.app-main .basket-coins button.basket-coins__pick:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   T106: Discovery coin rows, the sources panel and the unranked-category group.
+   --------------------------------------------------------------------------- */
+.discovery-scroll {
+  overflow-x: auto;
+}
+/* A wide coin table scrolls inside its own box instead of widening the category table. */
+.basket-table__coins > td {
+  max-width: 0;
+}
+.discovery-coins {
+  width: 100%;
+  min-width: 34em;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.discovery-coins th,
+.discovery-coins td {
+  padding: var(--sp-1) var(--sp-3);
+  border-bottom: 1px solid var(--sh-rule-soft);
+  text-align: left;
+  white-space: nowrap;
+}
+.discovery-coins th {
+  color: var(--ink-3);
+  font-weight: 500;
+  cursor: help;
+}
+.discovery-coins .basket-table__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.discovery-coin.is-selected > td {
+  background: var(--sh-2);
+}
+.discovery-muted {
+  color: var(--ink-3);
+}
+.discovery-pill {
+  display: inline-block;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--sev-mature);
+  border-radius: var(--radius-sm);
+  color: var(--sev-mature);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.discovery-chips {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: var(--sp-1);
+}
+.discovery-chip {
+  padding: 0 var(--sp-2);
+  border-radius: var(--radius-sm);
+  background: var(--sh-2);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.discovery-chip--rising {
+  color: var(--sev-mature);
+}
+.discovery-chip--falling {
+  color: var(--sev-bad);
+}
+.discovery-chip--flat {
+  color: var(--ink-2);
+}
+.discovery-sources {
+  margin: var(--sp-2) 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.discovery-sources > summary {
+  cursor: pointer;
+}
+.discovery-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: var(--sp-2);
+  border-radius: 50%;
+  background: var(--sev-insuf);
+}
+.discovery-dot--ok {
+  background: var(--sev-mature);
+}
+.discovery-dot--partial {
+  background: var(--sev-prov);
+}
+.discovery-dot--none {
+  background: var(--sev-bad);
+}
+.discovery-sources__sub > td:first-child {
+  padding-left: var(--sp-5);
+}
+.discovery-state--ok {
+  color: var(--sev-mature);
+}
+.discovery-state--insufficient-history {
+  color: var(--sev-prov);
+}
+.discovery-state--unavailable {
+  color: var(--sev-bad);
+}
+.discovery-state--not-probed,
+.discovery-state--off {
+  color: var(--ink-3);
+}
+.discovery-unranked {
+  margin-top: var(--sp-4);
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+}
+.discovery-unranked__title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.discovery-unranked__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.discovery-unranked__list li {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-1) 0;
+  border-bottom: 1px solid var(--sh-rule-soft);
+}
+.discovery-unranked__list li > span:first-child {
+  min-width: 10em;
+}
+/* Discovery exclusions (U3): reason list, thin-volume tag, proposed-list banner. */
+.discovery-exclusions {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.discovery-exclusions__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.discovery-exclusions__toggle:focus-visible {
+  outline: 2px solid var(--sev-prov);
+  outline-offset: 2px;
+}
+.discovery-exclusions__list {
+  margin-top: var(--sp-2);
+  padding-left: var(--sp-3);
+  border-left: 1px solid var(--sh-rule-soft);
+}
+.discovery-exclusions__group + .discovery-exclusions__group {
+  margin-top: var(--sp-2);
+}
+.discovery-exclusions__why {
+  margin: 0;
+}
+.discovery-exclusions__list > p:last-child {
+  margin-top: var(--sp-2);
+}
+.discovery-exclusions__group p,
+.discovery-banner {
+  overflow-wrap: anywhere;
+}
+.discovery-tag {
+  display: inline-block;
+  margin-left: var(--sp-1);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--sh-rule-soft);
+  border-radius: var(--radius-sm);
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.discovery-banner {
+  padding: var(--sp-1) var(--sp-2);
+  border-left: 2px solid var(--sev-prov);
+}
+.discovery-exclusions__toggle[aria-expanded="true"] .basket-table__chev {
+  transform: rotate(45deg);
 }

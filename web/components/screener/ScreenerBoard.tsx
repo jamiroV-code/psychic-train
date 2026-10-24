@@ -10,7 +10,7 @@ import { useVariant } from "@/components/screener/VariantProvider";
 import type { ChartRange } from "@/lib/island-loader";
 import { fetchLayout as fetchLayoutDefault, saveLayout as saveLayoutDefault } from "@/lib/api/layout";
 import { fetchChartView, fetchScreenerBoard, fetchSpaghetti as fetchSpaghettiDefault } from "@/lib/api/screener";
-import { addCoin as addCoinDefault, removeCoin as removeCoinDefault } from "@/lib/api/watchlist";
+import { addCoin as addCoinDefault, removalMessage, removeCoin as removeCoinDefault } from "@/lib/api/watchlist";
 import {
   addGroup,
   arrange,
@@ -232,15 +232,16 @@ export function ScreenerBoard({
       const at = findCoin(current, symbol);
       const holder = at ? current[at.group] : null;
       setActionError("");
+      let removed: unknown;
       try {
-        await remove(symbol);
+        removed = await remove(symbol);
       } catch (err) {
         if (alive.current) setActionError(`Could not remove ${symbol}: ${errorText(err)}`);
         return;
       }
       if (!alive.current) return;
       setDrillDownSymbol((open) => (open === symbol ? null : open));
-      announce(holder ? `Removed ${symbol} from ${holder.name}.` : `Removed ${symbol}.`);
+      announce(removalMessage(symbol, holder ? holder.name : null, (removed as { affected_baskets?: string[] } | undefined)?.affected_baskets));
       if (holder) focusNext.current = `group-heading-${holder.id}`;
       setReloadToken((t) => t + 1);
       reload();
@@ -411,6 +412,9 @@ export function ScreenerBoard({
         )}
         <p className="board-alert" data-testid="layout-save-error" role="alert">
           {saveError}
+        </p>
+        <p className="board-notice" data-testid="board-announcement-visible" role="status">
+          {announcement}
         </p>
         <p className="visually-hidden" data-testid="board-announcer" aria-live="polite">
           {announcement}

@@ -907,3 +907,5 @@ Because the app is intended to open up later, every provider adapter records whe
 may be redistributed. See Licensing in `data-sources/all-data-sources.md`.
 
 - 03-10-26: T16 and T20 merged (`351f946`, `54157e2`); operating-instructions.md tsbuildinfo sentence now says untracked and ignored; current-state.md tsbuildinfo row and next steps updated; MASTER-PLAN.md trimmed to headroom, T16/T20 `accepted`.
+
+- 21-10-26 (T118, docs only): MASTER-PLAN.md caught up to `origin/main` `faf416b` (P10 row, compact rows T88-T118, accepted rows and long P4/P5/P9 rows moved verbatim to `process/archive/master-plan-archived-rows_21-10-26.md`); decisions.md D-22..D-26 added (index also lists D-16..D-21); current-state.md restamped and trimmed from 11,465 B to under 8,000 B (old text verbatim in `process/archive/current-state-archived_21-10-26.md`); universe-narratives PLAN gate G8 now checks the three frozen sha256 hashes and says the file count grows daily. D-20 untouched.

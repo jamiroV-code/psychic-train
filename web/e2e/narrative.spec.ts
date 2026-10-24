@@ -1,343 +1,426 @@
 /**
- * End-to-end proof for /narrative (narrative dashboard plan RFC-6; AC-1, AC-2,
- * AC-4..AC-11 automated part; AC-3 and AC-12 are user-run on a real machine).
+ * End-to-end proof for /narrative, the My baskets tab (narrative-baskets S-E2;
+ * AC-35/32 UI, AC-42). Baskets are created through the real API (Playwright
+ * `request`: the watchlist and layout routes), then the real page reads the
+ * real /api/narrative/baskets/attention. Provider data is unreachable in the
+ * sandbox, so the attention numbers themselves are asserted only as "a row per
+ * basket"; the loading, error, partial and ranking-off states are driven by
+ * routed responses and say so.
  *
- * Real browser, real Next.js page, real API client, real FastAPI `/history`
- * route, real DuckDB reads. `seed_e2e_cache.py::seed_narrative` writes the
- * narrative archive through the production cache writers. Every expectation
- * (ranks, signs, dates, counts) comes from the seeder's manifest, where it is
- * hand-derived from the seeded shape. Nothing is retyped here, and no
- * assertion depends on a raw value for "today".
- *
- * Not covered here: the 10-panel soft cap and its "+N more" overflow. `/history`
- * can only return the 4 fixed seed categories (unknown ids are a 422), so the
- * cap cannot be reached end to end. It is unit-tested in vitest
- * (NarrativeDashboard.test.tsx, narrative-view-model.test.ts).
+ * Screenshots go to E2E_SHOT_DIR when set (never into the repo).
  */
-import { expect, test, type Page } from "@playwright/test";
-import fs from "node:fs";
-import path from "node:path";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
-interface RankFact {
-  category_id: string;
-  rank: number | null;
-  reason?: string;
-  sign?: number;
+const API_BASE_URL = process.env["NEXT_PUBLIC_API_BASE_URL"] ?? "http://127.0.0.1:8001";
+const WIDTHS = [375, 768, 1280] as const;
+const SHOT_DIR = process.env["E2E_SHOT_DIR"];
+
+interface Group {
+  id: string;
+  name: string;
+  coins: string[];
 }
 
-interface NarrativeFacts {
-  today: string;
-  day_minus_1: string;
-  category_ids: string[];
-  gap: { category: string; series: string; gap_date: string };
-  ai_chart_points: number;
-  ai_mixed_scale_points: number;
-  ai_new_listings: number;
-  ai_legacy_count: number;
-  narrative_only_symbol: string | null;
-  comparison: RankFact[];
-  change: RankFact[];
-  no_market_category: string;
-  v2: NarrativeV2Facts;
-}
-
-/** narrative-v2 RFC-7: the seeder's disposable NARRATIVES_PATH config + variants. */
-interface NarrativeV2Facts {
-  narratives_path: string;
-  base_path: string;
-  base_ids: string[];
-  variants: Record<string, { path: string; ids: string[] }>;
-  mature: string[];
-  thin: string[];
-  no_data: string[];
-}
-
-interface HistoryPoint {
-  date: string;
-  raw_value: number | null;
-  point_status: string | null;
-  reason: string | null;
-  gap_before: boolean;
-}
-
-interface HistoryResponse {
-  redistributable_all: boolean;
-  categories: {
-    category_id: string;
-    series: { source: string; variant: string | null; status: string; reason: string | null; points: HistoryPoint[] }[];
-    composite: { status: string; points: { date: string; mixed_scale: boolean; gap_before: boolean }[] };
-  }[];
-  comparison: { as_of: string | null; entries: { category_id: string; rank: number | null; reason: string | null }[] };
-  change_in_attention: { entries: { category_id: string; rank: number | null; delta: number | null; reason: string | null }[] };
-}
-
-const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, ".fixture-manifest.json"), "utf-8")) as {
-  narrative: NarrativeFacts;
-};
-const facts = manifest.narrative;
-
-async function openNarrative(page: Page): Promise<HistoryResponse> {
-  const responsePromise = page.waitForResponse((r) => r.url().includes("/api/narrative/history"));
-  await page.goto("/narrative");
-  const response = await responsePromise;
-  expect(response.status()).toBe(200);
-  await expect(page.getByTestId("narrative-dashboard")).toBeVisible();
-  await expect(page.getByTestId("narrative-history")).toBeVisible();
-  return (await response.json()) as HistoryResponse;
-}
-
-function series(body: HistoryResponse, cid: string, source: string, variant: string | null = null) {
-  const cat = body.categories.find((c) => c.category_id === cid);
-  expect(cat, `category ${cid} in /history`).toBeDefined();
-  const s = cat!.series.find((x) => x.source === source && (x.variant ?? null) === variant);
-  expect(s, `${cid} ${source} ${variant ?? ""}`).toBeDefined();
-  return s!;
-}
-
-test("page loads from a real request with the data-quality caveat shown exactly once", async ({ page }) => {
-  await openNarrative(page);
-  await expect(page.getByTestId("narrative-caveat")).toHaveCount(1);
-  await expect(page.getByTestId("narrative-caveat")).toBeVisible();
-  await expect(page.getByTestId("narrative-error")).toHaveCount(0);
-  await expect(page.getByTestId("narrative-empty")).toHaveCount(0);
-});
-
-test("one panel per seed category; charted categories have points, rwa shows its unavailable composite", async ({ page }) => {
-  await openNarrative(page);
-  for (const cid of facts.category_ids) {
-    await expect(page.getByTestId(`narrative-panel-${cid}`)).toBeVisible();
+async function resetBaskets(request: APIRequestContext, baskets: Record<string, string[]>): Promise<void> {
+  const reset = await request.delete(`${API_BASE_URL}/api/layout/crypto`);
+  expect(reset.ok()).toBeTruthy();
+  for (const coin of Object.values(baskets).flat()) {
+    const added = await request.post(`${API_BASE_URL}/api/watchlist`, { data: { symbol: coin } });
+    expect([200, 201, 409]).toContain(added.status());
   }
-  for (const cid of ["ai", "l2s", "memecoins"]) {
-    const points = Number(await page.getByTestId(`narrative-chart-${cid}`).getAttribute("data-points"));
-    expect(points, `${cid} data-points`).toBeGreaterThan(0);
-    await expect(page.getByTestId(`narrative-chart-${cid}`).locator("canvas").first()).toBeVisible();
-  }
-  await expect(page.getByTestId("narrative-chart-ai")).toHaveAttribute("data-points", String(facts.ai_chart_points));
-  await expect(page.getByTestId(`narrative-composite-notice-${facts.no_market_category}`)).toBeVisible();
-  // 4 seed categories < 10-panel cap: no overflow (cap itself is unit-tested only).
-  await expect(page.getByTestId("narrative-overflow-toggle")).toHaveCount(0);
-});
-
-test("the seeded hole is flagged gap_before by the API on exactly the manifest date", async ({ page }) => {
-  const body = await openNarrative(page);
-  const nightly = series(body, facts.gap.category, "pytrends", "nightly-7d");
-  const flagged = nightly.points.filter((p) => p.gap_before).map((p) => p.date);
-  expect(flagged).toEqual([facts.gap.gap_date]);
-  await expect(page.getByTestId(`narrative-legend-${facts.gap.category}-pytrends-nightly-7d`)).toBeVisible();
-});
-
-test("nightly and backfilled pytrends are separate lines", async ({ page }) => {
-  const body = await openNarrative(page);
-  await expect(page.getByTestId("narrative-legend-ai-pytrends-nightly-7d")).toBeVisible();
-  await expect(page.getByTestId("narrative-legend-ai-pytrends-backfill-269d")).toContainText("backfill");
-  const backfill = series(body, "ai", "pytrends", "backfill-269d");
-  expect(backfill.points.every((p) => p.point_status === "backfilled")).toBe(true);
-});
-
-test("mixed-scale composite points are marked, and today's rankings are not mixed", async ({ page }) => {
-  await openNarrative(page);
-  await expect(page.getByTestId("narrative-mixed-scale-ai")).toHaveAttribute("data-count", String(facts.ai_mixed_scale_points));
-  await expect(page.getByTestId(/^narrative-comparison-mixed-/)).toHaveCount(0);
-});
-
-test("legacy-map count is labelled as excluded from the composite", async ({ page }) => {
-  await openNarrative(page);
-  const legacy = page.getByTestId("narrative-legacy-count-ai");
-  await expect(legacy).toContainText("legacy-map count");
-  await expect(legacy).toContainText("excluded from the composite");
-});
-
-test("a narrative-only coin is labelled", async ({ page }) => {
-  test.skip(!facts.narrative_only_symbol, "curated map has no narrative-only ai coin");
-  await openNarrative(page);
-  const coin = page.getByTestId(`narrative-coin-ai-${facts.narrative_only_symbol}`);
-  await expect(coin).toHaveAttribute("data-narrative-only", "true");
-  await expect(coin).toContainText("narrative-only");
-});
-
-test("personal-use badge shows on the page and on every panel", async ({ page }) => {
-  const body = await openNarrative(page);
-  expect(body.redistributable_all).toBe(false);
-  await expect(page.getByTestId("narrative-redistribution-badge")).toContainText("Personal use only");
-  for (const cid of facts.category_ids) {
-    await expect(page.getByTestId(`narrative-redistribution-${cid}`)).toBeVisible();
-  }
-});
-
-test("comparison ranks match the hand-derived order; a null rank shows — with a reason", async ({ page }) => {
-  const body = await openNarrative(page);
-  expect(body.comparison.as_of).toBe(facts.today);
-  expect(body.comparison.entries.map((e) => [e.category_id, e.rank])).toEqual(
-    facts.comparison.map((e) => [e.category_id, e.rank]),
-  );
-  const rows = page.getByTestId("narrative-comparison").locator("tbody tr");
-  await expect(rows).toHaveCount(facts.comparison.length);
-  for (const [i, expected] of facts.comparison.entries()) {
-    const row = rows.nth(i);
-    await expect(row).toHaveAttribute("data-testid", `narrative-comparison-row-${expected.category_id}`);
-    await expect(row).toHaveAttribute("data-rank", expected.rank === null ? "" : String(expected.rank));
-    if (expected.rank === null) {
-      await expect(row.locator("td").first()).toHaveText("—");
-      await expect(row.locator("td").nth(2)).toHaveText("—");
-      await expect(row).toContainText("Unranked");
-    }
-  }
-});
-
-test("change-in-attention signs match; a null delta shows — with its reason", async ({ page }) => {
-  const body = await openNarrative(page);
-  const byId = new Map(body.change_in_attention.entries.map((e) => [e.category_id, e]));
-  for (const expected of facts.change) {
-    const got = byId.get(expected.category_id)!;
-    expect(got.rank, `${expected.category_id} change rank`).toBe(expected.rank);
-    const cell = page.getByTestId(`change-delta-${expected.category_id}`);
-    if (expected.rank === null) {
-      expect(got.delta).toBeNull();
-      expect(got.reason).toBe(expected.reason);
-      await expect(cell).toHaveText("—");
-    } else {
-      expect(Math.sign(got.delta!)).toBe(expected.sign);
-      await expect(cell).toHaveText(expected.sign! > 0 ? /^\+/ : /^[-−]/);
-    }
-  }
-  await expect(page.getByTestId("narrative-change-row-l2s")).toContainText("No change");
-});
-
-test("Hyperliquid: volume share line, new listings, no-baseline-yet on day 1, no-market reason", async ({ page }) => {
-  const body = await openNarrative(page);
-  await expect(page.getByTestId("narrative-legend-ai-exchange_volume_share")).toBeVisible();
-  await expect(page.getByTestId("narrative-new-listings-ai")).toContainText(`${facts.ai_new_listings} (as of ${facts.today})`);
-  const listings = series(body, "ai", "exchange_new_listings");
-  const first = listings.points.find((p) => p.date === facts.day_minus_1)!;
-  expect(first.raw_value).toBeNull();
-  expect(first.reason).toBe("no-baseline-yet");
-  const noMarket = series(body, facts.no_market_category, "exchange_volume_share");
-  expect(noMarket.points.every((p) => p.raw_value === null && p.reason === "no-hyperliquid-market")).toBe(true);
-});
-
-test("reddit is unavailable (no archived data) and the other sources still render", async ({ page }) => {
-  const body = await openNarrative(page);
-  const reddit = series(body, "ai", "reddit");
-  expect([reddit.status, reddit.reason]).toEqual(["unavailable", "no-archived-data"]);
-  await expect(page.getByTestId("narrative-notice-ai-reddit")).toContainText("no archived data");
-  await expect(page.getByTestId("narrative-legend-ai-coingecko-narrative")).toBeVisible();
-});
-
-// --- narrative-v2 RFC-7 (ADR-7 item 5) ------------------------------------
-// The API reads NARRATIVES_PATH, a disposable copy of api/data/narratives.json
-// under the E2E cache root (the seeder refuses the real file). Specs that swap
-// the config always restore the base copy in `finally`.
-
-const v2 = facts.v2;
-
-function writeConfig(json: string): void {
-  // Guard: never write outside the seeder's disposable directory.
-  expect(path.resolve(v2.narratives_path)).not.toContain(path.join("api", "data", "narratives.json"));
-  fs.writeFileSync(v2.narratives_path, json, "utf-8");
-}
-
-function restoreBase(): void {
-  writeConfig(fs.readFileSync(v2.base_path, "utf-8"));
-}
-
-async function waitForV2Views(page: Page): Promise<void> {
-  await expect(page.getByTestId("narrative-momentum")).toBeVisible();
-  await expect(page.getByTestId("narrative-mindshare")).toBeVisible();
-}
-
-test("momentum view is populated: every narrative is ranked or shows why not", async ({ page }) => {
-  await openNarrative(page);
-  await waitForV2Views(page);
-  for (const cid of v2.base_ids) {
-    const row = page.getByTestId(`momentum-row-${cid}`);
-    const insufficient = page.getByTestId(`momentum-insufficient-${cid}`);
-    await expect(row.or(insufficient)).toHaveCount(1);
-  }
-  await expect(page.getByTestId("narrative-momentum-error")).toHaveCount(0);
-});
-
-test("mindshare view is populated for the latest seeded day, with an excluded narrative accounted for", async ({ page }) => {
-  await openNarrative(page);
-  await waitForV2Views(page);
-  await expect(page.getByTestId("mindshare-bar")).toBeVisible();
-  for (const cid of ["ai", "l2s", "memecoins"]) {
-    await expect(page.getByTestId(`mindshare-row-${cid}`)).toBeVisible();
-  }
-  await expect(page.getByTestId(`mindshare-excluded-${facts.no_market_category}`)).toBeVisible();
-  await expect(page.getByTestId("mindshare-date-picker")).toHaveValue(facts.today);
-  await expect(page.getByTestId("narrative-mindshare-error")).toHaveCount(0);
-});
-
-test("AC-4: a config file edit (add, rename, remove) shows up without restarting the API", async ({ page }) => {
-  const base = JSON.parse(fs.readFileSync(v2.base_path, "utf-8")) as {
-    narratives: { id: string; label: string }[];
-  };
-  const added = v2.variants[String(Math.min(...Object.keys(v2.variants).map(Number)))]!.ids.find(
-    (id) => !v2.base_ids.includes(id),
-  )!;
-  const edited = JSON.parse(fs.readFileSync(v2.variants["15"]!.path, "utf-8")) as typeof base;
-  edited.narratives = [
-    ...base.narratives
-      .filter((n) => n.id !== "memecoins")
-      .map((n) => (n.id === "ai" ? { ...n, label: "AI (edited)" } : n)),
-    edited.narratives.find((n) => n.id === added)!,
+  const current = await (await request.get(`${API_BASE_URL}/api/layout/crypto`)).json();
+  const main: Group = current.groups[0];
+  const moved = new Set(Object.values(baskets).flat());
+  const groups: Group[] = [
+    { ...main, coins: main.coins.filter((c) => !moved.has(c)) },
+    ...Object.entries(baskets).map(([name, coins]) => ({ id: name.toLowerCase(), name, coins })),
   ];
-  try {
-    writeConfig(JSON.stringify(edited));
-    const body = await openNarrative(page);
-    expect(body.categories.map((c) => c.category_id)).toEqual(edited.narratives.map((n) => n.id));
-    await expect(page.getByTestId(`narrative-panel-${added}`)).toBeVisible();
-    await expect(page.getByTestId("narrative-panel-memecoins")).toHaveCount(0);
-    await expect(page.getByTestId("narrative-panel-ai")).toContainText("AI (edited)");
-  } finally {
-    restoreBase();
+  const saved = await request.post(`${API_BASE_URL}/api/layout/crypto`, {
+    data: { revision: current.revision, groups, hidden_lines: current.hidden_lines },
+  });
+  expect(saved.ok(), await saved.text()).toBeTruthy();
+}
+
+function seededBasket(name: string, over: object) {
+  const day = (n: number) => `2026-10-${String(n).padStart(2, "0")}`;
+  const mk = (base: number) => Array.from({ length: 10 }, (_, k) => ({ date: day(k + 1), value: base + k * 2 + (k % 3) }));
+  const src = (source: string, raw: number | null) => ({
+    source, raw, ratio: raw === null ? null : raw / 50, rank: raw === null ? null : 1,
+    state: raw === null ? ("unavailable" as const) : ("ok" as const),
+  });
+  return {
+    id: name.toLowerCase(), name, score: name === "Majors" ? 72.4 : 48.1, change: name === "Majors" ? 12.5 : -3.2,
+    breadth: name === "Majors" ? 0.8 : 0.5, coverage: "covers 2 of 2", series: mk(name === "Majors" ? 40 : 20),
+    coins: name === "Majors"
+      ? [
+          { symbol: "BTC", score: 80.2, sources_used: 1, sources_total: 2, sources: [src("trends", 61), src("wiki", null)] },
+          { symbol: "ETH", score: 64.6, sources_used: 2, sources_total: 2, sources: [src("trends", 44), src("wiki", 38)] },
+        ]
+      : [{ symbol: "THIN", score: 48.1, sources_used: 2, sources_total: 2, sources: [src("trends", 30), src("wiki", 22)] }],
+    status: "ok", reason: "", universe_size: 2, ...over,
+  };
+}
+
+function seededBody(baskets: object[] = [seededBasket("Majors", {}), seededBasket("Layer2", {})]) {
+  return { window: 30, as_of: "2026-10-16", membership_as_of: "2026-10-10", baskets };
+}
+
+async function noHorizontalScroll(page: Page): Promise<void> {
+  const fits = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+  expect(fits).toBe(true);
+}
+
+async function shot(page: Page, name: string, width: number, fullPage = true): Promise<void> {
+  if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/${name}-${width}.png`, fullPage });
+}
+
+test.describe("narrative: My baskets", () => {
+  test.beforeEach(async ({ request }) => {
+    await resetBaskets(request, { Majors: ["BTC", "ETH"], Layer2: ["THIN"] });
+  });
+
+  test.afterAll(async ({ request }) => {
+    // The removal test deletes ETH from the shared watchlist: put the seed back.
+    await request.delete(`${API_BASE_URL}/api/layout/crypto`);
+    for (const coin of ["BTC", "ETH", "THIN"]) {
+      await request.post(`${API_BASE_URL}/api/watchlist`, { data: { symbol: coin } });
+    }
+  });
+
+  test("two tabs, 30d default, a row per basket, window switch, coin expand", async ({ page }) => {
+    await page.goto("/narrative");
+    await expect(page.getByRole("tab")).toHaveText(["My baskets", "Discovery"]);
+    await expect(page.getByTestId("attention-window-30")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("attention-row-majors")).toBeVisible();
+    await expect(page.getByTestId("attention-row-layer2")).toBeVisible();
+    await expect(page.locator("[data-testid='attention-table'] thead th")).toHaveCount(5);
+
+    const refetch = page.waitForResponse((r) => r.url().includes("/baskets/attention?window=90"));
+    await page.getByTestId("attention-window-90").click();
+    await refetch;
+    await expect(page.getByTestId("attention-window-90")).toHaveAttribute("aria-pressed", "true");
+
+    await page.getByRole("button", { name: "Majors" }).last().click();
+    await expect(page.getByTestId("attention-coins-majors")).toContainText("BTC");
+    await expect(page.getByTestId("attention-coins-majors")).toContainText(/\d of \d sources/);
+    await shot(page, "coin-expand", 1280);
+  });
+
+  for (const width of WIDTHS) {
+    test(`seeded states at ${width}px: no horizontal scroll, screenshots`, async ({ page, request }) => {
+      await page.setViewportSize({ width, height: 900 });
+
+      // ok with numbers: routed fixture, baskets still created through the real API.
+      await page.route("**/baskets/attention*", (route) => route.fulfill({ json: seededBody() }));
+      await page.goto("/narrative");
+      await expect(page.getByTestId("attention-row-majors")).toBeVisible();
+      await expect(page.getByTestId("attention-row-majors")).toContainText("+12.5");
+      await expect(page.getByTestId("attention-row-majors")).toContainText("covers 2 of 2");
+      await expect(page.getByTestId("attention-row-majors")).toContainText("80%");
+      await expect(page.locator("[data-testid='attention-chart-container'] canvas").first()).toBeVisible();
+      await expect(page.getByTestId("attention-membership")).toContainText("membership as of 2026-10-10");
+      await noHorizontalScroll(page);
+      await shot(page, "ok", width);
+      await page.getByRole("button", { name: "Majors" }).last().click();
+      await expect(page.getByTestId("attention-coins-majors")).toContainText("BTC");
+      await expect(page.getByTestId("coin-source-BTC-trends")).toContainText("61");
+      await expect(page.getByTestId("coin-source-BTC-wiki")).toContainText("no data");
+      await noHorizontalScroll(page);
+      await shot(page, "coin-expand", width);
+
+      // partial: one basket without data.
+      await page.unroute("**/baskets/attention*");
+      await page.route("**/baskets/attention*", (route) =>
+        route.fulfill({ json: seededBody([seededBasket("Majors", {}), seededBasket("Layer2", { status: "no-data", score: null, change: null, breadth: null })]) }),
+      );
+      await page.goto("/narrative");
+      await expect(page.getByTestId("attention-partial")).toBeVisible();
+      await expect(page.locator("[data-testid='attention-chart-container'] canvas").first()).toBeVisible();
+      await noHorizontalScroll(page);
+      await shot(page, "partial", width);
+
+      // ranking off: the reference is missing.
+      await page.unroute("**/baskets/attention*");
+      await page.route("**/baskets/attention*", (route) =>
+        route.fulfill({
+          json: seededBody([
+            seededBasket("Majors", { status: "no-data", score: null, reason: "reference-missing" }),
+            seededBasket("Layer2", { status: "no-data", score: null, reason: "reference-missing" }),
+          ]),
+        }),
+      );
+      await page.goto("/narrative");
+      await expect(page.getByTestId("attention-ranking-off")).toBeVisible();
+      await expect(page.locator("[data-testid='attention-chart-container'] canvas").first()).toBeVisible();
+      await noHorizontalScroll(page);
+      await shot(page, "ranking-off", width);
+
+      // loading, then error (routed 500 after a delay).
+      await page.unroute("**/baskets/attention*");
+      await page.route("**/baskets/attention*", async (route) => {
+        await new Promise((r) => setTimeout(r, 1500));
+        await route.fulfill({ status: 500, body: "{}" });
+      });
+      await page.goto("/narrative");
+      await expect(page.getByTestId("attention-loading")).toBeVisible();
+      await shot(page, "loading", width);
+      await expect(page.getByTestId("attention-error")).toBeVisible();
+      await expect(page.getByTestId("attention-error")).not.toContainText("/api");
+      await expect(page.getByTestId("attention-retry")).toBeVisible();
+      await noHorizontalScroll(page);
+      await shot(page, "error", width);
+
+      // as shipped: the real API, no probe records, so no scores and no series (F-5).
+      await page.unroute("**/baskets/attention*");
+      await page.goto("/narrative");
+      await expect(page.getByTestId("attention-nodata")).toBeVisible();
+      await expect(page.getByRole("group", { name: "Baskets shown" })).toHaveCount(0);
+      await noHorizontalScroll(page);
+      await shot(page, "as-shipped", width);
+
+      // empty: no baskets, one line and a screener link.
+      await request.delete(`${API_BASE_URL}/api/layout/crypto`);
+      await page.goto("/narrative");
+      await expect(page.getByTestId("attention-empty")).toBeVisible();
+      await expect(page.getByTestId("attention-empty").getByRole("link")).toHaveAttribute("href", "/screener");
+      await noHorizontalScroll(page);
+      await shot(page, "empty", width);
+    });
   }
-  // And back again, still without a restart.
-  const body = await openNarrative(page);
-  expect(body.categories.map((c) => c.category_id)).toEqual(v2.base_ids);
+
+  for (const width of WIDTHS) {
+    test(`removing a coin in the screener names the basket at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/screener");
+      await page.getByRole("button", { name: /remove ETH/i }).first().click();
+      await page.getByRole("button", { name: /confirm/i }).first().click();
+      const notice = page.getByTestId("board-announcement-visible");
+      await expect(notice).toBeVisible();
+      await expect(notice).toContainText(/Basket Majors no longer counts it/);
+      await notice.scrollIntoViewIfNeeded();
+      await noHorizontalScroll(page);
+      await shot(page, "removal-notice", width, false);
+    });
+  }
 });
 
-test("AC-8: 15 narratives — every cross-narrative view lists all 15, none silently truncated", async ({ page }) => {
-  const fifteen = v2.variants["15"]!;
-  expect(fifteen.ids).toHaveLength(15);
-  try {
-    writeConfig(fs.readFileSync(fifteen.path, "utf-8"));
-    const body = await openNarrative(page);
-    await waitForV2Views(page);
-    expect(body.categories.map((c) => c.category_id)).toEqual(fifteen.ids);
-    // History panels: 10-panel soft cap + an overflow listing the other 5.
-    await expect(page.getByTestId("narrative-overflow-toggle")).toContainText("+5 more");
-    // Comparison and change-in-attention: one row per narrative.
-    await expect(page.getByTestId("narrative-comparison").locator("tbody tr")).toHaveCount(15);
-    expect(body.change_in_attention.entries).toHaveLength(15);
-    // Momentum: every narrative ranked or explicitly insufficient.
-    for (const cid of fifteen.ids) {
-      await expect(page.getByTestId(`momentum-row-${cid}`).or(page.getByTestId(`momentum-insufficient-${cid}`))).toHaveCount(1);
-    }
-    for (const cid of v2.mature) {
-      await expect(page.getByTestId(`momentum-row-${cid}`)).not.toHaveAttribute("data-rank", "");
-      await expect(page.getByTestId(`momentum-arrow-${cid}`)).not.toBeEmpty();
-    }
-    for (const cid of [...v2.thin, ...v2.no_data]) {
-      await expect(page.getByTestId(`momentum-insufficient-${cid}`)).toBeVisible();
-    }
-    // Mindshare: every narrative has a row or an explicit exclusion.
-    for (const cid of fifteen.ids) {
-      await expect(page.getByTestId(`mindshare-row-${cid}`).or(page.getByTestId(`mindshare-excluded-${cid}`))).toHaveCount(1);
-    }
-    for (const cid of v2.no_data) {
-      await expect(page.getByTestId(`mindshare-excluded-${cid}`)).toBeVisible();
-    }
-    // Still exactly one caveat with 15 narratives (AC-12).
-    await expect(page.getByTestId("narrative-caveat")).toHaveCount(1);
-  } finally {
-    restoreBase();
+function discoveryBody(over: object = {}) {
+  const coin = (symbol: string, change: number, trigger: boolean, thin = false) => ({
+    symbol, change, raw_change: change + 3, covered_weight: 35, rising_weight: trigger ? 25 : 0, trigger,
+    primary: true, volume_24h: thin ? 4_000_000 : 900_000_000, thin_volume: thin, tradeability: "unverified",
+    sources: [
+      { source: "wikipedia", change: change + 20, as_of: "2026-10-15" },
+      { source: "exchange_activity", change: -12, as_of: "2026-10-15" },
+      { source: "trends", change: 4, as_of: "2026-10-14" },
+    ],
+  });
+  const cat = (id: string, name: string, score: number) => ({
+    id, name, score, median: score - 1.5, coins_used: 2, gaining_count: 1, ranked: true,
+    coins: [coin("AAA", score + 4, true), coin("BBB", score - 4, false, true)],
+  });
+  const idle = (id: string, name: string) => ({ id, name, score: null, median: null, coins_used: 0, gaining_count: 0, ranked: false, coins: [] });
+  const tiny = { ...cat("oracle", "Oracles", 50), coins_used: 1, ranked: false, coins: [coin("LINK", 54, true)] };
+  return {
+    window: 30, as_of: "2026-10-16", categories_as_of: "2026-10-10", status: "ok", reason: "",
+    universe_size: 100, eligible_size: 81, shown_size: 54,
+    excluded: { exclusion_list: 23, below_volume_floor: 0, no_category: 4, no_source_data: 19 },
+    excluded_counts: { "no-source-data": 19, stablecoin: 16, "no-market": 7, unassigned: 4 },
+    excluded_coins: [
+      ...["USDT", "USDC", "USDE", "DAI", "USD1", "PYUSD", "FDUSD", "USDG", "RLUSD", "U", "USDS", "TUSD", "USDF", "BUSD", "GHO", "FRAX"]
+        .map((symbol) => ({ symbol, reason: "stablecoin", detail: "stablecoin" })),
+      ...["BUIDL", "USYC", "OUSG", "USTB", "BENJI", "JTRSY", "WTGXX"].map((symbol) => ({ symbol, reason: "no-market", detail: "tokenized fund" })),
+      ...["M", "GRAM", "AKE", "PRL"].map((symbol) => ({ symbol, reason: "unassigned", detail: "" })),
+      ...Array.from({ length: 19 }, (_, i) => ({ symbol: `NOSRC${i + 1}`, reason: "no-source-data", detail: "" })),
+    ],
+    narratives_status: "reviewed", unassigned: ["M", "GRAM", "AKE", "PRL"],
+    hidden_narratives: [{ id: "privacy", name: "Privacy", coins: ["XMR", "ZEC"] }],
+    min_category_coins: 3, rising_threshold_pct: 10, min_covered_weight: 30,
+    categories: [
+      cat("ai", "Artificial Intelligence", 31.2), cat("defi", "Decentralized Finance", 14.8), tiny,
+      idle("gaming", "Gaming"), idle("rwa", "Real World Assets"),
+    ],
+    ...over,
+  };
+}
+
+function sourcesBody() {
+  const row = (id: string, label: string, weight: number | null, state: string, over: object = {}) => ({
+    id, label, kind: "weighted", weight, state, newest: state === "ok" ? "2026-10-17" : null,
+    history_days: state === "ok" ? 99 : 0, coins_with_data: state === "ok" ? 38 : 0, eligible_size: 50, note: "", ...over,
+  });
+  return {
+    as_of: "2026-10-17", universe_size: 90, eligible_size: 50, live_sources: 2, total_sources: 7, live_weight: 35,
+    newest: "2026-10-17",
+    sources: [
+      row("wikipedia", "Wikipedia pageviews", 25, "ok"),
+      row("trends", "Google Trends", 25, "not-probed", { note: "not probed yet" }),
+      row("xsearch", "X search", 10, "off", { note: "X search is off (X_LIVE not set): dry run only" }),
+      row("exchange_activity", "Exchange activity", 10, "ok", { note: "12 of 38 coins use the CoinGecko volume fallback" }),
+      row("hyperliquid", "Hyperliquid volume", 20, "insufficient-history", { kind: "exchange-member", history_days: 1, note: "insufficient history 1/90" }),
+    ],
+  };
+}
+
+test.describe("narrative: Discovery", () => {
+  const noData = (reason: string) => discoveryBody({ status: "no-data", reason, categories: [] });
+  for (const width of WIDTHS) {
+    test(`every state at ${width}px: no horizontal scroll, screenshots`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.route("**/baskets/attention*", (route) => route.fulfill({ json: seededBody() }));
+      const open = async () => {
+        await page.goto("/narrative");
+        await page.getByRole("tab", { name: "Discovery" }).click();
+      };
+
+      await page.route("**/api/narrative/discovery*", (route) => route.fulfill({ json: discoveryBody() }));
+      await page.route("**/api/narrative/sources", (route) => route.fulfill({ json: sourcesBody() }));
+      await open();
+      await expect(page.getByTestId("discovery-row-ai")).toBeVisible();
+      await expect(page.getByTestId("sources-summary")).toContainText("Sources: 2 of 7 live, 35 of 100 weight, newest data 2026-10-17");
+      await expect(page.getByTestId("discovery-coverage")).toContainText(
+        "54 of 100 top coins shown, 46 excluded: 19 no source data, 16 stablecoins, 7 tokenized funds / no market, 4 unassigned",
+      );
+      await expect(page.getByTestId("discovery-proposed-banner")).toHaveCount(0);
+      await page.getByTestId("discovery-exclusions-toggle").click();
+      await expect(page.getByTestId("discovery-excluded-stablecoin")).toContainText("USDT");
+      await expect(page.getByTestId("discovery-unassigned")).toContainText("4 unassigned coins");
+      await expect(page.getByTestId("discovery-hidden")).toContainText("1 hidden narrative");
+      await expect(page.getByTestId("discovery-tab")).not.toContainText(/floor|exchange tokens/i);
+      await expect(page.getByTestId("discovery-unranked")).toContainText("Too few coins to rank (need 3)");
+      await expect(page.getByTestId("discovery-row-oracle")).toHaveCount(0);
+      await page.getByTestId("sources-summary").click();
+      await expect(page.getByTestId("sources-row-trends")).toContainText("not probed");
+      await noHorizontalScroll(page);
+      await shot(page, "discovery-sources-open", width);
+      await page.getByTestId("sources-summary").click();
+      await page.getByTestId("discovery-row-ai").getByRole("button").click();
+      await expect(page.getByTestId("discovery-coins-ai")).toContainText("AAA");
+      await expect(page.getByTestId("discovery-coins-ai")).toContainText("Wiki +");
+      await expect(page.getByTestId("discovery-coins-ai")).toContainText("35 / 100");
+      await expect(page.getByTestId("discovery-thin-ai-BBB")).toContainText("thin volume");
+      await expect(page.getByTestId("discovery-thin-ai-AAA")).toHaveCount(0);
+      await expect(page.getByTestId("discovery-empty-categories")).toContainText("2 categories without data");
+      await expect(page.getByTestId("discovery-as-of")).toContainText("as of 2026-10-16");
+      await noHorizontalScroll(page);
+      await shot(page, "discovery-ok", width);
+
+      await page.getByTestId("discovery-window-7").click();
+      await expect(page.getByTestId("discovery-window-7")).toHaveAttribute("aria-pressed", "true");
+
+      for (const reason of ["reference-missing", "no-attention-data"]) {
+        await page.unroute("**/api/narrative/discovery*");
+        await page.route("**/api/narrative/discovery*", (route) => route.fulfill({ json: noData(reason) }));
+        await open();
+        await expect(page.getByTestId(`discovery-nodata-${reason}`)).toBeVisible();
+        await noHorizontalScroll(page);
+        await shot(page, `discovery-nodata-${reason}`, width);
+      }
+
+      await page.unroute("**/api/narrative/discovery*");
+      await page.route("**/api/narrative/discovery*", () => new Promise(() => undefined));
+      await open();
+      await expect(page.getByTestId("discovery-loading")).toBeVisible();
+      await noHorizontalScroll(page);
+      await shot(page, "discovery-loading", width);
+
+      await page.unroute("**/api/narrative/discovery*");
+      await page.route("**/api/narrative/discovery*", (route) => route.fulfill({ status: 500, body: "x" }));
+      await open();
+      await expect(page.getByTestId("discovery-error")).toBeVisible();
+      await expect(page.getByTestId("discovery-retry")).toBeVisible();
+      await noHorizontalScroll(page);
+      await shot(page, "discovery-error", width);
+    });
   }
 });
 
-test("home page links to the narrative dashboard", async ({ page }) => {
-  await page.goto("/");
-  await page.getByTestId("home-link-narrative").click();
-  await expect(page).toHaveURL(/\/narrative$/);
-  await expect(page.getByTestId("narrative-dashboard")).toBeVisible();
+/** No two SVG labels in the history chart may overlap, and none may leave the plot's box. */
+async function expectNoTextOverlap(page: Page) {
+  const result = await page.getByTestId("history-plot").evaluate((plot) => {
+    const box = plot.getBoundingClientRect();
+    const rects = Array.from(plot.querySelectorAll("svg text")).map((t) => {
+      const r = t.getBoundingClientRect();
+      return { text: t.textContent ?? "", l: r.left, r: r.right, t: r.top, b: r.bottom };
+    });
+    const overlaps: string[] = [];
+    for (let i = 0; i < rects.length; i += 1) {
+      const a = rects[i];
+      if (a.l < box.left - 1 || a.r > box.right + 1) overlaps.push(`clipped: ${a.text}`);
+      for (let j = i + 1; j < rects.length; j += 1) {
+        const c = rects[j];
+        if (a.l < c.r && c.l < a.r && a.t < c.b && c.t < a.b) overlaps.push(`${a.text} x ${c.text}`);
+      }
+    }
+    return overlaps;
+  });
+  expect(result).toEqual([]);
+}
+
+function historyBody(kind: "coin" | "category") {
+  const dates = Array.from({ length: 30 }, (_, i) => new Date(Date.UTC(2026, 8, 16 + i)).toISOString().slice(0, 10));
+  const base = { id: kind === "coin" ? "AAA" : "ai", window: 30, as_of: dates[29], status: "ok", reason: "", min_history_days: 30, min_covered_weight: 30, history_days: { wikipedia: 99 } };
+  if (kind === "category") {
+    return { ...base, kind, days: dates.map((date, i) => ({ date, score: 4 + i * 0.8, coins_used: 5, triggered_count: i % 4, triggered_share: (i % 4) / 5 })) };
+  }
+  return {
+    ...base, kind,
+    days: dates.map((date, i) => ({
+      date, score: Math.sin(i / 4) * 12 + i * 0.9, covered_weight: i < 8 ? 10 : 35, rising_weight: i < 8 ? 0 : 25,
+      trigger: i > 20 && i % 3 === 0, thin: i < 8,
+    })),
+  };
+}
+
+test.describe("narrative: Discovery history chart", () => {
+  for (const width of [1280, 375] as const) {
+    test(`coin and category charts at ${width}px (routed data)`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.route("**/baskets/attention*", (route) => route.fulfill({ json: seededBody() }));
+      await page.route("**/api/narrative/discovery?*", (route) => route.fulfill({ json: discoveryBody() }));
+      await page.route("**/api/narrative/sources", (route) => route.fulfill({ json: sourcesBody() }));
+      const history: string[] = [];
+      await page.route("**/api/narrative/discovery/history*", (route) => {
+        const url = new URL(route.request().url());
+        history.push(`${url.searchParams.get("symbol") ?? url.searchParams.get("category")}:${url.searchParams.get("window")}`);
+        return route.fulfill({ json: historyBody(url.searchParams.has("symbol") ? "coin" : "category") });
+      });
+      await page.route("**/api/narrative/discovery/price*", (route) => {
+        const dates = historyBody("coin").days.map((d) => d.date);
+        return route.fulfill({ json: { symbol: "AAA", window: 30, status: "ok", last_date: dates[29], days: dates.map((date, i) => ({ date, close: 100 + i * 2 })) } });
+      });
+
+      await page.goto("/narrative");
+      await page.getByRole("tab", { name: "Discovery" }).click();
+      await page.getByTestId("discovery-row-ai").getByRole("button").click();
+      await expect(page.getByTestId("history-share-line")).toBeVisible();
+      await expect(page.getByTestId("history-readout")).toContainText("coins used 5");
+      await expect(page.getByTestId("history-panel-share")).toBeVisible();
+      await expectNoTextOverlap(page);
+      await page.getByTestId("history-plot").scrollIntoViewIfNeeded();
+      await noHorizontalScroll(page);
+      await shot(page, "discovery-history-category", width);
+
+      await page.getByTestId("discovery-coin-ai-AAA").click();
+      await expect(page.getByTestId("history-band")).toBeVisible();
+      await expect(page.getByTestId("history-panel-title-coverage")).toHaveText("Data coverage (weight of sources with data, out of 100)");
+      await expect(page.getByText("needs 30 to fire")).toBeVisible();
+      await expect(page.getByTestId("history-price-line")).toBeVisible();
+      expect(await page.getByTestId("history-trigger-marker").count()).toBeGreaterThan(0);
+      await expectNoTextOverlap(page);
+      await expect(page.getByTestId("history-weight-note")).toContainText("Early days have little history");
+      await page.getByTestId("history-plot").focus();
+      await page.keyboard.press("Home");
+      await expect(page.getByTestId("history-readout")).toContainText("thin");
+
+      await page.getByTestId("discovery-window-90").click();
+      await page.getByTestId("discovery-row-ai").getByRole("button").click();
+      await page.getByTestId("discovery-coin-ai-AAA").click();
+      await expect(page.getByTestId("history-band")).toBeVisible();
+      await expectNoTextOverlap(page);
+      expect(history).toContain("AAA:90");
+      await page.getByTestId("history-plot").scrollIntoViewIfNeeded();
+      await noHorizontalScroll(page);
+      await shot(page, "discovery-history-coin", width);
+    });
+  }
 });

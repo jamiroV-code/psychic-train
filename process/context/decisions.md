@@ -29,6 +29,17 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 | D-12 | Pinned planner budget, per-file ceilings and the same-failure stop | 03-10-26 | active |
 | D-13 | Gate 4 test counts measured by installing frozen dependencies and running each suite once (G4-K1 = A) | 03-10-26 | active |
 | D-15 | Data integration tooling: separate uv project, one approval gate, REA wrapper only (DIT-1..DIT-9) | 14-10-26 | active |
+| D-16 | Data integration tooling: cloud run, resource hosts, outlines, bot checks (DIT-10..DIT-13) | 16-10-26 | active |
+| D-17 | Narrative baskets: groups are baskets, percentile attention score | 17-10-26 | active |
+| D-18 | Narrative baskets: sources and Discovery outlier rules | 17-10-26 | active |
+| D-19 | Narrative baskets: daily refresh workflow; trust_weight kept | 17-10-26 | active |
+| D-20 | Exchange-token exclusion list | 17-10-26 | active |
+| D-21 | Planner session shell can break with E2BIG in long sessions | 17-10-26 | active |
+| D-22 | Weighted attention signal: sources, weights, rising rule | 18-10-26 | active |
+| D-23 | exchange_activity composite: four venues, blended by change | 18-10-26 | proposed |
+| D-24 | Frozen daily signal snapshots and the calibration plan | 18-10-26 | active |
+| D-25 | Tradeable universe and narratives rules | 18-10-26 | active |
+| D-26 | Return to full RIPER-5 for new slices; lapse note T96-T107 | 18-10-26 | active |
 | D-0 | Original goal: one confidence level that sizes positions | 17-09-26 | superseded by D-1, D-2 |
 
 ## Entries
@@ -144,7 +155,78 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
   - DIT-7 docs: one section in `all-data-sources.md`, one row in the Task Routing Table of `all-context.md`. Rejected: a new context group.
   - DIT-8 approvals: one `<source>.approval.json` per source under the local app-data folder (env `DIT_APPROVALS_DIR` for tests). Rejected: approvals in the repo.
   - DIT-9 first dataset: long BTC history under new cache key `BTC-HIST`, never replacing the existing BTC series. Rejected: overwriting the BTC key.
-- **Owner-level:** Scrapling tiers 1-3 are all built, gated per source by a local approval record only (no per-use go for tier 3); approval records live on the owner's PC only; REA is wrapper-only because setup writes user-scope config and exposes 127 commands; Farside is untouched; the first dataset is long BTC history. Spend ceiling raised 100 -> 130 USD (14-10-26).
+- **Owner-level:** Scrapling tiers 1-3 are all built, gated per source by a local approval record only (no per-use go for tier 3); approval records live on the owner's PC only (cloud: DIT-10); REA is wrapper-only because setup writes user-scope config and exposes 127 commands; Farside is untouched; the first dataset is long BTC history. Spend ceiling raised 100 -> 130 USD (14-10-26).
 - **Date:** 14-10-26. **Reason:** new data sources need a safe, repeatable, approval-bound path. **Alternatives:** see each DIT line.
 - **Consequences:** tiers 2-3 and REA web modes are unproven live; Windows/Python 3.12 unverified until the owner probes AC-16/AC-17. The paused market-framework SPEC's proposed exception text (labelled D-15 inside that SPEC) will be renumbered when it resumes.
+- **Status:** active.
+
+### D-16 Data integration tooling: cloud run, resource hosts, outlines, bot checks
+- **Decision:** owner decisions 15-16 Oct 2026 extending D-15 (plan Amendments A2-A5):
+  - DIT-10 cloud-run: the owner may have the cloud session run the scrape tooling when the owner names a recipe and has approved the site per site in chat. The approval record is made with `approvals add --owner-statement` (non-interactive; refused with a TTY or without an explicit `DIT_APPROVALS_DIR`; the statement must name the source and every host and resource host). Records live in a private store outside the checkout and are never committed. A worker (not the planner inline) runs it and quotes the owner message with its time. The statement cannot prove a human wrote it (known limit). No background scraping. The browser tier uses `/opt/pw-browsers` first; `scrapling install` only on an owner-requested tier 2/3 run. Rejected: owner-PC-only runs.
+  - DIT-11 resource-host allowance: optional `resource_hosts` on tier 2/3 approvals: exact https hosts, max 8, sub-resource types only, never navigations; robots checked for the page host only; the listed hosts' terms are the owner's call. Rejected: wildcard or unlisted hosts.
+  - DIT-12 outlines: on a selector miss or missing columns the CLI prints a bounded outline of the already-fetched page (counts, host names, link paths, id/class tokens, table header names), never page text or data rows. Rejected: dumping page content.
+  - DIT-13 bot-check policy: the tooling stops on bot checks and challenge pages; no solving, no stealth bypass (owner decision 16-10-26, after the owner's request to get past one was declined). Rejected: bypass support.
+- **Date:** 16-10-26. **Reason:** live cloud runs needed to prove the tiers on real pages without weakening the gate. **Alternatives:** see each DIT line.
+- **Consequences:** live runs (owner-approved per site, cloud): bitbo.io page stopped at a Cloudflare bot check (tier 1 HTTP 428; tier 2 needed outside hosts incl. a challenge host), not bypassed; zorinaq.com/price fetched at tiers 1 and 2 (with resource host cdnjs.cloudflare.com) but has no table, dropped; digrin.com needed the www host and has one table (Date, Adjusted price, Real price, 196 rows) without OHLCV, dropped. No dataset stored; BTC-HIST stays open (options: public data via the normal adapter, or close-only scrape support, which needs design). Owner-run probes AC-16/17/20 still outstanding.
+- **Status:** active.
+
+### D-17 Narrative baskets: groups are baskets, percentile attention score
+- **Decision:** (P5, 16-17 Oct 2026) groups ARE baskets: one coin per basket, cap 12, renaming a group renames the basket (D-1). A coin's attention is ranked by percentile against a top-100 market-cap reference that excludes stablecoins, wrapped and staked tokens (D-3); ratio = mean(last 7)/mean(last 90) daily.
+- **Date:** 17-10-26. **Reason:** one simple, explainable score; no verdict labels. **Alternatives:** separate basket objects, raw z-scores (rejected).
+- **Consequences:** missing data is a state (not-probed, unavailable, insufficient-history), never 0. Trigger and momentum code was deleted (T80).
+- **Status:** active.
+
+### D-18 Narrative baskets: sources and Discovery outlier rules
+- **Decision:** core sources Wikipedia, CoinGecko, exchange volume (incl. Hyperliquid), Google Trends; plus Reddit and X. X is low-trust (weight 0.25), reads insufficient-history until 90 own days, key only in a private environment variable. Discovery: top 100, minimum 24h volume 20M USD, a category counts as gaining only if >= 2 independent source groups agree, 7d vs window baseline, winsorize at the 95th percentile, median shown beside the mean.
+- **Date:** 17-10-26. **Reason:** resist single-source spikes and thin coins. **Alternatives:** mean only, no volume floor (rejected).
+- **Consequences:** provider shapes are fixture-tested only until the owner runs the probe guide.
+- **Status:** active.
+
+### D-19 Narrative baskets: daily refresh workflow; trust_weight kept
+- **Decision:** the attention store refreshes through a scheduled GitHub workflow (owner choice 17-10-26) that fails loudly on dark sources. `trust_weight` stays in the `/history` composite (D1/D2 decision) although plan AC-11 text says it should go; removal needs router, models and web checks.
+- **Date:** 17-10-26. **Reason:** keep `/history` JSON byte-identical. **Alternatives:** drop the field now (rejected).
+- **Consequences:** the workflow was never run live; `record_probe.py` is owner-run, not automated.
+- **Status:** active.
+
+### D-20 Exchange-token exclusion list
+- **Decision:** owner confirmed 2026-10-17: BNB kept, LEO OKB CRO GT KCS BGB MX excluded (editable in `attention_universe.json` and `discovery.json`; BNB is allowed past the exchange-based-tokens category via `include_despite_category`).
+- **Date:** 17-10-26. **Reason:** exchange tokens track their venue, not a narrative. **Alternatives:** keep them all in (rejected for all but BNB).
+- **Status:** active.
+
+### D-21 Planner session shell can break with E2BIG in long sessions
+- **Decision:** observed 2026-10-17. Every Bash call failed to start with `Could not start /bin/bash: ... exceed the OS exec argument limit (E2BIG)` (command line ~150-170 KB across 3 args), even for `git status`, for a whole long planner session (many compactions). The environment was ~8 KB, so the harness-built command line is the oversized part. Unconfirmed hypotheses: the shell wrapper/snapshot grows with session age, or the shell-init snapshot from the user profile.
+  - Effect: stop hook `stop-hook-git-check.sh` kept reporting "untracked files" (checkout not inspectable); they were already merged or on the remote.
+  - Workarounds: GitHub MCP tools for repo reads/writes; all edits and test runs in worker sessions from create_session (clean shells). Agent subagents inherit the broken shell and failed.
+  - Fix: start a fresh planner session (the repo holds all state). Mitigation: past ~6 hours, many compactions, or the first E2BIG, hand over instead of working around it.
+- **Date:** 17-10-26. **Reason:** owner asked to remember this; it will come back. **Alternatives:** keep working around it (rejected).
+- **Status:** active.
+
+### D-22 Weighted attention signal: sources, weights, rising rule
+- **Decision:** (owner answers in the T98 SPEC, 18-10-26; built in T101 W1) the Discovery signal is a weighted blend. Weights: wikipedia 25, trends 25, reddit 15, xsearch 10, exchange_activity 10, github_dev 8, defillama 7, rescaled over the weight that is available. A source is rising at +10 percent on raw change. A coin triggers when the rising weight is at least 60 percent of the covered weight and the covered weight is at least 30. The history chart needs `min_history_days` 30. CoinGecko volume is the fallback for the exchange_activity slot.
+- **Date:** 18-10-26. **Reason:** the earlier per-source-group count made every coin read under 2 sources after the per-source lag finding (T95, fixed in T96). **Alternatives:** keep the 2-group count (rejected).
+- **Consequences:** X stays off. Reddit API access was requested by the owner on 18-10-26 and awaits approval. Weights are the owner's to change, never automatically (D-24).
+- **Status:** active.
+
+### D-23 exchange_activity composite: four venues, blended by change
+- **Decision:** PROPOSAL, unverified: exchange_activity = Binance, Coinbase, Kraken, Hyperliquid with sub-weights 40/25/15/20, blended by each venue's own change, never by summing volumes. The Coinbase and Kraken adapters (W7) are proposed, not approved.
+- **Date:** 18-10-26. **Reason:** a summed volume is dominated by the largest venue. **Alternatives:** summed volume (rejected).
+- **Status:** proposed.
+
+### D-24 Frozen daily signal snapshots and the calibration plan
+- **Decision:** (T105 W9) the daily job stores one frozen signal snapshot per window per day under `api/data/cache/attention/signals/`, first write wins. Calibration plan: a 3-month report, then 6-month weight suggestions (scheduled reminders for 2027-01-18 and 2027-04-18: calibration check and suggestion check). The owner decides every weight change; nothing is applied automatically.
+- **Date:** 18-10-26. **Reason:** the signal can only be judged against what it said at the time. **Alternatives:** recompute history on read only (rejected).
+- **Consequences:** the file count under `signals/` grows daily; the three 2026-10-17 files are pinned by sha256 in the universe-narratives PLAN gate G8.
+- **Status:** active.
+
+### D-25 Tradeable universe and narratives rules
+- **Decision:** (owner, 18-10-26; SPEC T108, PLAN T111) Discovery covers the top 100 coins with reasoned exclusions (closed reason list). No volume floor and no volume cut: volume under 20M USD only adds a label. 11 narratives with multi-membership and a 3-coin minimum; coins in no narrative go to an Unassigned bucket. Baskets stays on the old universe lists (Q-V1). The exchange-token question (D-20) is left untouched here; slice U6 writes its entry.
+- **Date:** 18-10-26. **Reason:** exclude by reason, not by a volume cut. **Alternatives:** keep the 20M floor (rejected).
+- **G-OWN review:** planner-reported (not verified by this task): on 2026-10-21 the owner passed the review of the 11-narrative coin list in `api/data/attention_narratives.json` as on main (75 placed; NEAR, ICP, INJ primary Layer 1 accepted; M left Unassigned; the UNVERIFIED placements RAIN, GRAM, BTW, WLFI, PRL, AKE, STABLE, NIGHT and NEXO DeFi membership accepted as is). The file's `status` field is still `proposed`; a separate small worker task flips it to `reviewed` (pending).
+- **Consequences:** slices U1 (T113, #145) and U4 (T114, #144) merged; U2 (T115, PR #146) is an open draft in review; U3, U5, U6 queued.
+- **Status:** active.
+
+### D-26 Return to full RIPER-5 for new slices; lapse note T96-T107
+- **Decision:** (owner, 18-10-26) new slices run SPEC, PLAN, VALIDATE (contract and /goal block), an explicit ENTER EXECUTE MODE, an independent review before the owner merges, and EVL gates after each slice. Opus for code slices, sonnet otherwise.
+- **Lapse note:** T96-T107 and part of T113 and T114 were merged by the owner before the independent review; T96-T107 skipped PLAN, VALIDATE and EVL.
+- **Date:** 18-10-26. **Reason:** speed cost review coverage. **Alternatives:** keep the fast lane (rejected).
 - **Status:** active.

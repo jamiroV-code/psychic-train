@@ -1,45 +1,9 @@
-"""Pydantic contracts for RFC-003 (Narrative / Mindshare), items 54/56.
-
-`NarrativeCategory` (ADR-3): API responses always carry every triggered
-category regardless of `confirmed` — a triggered-but-unconfirmed category
-is never hidden, only carries a lower `trust_weight` (see Public
-Contracts, `GET /api/narrative/categories`).
-"""
+"""Pydantic contracts for the narrative history and mindshare endpoints."""
 from __future__ import annotations
 
 from typing import Literal
 
 from pydantic import BaseModel
-
-SourceAvailability = Literal["ok", "unavailable", "stale", "presumed-dead"]
-
-
-class NarrativeTriggerState(BaseModel):
-    """Internal trigger-computation result for one category (items 51/52)
-    — the pre-response shape `trigger.compute_trigger`/`apply_confirmation`
-    produce; `routers/narrative.py` assembles this into the public
-    `NarrativeCategory` response shape below.
-    """
-
-    category_id: str
-    triggered: bool
-    confirmed: bool
-    trust_weight: float
-    trigger_date: str | None = None
-    confirmed_date: str | None = None
-    source_availability: dict[str, SourceAvailability]
-
-
-class NarrativeCategory(BaseModel):
-    id: str
-    label: str
-    keywords: list[str]
-    seed: bool  # True = curated narrative_categories.json seed list; False = auto-flagged emerging
-    triggered: bool
-    confirmed: bool
-    trust_weight: float
-    source_availability: dict[str, SourceAvailability]
-
 
 # --- Narrative dashboard RFC-3: GET /api/narrative/history (ADR-4) ---------
 #
@@ -155,35 +119,6 @@ class NarrativeHistoryResponse(BaseModel):
     categories: list[NarrativeHistoryCategory]
     comparison: NarrativeComparison
     change_in_attention: NarrativeChange
-
-
-# --- Narrative-v2 RFC-4 (ADR-4): GET /api/narrative/momentum. Additive only;
-# no existing model above is changed.
-
-
-class NarrativeMomentumEntry(BaseModel):
-    category_id: str
-    label: str
-    momentum_basis: Literal["pytrends-blended", "composite", "insufficient"]
-    rank: int | None  # vs-the-field rank on `change`; None when insufficient
-    as_of: str | None
-    change: float | None
-    prev_change: float | None
-    acceleration: float | None
-    direction: Literal["up", "down", "flat"] | None
-    trend: Literal["accelerating", "decelerating", "steady"] | None
-    baseline_date: str | None
-    prior_baseline_date: str | None
-    status: Literal["ok", "insufficient"]
-    reason: str | None
-
-
-class NarrativeMomentumResponse(BaseModel):
-    generated_utc: str
-    window_days: int
-    acceleration_window_days: int
-    tolerance_days: int
-    entries: list[NarrativeMomentumEntry]
 
 
 # --- Narrative-v2 RFC-5 (ADR-5): GET /api/narrative/mindshare. Additive only;

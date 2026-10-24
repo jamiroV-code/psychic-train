@@ -1,0 +1,371 @@
+{
+  "_anchor": {
+    "term": "Bitcoin",
+    "label": "Bitcoin (placeholder anchor)",
+    "note": "placeholder: the owner picks the anchor (Bitcoin or Ethereum) from the probe_trends evidence"
+  },
+  "AAVE": {
+    "topic": "/g/11w1qyc8h6",
+    "label": "Aave",
+    "note": "checker PASS 21-10-26"
+  },
+  "ADA": {
+    "topic": "/g/11gf2dcwbj",
+    "label": "Cardano",
+    "note": "checker PASS 21-10-26"
+  },
+  "AERO": {
+    "topic": "/g/11mrd65ng5",
+    "label": "Aerodrome Finance",
+    "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "AKE": {
+    "no-keyword": true,
+    "label": "AKE",
+    "note": "unidentified ticker (UNVERIFIED), owner names it"
+  },
+  "ALGO": {
+    "topic": "/g/11rgg857l7",
+    "label": "Algorand",
+    "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "APT": {
+    "term": "Aptos",
+    "label": "Aptos"
+  },
+  "ARB": {
+    "topic": "/g/11w99dbsyz",
+    "label": "Arbitrum",
+    "note": "checker PASS 21-10-26"
+  },
+  "ASTER": {
+    "no-keyword": true,
+    "label": "Aster",
+    "note": "common word; needs topic id"
+  },
+  "ATOM": {
+    "no-keyword": true,
+    "label": "Cosmos",
+    "note": "common word (Cosmos, Avalanche, UNUS SED LEO); needs topic id"
+  },
+  "AVAX": {
+    "no-keyword": true,
+    "label": "Avalanche",
+    "note": "common word (Cosmos, Avalanche, UNUS SED LEO); needs topic id"
+  },
+  "BCH": {
+    "topic": "/g/11d_wtvc5k",
+    "label": "Bitcoin Cash",
+    "note": "checker PASS 21-10-26"
+  },
+  "BGB": {
+    "topic": "/g/11xgyky_2b",
+    "label": "Bitget Token",
+    "note": "checker PASS 22-10-26"
+  },
+  "BNB": {
+    "topic": "/g/11mjf91p7c",
+    "label": "Binance Coin",
+    "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "BTC": {
+    "topic": "/m/05p0rrx",
+    "label": "Bitcoin",
+    "note": "checker PASS 21-10-26"
+  },
+  "BTW": {
+    "no-keyword": true,
+    "label": "BTW",
+    "note": "unidentified ticker (UNVERIFIED), owner names it"
+  },
+  "CAKE": {
+    "topic": "/g/11vb5nyrj6",
+    "label": "PancakeSwap",
+    "note": "checker PASS 22-10-26"
+  },
+  "CC": {
+    "no-keyword": true,
+    "label": "Canton Coin",
+    "note": "identity UNVERIFIED (Canton Coin, Midnight, Venice token, World Liberty Financial, XDC Network); needs topic id"
+  },
+  "CRO": {
+    "term": "Cronos",
+    "label": "Cronos"
+  },
+  "DOGE": {
+    "topic": "/m/0zmxk9t",
+    "label": "Dogecoin",
+    "note": "checker PASS 21-10-26"
+  },
+  "DOT": {
+    "topic": "/g/11f3mbgrgj",
+    "label": "Polkadot",
+    "note": "checker PASS 21-10-26"
+  },
+  "ENA": {
+    "term": "Ethena",
+    "label": "Ethena"
+  },
+  "ETC": {
+    "term": "Ethereum Classic",
+    "label": "Ethereum Classic"
+  },
+  "ETH": {
+    "topic": "/m/0108bn2x",
+    "label": "Ethereum",
+    "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "FIL": {
+    "topic": "/g/11g9ngp3p7",
+    "label": "Filecoin",
+    "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "GRAM": {
+    "no-keyword": true,
+    "label": "GRAM",
+    "note": "unidentified ticker (UNVERIFIED), owner names it"
+  },
+  "GT": {
+    "topic": "/g/11n3zc6c3t",
+    "label": "GateToken",
+    "note": "checker PASS 22-10-26"
+  },
+  "HBAR": {
+    "topic": "/g/11hbsyfq3f",
+    "label": "Hedera",
+    "note": "checker PASS 22-10-26"
+  },
+  "HTX": {
+    "topic": "/m/012vj2d4",
+    "label": "HTX",
+    "note": "checker PASS 22-10-26"
+  },
+  "HYPE": {
+    "topic": "/g/11z3m2dkm4",
+    "label": "Hyperliquid",
+    "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "ICP": {
+    "topic": "/g/11q1mbrj5p",
+    "label": "Internet Computer",
+    "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "INJ": {
+    "topic": "/g/11ldr16mw_",
+    "label": "Injective",
+    "note": "checker PASS 21-10-26"
+  },
+  "JST": {
+    "no-keyword": true,
+    "label": "JUST",
+    "note": "common word; needs topic id"
+  },
+  "JUP": {
+    "no-keyword": true,
+    "label": "Jupiter",
+    "note": "common word; needs topic id"
+  },
+  "KAS": {
+    "topic": "/g/11dxd52vfh",
+    "label": "Kaspa",
+    "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "KCS": {
+    "topic": "/g/11ydr7tg_8",
+    "label": "KuCoin Token",
+    "note": "checker PASS 22-10-26"
+  },
+  "LEO": {
+    "no-keyword": true,
+    "label": "UNUS SED LEO",
+    "note": "common word (Cosmos, Avalanche, UNUS SED LEO); needs topic id"
+  },
+  "LINK": {
+    "topic": "/g/11qn04qyw9",
+    "label": "Chainlink",
+    "note": "checker PASS 21-10-26"
+  },
+  "LIT": {
+    "no-keyword": true,
+    "label": "LIT",
+    "note": "unidentified ticker (UNVERIFIED), owner names it"
+  },
+  "LTC": {
+    "topic": "/m/0t544l4",
+    "label": "Litecoin",
+    "note": "checker PASS 21-10-26"
+  },
+  "MNT": {
+    "no-keyword": true,
+    "label": "Mantle",
+    "note": "common word; needs topic id"
+  },
+  "MORPHO": {
+    "term": "Morpho",
+    "label": "Morpho"
+  },
+  "NEAR": {
+    "topic": "/g/11q3ypz8pd",
+    "label": "NEAR Protocol",
+    "note": "checker PASS 22-10-26"
+  },
+  "NEXO": {
+    "topic": "/g/113nvt4wp",
+    "label": "Nexo",
+    "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "NIGHT": {
+    "no-keyword": true,
+    "label": "Midnight",
+    "note": "identity UNVERIFIED (Canton Coin, Midnight, Venice token, World Liberty Financial, XDC Network); needs topic id"
+  },
+  "OKB": {
+    "term": "OKB",
+    "label": "OKB"
+  },
+  "ONDO": {
+    "term": "Ondo",
+    "label": "Ondo"
+  },
+  "PAXG": {
+    "no-keyword": true,
+    "label": "PAX Gold",
+    "note": "gold token; attention tracks gold, not the token"
+  },
+  "PEPE": {
+    "term": "Pepe coin",
+    "label": "Pepe coin"
+  },
+  "PI": {
+    "topic": "/g/11kzq2y5bk",
+    "label": "Pi Network",
+    "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "POL": {
+    "no-keyword": true,
+    "label": "Polygon",
+    "note": "common word; needs topic id"
+  },
+  "PRL": {
+    "no-keyword": true,
+    "label": "PRL",
+    "note": "unidentified ticker (UNVERIFIED), owner names it"
+  },
+  "PUMP": {
+    "topic": "/g/11wr7k80z3",
+    "label": "pump.fun",
+    "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "QNT": {
+    "no-keyword": true,
+    "label": "Quant",
+    "note": "common word; needs topic id"
+  },
+  "RAIN": {
+    "no-keyword": true,
+    "label": "RAIN",
+    "note": "unidentified ticker (UNVERIFIED); common word; owner names it"
+  },
+  "RENDER": {
+    "no-keyword": true,
+    "label": "Render",
+    "note": "common word; needs topic id"
+  },
+  "SHIB": {
+    "topic": "/g/11q1jsfvsn",
+    "label": "Shiba Inu",
+    "note": "checker PASS 21-10-26"
+  },
+  "SKY": {
+    "no-keyword": true,
+    "label": "Sky",
+    "note": "common word; needs topic id"
+  },
+  "SOL": {
+    "topic": "/g/11qh5y640t",
+    "label": "Solana",
+    "note": "checker PASS 21-10-26"
+  },
+  "STABLE": {
+    "no-keyword": true,
+    "label": "STABLE",
+    "note": "unidentified ticker (UNVERIFIED), owner names it"
+  },
+  "STX": {
+    "no-keyword": true,
+    "label": "Stacks",
+    "note": "common word; needs topic id"
+  },
+  "SUI": {
+    "no-keyword": true,
+    "label": "Sui",
+    "note": "common word; needs topic id"
+  },
+  "TAO": {
+    "topic": "/g/11n9szvdlj",
+    "label": "Bittensor",
+    "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "TRX": {
+    "term": "TRON",
+    "label": "TRON"
+  },
+  "UNI": {
+    "topic": "/g/11h1dsqb_m",
+    "label": "Uniswap",
+    "note": "checker PASS 22-10-26"
+  },
+  "VVV": {
+    "topic": "/g/11xv_6jggk",
+    "label": "Venice token",
+    "note": "checker PASS 22-10-26"
+  },
+  "WBT": {
+    "term": "WhiteBIT Coin",
+    "label": "WhiteBIT Coin"
+  },
+  "WLD": {
+    "topic": "/g/11t_vkgtjf",
+    "label": "Worldcoin",
+    "note": "checker PASS 22-10-26"
+  },
+  "WLFI": {
+    "topic": "/g/11lp7f_05g",
+    "label": "World Liberty Financial",
+    "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "XAUT": {
+    "topic": "/g/11n3zb_gpq",
+    "label": "Tether Gold",
+    "note": "checker PASS 22-10-26"
+  },
+  "XDC": {
+    "topic": "/g/11h1y76mtz",
+    "label": "XDC Network",
+    "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "XLM": {
+    "topic": "/m/0121k_50",
+    "label": "Stellar",
+    "note": "checker PASS 22-10-26"
+  },
+  "XMR": {
+    "topic": "/m/0130q41b",
+    "label": "Monero",
+    "note": "checker PASS 22-10-26"
+  },
+  "XRP": {
+    "topic": "/g/11ggfsh1hd",
+    "label": "XRP",
+    "note": "checker PASS 22-10-26"
+  },
+  "ZEC": {
+    "topic": "/g/11c1tqqpyq",
+    "label": "Zcash",
+    "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "ZRO": {
+    "term": "LayerZero",
+    "label": "LayerZero"
+  }
+}

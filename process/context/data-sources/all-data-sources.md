@@ -117,8 +117,8 @@ the existing `ccxt_adapter._exchange()` singleton — no new provider identity, 
 only active, non-HIP-3 perps, and never raises. Two derived series: per-category volume share
 (denominator = all active non-HIP-3 perps + an explicit `unmapped` bucket, shares sum to 1) and a
 new-listing count from a day-over-day market-list diff (`no-baseline-yet` on day one, never a bare
-`0`). It is **display-only** — never wired into `trigger.compute_trigger` or
-`GET /api/narrative/categories`, feeds only `GET /api/narrative/history`.
+`0`). It is **display-only** and feeds only `GET /api/narrative/history`
+(`trigger.py`, `momentum.py` and `/api/narrative/categories|momentum` were deleted in P5).
 
 **Ticker keying:** meme perps use a `k`-prefixed base that ccxt upper-cases (`kPEPE` → `KPEPE`);
 the resolver checks `base == SYM` or `baseName == "k"+SYM`. Confirmed against the installed `ccxt`
@@ -417,9 +417,11 @@ Tooling lives in `tools/data-integration` (owner-run, outside the API and CI). R
 1. **REA findings.** Run `rea <command> [--confirm-source N] [--findings F] -- args`. The evidence note tags each finding VERIFIED or ASSUMED; REA cannot see server-side methodology.
 2. **Alternatives.** List other sources (keyless API, file, existing adapter) before any scrape.
 3. **Integrate the normal way.** One adapter in `api/data/`, cached, redistribution checked (Standing Rules).
-4. **Scrapling only with a per-source approval record.** `approvals status`; `approvals add --source --tier --host --page --owner --rate --robots-checked [--alternative] [--days]`; non-interactive cloud runs add `--owner-statement TEXT` (the owner's chat approval, 20-500 ASCII chars naming the source and every host; needs `DIT_APPROVALS_DIR`). Browser: `/opt/pw-browsers` Chromium first (`DIT_BROWSER_EXECUTABLE`); `scrapling install` only if absent and the owner asked for that tier 2/3 run; never `playwright install`. A blocked host shows as `connection_failed` (exit 4): tell the owner which host to allow; retry once on their word. Output goes to gitignored `api/data/cache/ohlcv/` and is lost when the session ends. Then `run <recipe> [--dry-run] [--preview] [--refresh] [--replace] [--accept-baseline]` (see `recipes/example.recipe.json`).
+4. **Scrapling only with a per-source approval record.** `approvals status`; `approvals add --source --tier --host --page --owner --rate --robots-checked [--alternative] [--days]`; non-interactive cloud runs add `--owner-statement TEXT` (the owner's chat approval, 20-500 ASCII chars naming the source and every host and resource host; needs `DIT_APPROVALS_DIR`); tier 2/3 pages that load scripts, styles or data from other hosts add `--resource-host H` (max 8, exact https names, only with `--owner-statement`). Browser: `/opt/pw-browsers` Chromium first (`DIT_BROWSER_EXECUTABLE`); `scrapling install` only if absent and the owner asked for that tier 2/3 run; never `playwright install`. A blocked host shows as `connection_failed` (exit 4): tell the owner which host to allow; retry once on their word. Output goes to gitignored `api/data/cache/ohlcv/` and is lost when the session ends. Then `run <recipe> [--dry-run] [--preview] [--refresh] [--replace] [--accept-baseline]` (see `recipes/example.recipe.json`).
 
 Exit codes: 0 ok, 2 usage, 3 gate refused, 4 fetch failed, 5 validation failed, 6 changed or uncertain, 7 cache protection refused.
+
+A selector miss prints a page outline, missing columns a table outline (no text).
 
 ### Rules
 
@@ -435,9 +437,13 @@ Exit codes: 0 ok, 2 usage, 3 gate refused, 4 fetch failed, 5 validation failed, 
 
 - Tiers 2 and 3 are not proven on a real protected site.
 - Size caps are checked after the body is read.
-- Redirects: each hop goes through `permits()`; robots is checked only on the requested and final URL (tier 2).
+- Redirects: each hop goes through `permits()`; robots is checked only on the requested and final URL (tier 2). Resource hosts: sub-resources only (script, stylesheet, font, image, xhr, fetch), never navigations; robots and politeness stay page-host only; listing a host is the owner's call; provenance `resource_hosts` lists approved, not contacted, hosts. A refusal names the blocked hosts.
 - The approval file is forgeable by anyone who can write the store, and a statement cannot prove a human wrote it.
 - Scrapling tests run outside CI.
 - Windows and Python 3.12 are unverified until the owner runs the probes (AC-16/17/20: `scripts/probe_tier1.py`, `scripts/probe_tier2.py`).
 - REA failures map to exit 5.
 - `--refresh` does nothing in `--dry-run` and `--preview`.
+
+## Attention sources (P5)
+
+Wikipedia, CoinGecko, exchange volume (Binance, Hyperliquid), Google Trends, Reddit and X feed the attention store (`api/data/attention/`); X is low-trust and needs 90 own days. Ranking uses a top-100 market-cap reference (`universe`); Discovery reads `categories`. Daily refresh: `attention-refresh.yml`; probe states: `record_probe.py`.

@@ -15,7 +15,6 @@ import pandas as pd
 import pytest
 
 from api.analytics import screener_board
-from api.analytics.narrative import trigger as narrative_trigger
 from api.analytics.regime import leg_boundary
 from api.data import ccxt_adapter
 from api.data import watchlist as watchlist_store
@@ -148,11 +147,8 @@ def test_board_build_makes_no_leg_boundary_or_narrative_call(monkeypatch):
         raise AssertionError("the screener board must not read leg or narrative state")
 
     monkeypatch.setattr(leg_boundary, "compute_current_leg_state", boom)
-    monkeypatch.setattr(narrative_trigger, "assemble_narrative_categories", boom)
     if hasattr(screener_board, "leg_boundary"):
         monkeypatch.setattr(screener_board.leg_boundary, "compute_current_leg_state", boom)
-    if hasattr(screener_board, "narrative_trigger"):
-        monkeypatch.setattr(screener_board.narrative_trigger, "assemble_narrative_categories", boom)
     _install(monkeypatch, _fresh_frames())
 
     board = screener_board.build_screener_board("1d")

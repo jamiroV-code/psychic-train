@@ -171,8 +171,7 @@ def test_empty_archive_is_unavailable_not_zero(isolated_cache, tmp_path, monkeyp
 
 def test_existing_routes_unchanged():
     paths = set(app.openapi()["paths"])
-    for p in ["/api/regime/legs", "/api/regime/components", "/api/narrative/categories",
-              "/api/narrative/history", "/api/health"]:
+    for p in ["/api/regime/legs", "/api/regime/components", "/api/narrative/history", "/api/health"]:
         assert p in paths
     new = {p for p in paths if p.startswith("/api/onchain")}
     assert new == {"/api/onchain/growth", "/api/onchain/chains"}

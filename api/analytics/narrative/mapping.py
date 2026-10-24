@@ -3,7 +3,7 @@
 Curated lookup, never inferred/fuzzy-matched from a coin's name or
 description — an unmapped coin returns an explicit no-mapping sentinel
 (`None`), never silently treated as belonging to whatever category happens
-to be triggered. ADR-4 treats `unmapped` as a distinct, non-failure
+to be active. ADR-4 treats `unmapped` as a distinct, non-failure
 `narrative_state`, not folded into `rotated-out` or any other value — a
 false mapping would let an unrelated coin's price action masquerade as
 corroborating narrative evidence for a category it has nothing to do with,
@@ -20,8 +20,8 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # FROZEN legacy map (narrative-dashboard RFC-1, option B, user-approved
-# 2026-09-24). This is what `/api/narrative/categories` (the trigger's
-# CoinGecko trending count) and `/screener`'s `narrative_state` use, and it
+# 2026-09-24). This is what `/screener`'s `narrative_state` uses (the old
+# `/api/narrative/categories` endpoint and its trigger are removed), and it
 # must NOT be widened: AC-1 requires both stay byte-identical, proven by
 # api/tests/routers/test_narrative_categories_contract.py. To change the
 # narrative map shown on /history and /narrative, edit
@@ -40,7 +40,7 @@ def map_coin_to_category(symbol: str) -> str | None:
     has no curated mapping yet. Callers must treat `None` as an explicit,
     valid state (ADR-4's `unmapped`) — never as a signal to exclude the
     coin from anything, and never as a fallback that treats it as
-    vacuously aligned with whatever category is currently triggered.
+    vacuously aligned with whatever category is currently active.
     """
     return LEGACY_COIN_CATEGORY_MAP.get(symbol.upper())
 

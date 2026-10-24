@@ -4,8 +4,8 @@
 re-coin a narrative for `/api/narrative/history`, the `/narrative` page, the
 nightly snapshot and the pytrends backfill. It replaces the old two-file
 split (`narrative_categories.json` seeds + `narrative_category_map.json`
-coins) for those paths only. `/api/narrative/categories`, `/screener` and
-`trigger.py` are NOT driven by this file — they stay on the frozen legacy
+coins) for those paths only. `/screener` is NOT driven by this file (the old
+`/api/narrative/categories` endpoint and `trigger.py` no longer exist) — they stay on the frozen legacy
 seed file and `mapping.LEGACY_COIN_CATEGORY_MAP`.
 
 Behaviour:

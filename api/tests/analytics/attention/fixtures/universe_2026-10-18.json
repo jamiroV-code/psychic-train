@@ -1,0 +1,609 @@
+{
+ "snapshots": [
+  {
+   "date": "2026-10-18",
+   "coins": [
+    {
+     "id": "bitcoin",
+     "symbol": "BTC",
+     "market_cap": 1635885234127,
+     "volume_24h": 16391057565
+    },
+    {
+     "id": "ethereum",
+     "symbol": "ETH",
+     "market_cap": 292295402578,
+     "volume_24h": 6954195255
+    },
+    {
+     "id": "tether",
+     "symbol": "USDT",
+     "market_cap": 183482071309,
+     "volume_24h": 31074287583
+    },
+    {
+     "id": "binancecoin",
+     "symbol": "BNB",
+     "market_cap": 95522606222,
+     "volume_24h": 558090353
+    },
+    {
+     "id": "ripple",
+     "symbol": "XRP",
+     "market_cap": 80873273255,
+     "volume_24h": 1020054791
+    },
+    {
+     "id": "usd-coin",
+     "symbol": "USDC",
+     "market_cap": 72503931256,
+     "volume_24h": 8102760081
+    },
+    {
+     "id": "solana",
+     "symbol": "SOL",
+     "market_cap": 60561952818,
+     "volume_24h": 2011784938
+    },
+    {
+     "id": "tron",
+     "symbol": "TRX",
+     "market_cap": 31560677671,
+     "volume_24h": 281931688
+    },
+    {
+     "id": "figure-heloc",
+     "symbol": "FIGR_HELOC",
+     "market_cap": 25817596998,
+     "volume_24h": 156848
+    },
+    {
+     "id": "zcash",
+     "symbol": "ZEC",
+     "market_cap": 18861630099,
+     "volume_24h": 704090944
+    },
+    {
+     "id": "hyperliquid",
+     "symbol": "HYPE",
+     "market_cap": 17337579528,
+     "volume_24h": 438321067
+    },
+    {
+     "id": "dogecoin",
+     "symbol": "DOGE",
+     "market_cap": 12220761216,
+     "volume_24h": 446825757
+    },
+    {
+     "id": "monero",
+     "symbol": "XMR",
+     "market_cap": 11077133935,
+     "volume_24h": 179885512
+    },
+    {
+     "id": "usds",
+     "symbol": "USDS",
+     "market_cap": 10229460644,
+     "volume_24h": 10545926
+    },
+    {
+     "id": "whitebit",
+     "symbol": "WBT",
+     "market_cap": 9454648763,
+     "volume_24h": 50850696
+    },
+    {
+     "id": "chainlink",
+     "symbol": "LINK",
+     "market_cap": 9086280967,
+     "volume_24h": 236812849
+    },
+    {
+     "id": "leo-token",
+     "symbol": "LEO",
+     "market_cap": 8309163677,
+     "volume_24h": 244429
+    },
+    {
+     "id": "cardano",
+     "symbol": "ADA",
+     "market_cap": 8158349622,
+     "volume_24h": 236728934
+    },
+    {
+     "id": "rain",
+     "symbol": "RAIN",
+     "market_cap": 6567291224,
+     "volume_24h": 16417321
+    },
+    {
+     "id": "near",
+     "symbol": "NEAR",
+     "market_cap": 6320657439,
+     "volume_24h": 555924408
+    },
+    {
+     "id": "stellar",
+     "symbol": "XLM",
+     "market_cap": 6183561131,
+     "volume_24h": 98515515
+    },
+    {
+     "id": "bitcoin-cash",
+     "symbol": "BCH",
+     "market_cap": 5466096782,
+     "volume_24h": 121037957
+    },
+    {
+     "id": "ethena-usde",
+     "symbol": "USDE",
+     "market_cap": 4679582261,
+     "volume_24h": 17054351
+    },
+    {
+     "id": "litecoin",
+     "symbol": "LTC",
+     "market_cap": 4611719963,
+     "volume_24h": 205132982
+    },
+    {
+     "id": "dai",
+     "symbol": "DAI",
+     "market_cap": 4518163896,
+     "volume_24h": 150729399
+    },
+    {
+     "id": "uniswap",
+     "symbol": "UNI",
+     "market_cap": 4442998430,
+     "volume_24h": 274511515
+    },
+    {
+     "id": "avalanche-2",
+     "symbol": "AVAX",
+     "market_cap": 4273127451,
+     "volume_24h": 223725252
+    },
+    {
+     "id": "usd1-wlfi",
+     "symbol": "USD1",
+     "market_cap": 4023151961,
+     "volume_24h": 497015599
+    },
+    {
+     "id": "canton-network",
+     "symbol": "CC",
+     "market_cap": 3986286695,
+     "volume_24h": 8782375
+    },
+    {
+     "id": "sui",
+     "symbol": "SUI",
+     "market_cap": 3983633235,
+     "volume_24h": 350314112
+    },
+    {
+     "id": "hedera-hashgraph",
+     "symbol": "HBAR",
+     "market_cap": 3826838699,
+     "volume_24h": 173951672
+    },
+    {
+     "id": "the-open-network",
+     "symbol": "GRAM",
+     "market_cap": 3803341433,
+     "volume_24h": 19309632
+    },
+    {
+     "id": "bitway",
+     "symbol": "BTW",
+     "market_cap": 3636446044,
+     "volume_24h": 27431875
+    },
+    {
+     "id": "tether-gold",
+     "symbol": "XAUT",
+     "market_cap": 3356689183,
+     "volume_24h": 66650671
+    },
+    {
+     "id": "global-dollar",
+     "symbol": "USDG",
+     "market_cap": 3095495142,
+     "volume_24h": 272684327
+    },
+    {
+     "id": "bittensor",
+     "symbol": "TAO",
+     "market_cap": 2997391856,
+     "volume_24h": 120473792
+    },
+    {
+     "id": "shiba-inu",
+     "symbol": "SHIB",
+     "market_cap": 2900105262,
+     "volume_24h": 35650776
+    },
+    {
+     "id": "paypal-usd",
+     "symbol": "PYUSD",
+     "market_cap": 2848301112,
+     "volume_24h": 14545134
+    },
+    {
+     "id": "crypto-com-chain",
+     "symbol": "CRO",
+     "market_cap": 2844629569,
+     "volume_24h": 4963653
+    },
+    {
+     "id": "quant-network",
+     "symbol": "QNT",
+     "market_cap": 2824626831,
+     "volume_24h": 54896246
+    },
+    {
+     "id": "ethena",
+     "symbol": "ENA",
+     "market_cap": 2475058187,
+     "volume_24h": 234981343
+    },
+    {
+     "id": "ripple-usd",
+     "symbol": "RLUSD",
+     "market_cap": 2424303341,
+     "volume_24h": 60281109
+    },
+    {
+     "id": "hashnote-usyc",
+     "symbol": "USYC",
+     "market_cap": 2387304081,
+     "volume_24h": 0.0
+    },
+    {
+     "id": "okb",
+     "symbol": "OKB",
+     "market_cap": 2382449885,
+     "volume_24h": 20207094
+    },
+    {
+     "id": "ondo-us-dollar-yield",
+     "symbol": "USDY",
+     "market_cap": 2355660579,
+     "volume_24h": 2336675
+    },
+    {
+     "id": "aave",
+     "symbol": "AAVE",
+     "market_cap": 2340982698,
+     "volume_24h": 198275921
+    },
+    {
+     "id": "blackrock-usd-institutional-digital-liquidity-fund",
+     "symbol": "BUIDL",
+     "market_cap": 2187330078,
+     "volume_24h": 0.0
+    },
+    {
+     "id": "ondo-finance",
+     "symbol": "ONDO",
+     "market_cap": 2102502310,
+     "volume_24h": 78535398
+    },
+    {
+     "id": "pump-fun",
+     "symbol": "PUMP",
+     "market_cap": 1962472882,
+     "volume_24h": 98594112
+    },
+    {
+     "id": "aster-2",
+     "symbol": "ASTER",
+     "market_cap": 1891447254,
+     "volume_24h": 114428272
+    },
+    {
+     "id": "falcon-finance",
+     "symbol": "USDF",
+     "market_cap": 1881717253,
+     "volume_24h": 346460
+    },
+    {
+     "id": "worldcoin-wld",
+     "symbol": "WLD",
+     "market_cap": 1850432554,
+     "volume_24h": 222489980
+    },
+    {
+     "id": "polkadot",
+     "symbol": "DOT",
+     "market_cap": 1849308854,
+     "volume_24h": 132338304
+    },
+    {
+     "id": "pax-gold",
+     "symbol": "PAXG",
+     "market_cap": 1828489832,
+     "volume_24h": 43443003
+    },
+    {
+     "id": "world-liberty-financial",
+     "symbol": "WLFI",
+     "market_cap": 1809730668,
+     "volume_24h": 13658751
+    },
+    {
+     "id": "memecore",
+     "symbol": "M",
+     "market_cap": 1793206225,
+     "volume_24h": 1047857
+    },
+    {
+     "id": "usdd",
+     "symbol": "USDD",
+     "market_cap": 1782239284,
+     "volume_24h": 2203985
+    },
+    {
+     "id": "mantle",
+     "symbol": "MNT",
+     "market_cap": 1729725876,
+     "volume_24h": 19185961
+    },
+    {
+     "id": "spiko-amundi-overnight-swap-fund-eur",
+     "symbol": "EURSAFO",
+     "market_cap": 1701631577,
+     "volume_24h": 0.0
+    },
+    {
+     "id": "morpho",
+     "symbol": "MORPHO",
+     "market_cap": 1648916489,
+     "volume_24h": 17514395
+    },
+    {
+     "id": "pepe",
+     "symbol": "PEPE",
+     "market_cap": 1628627693,
+     "volume_24h": 155763242
+    },
+    {
+     "id": "sky",
+     "symbol": "SKY",
+     "market_cap": 1614849181,
+     "volume_24h": 5938230
+    },
+    {
+     "id": "internet-computer",
+     "symbol": "ICP",
+     "market_cap": 1600959131,
+     "volume_24h": 37307155
+    },
+    {
+     "id": "united-stables",
+     "symbol": "U",
+     "market_cap": 1574335271,
+     "volume_24h": 88815049
+    },
+    {
+     "id": "htx-dao",
+     "symbol": "HTX",
+     "market_cap": 1470396856,
+     "volume_24h": 67456269
+    },
+    {
+     "id": "bfusd",
+     "symbol": "BFUSD",
+     "market_cap": 1317743479,
+     "volume_24h": 635883
+    },
+    {
+     "id": "bitget-token",
+     "symbol": "BGB",
+     "market_cap": 1305748331,
+     "volume_24h": 9016334
+    },
+    {
+     "id": "usdgo",
+     "symbol": "USDGO",
+     "market_cap": 1270550687,
+     "volume_24h": 9226006
+    },
+    {
+     "id": "arbitrum",
+     "symbol": "ARB",
+     "market_cap": 1243931995,
+     "volume_24h": 108069837
+    },
+    {
+     "id": "ethereum-classic",
+     "symbol": "ETC",
+     "market_cap": 1219567586,
+     "volume_24h": 42571958
+    },
+    {
+     "id": "just",
+     "symbol": "JST",
+     "market_cap": 1083676610,
+     "volume_24h": 21787819
+    },
+    {
+     "id": "venice-token",
+     "symbol": "VVV",
+     "market_cap": 1073128157,
+     "volume_24h": 13595105
+    },
+    {
+     "id": "gatechain-token",
+     "symbol": "GT",
+     "market_cap": 1036860634,
+     "volume_24h": 1013028
+    },
+    {
+     "id": "kucoin-shares",
+     "symbol": "KCS",
+     "market_cap": 1036315640,
+     "volume_24h": 57997378
+    },
+    {
+     "id": "algorand",
+     "symbol": "ALGO",
+     "market_cap": 992872285,
+     "volume_24h": 40044080
+    },
+    {
+     "id": "kaspa",
+     "symbol": "KAS",
+     "market_cap": 969954249,
+     "volume_24h": 8813575
+    },
+    {
+     "id": "polygon-ecosystem-token",
+     "symbol": "POL",
+     "market_cap": 966019225,
+     "volume_24h": 45845870
+    },
+    {
+     "id": "blockchain-capital",
+     "symbol": "BCAP",
+     "market_cap": 963514617,
+     "volume_24h": 0.0
+    },
+    {
+     "id": "jupiter-exchange-solana",
+     "symbol": "JUP",
+     "market_cap": 939069661,
+     "volume_24h": 44073039
+    },
+    {
+     "id": "render-token",
+     "symbol": "RENDER",
+     "market_cap": 936935996,
+     "volume_24h": 44738016
+    },
+    {
+     "id": "cosmos",
+     "symbol": "ATOM",
+     "market_cap": 898537403,
+     "volume_24h": 34956923
+    },
+    {
+     "id": "pi-network",
+     "symbol": "PI",
+     "market_cap": 893872002,
+     "volume_24h": 2600416
+    },
+    {
+     "id": "filecoin",
+     "symbol": "FIL",
+     "market_cap": 865405665,
+     "volume_24h": 138149276
+    },
+    {
+     "id": "open-usd",
+     "symbol": "OUSD",
+     "market_cap": 824775895,
+     "volume_24h": 183767
+    },
+    {
+     "id": "superstate-short-duration-us-government-securities-fund-ustb",
+     "symbol": "USTB",
+     "market_cap": 821063728,
+     "volume_24h": 0.0
+    },
+    {
+     "id": "aerodrome-finance",
+     "symbol": "AERO",
+     "market_cap": 814263584,
+     "volume_24h": 33830294
+    },
+    {
+     "id": "injective-protocol",
+     "symbol": "INJ",
+     "market_cap": 808673800,
+     "volume_24h": 117854958
+    },
+    {
+     "id": "nexo",
+     "symbol": "NEXO",
+     "market_cap": 806816986,
+     "volume_24h": 3004503
+    },
+    {
+     "id": "lighter",
+     "symbol": "LIT",
+     "market_cap": 743095792,
+     "volume_24h": 48120343
+    },
+    {
+     "id": "layerzero",
+     "symbol": "ZRO",
+     "market_cap": 722500713,
+     "volume_24h": 60949119
+    },
+    {
+     "id": "gho",
+     "symbol": "GHO",
+     "market_cap": 697879038,
+     "volume_24h": 1013132
+    },
+    {
+     "id": "pearl-2",
+     "symbol": "PRL",
+     "market_cap": 695451374,
+     "volume_24h": 8682133
+    },
+    {
+     "id": "aptos",
+     "symbol": "APT",
+     "market_cap": 691639022,
+     "volume_24h": 62173017
+    },
+    {
+     "id": "pancakeswap-token",
+     "symbol": "CAKE",
+     "market_cap": 688348922,
+     "volume_24h": 64072057
+    },
+    {
+     "id": "akedo",
+     "symbol": "AKE",
+     "market_cap": 684249084,
+     "volume_24h": 8109534
+    },
+    {
+     "id": "blockstack",
+     "symbol": "STX",
+     "market_cap": 680142324,
+     "volume_24h": 15574909
+    },
+    {
+     "id": "stable-2",
+     "symbol": "STABLE",
+     "market_cap": 677082033,
+     "volume_24h": 7183184
+    },
+    {
+     "id": "xdce-crowd-sale",
+     "symbol": "XDC",
+     "market_cap": 665498266,
+     "volume_24h": 8987065
+    },
+    {
+     "id": "midnight-3",
+     "symbol": "NIGHT",
+     "market_cap": 659896052,
+     "volume_24h": 11864190
+    },
+    {
+     "id": "eutbl",
+     "symbol": "EUTBL",
+     "market_cap": 640295280,
+     "volume_24h": 0.0
+    }
+   ]
+  }
+ ]
+}

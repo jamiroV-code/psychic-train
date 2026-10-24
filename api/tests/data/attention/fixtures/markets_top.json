@@ -1,0 +1,8 @@
+[
+ {"id":"bitcoin","symbol":"btc","market_cap":1000},
+ {"id":"tether","symbol":"usdt","market_cap":900},
+ {"id":"wrapped-bitcoin","symbol":"wbtc","market_cap":800},
+ {"id":"ethereum","symbol":"eth","market_cap":700},
+ {"id":"staked-ether","symbol":"steth","market_cap":600},
+ {"id":"solana","symbol":"sol","market_cap":500}
+]

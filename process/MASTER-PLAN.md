@@ -10,7 +10,7 @@ metadata:
 
 # my_site — Master Plan (board and task registry)
 
-**Last verified:** 2026-10-14 UTC at `origin/main` `2ec34bb` (P9 waves 1-6 merged; PR #60: T45-T51; R12 accepted w/ known gaps; PR #63 market SPEC) ; **built from:** revision 6 (`18ffd4f`). Gate reports: `process/general-plans/completed/master-planner-recovery_02-10-26/`.
+**Last verified:** 2026-10-21 UTC at `origin/main` `faf416b` (PR #144 merge; nightly bot snapshot commits sit below it); PRs checked with `git log --merges` and the GitHub API; **built from:** revision 6 (`18ffd4f`). Gate reports: `process/general-plans/completed/master-planner-recovery_02-10-26/`.
 
 **This file is the one board.** Each task has one row here; details live in its task folder. Revisions 1-6: `process/archive/master-plan-revisions_02-10-26.md`. Protocol: `process/development-protocols/master-planner.md`. Direction: north-star.md. State: current-state.md.
 
@@ -24,7 +24,7 @@ metadata:
 
 ## Active lanes
 
-No worker lane active. Merge token: free. P9: T53-T63 except T61 merged; T61 (BTC-HIST) is owner-run; P8 PAUSED.
+Lanes: T115 (U2, PR #146, open draft, in review), T117 (independent review of T115), T118 (this docs catch-up). Merge token: free. P10 slices U3, U5, U6 queued. P9: first dataset (BTC-HIST) open; owner-run probes pending; P8 PAUSED. Worker spend about 188 of the 200 USD ceiling (planner figures, 21-10-26).
 
 ## Registry
 
@@ -51,12 +51,7 @@ Columns: ID · Objective · Prio · Status · Parent · Deps · Worker/session �
 | T26 | pytrends 0.0 questions (`layer 2 crypto`, `l2s`, `pytrends-blended/rwa`); confirm RFC-1 gating marks them `insufficient` | M | needs_input | — | T3 | — | — | open finding | — | rev 6 | data quality | — |
 | T27 | snapshot cron timing: all five crons at 11:17-13:17 UTC plus a midnight-crossing warning | M | review | P1 | — | — | merged | crons fire before UTC midnight | `gh run list` | PR #11 | start times unchecked | — |
 | T28 | non-atomic parquet writes | H | review | P1 | — | — | merged | `cache.py` temp-then-rename | full pytest (P1 EVL) | PR #11 `ba82986` | `etf_flows` write non-atomic (backlog) | — |
-| T32-T40, T42-T44 | screener batches 1-4 and zoom fix: S1, S3, S2, S8, S4, S6, S7, e2e fix, S5a, S11a, S11b, T44 | H / M | review (T39, T44 accepted) | P4 | realignment: delete verdict code; screener RSI, groups, 30-coin cap, spaghetti chart, BTC leg strip, 15-min refresh, lean storage | H | in_progress | - | - | - | - | 19 ACs | per SPEC | `active/personal-tracker-realignment_02-10-26/` | batches 1-4 (T32-T44), equities batch 5 (T45-T51) merged, `bfb7793`; S10 optional, not started, needs its own estimate and go; PC probes pending; worker spend 86.13 USD of the 100 ceiling (user raised 75 -> 100 on 12-10-26): 69.43 before batch 5 + 3.62 + 1.72 + 3.38 + 3.38 + 1.01 + 3.59, about 13.9 left; T51, planner, validator and tester sessions unmetered | - |
-| T41 | S5b layout web side (groups, add/remove, 30-coin cap, RSI) | H | accepted | P4 | T40, S11 | worker `session_01MTJTEUo9ug2o7oyRTp9ApS` | `claude/t41-s5b-layout-ui` (merged) | S5b | RT3 | PR #51 `20e9f20`, user merge 11-10-26 15:07Z; code `71e90e4`, report `1b2dc70`; tester PASS WITH_GAPS (pytest 1016/2/5/0, vitest 400 in 50 files, e2e 79 in 9); 9.99 USD read from archived session | P-S5b-1 PC probe open; AC-8r group sort, AC-S5b-8r contrast (`screener-ondemand-states-contrast_NOTE_10-10-26.md`); worker passed 7 USD ask point unrecorded | `active/screener-batch3_09-10-26/` (accepted with known gaps; not archived, needs the user's go) |
-| T45 | S9A equities API: cache-only board, chart, spaghetti, add/remove with 30 cap, calendar | H | accepted | P6 | T41 | `session_01D3a21vGbbh7Jm7kYCxe5vR` | `claude/t45-s9a-equities-api` (merged) | S9A | RT3 | PR #54 `6aee5e2`; tester PASS; 3.62 USD | none | `active/screener-batch5-equities_12-10-26/` |
-| T46 | S9B layout section `equities` | H | accepted | P6 | T45 | `session_01M9p9gPbZqhgVZapoadX5eQ` | `claude/t46-s9b-equities-layout` (merged) | S9B | RT3 | PR #55 `23d7e43`; tester PASS; 1.72 USD | hidden break in `test_layout_failure_is_logged_not_failed` fixed with planner approval | same |
-| T47 | S9C `/equities` page by parameterised reuse | H | accepted | P6 | T46 | `session_01R8x2RhVF7MTRhzVtG6NP8W` | `claude/t47-s9c-equities-page` (merged) | S9C | RT1-RT3 | PR #56 `4ec0cd0`; tester PASS (vitest 446 in 55 files); 3.38 USD | P-S9-3 phone/iPad open | same |
-| T48 | S9D equities e2e, spaghetti, drill-down | H | accepted | P6 | T47 | `session_01Hcd3ZQPzPN1s6om5zoQobY` | `claude/t48-s9d-equities-e2e` (merged) | S9D | RT1 | PR #57 `d7f3ee9`; tester PASS (pytest 1105/2/5, e2e 90 in 10); 3.38 USD | none | same |
+| T32-T40, T42-T44 | screener batches 1-4 and zoom fix | H / M | review (T39, T44 accepted) | P4 | - | workers | merged | per SPEC | per SPEC | batches 1-4 merged, `bfb7793` | PC probes pending | verbatim row: `process/archive/master-plan-archived-rows_21-10-26.md` |
 | T49 | S9F LSE adapter live-shape fix (added outside the plan after the user's probe) | H | review | P6 | T48 | `session_01BJ52mKHgXHYs8DPELeHpdc` | `claude/t49-lse-live-shape` (merged) | S9F | RT3 | PR #58 `2223e95`; CI + planner diff read only, no tester (user's decision, near usage limit); 1.01 USD | no live call run by an agent | same |
 | T50 | S9E market-hours refresh worker + equities freshness strip | H | review | P6 | T49 | `session_01YHqbhmpwYL18wnvzvSFDta` | `claude/t50-s9e-equities-refresh` (merged) | S9E | RT3 | PR #59 `7de6dea`; tester PASS (pytest 1127/1/5, vitest 476 in 59, e2e 92 in 11); 3.59 USD | AC-S9E-1 CONDITIONAL: 30/60 min constants unmeasured (P-S9-2) | same |
 | T51 | equities catch-up fix after downtime (fast lane) | M | review | P6 | T50 | one execute agent in the planner session | `claude/t51-equities-catchup-fix` (merged) | worker `_behind` rule | RT3 | PR #60 `bfb7793`; pytest 1134/1/5 (worker); CI + planner diff read only, no tester (user's decision); cost not metered | none | same, report `-t51_REPORT_13-10-26.md` |
@@ -70,31 +65,60 @@ Columns: ID · Objective · Prio · Status · Parent · Deps · Worker/session �
 | P2 | deployability (home PC + Tailscale) | M | review | — | — | — | merged | `deploy/` launchers, CORS, runbook | user PC | PR #10 | verifiable on user PC only | `active/deployability_28-09-26/` |
 | P2b | stale-build guard | M | superseded by R12 | P2 | — | — | — | gap from the 2026-10-01 live incident | — | — | — | R12 |
 | P3 | UI Direction D | M | review | — | — | — | merged | same as T14 | user visual acceptance | PR #9 | — | `active/ui-shell_28-09-26/` |
-| P4 | realignment: delete verdict code; screener RSI, groups, 30-coin cap, spaghetti chart, BTC leg strip, 15-min refresh, lean storage | H | in_progress | - | - | - | - | 19 ACs | per SPEC | `active/personal-tracker-realignment_02-10-26/` | batches 1-3 (T32-T41), S11a/b (T42, T43) and zoom fix (T44) merged, `20e9f20`; S9 later; S10 optional; PC probes pending; workers 69.43 USD of 75 (34.73 through T39 + 34.70 since; ceiling 45 -> 60 -> 75), about 5.57 left, S9 and S10 each need a fresh estimate and the user's go, a slice may no longer fit without raising the ceiling (user decides); T44 and testers unmetered | - |
-| P5 | narrative baskets: user-defined baskets, equal-weight view, mindshare share-of-total, raw-only /narrative | H | proposed | — | P4 | — | — | 12 active ACs | per SPEC | `process/general-plans/active/narrative-baskets_02-10-26/` | live probe per signal on user PC | — |
+| P4 | realignment: delete verdict code, screener groups, 30-coin cap, spaghetti, BTC leg strip, 15-min refresh | H | in_progress | - | - | - | - | 19 ACs | per SPEC | `active/personal-tracker-realignment_02-10-26/` | batches 1-5 merged (T32-T51), S10 optional and not started; PC probes pending; worker spend 86.13 of 100 USD at 13-10-26 | verbatim row: `process/archive/master-plan-archived-rows_21-10-26.md` |
+| P5 | narrative baskets: My baskets, attention score vs top-100 reference, Discovery tab, daily refresh; verdict/momentum code deleted | H | merged | - | P4 | - | `claude/t68..t86-*` | 12 active ACs | RT0-RT3 | `active/narrative-baskets_02-10-26/`; merged 16-17 Oct (T68-T86, T87 BNB, T88 #124, T89 #125, T90 #126, T91 #128, T92 report #127, T93 #129) | owner live probes; X key and caps in private env | D-17..D-20; verbatim row: `process/archive/master-plan-archived-rows_21-10-26.md` |
 | P6 | LSE equities page with Add button, private-use note | M | review | - | P4 | - | - | realignment SPEC | per SPEC | REALIGN SPEC | built: T45-T51, accepted with known gaps (PRs #54-#60); open: P-S9-2 (on-PC page, real-close timing), P-S9-3 (phone/iPad); gaps: `equities-known-gaps_NOTE_13-10-26.md` | `active/screener-batch5-equities_12-10-26/` (not archived, needs the user's go) |
 | P7 | protect pytrends partial-hour fix and nightly archive (guard tests) | M | proposed | P4 | — | — | — | BASKETS Decision 16, AC-25 | RT2 | BASKETS SPEC | — | — |
 | P8 | Human-confirmed market framework | M | proposed, PAUSED by owner 14-10-26 | - | - | - | - | owner must decide which input fits which timeframe before resume | per SPEC | SPEC `active/market-framework_13-10-26/`; PR #63 | paused; its proposed exception text (labelled D-15 in the SPEC) is renumbered on resume | `active/market-framework_13-10-26/` |
-| P9 | Data integration tooling: REA allow-listed wrapper + Scrapling tiers 1-3, separate uv project `tools/data-integration` | M | approved (owner 14-10-26) | - | - | workers per wave | `claude/t53..t63-*` | PLAN PASS. Merged: T53 #66, T54 #67, T55 #70, T56 #69, supplements #71 #72, T57 #75, T58 #74. Wave 3.5 T63 (S-T3c provenance completeness + fetch hardening) done: PR #76 + follow-up PR #77 merged; tester PASS_WITH_GAPS, fixed; cost 1.10 USD. T59 (S-T4, #79) merged PASS_WITH_GAPS (robots on redirect hops unchecked; size cap after full download; probe_tier2 browser-missing message generic). T62 (CLI, #80) merged PASS_WITH_GAPS (report lacked known-limits; documented in docs). T60 (docs, #81) merged PASS. Baselines: API 1192 passed/1 skipped/5 deselected, tooling 523, tooling_guards 49. Left: T61 (BTC-HIST) is owner-run: scrape https://charts.bitbo.io/halving-progress/, no APIs; guide `active/data-integration-tooling_13-10-26/data-integration-tooling-btc-hist-owner-guide_15-10-26.md`; fit unknown, STOP valid; owner probes AC-16/17/20 open; then programme EVL and closeout. P8 stays PAUSED. Rule: recompute API baseline from origin/main before envelopes | RT0-RT3; est 24.8-43.5 USD plus T63; ceiling 130 USD; worker spend 97.66 USD; ask 7, cap 15 USD per slice | plan `active/data-integration-tooling_13-10-26/` | limits: tiers 2/3 not proven live; scrapling-importing tests outside CI; Windows/Py 3.12 unverified until owner probes AC-16/17; REA web modes unverified | - |
+| P9 | Data integration tooling: REA wrapper + Scrapling tiers 1-3, `tools/data-integration` | M | approved (owner 14-10-26) | - | - | workers | `claude/t53..t67-*` | PLAN PASS; programme built, merged 13-16 Oct (T53-T67, PRs #66-#95), D-15, D-16 | RT0-RT3; worker spend 97.66 USD | plan `active/data-integration-tooling_13-10-26/` | BTC-HIST open; owner probes AC-16/17/20 pending; tiers 2/3 not proven live; P8 stays PAUSED | verbatim row: `process/archive/master-plan-archived-rows_21-10-26.md` |
+| P10 | weighted attention signal and tradeable universe | H | in_progress | P5 | - | workers per slice | `claude/t96..t118-*` | weighted scoring W1-W3, W9 done; universe U1, U4 done, U2 in review, U3 U5 U6 queued. Proposed, not approved: W4 detail table, W5 github_dev, W6 defillama, W7 exchange_activity (Coinbase, Kraken), W8 in-API fetch for sources GitHub cannot reach, T100 Trends backfill | RT0-RT3; ceiling 200 USD | SPECs and PLAN in `active/narrative-baskets_02-10-26/` (`weighted-signal_SPEC`, `universe-narratives_SPEC`, `universe-narratives_PLAN`); rows T95-T118 below | G-OWN review of the 11-narrative list passed by the owner 21-10-26 (planner-reported), file `status` flip to `reviewed` pending (separate small task); Reddit API access requested by the owner 18-10-26, awaiting approval; X stays off; weights are the owner's call (D-24); scheduled checks `trig_01L2U9sNDtrJ59DCjvXYdBVG` (2027-01-18 calibration) and `trig_015hASBMDARhqyxofVKv3Ghd` (2027-04-18 suggestions); T96-T107 skipped PLAN/VALIDATE/EVL (D-26) | D-22..D-26 |
+
+### Weighted signal and universe tasks (T88-T118, compact rows)
+
+Columns: ID · What · Status · PR / evidence · Cost USD (planner-measured). `review` = merged but not independently reviewed or EVL-gated, or still open. Report-only tasks have no PR.
+
+| ID | What | Status | PR / evidence | Cost |
+|---|---|---|---|---|
+| T88 | P5 refresh fix | review | #124 | n/m |
+| T89 | P5 verifier fix | review | #125 | n/m |
+| T93 | P5 extra hardening | review | #129 | n/m |
+| T95 | discovery data check, report-only: per-source lag made every coin read under 2 sources | review | report only | not measured |
+| T96 | discovery lag fix | review | #131 | not measured |
+| T97 | sources audit, report-only | review | report only | 0.43 |
+| T98 | weighted-signal SPEC | review | #132 | 1.61 |
+| T99 | wiki articles (no coins added, shape test only) | review | #133 | 0.51 |
+| T101 | W1 weighted scoring and trigger | review | #134 | 1.06 |
+| T102 | Wikipedia title checker | review | #135 | 0.63 |
+| T103 | W2 point-in-time history endpoint | review | #136 | 1.14 |
+| T104 | W3 Discovery history chart | review | #138 | 1.67 |
+| T105 | W9 frozen daily signal snapshots | review | #137 | 0.73 |
+| T106 | Discovery table, ranked-category rule, sources panel | review | #140 | 1.81 |
+| T107 | history chart panels | review | #139 | 1.12 |
+| T108 | universe-narratives SPEC | review | #141 | 1.07 |
+| T109 | review, report-only | review | report only | 0.62 |
+| T110 | small fixes on #140 | review | commit `d434621` inside #140 | 0.40 |
+| T111 | universe-narratives PLAN | review | #142 | 1.05 |
+| T112 | VALIDATE of that PLAN, `Gate: PASS` | review | #143 | 3.69 |
+| T113 | U1 narratives file and loader | review | #145 (part merged before review) | 6.55 |
+| T114 | U4 symbol source (CoinGecko and Wikipedia cover the universe) | review | #144 (part merged before review); owner probe P-CG passed 21-10-26 on the owner's PC (planner-reported): `coingecko: 90/92 ok, 3605 rows written [ok 90, insufficient-history 2]`, was 56 of 103 ok before U4 | 1.84 |
+| T115 | U2 reasoned exclusions, label-only volume | review | PR #146 open draft | 3.75 |
+| T116 | review, report-only | review | report only | 0.69 |
+| T117 | independent review of T115 | in_progress | report only | - |
+| T118 | this docs catch-up | in_progress | draft PR | - |
+| T100 | Trends backfill | proposed | not approved | - |
+
+Worker spend: about 152 USD before this block (ceiling then 160), ceiling raised to 185 and then 200 on 18-10-26; measured sessions above sum to about 30; total about 188 of 200 at writing. T88-T95 and T96 are not measured.
 
 ### Recovery program (master-planner-recovery)
 
 | ID | Objective | Prio | Status | Parent | Deps | Worker/session | Branch/worktree | Scope + acceptance | Test req/budget | Report + commit refs | Blockers/risks | Outcome / archive location |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| R1 | re-verify ground truth, write current-state.md | H | accepted | — | — | Gate 2 execute | `claude/pensive-albattani-ou0cgv` | F2 | RT0, C14 | `3562deb`; vc-tester green | docs-only | `process/context/current-state.md` |
-| R2 | north-star.md + decisions.md | H | accepted | — | — | Gate 2 execute | same | F1, F3 | RT0, C8, C14 | `3562deb`; vc-tester green | — | `process/context/north-star.md`, `process/context/decisions.md` |
-| R3 | slim all-context.md, create context-changelog.md | H | accepted | — | — | Gate 2 execute | same | F4, F5, F16, F17 | RT0, C5, C6, C7 | `0e593cd`, `bcb62e4`, `5a73705`; vc-tester green | — | `process/context/` root docs |
 | R4 | master-planner.md protocol + templates | H | review | — | — | Gate 2 execute | same | F7, F11 | RT0, C7, C12 | `b78e652`; green | branch-delete unverified | `process/development-protocols/master-planner.md` |
-| R5 | registry rewrite in this file | H | accepted | — | R14 | Gate 2 execute | same | F6, F8 | RT0, C11, C14 | `dafa781`, `b36a0da` | user accepted AC-R5, AC-R6 | this file; `process/archive/index.md` |
-| R6 | CLAUDE.md / AGENTS.md role-neutral rewrite, ENTRY-SET drift check | H | accepted | — | Gate 2 | Gate 3 execute | `claude/pensive-albattani-ou0cgv` | F9, F10 | RT0, C1, C2, C9, C10 (G3-1..G3-11) | `eee7709`, `0b3c9bf`; user accepted | — | decisions D-9, D-10 |
-| R7 | token baseline measurement | M | accepted | — | R6 | Gate 3 execute + independent vc-tester | same | C3, C4, probes B1, B2, P2 | cap 1 USD; 0.617 spent | planner 78,664 -> 37,450 tokens | single-run; user accepted AC-R9 | Gate 3 report |
 | R8 | test policy into all-tests.md | M | review | — | R6 | Gate 4 execute + independent vc-tester | same | F12, planner budget pin | RT0, G4-1..G4-11 | `753db23`; green | needs user's Gate 4 acceptance | operating-instructions.md, all-tests.md |
 | R9 | housekeeping (approved items only) | L | proposed | — | — | — | — | H1-H10 per approval | validators | — | user 03-10-26: H2 = T20, H8 = T16, H1 declined (T17), rest deferred | backlog `gate5-deferred-candidates_NOTE_03-10-26.md` |
 | R10 | deploy path doc + stale-build guard proposal | M | proposed | — | — | — | — | RECOVERY section 8 | RT0 | — | — | Gate 5 |
 | R11 | archive index + session triage | L | proposed | — | — | — | — | grow `process/archive/index.md` | RT0 | — | — | Gate 5 |
 | R12 | deploy fixes: kill-by-port before build, stale-build guard in `start-web`, post-start smoke check | M | accepted | P2 | - | workers W1-W4 | `claude/r12-deploy-fixes` (merged) | owns `deploy/*.ps1`; user PC record 10-10-26 | RT4 | PR #45 `86ddebc` (code), PR #48 `a2fd4b5` (record); review-decision approved-with-concerns; W1 2.45 + W2 4.56 + W3 1.39 + W4 0.77 USD | ACCEPTED WITH KNOWN GAPS (W1-W4): HTTP non-200 and build-id-mismatch smoke branches shape-tested only; exit 6 seen only for process-exited; failed-smoke port stop could exit 5 first; invalid WebPort under -ReportOnly exits 2. W4 self-merged PR #48 despite NEVER merge | `active/r12-deploy-fixes_03-10-26/` (left in place; archive needs the user's go) |
-| R13 | salvage `claude/exciting-meitner-hy50kn` selectively | H | accepted | — | — | Gate 2 execute | same | TAKE: LSE folder, strip fixes; DROP: duplicate board | RT0, C14 | `448b10c`; vc-tester green; user accepted AC-R6 | other hunks not taken | `process/general-plans/completed/lse-data-verification_17-09-26/` |
-| R14 | adopt `pensive-dijkstra` MASTER-PLAN rev 6 as registry base | H | accepted | — | — | Gate 2 execute | same | rev 6 `18ffd4f` | C14 | `c33fa96`; green | — | `process/archive/master-plan-revisions_02-10-26.md` |
 
 ## Carried notes
 

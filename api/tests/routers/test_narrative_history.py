@@ -13,7 +13,6 @@ from fastapi.testclient import TestClient
 
 from api.data import cache, coingecko_adapter, hyperliquid_narrative_adapter, pytrends_adapter, reddit_adapter
 from api.main import app
-from api.routers import narrative as narrative_router
 
 URL = "/api/narrative/history"
 SEEDS = {"ai": "AI crypto", "rwa": "RWA crypto", "l2s": "layer 2 crypto", "memecoins": "memecoin"}
@@ -147,9 +146,3 @@ class TestTransport:
         assert resp.headers.get("content-encoding") == "gzip"
         assert resp.json()["categories"]  # httpx decodes transparently
         assert gzip  # imported for clarity of intent
-
-    def test_get_history_is_separate_from_get_categories(self):
-        import inspect
-        src = inspect.getsource(narrative_router.get_categories)
-        assert "history" not in src
-        assert "assemble_narrative_categories" not in inspect.getsource(narrative_router.get_history)

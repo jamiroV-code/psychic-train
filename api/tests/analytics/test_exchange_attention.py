@@ -150,10 +150,10 @@ def test_real_map_file_loads_and_resolves_thousand_unit_coins():
     assert got == {"PEPE": "kPEPE", "BONK": "kBONK", "SHIB": "kSHIB"}
 
 
-def test_display_only_not_imported_by_trigger_or_screener():
+def test_display_only_not_imported_by_screener_or_router():
     import pathlib
 
     root = pathlib.Path(ea.__file__).resolve().parents[2]
-    for rel in ["analytics/narrative/trigger.py", "analytics/screener_board.py", "routers/narrative.py"]:
+    for rel in ["analytics/screener_board.py", "routers/narrative.py"]:
         text = (root / rel).read_text(encoding="utf-8")
         assert "exchange_attention" not in text and "hyperliquid_narrative_adapter" not in text

@@ -11,6 +11,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from api.data import baskets_view
 from api.data import layout as layout_store
 from api.data import watchlist as watchlist_store
 
@@ -23,6 +24,10 @@ _SECTION = "crypto"
 
 class WatchlistResponse(BaseModel):
     coins: list[str]
+
+
+class RemoveCoinResponse(WatchlistResponse):
+    affected_baskets: list[str]
 
 
 class AddCoinRequest(BaseModel):
@@ -50,11 +55,26 @@ def add_coin(body: AddCoinRequest) -> WatchlistResponse:
             layout_store.place_coin(_SECTION, symbol, body.group_id)
         except Exception:
             logger.warning("layout not updated after adding %s", symbol, exc_info=True)
+    elif symbol not in before:
+        # _reconcile appends unplaced coins to the LAST group, which would be a
+        # basket: pin a new coin to Unassigned (main) when a saved layout has one.
+        try:
+            lay = layout_store.read_layout(_SECTION)
+            if lay.source == "file" and any(g.id == layout_store.DEFAULT_GROUP_ID for g in lay.groups):
+                layout_store.place_coin(_SECTION, symbol, layout_store.DEFAULT_GROUP_ID)
+        except Exception:
+            logger.warning("layout not updated after adding %s", symbol, exc_info=True)
     return WatchlistResponse(coins=coins)
 
 
-@router.delete("/{symbol}", response_model=WatchlistResponse)
-def remove_coin(symbol: str) -> WatchlistResponse:
+@router.delete("/{symbol}", response_model=RemoveCoinResponse)
+def remove_coin(symbol: str) -> RemoveCoinResponse:
+    affected: list[str] = []
+    try:
+        basket = baskets_view.basket_of(layout_store.read_layout(_SECTION), symbol.upper().strip())
+        affected = [basket.name] if basket else []
+    except Exception:
+        logger.warning("baskets not read before removing %s", symbol, exc_info=True)
     try:
         coins = watchlist_store.remove_coin(symbol)
     except watchlist_store.SymbolNotFoundError:
@@ -63,4 +83,4 @@ def remove_coin(symbol: str) -> WatchlistResponse:
         layout_store.drop_coin(_SECTION, symbol.upper().strip())
     except Exception:
         logger.warning("layout not updated after removing %s", symbol, exc_info=True)
-    return WatchlistResponse(coins=coins)
+    return RemoveCoinResponse(coins=coins, affected_baskets=affected)
