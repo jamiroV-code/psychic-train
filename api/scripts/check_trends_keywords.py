@@ -1,20 +1,27 @@
-"""Check coin names against Google Trends suggestions and propose topic ids (T100a, v3 T155).
+"""Check coin names against Google Trends suggestions and propose topic ids (T100a, v3 T155, T161).
 
 Run from the repo root: uv run --project api --with pytrends python -m api.scripts.check_trends_keywords
 Reads a symbol -> name JSON map (default, T155: every coin in api/data/trends_keywords.json with its label, then
 every Discovery-eligible coin of the latest universe snapshot that has no entry, named from its CoinGecko id;
 those names are listed first, check them), prints one line per coin, a paste-ready JSON of PASS entries and a 'needs a decision' block (each AMBIGUOUS coin with its first
-exact-name candidate and a Trends link to check it by eye). Writes nothing. Exit 0 (also after a 429 stop), 1 if the Trends
-session cannot start, 2 if the input is unreadable, 3 if pytrends is not installed, 130 after Ctrl-C.
+exact-name candidate and a Trends link to check it by eye). Writes nothing. Exit 0, 1 if the Trends session cannot start, 2 if the
+input or an option is bad, 3 if pytrends is not installed, 4 when Google refused and the run stopped, 130 after Ctrl-C.
 Starting the session sends one cookie request to Google before the per-coin calls.
 PowerShell: quote comma lists, e.g. --symbols 'LINK,AAVE'.
---only-unresolved checks only those coins with no `topic` entry (or no entry at all) and turns on --variants: each
-coin is also queried as '<name> crypto', '<name> coin' and '<ticker> crypto' (at most 4 queries per coin, 3 s
-apart; the expected request count and minutes print first). Candidates are merged by topic id, each tagged with
-the query that found it. Examples:
+Requests go 3 s apart (--delay S raises it), with a 20 s pause every 40 requests (--pause-every N, 0 = never;
+--pause-s S); the expected request count and minutes print first. Three failed requests in a row of any kind
+(ConnectionError, timeout, 429, 5xx) mean Google is refusing us: the run stops sending, marks the rest NOT-RUN,
+prints the --symbols list to re-run after 30-60 minutes and exits 4 (T161: on 23-10-26 every request after about
+100 failed with ConnectionError and the run kept sending to 137).
+--only-unresolved checks only those coins with no `topic` entry (or no entry at all), one request per coin.
+--variants also queries each coin as '<name> crypto', '<name> coin' and '<ticker> crypto' (at most 4 queries per
+coin), merging candidates by topic id, each tagged with the query that found it. It is opt-in since T161: in the
+owner's run of 23-10-26 the variants found no crypto-typed topic for 13 of 13 ambiguous coins (they return books,
+products and apartments), at four times the requests. Examples:
   uv run --project api --with pytrends python -m api.scripts.check_trends_keywords --only-unresolved
   uv run --project api --with pytrends python -m api.scripts.check_trends_keywords --only-unresolved --symbols 'AVAX,SUI'
-With variants, a coin still AMBIGUOUS gets a paste-ready qualified term ('avalanche crypto') in a 'qualified term
+  uv run --project api --with pytrends python -m api.scripts.check_trends_keywords --only-unresolved --variants --delay 5
+With --only-unresolved or --variants, a coin still AMBIGUOUS gets a paste-ready qualified term ('avalanche crypto') in a 'qualified term
 proposals' block: lower confidence than a topic, never a checker PASS. A coin with a failed query cannot PASS and
 gets no term; re-run it. Ctrl-C stops the run, prints the partial results and exits 130. A last block lists
 the proposed symbols outside the narrative-placed set (the loader only warns on them) and the Discovery coverage.
@@ -46,13 +53,16 @@ from api.analytics.attention.universe import load_universe_rows
 from api.data.attention import trends_keywords as tk
 from api.scripts.trends_cli_common import (
     error_class,
-    is_rate_limited,
     make_trendreq,
     start_client,
 )
 
 INTERVAL_SECONDS = 3.0
-MAX_CONSECUTIVE_429 = 3
+# T161: any failure counts (ConnectionError, timeout, 429, 5xx), not only 429.
+MAX_CONSECUTIVE_FAILURES = 3
+PAUSE_EVERY = 40
+PAUSE_SECONDS = 20.0
+STOPPED_EXIT = 4
 # Google `type` strings seen in the owner's run of 21-10-26 (T134): Currency, Coin, Chain, Blockchain,
 # Blockchain platform, Distributed ledger, Payment network, Cryptocurrency, Cryptocurrency exchange company.
 # Generic types (Topic, Software, Company, Website, Computer program) stay out: a hit there needs the owner.
@@ -74,7 +84,7 @@ CONTAINED_SUFFIXES = ("coin", "token", "network", "blockchain", "cryptocurrency"
 VERIFY_URL = "https://trends.google.com/trends/explore?q={}"
 PASTE_HEADER = "--- paste-ready JSON (PASS entries) ---"
 DECISION_HEADER = "--- needs a decision ---"
-NOT_RUN_REASON = f"stopped after {MAX_CONSECUTIVE_429} consecutive HTTP 429"
+NOT_RUN_REASON = f"stopped after {MAX_CONSECUTIVE_FAILURES} consecutive failed requests"
 INTERRUPTED_REASON = "interrupted (Ctrl-C)"
 INTERRUPTED_EXIT = 130
 # T155: extra suggestion queries per coin; the plain name hides the crypto entity for common words (Avalanche,
@@ -89,7 +99,25 @@ LEAD_RULES = ("ticker-title", "bracket")
 LEAD_NOTE = ("a ticker-title or bracket PASS is a LEAD: open its Trends link and confirm the coin before pasting;"
              " notes marked 'name from CoinGecko id' carry a guessed name")
 DERIVED_MARK = "name from CoinGecko id"
-COVERAGE_KINDS = ("topic", "qualified-term", "term", "nothing", "not checked")
+COVERAGE_KINDS = ("topic", "qualified-term", "term", "nothing", "not run", "not checked")
+
+
+@dataclass
+class Pacing:
+    """Request spacing in; requests sent and whether the failure breaker stopped the run out."""
+    delay: float = INTERVAL_SECONDS
+    pause_every: int = PAUSE_EVERY
+    pause_s: float = PAUSE_SECONDS
+    sent: int = 0
+    stopped: bool = False
+
+    def wait(self, sleep) -> None:
+        """Before every request but the first: a pause after each `pause_every` requests, then the delay."""
+        if not self.sent:
+            return
+        if self.pause_every and self.sent % self.pause_every == 0:
+            sleep(self.pause_s)
+        sleep(self.delay)
 
 
 @dataclass
@@ -265,19 +293,22 @@ def _verify_hint(r: Result) -> str | None:
     return f"    verify {_cand(exact)}: {VERIFY_URL.format(quote(exact['mid'], safe=''))}" if exact else None
 
 
-def _plan_line(n_coins: int, n_requests: int) -> str:
-    minutes = round(max(n_requests - 1, 0) * INTERVAL_SECONDS / 60)
-    return f"plan: {n_coins} coins, {n_requests} requests, about {minutes} min ({INTERVAL_SECONDS:g} s apart)"
+def _plan_line(n_coins: int, n_requests: int, pacing: Pacing) -> str:
+    gaps = max(n_requests - 1, 0)
+    pauses = gaps // pacing.pause_every if pacing.pause_every else 0
+    minutes = round((gaps * pacing.delay + pauses * pacing.pause_s) / 60)
+    pause = f", {pacing.pause_s:g} s pause every {pacing.pause_every}" if pacing.pause_every else ""
+    return f"plan: {n_coins} coins, {n_requests} requests, about {minutes} min ({pacing.delay:g} s apart{pause})"
 
 
-def _query_coins(mapping: dict, client, sleep, variants: bool) -> tuple[list[Result], int, bool]:
-    """Every request is INTERVAL_SECONDS after the previous one; MAX_CONSECUTIVE_429 in a row (across coins)
-    stop the run. Returns (results, requests sent, interrupted)."""
+def _query_coins(mapping: dict, client, sleep, variants: bool, pacing: Pacing) -> tuple[list[Result], bool]:
+    """Requests are spaced by `pacing`; MAX_CONSECUTIVE_FAILURES failed requests in a row (across coins) stop the
+    run and set pacing.stopped. Returns (results, interrupted)."""
     results: list[Result] = []
-    streak = sent = 0
+    streak = 0
     interrupted = False
     for sym, name in mapping.items():
-        if interrupted or streak >= MAX_CONSECUTIVE_429:
+        if interrupted or streak >= MAX_CONSECUTIVE_FAILURES:
             reason = INTERRUPTED_REASON if interrupted else NOT_RUN_REASON
             results.append(Result(sym, name, verdict="NOT-RUN", reason=reason))
             continue
@@ -285,17 +316,16 @@ def _query_coins(mapping: dict, client, sleep, variants: bool) -> tuple[list[Res
         res = Result(sym, name, queries=len(queries))
         try:
             for q in queries:
-                if streak >= MAX_CONSECUTIVE_429:
+                if streak >= MAX_CONSECUTIVE_FAILURES:
                     break
-                if sent:
-                    sleep(INTERVAL_SECONDS)
-                sent += 1
+                pacing.wait(sleep)
+                pacing.sent += 1
                 try:
                     raw = client.suggestions(q)
                 except Exception as exc:  # noqa: BLE001 - the class is reported, never the message
                     res.done += 1
                     res.failed.append(error_class(exc))
-                    streak = streak + 1 if is_rate_limited(exc) else 0
+                    streak += 1
                     continue
                 res.done += 1
                 streak = 0
@@ -306,7 +336,8 @@ def _query_coins(mapping: dict, client, sleep, variants: bool) -> tuple[list[Res
             results.append(Result(sym, name, verdict="NOT-RUN", reason=INTERRUPTED_REASON))
         else:
             results.append(_settle(res, interrupted, loose=variants))
-    return results, sent, interrupted
+    pacing.stopped = streak >= MAX_CONSECUTIVE_FAILURES
+    return results, interrupted
 
 
 def _cand_via(r: Result, c: dict, variants: bool) -> str:
@@ -355,11 +386,12 @@ def _print_scope(proposed: set[str], eligible: list[str], results: list[Result],
               " the Trends pull reads only the coins its caller passes", file=out)
     passed = {r.symbol for r in results if r.verdict == "PASS"}
     checked = {r.symbol for r in results if r.verdict != "NOT-RUN"}
+    not_run = {r.symbol for r in results if r.verdict == "NOT-RUN"}
     status = {}
     for s in eligible:
         e = keywords.get(s, {})
         status[s] = ("topic" if "topic" in e or s in passed else "qualified-term" if s in terms
-                     else "term" if "term" in e else "nothing" if s in checked else "not checked")
+                     else "term" if "term" in e else "nothing" if s in checked else "not run" if s in not_run else "not checked")
     counts = {k: sum(v == k for v in status.values()) for k in COVERAGE_KINDS}
     print(f"discovery eligible: {len(eligible)} | " + " | ".join(f"{k}: {n}" for k, n in counts.items())
           + f" (this run checked {len(checked & set(eligible))} of them)", file=out)
@@ -371,15 +403,19 @@ def _pass_note(r: Result, stamp: str, derived: bool) -> str:
 
 
 def run(mapping: dict, *, client, sleep=time.sleep, out=None, now=None, variants: bool = False,
-        eligible: list[str] | None = None, derived: dict | None = None) -> list[Result]:
+        eligible: list[str] | None = None, derived: dict | None = None, pacing: Pacing | None = None,
+        qualify: bool | None = None) -> list[Result]:
+    """`qualify` (default: `variants`) prints the qualified term proposals."""
     out = out or sys.stdout
     now = now or (lambda: datetime.now(timezone.utc))
+    pacing = pacing or Pacing()
+    qualify = variants if qualify is None else qualify
     planned = sum(len(queries_for(s, n)) if variants else 1 for s, n in mapping.items())
-    print(_plan_line(len(mapping), planned), file=out, flush=True)
+    print(_plan_line(len(mapping), planned, pacing), file=out, flush=True)
     names = {s: n for s, n in (derived or {}).items() if s in mapping}
     if names:
         print("names from the CoinGecko id (check them): " + ", ".join(f"{s}={n}" for s, n in names.items()), file=out)
-    results, sent, _ = _query_coins(mapping, client, sleep, variants)
+    results, _ = _query_coins(mapping, client, sleep, variants, pacing)
     _demote_duplicate_topics(results)
 
     for r in results:
@@ -400,7 +436,11 @@ def run(mapping: dict, *, client, sleep=time.sleep, out=None, now=None, variants
                 print(f"    {_cand_via(r, c, variants)}", file=out)
     counts = {v: sum(r.verdict == v for r in results) for v in ("PASS", "AMBIGUOUS", "FAIL", "NOT-RUN")}
     print("\n" + " ".join(f"{v}: {n}" for v, n in counts.items()), file=out)
-    print(f"requests sent: {sent}", file=out)
+    print(f"requests sent: {pacing.sent}", file=out)
+    if pacing.stopped:
+        rerun = ",".join(r.symbol for r in results if r.verdict == "NOT-RUN" or r.failed)
+        print(f"stopped: Google is refusing connections after {pacing.sent} requests; wait 30-60 minutes, then run"
+              f" again with --symbols '{rerun}'", file=out)
 
     stamp = now().strftime("%d-%m-%y")
     block = {r.symbol: {"topic": r.proposed["mid"], "label": r.name if tk.is_valid_label(r.name) else r.symbol,
@@ -414,7 +454,7 @@ def run(mapping: dict, *, client, sleep=time.sleep, out=None, now=None, variants
             hint = _verify_hint(r) if r.verdict == "AMBIGUOUS" else None
             if hint:
                 print(hint, file=out)
-    terms = _print_qualified(results, stamp, out, names) if variants else {}
+    terms = _print_qualified(results, stamp, out, names) if qualify else {}
     if eligible is not None:
         _print_scope(set(block) | set(terms), eligible, results, set(terms), out)
     return results
@@ -455,12 +495,18 @@ def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep
     ap.add_argument("--file", type=Path, default=None, help="symbol -> name JSON map")
     ap.add_argument("--symbols", default=None, help="comma-separated subset, e.g. LINK,AAVE")
     ap.add_argument("--only-unresolved", action="store_true",
-                    help="only coins with no topic in trends_keywords.json; implies --variants")
+                    help="only coins with no topic in trends_keywords.json (one request per coin)")
     ap.add_argument("--variants", action="store_true", help="also query '<name> crypto', '<name> coin', '<ticker> crypto'")
+    ap.add_argument("--delay", type=float, default=INTERVAL_SECONDS, help=f"seconds between requests, >= {INTERVAL_SECONDS:g}")
+    ap.add_argument("--pause-every", type=int, default=PAUSE_EVERY, help="pause after this many requests (0 = never)")
+    ap.add_argument("--pause-s", type=float, default=PAUSE_SECONDS, help="length of that pause in seconds")
     try:
         args = ap.parse_args(argv)
     except SystemExit as exc:
         return 0 if exc.code == 0 else 2
+    if not args.delay >= INTERVAL_SECONDS or args.pause_every < 0 or not args.pause_s >= 0:
+        print(f"--delay must be >= {INTERVAL_SECONDS:g}, --pause-every >= 0 and --pause-s >= 0", file=err)
+        return 2
     try:
         if universe_rows is None:
             universe_rows, _ = load_universe_rows()
@@ -493,10 +539,13 @@ def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep
         return code
     if not universe_rows:
         print("no universe snapshot: checking the keyword file only", file=err)
-    results = run(mapping, client=client, sleep=sleep, out=out, now=now,
-                  variants=args.variants or args.only_unresolved, eligible=eligible if universe_rows else None,
-                  derived=derived)
-    return INTERRUPTED_EXIT if any(INTERRUPTED_REASON in r.reason for r in results) else 0
+    pacing = Pacing(args.delay, args.pause_every, args.pause_s)
+    results = run(mapping, client=client, sleep=sleep, out=out, now=now, variants=args.variants,
+                  eligible=eligible if universe_rows else None, derived=derived, pacing=pacing,
+                  qualify=args.variants or args.only_unresolved)
+    if any(INTERRUPTED_REASON in r.reason for r in results):
+        return INTERRUPTED_EXIT
+    return STOPPED_EXIT if pacing.stopped else 0
 
 
 if __name__ == "__main__":

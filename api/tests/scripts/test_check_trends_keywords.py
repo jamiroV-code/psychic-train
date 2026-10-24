@@ -944,6 +944,7 @@ def test_t161_bad_pacing_options_exit_2(tmp_path):
         client = FakeTrendReq()
         code, _, err = _cli(argv, client, tmp=tmp_path)
         assert code == 2 and client.suggestion_calls == [], argv
+        assert argv[1] == "x" or "--delay must be >= 3" in err  # "x" is refused by argparse itself
 
 
 def test_t161_coverage_counts_not_run_apart_from_nothing():
