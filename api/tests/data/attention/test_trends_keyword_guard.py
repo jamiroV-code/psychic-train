@@ -35,11 +35,37 @@ def test_eligible_discovery_symbols_empty_without_universe(tmp_path):
     assert discovery.eligible_discovery_symbols(universe_path=missing) == []
 
 
-def test_every_eligible_discovery_coin_has_a_trends_keyword():
-    eligible = discovery.eligible_discovery_symbols()
-    gaps = k.guard_gaps(k.load(), eligible)
-    assert gaps == {"no-entry": [], "no-keyword": [], "skipped-unqualified": [], "allowlist-has-keyword": []}, (
-        f"eligible Discovery coins without a Google Trends keyword: {gaps}")
+# Reviewed Discovery eligible set (78 coins on the 2026-10-24 snapshot, BDX included). Pinned so a daily snapshot
+# commit cannot turn CI red; update it on purpose when the universe changes. The live gap is reported, not failed:
+# `gap_report`, the runner's no-keyword reasons and the Sources "Trends keyword: N of M" line.
+PINNED_ELIGIBLE = (
+    "AAVE", "ADA", "AERO", "AKE", "ALGO", "APT", "ARB", "ASTER", "ATOM", "AVAX", "BCH", "BDX", "BGB", "BNB", "BTC",
+    "BTW", "CAKE", "CC", "CRO", "DASH", "DOGE", "DOT", "ENA", "ETC", "ETH", "ETHFI", "FIL", "GRAM", "GT", "HBAR",
+    "HTX", "HYPE", "ICP", "INJ", "JST", "JUP", "KAS", "KCS", "LEO", "LINK", "LIT", "LTC", "M", "MNT", "MORPHO",
+    "NEAR", "NEXO", "NIGHT", "OKB", "ONDO", "PAXG", "PEARL", "PEPE", "PI", "POL", "PUMP", "QNT", "RAIN", "RENDER",
+    "SHIB", "SKY", "SOL", "SUI", "TAO", "TRX", "UNI", "VET", "VVV", "WBT", "WLD", "WLFI", "XAUT", "XDC", "XLM",
+    "XMR", "XRP", "ZEC", "ZRO",
+)
+NO_GAPS = {"no-entry": [], "no-keyword": [], "skipped-unqualified": [], "allowlist-has-keyword": []}
+
+
+def test_pinned_eligible_set_is_the_reviewed_one():
+    assert len(PINNED_ELIGIBLE) == len(set(PINNED_ELIGIBLE)) == 78 and "BDX" in PINNED_ELIGIBLE
+
+
+def test_every_pinned_discovery_coin_has_a_trends_keyword():
+    gaps = k.guard_gaps(k.load(), PINNED_ELIGIBLE)
+    assert gaps == NO_GAPS, f"eligible Discovery coins without a Google Trends keyword: {gaps}"
+
+
+def test_live_snapshot_gap_is_reported_never_failed():
+    """A new live coin without a keyword only shows in the report line; the live set is never asserted gap-free."""
+    line = k.gap_report(k.load(), [*PINNED_ELIGIBLE, "NEWCOIN"])
+    assert line == ("trends keyword: 73 of 79 eligible coins; no keyword: AKE (no-keyword), BTW (no-keyword), "
+                    "GRAM (no-keyword), LIT (no-keyword), RAIN (no-keyword), NEWCOIN (no-entry)")
+    assert k.gap_report(k.load(), discovery.eligible_discovery_symbols()).startswith("trends keyword: ")
+    assert k.gap_report(None, ["A"]) == "trends keyword: 0 of 1 eligible coins; no keyword: A (bad-file)"
+    assert k.gap_report(k.load(), ["BTC"]) == "trends keyword: 1 of 1 eligible coins"
 
 
 def test_guard_lists_the_exact_missing_symbols():
@@ -70,8 +96,7 @@ def test_allowlisted_ticker_without_entry_is_still_a_gap():
 def test_bdx_is_eligible_and_has_a_keyword():
     """T160 found BDX eligible but missing; #171 added a qualified term."""
     m = k.load()
-    if "BDX" in discovery.eligible_discovery_symbols():
-        assert k.keyword_status(m, "BDX") in ("topic", "term")
+    assert "BDX" in PINNED_ELIGIBLE and k.keyword_status(m, "BDX") == "term"
     assert m.entries["BDX"]["term"] == "beldex crypto"
 
 

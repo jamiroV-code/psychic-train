@@ -216,3 +216,12 @@ def coverage(km: KeywordMap | None, eligible) -> Coverage:
             counts["keyword-missing"] += 1
             missing.append((s, st))
     return Coverage(len(symbols), counts["topic"] + counts["term"], counts, missing)
+
+
+def gap_report(km: KeywordMap | None, eligible) -> str:
+    """One non-failing report line for the live eligible set (the guard test checks a pinned set)."""
+    cov = coverage(km, eligible)
+    line = f"trends keyword: {cov.with_keyword} of {cov.eligible} eligible coins"
+    if cov.missing:
+        line += "; no keyword: " + ", ".join(f"{s} ({st})" for s, st in cov.missing)
+    return line
