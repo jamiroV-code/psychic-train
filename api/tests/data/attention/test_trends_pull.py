@@ -102,37 +102,14 @@ def test_frozen_signals_files_untouched(isolated_cache, monkeypatch):
 
 
 def _chart(day):
-    """What the history chart (discovery_history) sees for Trends on a past `day`: the live store, gated per day."""
+    """What the history chart (discovery_history) sees for Trends on a past `day`: the pull of day+1, gated."""
     from api.analytics.attention import discovery, discovery_history
-    s = discovery_history._Stored("trends", "AAVE", True, 90).at(day)
+    s = discovery_history._TrendsPulls(True, 90).at("AAVE", day)
     return discovery._source_change(s.points, day, 7, 7, 3) if s.state == "ok" else None
 
 
-def test_replace_revises_past_chart_days_truncate_and_recompute(isolated_cache):
-    """M1 (T152) characterization, not a fix: the chart rebuilds past days from the live store, so a replace
-    (1) drops Trends from the oldest gated day each day (the 90-point gate loses its first row), and
-    (2) revises every past day whose 14-day span holds a re-pulled value that changed. A pure rescale changes
-    nothing else. The fix needs an api/analytics change (report heading 9, needs_input)."""
-    d1 = D
-    p1 = [(d1 - timedelta(days=100 - i), float(20 + (i * 37) % 50)) for i in range(100)]   # pull on d1
-    assert store.write_series(_s("AAVE", p1), today=d1, mode="replace-series") == 100
-    days = [d1 - timedelta(days=k) for k in range(1, 101)]
-    before = {x: _chart(x) for x in days}
-    gated = {x for x, v in before.items() if v is not None}
-    assert gated == {d1 - timedelta(days=k) for k in range(1, 12)}  # only 11 chart days carry Trends at all
-
-    # day 2, pure rescale: the same days on another scale, one row older dropped, one new day added
-    p2 = [(d, 1.25 * v) for d, v in p1[1:]] + [(d1, 60.0)]  # stays inside Google's 0..100 scale
-    store.write_series(_s("AAVE", p2), today=d1 + timedelta(days=1), mode="replace-series")
-    after = {x: _chart(x) for x in days}
-    changed = {x for x in days if (before[x] is None) != (after[x] is None)
-               or (before[x] is not None and abs(before[x] - after[x]) > 1e-9)}
-    assert changed == {d1 - timedelta(days=11)} and after[d1 - timedelta(days=11)] is None
-
-    # day 2 with a revised past value (Google re-samples): every chart day whose span holds it moves
-    rev = d1 - timedelta(days=5)
-    p3 = [(d, v + (7.0 if d == rev else 0.0)) for d, v in p2]
-    store.write_series(_s("AAVE", p3), today=d1 + timedelta(days=1), mode="replace-series")
-    after3 = {x: _chart(x) for x in days}
-    moved = {x for x in days if after3[x] is not None and abs(after3[x] - after[x]) > 1e-9}
-    assert moved == {d1 - timedelta(days=k) for k in range(1, 6)}
+def _live(day):
+    """The old chart path (before T175): the live store, gated per day."""
+    from api.analytics.attention import discovery, discovery_history
+    s = discovery_history._Stored("trends", "AAVE", True, 90).at(day)
+    return discovery._source_change(s.points, day, 7, 7, 3) if s.state == "ok" else None

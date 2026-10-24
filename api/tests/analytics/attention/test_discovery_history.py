@@ -89,6 +89,8 @@ def test_changing_or_deleting_points_after_d_does_not_change_d(isolated_cache, t
 def test_last_day_matches_live_scoring(isolated_cache, tmp_path, monkeypatch):
     world(tmp_path, monkeypatch, {"A": 5e7}, cats={"ai": ["A"]})
     seed_coin("A")
+    # the Trends run archives today's pull with the live series; the chart reads Trends from it (T175)
+    store.write_pull_archive("trends", TODAY, [SourceSeries("trends", "A", store.read_points("trends", "A"), "ok")])
     live = next(c for c in cat(disc.build_discovery(30, today=TODAY), "ai").coins if c.symbol == "A")
     last = hist.coin_history("A", 30, today=TODAY).days[-1]
     assert last.date == END.isoformat()
