@@ -233,3 +233,34 @@ def test_trends_code_failure_still_turns_the_verify_step_red() -> None:
     assert attention_extra.classify("trends", None).status == "failed"  # crash or timeout: no result line
     verify = [s for s in _steps("refresh-extra") if "attention_extra.py" in s.get("run", "")]
     assert len(verify) == 1 and "continue-on-error" not in verify[0] and verify[0]["if"] == "${{ !cancelled() }}"
+
+
+def _run_trends_step(tmp_path, fetcher_rc: int, line: str) -> int:
+    """Run the Trends step's shell with a fake `uv`: the fetcher (--with) prints `line` and exits fetcher_rc,
+    every other uv call (the failure-class snippet) exits 0. Returns the step's own exit status."""
+    import os
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    uv = bindir / "uv"
+    uv.write_text('#!/bin/bash\ncat >/dev/null </dev/stdin 2>/dev/null || true\n'
+                  'case "$*" in *--with*) echo "$FAKE_LINE"; exit "$FAKE_RC";; esac\nexit 0\n')
+    uv.chmod(0o755)
+    env = {**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", "RUNNER_TEMP": str(tmp_path),
+           "FAKE_LINE": line, "FAKE_RC": str(fetcher_rc)}
+    return subprocess.run(["bash", "-e", "-c", _trends_step()["run"]], env=env, capture_output=True, text=True,
+                          check=False).returncode
+
+
+def test_trends_step_propagates_the_fetcher_exit_code(tmp_path) -> None:
+    # `exit "$rc"` -> `exit 0` would hide a fetcher code failure behind a green step.
+    assert _run_trends_step(tmp_path, 3, "trends: error store-failed: ValueError x3") == 3
+    (tmp_path / "ok").mkdir()
+    assert _run_trends_step(tmp_path / "ok", 0, "trends: 3/75 ok, 3 rows written []") == 0
+
+
+def test_trends_failure_class_labels_come_from_attention_extra() -> None:
+    from api.scripts import attention_extra
+    run = _trends_step()["run"]
+    assert "attention_extra.failure_class" in run
+    assert "provider block (" not in run and '"code error"' not in run  # no second copy of the labels
+    assert attention_extra.failure_class("unavailable").startswith("provider block")
