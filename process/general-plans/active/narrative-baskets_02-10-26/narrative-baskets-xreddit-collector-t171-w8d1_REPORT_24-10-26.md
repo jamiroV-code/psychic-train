@@ -1,0 +1,225 @@
+# T171 report: W8d1 X pure core for twscrape, including the account-pool logic (24-10-26)
+
+## 1 Task ID
+
+T171, slice W8d1 "X pure core for twscrape (incl. account-pool logic)". Worker session. Branch
+`claude/t171-w8d1-x-core`, created from W8b (`claude/t140-w8b-collector-core`, draft PR #161, head `691c923`).
+The draft PR is stacked on #161 and must be retargeted to `main` after #161 merges. Approval: the owner's
+ENTER EXECUTE MODE W8d1 of 24-10-26, relayed in the envelope.
+
+## 2 Outcome
+
+DONE, with the interpretations listed in heading 8 and the open questions in heading 9. All code is pure logic
+plus fakes. Nothing from twscrape, curl_cffi, httpx or any other network library is imported, and no network
+call is made. `api/pyproject.toml`, `api/uv.lock` and `.github/` are untouched.
+
+## 3 Summary
+
+Six new pure modules under `api/data/attention/`, as the PLAN's W8d1 file list asks:
+
+- `x_window.py` (AC42): the query builder for both window syntaxes (`since_time:/until_time:` epochs, or
+  `since:D until:D+1` with until exclusive), the `lang:` policy (empty means any), the query-side
+  `-filter:replies -filter:retweets`, the coin terms (cashtag first), the timestamp filter to [D, D+1) UTC,
+  Latest as the only product, and the paging stop conditions (window start, sample N, page cap).
+- `x_filters.py` (AC43, AC44): the record types `Tweet`, `XUser` and `Coin` (W8d2 maps the library's objects onto
+  them), and the post-filters in a fixed order with one exclusion reason per tweet: not_in_window, retweet,
+  reply, lang, placeholder, protected, young_account, low_followers, cashtag_spam, no_coin_match,
+  name_only_no_match, duplicate_text, author_cap. Cashtags are matched without `$` and case-folded. For the
+  `name_only` tickers (ETC, LINK, NEAR, HYPE, PI, PUMP, GT, CC) the bare ticker word never matches. Also unique
+  authors, top-author share, the log1p engagement sum (views not in it), the median of the views that exist
+  (a missing view count is never 0), and `read_age_hours`.
+- `x_density.py` (AC42, AC54): the read-sample value. N counts raw entries READ, k counts tweets COUNTED, and the
+  span runs from the window end to the oldest READ tweet, with a floor of 0.25 h. The flags are `capped` and
+  `pagecap`. A coin-day is missing, never 0, when neither the window start, N nor the page-cap minimum is
+  reached. `summarize` runs the filters and the density for one attempt.
+- `x_raw.py` (AC45, AC54): raw pages are stored gzipped under the cache at
+  `attention/xsearch_raw/<date>/<SYMBOL>/r<run>_a<attempt>_p<page>.json.gz`. Each page carries `collected_at`,
+  the parser and reader versions, the entry ids, the retries and the two rate-limit numbers. All other header
+  values are dropped, and keys that could hold a cookie or token are removed from the body. Also: retention
+  that deletes date folders only, a completion manifest, and `reparse`, which rebuilds the X evidence row from
+  the raw pages. The live unit builds its row through `reparse` too, so a re-parse with the same parser gives
+  the same row by construction. X evidence rows are first-wins per (date, parser version), so a new parser
+  version adds a row. `mark_suspect` flags an account's stored rows with `suspect_since`.
+- `x_reader.py` (AC41, AC46, AC53-AC55):
+  - The pin, held as data only: `TWSCRAPE_PINNED_COMMIT = 63f61a518e576ea5c132f1156c03dda0520d76c1`, the package
+    name and repo URL, and `CURL_CFFI_PIN 0.16.3`.
+  - The one-account `XReader` Protocol (design A), plus `RawPage`, `PoolRow` and `ReaderFailure`. A failure
+    keeps only its abort class, never the response text.
+  - `no_account_cause`, which reads the cause of a NoAccountError from the pool row: inactive, a future
+    `SearchTimeline` lock, or a server error.
+  - The code-to-alert mapping, `fallback_decision`, `parse_drop`, `env_problems` (a pure check over a dict of
+    environment variables) and `FakeXReader`.
+- `x_pool.py` (AC46, AC49-AC54):
+  - Pool state persisted in `_pc_state/x_pool.json`, which survives a restart. A label that is not configured
+    is refused.
+  - Selection: least recently used, ties broken by registration order (not alphabetical), and every choice is
+    logged by label.
+  - Account states active, locked (until the next 00:00 UTC), inactive (with a persisted owner alert) and
+    suspect. The day is paused only at zero usable accounts. The library's `reset_locks` is never called.
+  - `run_unit` keeps one account per unit end to end. It restarts once on another account after a ban, logout
+    or lock, discards the aborted tweets and still counts their reads. A second failure gives `account_failed`.
+  - Budget and spacing are global through the one shared `PcSource`.
+  - Cloudflare and HTML blocks, including the one-retry fallback hook for the separate curl process, are
+    logged in the evidence and in the pool health. The drift stop triggers after 3 failures and the parse-drop
+    stop on `layout_changed`.
+  - `run_daily_canary` runs before any unit on the least recently canaried accounts, three when three or more
+    are usable. It uses the same query and the same last complete hour for each account, with 25 percent
+    tolerance and 0.6 overlap measured on the smaller set. It has a majority rule for three and the
+    minimum-results gate, and it skips the comparison for a single account with a note in the health payload.
+
+Config: the 8 PLAN keys and the 5 further SPEC keys the logic needs were added to `attention_queries.json`,
+typed and validated in `web_queries.py`, with a per-coin `x_lang` override (heading 8 D2). Tooling guards were
+extended in `test_pc_collector_guards.py` for:
+- no twscrape, curl_cffi or network import in the six modules (with a planted-import self-test);
+- no evasion vocabulary, no fixed-hour comparison and no logger use;
+- no `reset_locks` and no `debug=` keyword (with a planted self-test);
+- the pin held as data only, and absent from the dependency files.
+
+## 4 Files changed
+
+| File | Change |
+|---|---|
+| `api/data/attention/x_window.py`, `x_filters.py`, `x_density.py`, `x_raw.py`, `x_reader.py`, `x_pool.py` | new |
+| `api/data/attention/web_queries.py` | X keys (`X_DEFAULTS`, typed validation), per-coin `x_lang` |
+| `api/data/attention_queries.json` | 13 X keys in `collector` |
+| `api/tests/data/attention/test_x_window.py`, `test_x_filters.py`, `test_x_density.py`, `test_x_raw.py`, `test_x_reader.py` | new (73 tests) |
+| `api/tests/tooling_guards/test_pc_collector_guards.py` | 5 W8d1 guard tests added |
+| this report | new |
+
+File-set check: `git diff --stat 691c923..HEAD` lists exactly these files. There are no edits to `api/pyproject.toml`,
+`api/uv.lock`, `.github/` or any other W8b module (`density.py`, `pc_pace.py`, `web_evidence.py` and
+`pc_adapter.py` were read and imported, not changed).
+
+## 5 Commits
+
+1. `1ef1197` test: red tests. All five new test files fail at import, and 4 of the 5 new guard tests fail; the
+   planted-import self-test passes on the helper alone.
+2. `6bcb6a4` feat: the implementation. Green.
+3. `6469d16` style: a trailing blank line in `x_pool.py`.
+4. `9475e94` test: boundary tests from the mutation check, and removal of an equivalent (dead) unit-wide drop
+   check.
+5. This report (docs).
+
+## 6 Tests run
+
+- New files: `test_x_window` 9 functions (24 cases with the parametrized config test), `test_x_filters` 14,
+  `test_x_density` 5, `test_x_raw` 7, `test_x_reader` 38. All pass.
+- `api/tests/data/attention` + `api/tests/scripts` + `api/tests/tooling_guards`: 813 passed, 1 skipped.
+- Full `uv run --project api pytest api -q` at `9475e94`: 2084 passed, 1 failed, 2 skipped, 5 deselected. The W8b
+  base before any change had 1991 passed, 1 failed, 2 skipped and 5 deselected. The +93 equals the new tests
+  (88 cases in the five new files plus 5 guard tests). The one failure,
+  `analytics/attention/test_weights_v2.py::test_committed_frozen_snapshots_match_their_days_weights`, is
+  pre-existing and unrelated to the X files.
+- Mutation check, done by hand by applying mutants to the decision logic and running the five new test files:
+  - First pass: 34 mutants, 29 killed and 5 survived. The survivors were the lock end 1 h early, the canary
+    tolerance `>` changed to `>=`, the overlap divided by the larger set, "several entries" set to more than 2,
+    and the unit-wide parse-drop check removed.
+  - Four of the survivors were test gaps; boundary tests were added for each. The fifth was an equivalent mutant:
+    a unit-wide rate above the threshold implies a page above it, so that check was dead code and was removed.
+  - Second pass: 33 mutants, 33 killed, 0 survived.
+  - Covered areas: selection, state machine and restarts, UTC-day lock, drift stop and reset, canary
+    (tolerance, overlap, two-account rule, majority, account count, minimum results, gate before units), window
+    and stop conditions, density (exact, floor, page cap), parse drop, fallback decision, NoAccountError cause,
+    environment guard, budget accounting and author cap.
+- Hygiene:
+  - `git diff --check 691c923..HEAD` is clean.
+  - Secret scan over the diff: the only hits are the planted test markers and the scrub key list.
+  - The banned-name grep uses names built from split strings and finds no hit.
+  - No-network-import grep: none.
+  - `ruff check` on all new and changed files passes. The base already has 48 ruff findings elsewhere, so ruff is
+    not a gate.
+
+## 7 Tests NOT run
+
+- Anything live: X is not reachable from the sandbox, and nothing from twscrape is installed.
+- The owner probe P-X9 (AC48) is not run, so it is still open. Whichever window syntax X honours, the shape of
+  `viewCount` and the cashtags, and the real `x-rate-limit-*` headers all stay UNVERIFIED.
+- No CI result on this branch yet.
+- AC41 parts left to W8d2: the pin, name and near-name guard, the installed-commit check and the optional
+  dependency group.
+- AC47 is all W8d2.
+- AC52 health-line wiring and AC53 install and hash guards are W8d2 and W8e2.
+- The engagement series is computed here but stored separately only once W8d2 wires it.
+
+## 8 Deviations
+
+Interpretations where the SPEC or PLAN was silent or ambiguous. Each one is small and listed so the planner can
+overrule it.
+
+- D1: Pool tests are in `test_x_reader.py`, because the PLAN file list has no `test_x_pool.py`.
+- D2: The PLAN lists 8 config keys. I also added `x_unit_max_restarts` (1), `x_canary_tolerance` (0.25),
+  `x_canary_min_overlap` (0.6), `x_parse_drop_threshold` (0.2) and `x_allow_curl_backend` (false), which are
+  named by SPEC rules 18-19 and used by this logic. The X keys are required in the file, and the existing
+  dataclass gets defaults so W8b callers are unchanged. `x_pool_size` and the labels are left to W8d2 (AC47).
+- D3: When the window start is reached on the same page that brings the reads to N, the value is EXACT (k). The
+  "capped otherwise" wording would use a span over 24 h and undercount.
+- D4: A cashtag coin with no cashtag and no name match is excluded as `no_coin_match`, because A.1b lists only
+  `name_only_no_match`.
+- D5: Alert mapping for an inactive row. 32, a bare 403 (no text) and text without a code map to
+  `x_login_required`; 88, 326 and any other code map to `x_account_suspended`. Both are owner-action alerts.
+- D6: "Several" raw entries is 2 or more. The drop rate is checked per page (D-mutation note in heading 6).
+- D7: Canary details:
+  - One page per account. The result is the set of parsed tweet ids inside the last complete clock hour (the
+    "fixed past hour", the same for every account; no fixed UTC hour, per the hour guard).
+  - With three or more usable accounts, three are canaried. A suspect is an account that agrees with fewer than
+    half of the others.
+  - An inconclusive result (two equal-size results that disagree, or no majority) pauses the day with the new
+    reason `canary_disagree` (fail closed).
+  - A Cloudflare or HTML block during the canary pauses the day without the curl fallback.
+  - Canary reads respect the global spacing and the global budget.
+- D8: Account age is measured at tweet time, so a re-parse gives the same result whenever it runs.
+- D9: A NoAccountError on an active row with no future lock (server error) leaves the coin-day missing with
+  reason `failed`, and nothing restarts. Rule 18f lists only ban, logout or lock as restart causes.
+- D10: Pool day pauses live in the pool state, not in `PcSource.warn`, whose owner-action pause would stop the
+  whole source on one banned account. The W8e worker must check `XPool.is_paused()` and `PcSource.is_paused()`.
+- D11: All pages of a unit carry the unit's start time as `collected_at`. The run id is that time in epoch
+  seconds.
+- D12: The environment guard also refuses lowercase proxy variables and `ALL_PROXY`, and it requires
+  `TWS_RAISE_WHEN_NO_ACCOUNT=1` (rule 20b).
+- D13: `reparse` uses the first completed run of a coin-day, matching the first-wins value.
+
+## 9 Blockers
+
+No blockers. Envelope owner questions answered with the SPEC's recommended value:
+
+- Q21: twscrape primary, API Anything not built.
+- Q22: `x_lang` defaults to `en`, with a per-coin override; empty means any language.
+- Q23: account age 30 days, 10 followers, protected and placeholder users excluded, author cap 3, more than 5
+  cashtags excluded.
+- Q28: design A.
+- Q29: not needed for W8d1; the wheel hash is W8d2's.
+
+New questions for the owner or planner (the defaults chosen are in heading 8):
+
+- QA: Should an inconclusive canary pause the day (`canary_disagree`, the current behaviour), or should the day
+  proceed with an alert only? (D7)
+- QB: Is the D5 alert mapping right, in particular a bare 403 counting as login-required?
+- QC: Is "several" entries = 2 right for the zero-parsed rule? (D6)
+- QD: Should the exclusion reason for a non-matching cashtag coin be `no_coin_match`? (D4)
+- QE: Should the window start win over N on the same page (exact value)? (D3)
+
+## 10 Follow-up
+
+W8d2 needs to:
+- wrap the library onto `XReader` (`search_raw` to `RawPage` with tweet-entry ids only, `parse_tweets` to
+  `x_filters.Tweet`, `pool.get` to `PoolRow`, exception classes to `ReaderFailure` kinds);
+- add the pin, name, near-name and installed-commit guards, the optional group, and the curl fallback process
+  that `run_unit(fallback=...)` calls;
+- call `env_problems(os.environ)` at start;
+- store `xsearch_engagement`, and add the labels and `x_pool_size` config and the AC47 file checks.
+
+W8e or W8e2 needs to:
+- run the canary, then the units, honouring `XPool.is_paused()`, `XPool.health()` and `x_raw.prune`;
+- commit values via `web_evidence.commit_day` with `canary_ok` from the canary.
+
+The planner needs to retarget this PR to `main` after #161 merges.
+
+## 11 Context and cost
+
+Read: CLAUDE.md, the envelope, the PLAN's W8d1 section and AC rows (git show on
+`claude/t163-reddit-engagement-spec`), SPEC rules 17-20, Annex A.1 and A.1b, AC41-AC55 and Q21-Q29 (same ref),
+and the W8a2 report sections 9.3 and 10 (C1-C11). W8b modules were opened as needed: `density.py`, `pc_pace.py`,
+`web_evidence.py`, `web_queries.py`, `pc_adapter.py`, `test_pc_pace.py` and `test_web_queries.py` (fixtures),
+`test_pc_collector_guards.py` (extended), and `conftest.py`. Extra docs opened beyond the envelope:
+`process/context/tests/all-tests.md` (a grep for the pytest command only) and the T140 report (heading layout
+only). The session cannot meter USD; no stop threshold was signalled.
