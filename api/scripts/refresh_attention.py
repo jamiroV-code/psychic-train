@@ -52,6 +52,9 @@ _TRENDS_REASON_OUTCOME = {trends.TOO_LITTLE_INTEREST: "too-little-interest",
                           trends.QUIET_THEN_SURGE: "quiet-then-surge",
                           trends.NAME_AMBIGUOUS: "skipped-unqualified", "no keyword mapped": "no-keyword",
                           "non-daily": "non-daily"}
+# trends_keywords.keyword_status of a coin with no usable keyword -> its Trends reason (T180: existing strings kept).
+MISSING_KEYWORD_REASON = {"no-entry": "no keyword mapped", "no-keyword": "no keyword mapped",
+                          "skipped-unqualified": trends.NAME_AMBIGUOUS}
 # Store mode per source; every source not listed keeps first-write-wins.
 WRITE_MODES = {"trends": "replace-series"}
 TRENDREQ_FACTORY = make_trendreq  # pytrends is imported on first use only; tests inject a fake
@@ -241,16 +244,11 @@ def _run_trends(symbols, client, today, sleep):
     out: dict[str, SourceSeries] = {}
     todo: list[tuple[str, str]] = []
     for s in dict.fromkeys(x.upper() for x in symbols):  # a repeated symbol costs one request
-        entry = km.entries.get(s) if km else None
-        kw = km.keyword_for(s) if km else None
-        if km is None:
-            out[s] = SourceSeries("trends", s, [], "unavailable", bad)
-        elif not kw:
-            out[s] = SourceSeries("trends", s, [], "unavailable", "no keyword mapped")
-        elif s in trends.NAME_RISK_SYMBOLS and "topic" not in entry and not trends.is_qualified_term(kw):
-            out[s] = SourceSeries("trends", s, [], "unavailable", trends.NAME_AMBIGUOUS)
+        status = trends_keywords.keyword_status(km, s)
+        if status in ("topic", "term"):
+            todo.append((s, km.keyword_for(s)))
         else:
-            todo.append((s, kw))
+            out[s] = SourceSeries("trends", s, [], "unavailable", MISSING_KEYWORD_REASON.get(status, bad))
     if todo:
         start = today.toordinal() % len(todo)  # rotate so a budget stop does not always starve the same coins
         todo = todo[start:] + todo[:start]

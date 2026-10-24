@@ -101,6 +101,20 @@ class DiscoverySourceRow(BaseModel):
     note: str = ""
 
 
+class DiscoveryKeywordGap(BaseModel):
+    """An eligible coin the daily Trends pull skips (T180): it gets no Trends data, never a 0."""
+    symbol: str
+    reason: Literal["no-trends-keyword"] = "no-trends-keyword"
+    detail: str            # trends_keywords.MISSING_STATUSES: no-entry, no-keyword, skipped-unqualified, bad-file
+
+
+class DiscoveryTrendsKeyword(BaseModel):
+    """Google Trends keyword coverage over the eligible coins (T180)."""
+    eligible_size: int
+    with_keyword: int      # eligible coins with a topic or a pullable term
+    missing: list[DiscoveryKeywordGap] = []
+
+
 class DiscoverySourcesResponse(BaseModel):
     as_of: str
     universe_size: int
@@ -110,6 +124,7 @@ class DiscoverySourcesResponse(BaseModel):
     live_weight: float     # points of 100 whose source is ok
     newest: str | None     # newest stored date over live sources
     sources: list[DiscoverySourceRow]
+    trends_keyword: DiscoveryTrendsKeyword | None = None   # additive (T180)
 
 
 class DiscoveryHistoryDay(BaseModel):

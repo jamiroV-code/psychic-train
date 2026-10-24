@@ -121,6 +121,21 @@ export interface DiscoverySourceRow {
   note: string;
 }
 
+/** T180: an eligible coin the daily Google Trends pull skips (no data, never a 0). */
+export interface DiscoveryKeywordGap {
+  symbol: string;
+  reason: "no-trends-keyword";
+  /** no-entry, no-keyword, skipped-unqualified or bad-file */
+  detail: string;
+}
+
+/** T180: Google Trends keyword coverage over the eligible coins. */
+export interface DiscoveryTrendsKeyword {
+  eligible_size: number;
+  with_keyword: number;
+  missing: DiscoveryKeywordGap[];
+}
+
 export interface DiscoverySourcesResponse {
   as_of: string;
   universe_size: number;
@@ -130,6 +145,7 @@ export interface DiscoverySourcesResponse {
   live_weight: number;
   newest: string | null;
   sources: DiscoverySourceRow[];
+  trends_keyword?: DiscoveryTrendsKeyword | null;
 }
 
 /** GET /api/narrative/discovery/history: shared by the coin and category payloads. */
