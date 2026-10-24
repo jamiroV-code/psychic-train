@@ -14,10 +14,10 @@ metadata:
 
 Date: 21-10-26
 Complexity: COMPLEX (eight slices, two providers, a worker; each slice is one EXECUTE envelope)
-Status: VALIDATED: Gate: PASS (re-validated T163 addenda; the PLAN artifact; per-slice execution gates are the contract for later EXECUTE)
+Status: VALIDATED: Gate: PASS (re-validated T166; the PLAN artifact; per-slice execution gates are the contract for later EXECUTE)
 Validation: T131 (FAST MODE: SPEC amendment, PLAN, VALIDATE in one session), 21-10-26, branch base `main` 007d53c. Next step: the owner's separate ENTER EXECUTE MODE per slice, starting with W8a. This session builds nothing.
 
-**Summary:** **SPEC:** `narrative-baskets-xreddit-collector_SPEC_21-10-26.md` (T126, amended by T131, T133, T135, T136, T138, T139, T163 and its two addenda; status APPROVED (locked) by the owner on 21-10-26, recorded on the planner's message; each slice still needs the owner's own ENTER EXECUTE MODE). Config pace (X default one coin unit per 3-6 min, Reddit one request per 60-120 s from the public RSS feeds, 150 per day (T138)), daily X read budget 800 posts with sample N 40 (about 20 coins per day), adaptive halving, yesterday-only values, pause on any warning, narrative coins only, throwaway X account, Reddit first (amended T133). Every provider (X, Reddit, API Anything) is unreachable from the build container: live behaviour is UNVERIFIED and proven only by owner probes.
+**Summary:** **SPEC:** `narrative-baskets-xreddit-collector_SPEC_21-10-26.md` (T126, amended by T131, T133, T135, T136, T138, T139, T163, its two addenda and T166; status APPROVED (locked) by the owner on 21-10-26, recorded on the planner's message; each slice still needs the owner's own ENTER EXECUTE MODE). Config pace (X default one coin unit per 3-6 min, Reddit one request per 60-120 s from the public RSS feeds, 150 per day (T138)), daily X read budget 800 posts with sample N 40 (about 20 coins per day), adaptive halving, yesterday-only values, pause on any warning, narrative coins only, throwaway X account, Reddit first (amended T133). Every provider (X, Reddit, API Anything) is unreachable from the build container: live behaviour is UNVERIFIED and proven only by owner probes.
 
 ## Overview and Context
 
@@ -41,6 +41,7 @@ Context router: `process/context/all-context.md`; tests: `process/context/tests/
 | 1d | Owner answers (T135): shorter 3-6 min delay confirmed; Q10 rotation mode for X (latest 3 stored values; locked, built in W8f); PC on about 1-3 h per day (pace and budget must fit; X about 90 min, Reddit concurrent); Reddit numbers unchanged. The owner is still reading the SPEC and has NOT approved it | W8b, W8e, W8f |
 | 1f | Owner decision 24-10-26 (T163 addendum 1): a spare laptop running 24/7 is the target host; baseline schedule (X units spread over the day at a 3-6 min minimum spacing, Reddit searches spread over the day with `t=week`, comments feeds every 2 h, posts feeds every 6 h, enrichment once a day); the T135 small-window behaviour is DEGRADED MODE for outages and the interim; the X read budget (800 posts, N 40) stays the binding limit | W8b scheduler modes, W8c, W8c2, W8c3, W8d, W8e; new slice W8e2 |
 | 1g | Owner principle 24-10-26 (T163 addendum 2): quality over speed; nothing dropped, shrunk, shortened or cut to fit a time budget; completeness reported per source-day; cross-source host profile is the separate audit task T164 | W8b evidence fields, W8e, W8e2, W8g; hard stop in section 7 |
+| 1h | T166 (24-10-26): X design 'learn from both, make the best of it'; throwaway account only; ban and terms-of-service risk accepted; focus only on quality data; 24/7 server available. I chose twscrape as the X primary behind a reader interface and demoted API Anything to an optional fallback (not built unless twscrape fails); Q20 is recorded as recommended, awaiting owner | W8a2, W8d1, W8d2; AC41-AC48; the owner's approval of T166 is not recorded |
 | 1c | Throwaway X account only; official X counts route is a recorded, unbuilt fallback (option D); Q10 rotation rule flagged to the owner, not implemented (T133) | W8d precondition; no code for option D or rotation |
 | 2 | Yesterday-only, one day late, today's partial day never stored or shown | W8b window rule; AC1 |
 | 3 | Rate-limit, login or suspension warning pauses that source for the rest of the day, no retries; pause persisted | W8b pause state; W8e restart test |
@@ -76,6 +77,7 @@ Context router: `process/context/all-context.md`; tests: `process/context/tests/
 | Order | Slice | Branch (proposed) | Depends on | Owner ENTER EXECUTE MODE | Model, effort | USD (ask at 7, cap 15) |
 |---|---|---|---|---|---|---|
 | 1 | W8a vet API Anything (report only; gates X, W8d, only) | `claude/<id>-w8a-vet-apianything` | owner approves SPEC (done) | yes, own | sonnet, medium | 2-3 |
+| 1b | W8a2 vet twscrape (report only) | `claude/<id>-w8a2-vet-twscrape` | owner approves the SPEC change (T166); Q21 answered | yes, own | sonnet, medium | 2-3 |
 | 2 | W8b pure core | `claude/<id>-w8b-collector-core` | none (can start now; W8a gates only W8d) | yes, own | opus, medium | 6-8 |
 | 3 | W8c Reddit connector (incl. item ledger and mention metrics) | `claude/<id>-w8c-reddit-web` | W8b; none on W8a; probes P-R6, P-R3, P-R4, P-R7 (before, owner runs now), P-R2, P-R5 (after) | yes, own | opus, medium | 3-4 |
 | 3b | W8c2 Reddit stream-and-count complement (posts and comments feeds) | `claude/<id>-w8c2-reddit-stream` | W8b, W8c (reuses its feed parser and ledger); none on W8a; Q17 answered | yes, own | opus, medium | 3-4 |
@@ -84,10 +86,11 @@ Context router: `process/context/all-context.md`; tests: `process/context/tests/
 | 5 | W8f Discovery wiring (incl. X rotation mode) | `claude/<id>-w8f-discovery-wiring` | W8e, W8c | yes, own | opus, medium | 3-4 |
 | 5b | W8e2 server host guide and health line | `claude/<id>-w8e2-host-guide` | W8e, W8f | yes, own | sonnet for the guide, opus for the health code, medium | 3-4 |
 | 6 | W8g web status text | `claude/<id>-w8g-web-status` | W8f | yes, own | opus, low | 1-2 |
-| 7 | W8d X connector | `claude/<id>-w8d-xsearch-web` | W8b, W8e; owner probes P-X1..P-X7 passed and Q1 answered | yes, own, only after the probes | opus, high | 5-7 |
+| 7 | W8d1 X pure core for twscrape | `claude/<id>-w8d1-x-core` | W8b; W8a2 verdict; Q21-Q23 answered | yes, own | opus, medium | 4-5 |
+| 7b | W8d2 X reader (twscrape wrapper, pinned optional group) | `claude/<id>-w8d2-x-reader` | W8d1, W8e, W8a2; P-X9 recorded; Q1 and Q24 answered; owner approval for `api/pyproject.toml` and `api/uv.lock` | yes, own | opus, high | 4-6 |
 | 8 | W8h owner guide and closeout | `claude/<id>-w8h-closeout` | W8c live (Reddit) and, when built, W8d | yes, own | sonnet, low | 1 |
 
-Total about 34-46 USD (eleven slices: W8a..W8h, W8c2, W8c3 and W8e2; T163 widened W8c and W8c2, added W8c3, and its addenda added the 24/7 baseline, W8e2 and the quality-over-speed rule). W8b and W8c can start without waiting for W8a; W8a stays first only for X (W8d); W8c and W8d are independent after W8b; the order puts X last by the owner's decision. After W8g the Reddit source can be live while X does not exist yet.
+Total about 39-53 USD (thirteen slices: W8a, W8a2, W8b, W8c, W8c2, W8c3, W8d1, W8d2, W8e, W8e2, W8f, W8g, W8h; T166 replaced W8d by W8a2, W8d1 and W8d2; T163 widened W8c and W8c2, added W8c3, and its addenda added the 24/7 baseline, W8e2 and the quality-over-speed rule). W8b and W8c can start without waiting for W8a; W8a stays first only for X (W8d); W8c and W8d are independent after W8b; the order puts X last by the owner's decision. After W8g the Reddit source can be live while X does not exist yet.
 
 ### File ownership and collision proof
 
@@ -142,7 +145,7 @@ The owner pastes the output only; it contains file names, line numbers and sourc
   - AC11/AC12: `test_logs_contain_class_and_status_only_with_planted_secrets`, `test_profile_path_is_gitignored_and_outside_repo`.
   - AC15/AC20: `test_ambiguous_coin_is_missing`, `test_coin_set_is_narrative_placed_symbols_minus_ambiguous`.
   - AC16: `test_dependency_pinned_and_banned_names_absent` (greps requirements, lock and code for xscrape, kloxeld, gunkonchi outside the guard's own constant list built from split strings).
-  - AC27: `test_adapter_refuses_registry_and_publish_calls`, `test_shipped_x_recipe_never_loaded`, `test_pinned_sha_constant_is_20cb677039fcfe92d3d9c777aa9362e30ff1fdb8`, `test_install_docs_use_npm_ci_ignore_scripts`.
+  - AC27 (only if the optional API Anything fallback is ever built, T166): `test_adapter_refuses_registry_and_publish_calls`, `test_shipped_x_recipe_never_loaded`, `test_pinned_sha_constant_is_20cb677039fcfe92d3d9c777aa9362e30ff1fdb8`, `test_install_docs_use_npm_ci_ignore_scripts`.
   - AC19: `test_self_repair_refused_after_15_usd_in_month`, `test_cap_resets_next_month`.
 - **Gates:** G-B1 `UV_FROZEN=1 uv run --project api pytest api/tests/data/attention api/tests/scripts/test_probe_pc_sources.py api/tests/tooling_guards/test_pc_collector_guards.py -q` (0 failed; at least baseline + the named tests); G-B2 attention suite unchanged; G-B3 file-set check (section 6, only the W8b files); G-B4 hygiene and secret scan; G-B5 no network import (`grep` for `requests|httpx|socket|urllib|playwright` import lines in the new pure modules prints nothing).
 - **Owner probes:** none (pure).
@@ -232,23 +235,59 @@ After W8e and W8f (it edits the Sources data that W8f also touches). The generic
 
 - **Files (edits):** `web/components/narrative/` Sources/updating text for reason codes and the "one day late" note; vitest additions. Gates: `pnpm` vitest and `tsc` per `process/context/tests/all-tests.md`; no `.github/`. **Owner probe:** look at the Sources page once.
 
-### W8d: X connector (opus, high; only after the owner probes)
+### W8a2: vet twscrape at the pinned commit (report only, sonnet; T166)
 
-- **T163 addenda:** the X units follow the baseline schedule (spread over the UTC day, never closer than `x_query_delay_min_s`) or degraded mode; the daily read budget stays the binding limit with a 24/7 host; completeness fields are written per source-day. Tests: `test_x_unit_schedule_baseline_spread_and_degraded_cluster`, `test_budget_binding_even_when_host_up_24_7`, `test_x_completeness_attempted_fetched_missing_reasons_cap_flags`. Raising `x_daily_post_budget` is an owner config change after clean weeks (P-X6 and P-X8 measure the real cap).
+Report only: nothing from twscrape is installed, built, imported or run by the worker. Reads the repository with `add_repo` (read access) at the commit the planner named, `63f61a5`, resolving its full 40-hex SHA, and records the verdict `usable` / `usable with changes` / `not usable`.
 
-- **Preconditions:** W8a verdict usable; Q1 answered (throwaway dedicated account created; never the main or Premium account); Q10 decided by the owner (rotation rule or fixed small set) and Q11 superseded by the 24/7 host decision (SPEC rule 15; degraded mode keeps the PC-hours rule); P-X1 and P-X2 pasted; the owner then runs the probe below on W8b's tool before W8d code is accepted.
-- **Files:** `api/data/attention/xsearch_web.py`, adapter wrapper for tier 3, additions to `probe_pc_sources.py` (`--source xsearch`), tests `api/tests/data/attention/test_xsearch_web.py`.
-- **Red-first tests:** `test_unit_is_one_coin_one_day_at_most_p_pages`, `test_query_has_cashtag_lang_and_filters_and_utc_window`, `test_dedupe_text_and_three_per_author`, `test_canary_failure_pauses_rest_of_day`, `test_login_expired_state_and_pause`, `test_suspension_state_stays_paused`, `test_layout_change_after_3_bad_shapes_attempts_one_repair`, `test_repair_refused_when_cap_spent`, `test_no_value_written_for_today`, `test_value_matches_density_formula`, `test_hidden_flag_passed_to_adapter`, `test_logs_class_and_status_only`, `test_sample_n_40_min_20_page_cap_3_from_config`, `test_every_loaded_post_counts_against_daily_budget`, `test_budget_spent_stops_x_and_leaves_coins_missing`, `test_warning_halves_next_day_budget`, `test_canary_posts_count_against_budget`, `test_rotation_hook_off_by_default_no_discovery_change`, `test_x_recipe_is_relearned_not_shipped`, `test_registry_and_publish_never_invoked` (AC27).
-- **Acceptance (W8d):** AC1 (with N 40, N_min 20, P 3), AC3, AC9, AC10, AC19, AC21, AC22 and the owner probes P-X3..P-X7; the official X counts route is NOT built (option D); no rotation rule is implemented (Q10 is the owner's SPEC change).
-- **Owner probes (PowerShell, repo root):**
-  - P-X3 `python -m api.scripts.probe_pc_sources --source xsearch --symbol SOL --login` once, then `python -m api.scripts.probe_pc_sources --source xsearch --symbol SOL`
-  - P-X4 `python -m api.scripts.probe_pc_sources --source xsearch --symbol SOL --hidden` (owner states whether any window appeared)
-  - P-X5 `python -m api.scripts.probe_pc_sources --source xsearch --symbol SOL --days-back 1,7,14` (depth beyond 14 days is not needed under the short-backfill decision)
-  - P-X6 `python -m api.scripts.probe_pc_sources --source xsearch --symbols SOL,ETH,BTC --paced` (paced at the configured 3-6 min: takes about 15 minutes; prints the number of posts read, which counts against the daily budget)
-  - P-X8 (optional, option D) the one-call counts test of SPEC Annex E, prints a status code only
-  - P-W2 `Get-WinEvent -FilterHashtable @{LogName='System'; Id=6005,6006; StartTime=(Get-Date).AddDays(-7)} | Select-Object TimeCreated,Id` and `(Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime` (typical PC hours, Q11)
-  - P-X7 rerun the second line of P-X3 after 3 days idle
-  - Probes P-X3..P-X7 need the W8b probe tool and a connector, so they run after W8b (tool) and, for the full flow, W8d; P-X1 and P-X2 run first.
+- **Files:** one report `narrative-baskets-w8a2-twscrape-vetting_REPORT_<dd-mm-yy>.md` in the task folder.
+- **Method:** the W8a method of SPEC Annex F applied to twscrape: full SHA (`git rev-parse`), `pyproject.toml` build backend and any build or install hooks, dependency tree and versions, licence, every outbound host, the telemetry code (CLI-only; confirm the library path sends none and that `TWS_TELEMETRY=0` is honoured), the `curl` HTTP backend and what it impersonates (record it, do not enable it), the account database (plaintext cookies; path and permissions), the 0.21.0 raising semantics and options (`wait_timeout`, `raise_when_no_account`), the error codes 88, 326, 32 and bare 403, how the client transaction id and the GraphQL operation ids are obtained and what breaks on a new X web build, the `x-rate-limit-*` TRACE method for header numbers, the exact cookie upsert call, whether the pinned commit is on the 0.21.0 line, and whether `0.20.1` on PyPI differs. Read the reference report `narrative-baskets-twscrape-reference_REPORT_24-10-26.md` (branch `claude/t165-twscrape-reference`) when it exists and reconcile it with the code; where they differ, the code at the pinned SHA wins.
+- **Gate:** the report has every item filled or marked UNVERIFIED with the reason; banned names appear only in "banned" sentences; `twscrape` is distinguished from `xscrape` in the report.
+- **Owner steps after the verdict (PowerShell, read-only until the verdict is accepted):** `git ls-remote https://github.com/vladkens/twscrape HEAD`; `git clone --no-checkout https://github.com/vladkens/twscrape C:\vet\twscrape`; `git -C C:\vet\twscrape rev-parse 63f61a5` (prints the full SHA); `git -C C:\vet\twscrape checkout --detach <FULL SHA>`; ONLY after the owner accepts the verdict: `py -3.12 -m venv C:\vet\twvenv` and `C:\vet\twvenv\Scripts\python.exe -m pip install C:\vet\twscrape` (an install runs the package's build backend, which is why vetting comes first), then probe P-X9 below.
+- **P-X9 (owner, throwaway account only, cookies from a local file and never printed; reads at most 80 posts; prints counts and timestamps only; exact paste):**
+
+```powershell
+$env:TWS_TELEMETRY="0"; $env:X_PROBE_COOKIES=(Get-Content C:\secrets\x_throwaway_cookies.txt -Raw).Trim()
+@'
+import asyncio, os, datetime as dt
+from twscrape import API
+async def run(api, q, tag):
+    n = 0; dates = []; views = 0; casht = 0; ph = 0
+    async for t in api.search(q, limit=40):
+        n += 1; dates.append(t.date); views += t.viewCount is not None; casht += bool(t.cashtags); ph += (not t.user.profileImageUrl)
+    print(tag, "read", n, "oldest", min(dates) if dates else None, "newest", max(dates) if dates else None, "with_views", views, "with_cashtags", casht, "placeholder_users", ph)
+async def main():
+    api = API(r"C:\vet\tws_accounts.db")
+    await api.pool.add_account("throwaway", "x", "x@example.com", "x", cookies=os.environ["X_PROBE_COOKIES"])
+    d = dt.datetime.now(dt.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) - dt.timedelta(days=1)
+    a, b = int(d.timestamp()), int((d + dt.timedelta(days=1)).timestamp())
+    base = '("$SOL" OR "Solana") -filter:replies -filter:retweets lang:en'
+    await run(api, base + f" since_time:{a} until_time:{b}", "epoch")
+    await run(api, base + f" since:{d:%Y-%m-%d} until:{(d + dt.timedelta(days=1)):%Y-%m-%d}", "dates")
+asyncio.run(main())
+'@ | Set-Content C:\vet\probe_x9.py
+C:\vet\twvenv\Scripts\python.exe C:\vet\probe_x9.py
+```
+
+  Pass: two lines (`epoch` and `dates`) with tweets read, oldest and newest timestamps, counts of viewCount, cashtags and placeholder users. The header numbers (remaining and limit) come from the reference report's TRACE method, read in this slice. The twscrape API names in the probe (`API`, `pool.add_account` with `cookies`, `search`, `viewCount`, `cashtags`, `user.profileImageUrl`) are UNVERIFIED until the reference report and the code are read; W8a2 corrects the probe if they differ.
+
+### W8d1: X pure core for twscrape (opus, medium; T166)
+
+Pure logic and fakes; nothing from twscrape is imported. Depends on W8b (pace, budget, pause, evidence core), W8a2's verdict and Q21-Q23.
+
+- **Files:** `api/data/attention/x_window.py` (query and window builder, both syntaxes, timestamp filter), `api/data/attention/x_filters.py` (post-filters and quality metrics), `api/data/attention/x_density.py` (read-sample density, may extend `density.py`), `api/data/attention/x_raw.py` (raw page writer, retention, re-parse), `api/data/attention/x_reader.py` (`XReader` Protocol, error classes, reason mapping, canary logic, fake reader), config keys in `api/data/attention_queries.json` (`x_lang`, `x_window_syntax`, `x_min_account_age_days`, `x_min_followers`, `x_max_cashtags`, `x_raw_retention_days`, `x_canary_query`, `x_canary_min_results`), tests `api/tests/data/attention/test_x_window.py`, `test_x_filters.py`, `test_x_density.py`, `test_x_raw.py`, `test_x_reader.py`.
+- **Red-first tests (AC41-AC46):** `test_query_since_time_until_time_form`, `test_query_utc_date_form_until_exclusive`, `test_out_of_window_tweet_excluded_by_timestamp`, `test_latest_order_only`, `test_paging_stops_at_window_start_or_sample_or_page_cap`, `test_read_sample_density_exact_when_window_reached`, `test_read_sample_density_capped_24_k_over_span`, `test_span_floor_quarter_hour`, `test_retweets_and_replies_excluded_by_fields`, `test_lang_policy_default_en_and_override_and_any`, `test_cashtag_field_matching`, `test_name_only_tickers_etc_link_near_hype_pi_pump_gt_cc`, `test_placeholder_user_excluded`, `test_young_account_and_low_followers_and_protected_excluded`, `test_author_cap_three_and_duplicate_text_once`, `test_cashtag_spam_over_five_excluded`, `test_unique_authors_and_top_author_share`, `test_exclusions_counted_by_reason_in_evidence`, `test_engagement_sum_log1p_like_reply_quote_retweet`, `test_missing_view_count_not_zero_and_median_views_stored`, `test_read_age_hours_recorded`, `test_raw_page_gzipped_with_versions_and_no_cookies`, `test_reparse_identical_same_parser_version`, `test_new_parser_version_new_evidence_row_never_overwrites`, `test_raw_retention_deletes_old_pages`, `test_none_short_empty_exception_is_missing_never_zero`, `test_codes_88_326_32_403_pause_day_and_alert`, `test_cloudflare_block_pauses_day_no_backend_switch`, `test_canary_must_pass_before_units`, `test_three_parse_failures_set_layout_changed`.
+- **Gates:** pytest on the new files and `api/tests/data/attention`; scripts suite; file-set check; hygiene; banned-name grep; no network import in the pure modules.
+- **Owner probes:** none beyond P-X9 (recorded in W8a2).
+
+### W8d2: X reader, twscrape wrapper (opus, high; T166)
+
+Depends on W8d1, W8e (worker), W8a2 verdict, P-X9 recorded, Q1 (throwaway account exists) and Q24 (curl backend decision). The envelope must carry the owner's explicit approval to edit `api/pyproject.toml` and `api/uv.lock` for the optional dependency group.
+
+- **Files:** `api/data/attention/twscrape_reader.py` (lazy import, wrapper implementing `XReader`), edit `api/pyproject.toml` (optional group `xreader` with `twscrape @ git+https://github.com/vladkens/twscrape@<full SHA>`) and regenerate `api/uv.lock` with the repo tooling (never by hand), config keys (`x_accounts_db_path`, `x_pinned_commit`, `x_pinned_version`), additions to `probe_pc_sources.py` (`--source xsearch --reader-status`), tests `api/tests/data/attention/test_twscrape_reader.py`, `api/tests/tooling_guards/test_x_reader_guards.py`.
+- **Red-first tests (AC41, AC46, AC47):** `test_default_env_does_not_install_or_import_twscrape`, `test_pinned_full_sha_required_short_sha_refused`, `test_only_package_name_twscrape_from_vladkens_url`, `test_near_names_and_banned_names_refused`, `test_version_and_commit_mismatch_refuses_x`, `test_reader_options_wait_timeout_zero_raise_when_no_account_true`, `test_telemetry_env_set_to_zero`, `test_wrapper_refuses_curl_backend_proxy_ua_override_and_pool_rotation`, `test_api_error_abort_req_no_account_mapped_to_reasons`, `test_ban_codes_pause_rest_of_day_and_set_persisted_alert`, `test_cloudflare_html_block_pauses_day`, `test_pool_must_hold_exactly_one_account`, `test_accounts_db_path_outside_repo_required`, `test_accounts_db_permissions_checked_fake_fs`, `test_cookie_age_in_days_in_health`, `test_cookie_upsert_procedure_documented_and_guarded`, `test_logs_class_and_status_only_planted_secrets`, `test_no_auto_update_code_path`.
+- **Gates:** pytest on the new files, `api/tests/data/attention` and the guards; `UV_FROZEN=1 uv sync --project api --frozen` still works without the optional group; scripts suite; file-set check (the two dependency files only with the owner's approval in the envelope); hygiene; banned-name grep.
+- **Owner steps (account on the 24/7 host):** the accounts database on an encrypted disk outside the repository with permissions limited to the service user; cookie refresh by the documented upsert (exact call from the W8a2 report); never the owner's main or Premium account.
+- **Fallback:** if twscrape fails the W8a2 vetting or P-X9, X stays paused and the owner chooses between the API Anything fallback (W8a report, AC27 conditional tests) and the official counts route (SPEC option D); neither is built unless chosen.
 
 ### W8h: owner guide and closeout (sonnet)
 
@@ -268,10 +307,11 @@ After W8e and W8f (it edits the Sources data that W8f also touches). The generic
 
 ## 7. Hard stops (verbatim for each slice's /goal block)
 
-- Any change under `.github/`, `api/pyproject.toml`, `api/uv.lock`, `api/data/cache/`: stop and report.
+- Any change under `.github/`, `api/data/cache/`, or to `api/pyproject.toml` or `api/uv.lock` (the only exception: W8d2 adds the optional `xreader` dependency group, and only when its envelope carries the owner's explicit approval): stop and report.
 - Any code path or doc that adds or recommends a detection-evasion technique (fingerprint spoofing, proxy rotation, extra or fake accounts, header forgery beyond a plain honest user-agent): stop and report.
 - Any use, install or mention as a dependency of `xscrape`, `kloxeld` or `gunkonchi`: stop and report.
-- Installing or running API Anything before W8a's verdict is accepted by the owner; any install without `--ignore-scripts`; any use of a commit other than `20cb677039fcfe92d3d9c777aa9362e30ff1fdb8`; any call of the registry or publish paths; loading the shipped `sites/x.*` recipe as data: stop.
+- Any use or install of twscrape before the W8a2 verdict is accepted by the owner and the full 40-hex SHA is pinned; any `TWS_HTTP_BACKEND=curl`, proxy, user-agent override, account-pool rotation or second account; twscrape 0.20.1 (silent failures); any auto-update of twscrape; any raw page, log or file containing a cookie or request header: stop and report.
+- Installing or running API Anything (optional fallback, not planned) before W8a's verdict is accepted by the owner; any install without `--ignore-scripts`; any use of a commit other than `20cb677039fcfe92d3d9c777aa9362e30ff1fdb8`; any call of the registry or publish paths; loading the shipped `sites/x.*` recipe as data: stop.
 - A test, tool or log that prints an exception message, header, cookie, token, URL query or response body: stop and report.
 - A speed-up of the locked pace (spacing below the configured minimum delay, a default faster than 180 s for X or 60 s for Reddit, a Reddit request with any user agent other than the single honest constant or through a proxy, a daily budget or sample size above the config values, or a halved budget not applied after a warning) or a stored same-day value: stop and report.
 - A baseline on fresh main differs from section 8 by anything other than a merged earlier PR: stop and report the numbers.
@@ -279,7 +319,7 @@ After W8e and W8f (it edits the Sources data that W8f also touches). The generic
 - Any pass, scheduler or config default that drops coins, shrinks `x_sample_n` or `x_page_cap`, shortens a window or cuts pages to fit a time budget (quality over speed, SPEC rule 16), or that lets the X daily read budget or the Reddit daily request budget be exceeded: stop and report.
 - `needs_input`: stop; do not merge; never merge any PR. Slice cost at 7 USD: ask; hard cap 15 USD.
 
-## 8. Acceptance criteria mapping (SPEC AC1..AC40 to slices)
+## 8. Acceptance criteria mapping (SPEC AC1..AC48 to slices)
 
 | AC | Slice | Strategy |
 |---|---|---|
@@ -304,6 +344,14 @@ After W8e and W8f (it edits the Sources data that W8f also touches). The generic
 | AC38 | W8b (completeness fields), W8e (continue-next-window), W8e2 and W8g (panel text) | Fully-Automated |
 | AC39 | W8e2 (payload), W8g (text) | Fully-Automated |
 | AC40 | W8e (bounded state, rotation, restart), W8b (state bounds) | Fully-Automated |
+| AC41 | W8d1 (interface, fake reader), W8d2 (wrapper, pin, guards) | Fully-Automated |
+| AC42 | W8d1 | Fully-Automated |
+| AC43 | W8d1 | Fully-Automated |
+| AC44 | W8d1 | Fully-Automated |
+| AC45 | W8d1 | Fully-Automated |
+| AC46 | W8d1 (reason mapping, canary logic), W8d2 (pause, alert) | Fully-Automated |
+| AC47 | W8d2 (pool and path checks), W8e2 (cookie age in health) | Fully-Automated |
+| AC48 | W8a2, W8d2, owner probe P-X9 | Agent-Probe (owner output) |
 | AC11, AC12, AC16 | W8b | Fully-Automated |
 | AC15, AC20 | W8b | Fully-Automated |
 | AC17 | W8c, W8d, W8h | Agent-Probe (owner output) |
@@ -328,7 +376,8 @@ Each item is its own EXECUTE envelope and needs the owner's separate ENTER EXECU
 - [ ] 5b. W8e2 server host guide and health line (after W8f; before W8g).
 - [ ] 5. W8f Discovery wiring.
 - [ ] 6. W8g web status text.
-- [ ] 7. W8d X connector, only after the owner's X probes and Q1; owner runs P-X3..P-X7.
+- [ ] 6b. W8a2 vet twscrape at the pinned commit (report only); owner then runs P-X9.
+- [ ] 7. W8d1 X pure core for twscrape (fake reader); then W8d2 X reader (pinned optional dependency group, owner approval needed for `api/pyproject.toml` and `api/uv.lock`), only after W8a2 and P-X9 and Q1, Q21-Q24; owner runs P-X3 style probes if the fallback is ever built.
 - [ ] 8. W8h owner guide and closeout.
 
 ## Touchpoints
@@ -397,8 +446,8 @@ Scope of this gate: the PLAN and the amended SPEC as documents. Per-slice code g
 | V4 banned names | `grep -niE "xscrape\|kloxeld\|gunkonchi" process/general-plans/active/narrative-baskets_02-10-26/narrative-baskets-xreddit-collector_{SPEC,PLAN}_21-10-26.md` | every hit is inside a "banned/never/malware/guard" sentence (reviewed by hand, listed in the record) |
 | V5 secret scan | `git diff -U0 origin/main...HEAD \| grep -nE "^\+.*(Bearer [A-Za-z0-9._-]{12,}\|(API_?KEY\|SECRET\|TOKEN\|PASSWORD)[A-Z_]* *[:=] *[\"'][A-Za-z0-9+/_-]{12,})"` | prints nothing |
 | V6 whitespace | `git diff --check origin/main...HEAD` | exit 0 |
-| V7 AC count and mapping | `grep -c "^- AC" <SPEC>` and every AC1..AC40 appears in section 8 | count 40 (above the skill's usual 20 by the planner's T133, T135, T138, T139 and T163 instructions); each AC mapped |
-| V8 slice coverage | the eleven slices W8a..W8h, W8c2, W8c3 and W8e2 appear in sections 4 and 5, each with files, tests or doc gate, model, USD, probes (where relevant), branch, dependencies | all present |
+| V7 AC count and mapping | `grep -c "^- AC" <SPEC>` and every AC1..AC48 appears in section 8 | count 48 (above the skill's usual 20 by the planner's T133, T135, T138, T139, T163 and T166 instructions); each AC mapped |
+| V8 slice coverage | the thirteen slices W8a, W8a2, W8b, W8c, W8c2, W8c3, W8d1, W8d2, W8e, W8e2, W8f, W8g, W8h appear in sections 4 and 5, each with files, tests or doc gate, model, USD, probes (where relevant), branch, dependencies | all present |
 | V9 cites | `ls api/main.py api/data/equities_refresh.py api/data/attention/store.py api/analytics/attention/sources.py api/data/discovery.json api/data/attention_narratives.json` and `grep -n "PASS_LOCK\|def _behind\|def start_from_env\|def stop_worker" api/data/equities_refresh.py` | all exist; lines 56, 231, 361, 388 as cited |
 | V10 W8 existence | `git ls-tree -r origin/main --name-only \| grep -c attention_pc_refresh` and `grep -rn SCREENER_ATTENTION_PC_WORKER api --include=*.py \| wc -l` | both 0 (as stated in Overview) |
 
@@ -458,3 +507,7 @@ Re-validation after widening Reddit to comments, votes and proper search without
 ## Validation record (T163 addenda, 24-10-26)
 
 Re-validation after two planner addenda to T163, both owner decisions of 24-10-26 relayed by the planner (not seen directly in this session and not yet approved there): (1) a spare laptop that runs 24/7 is the target host, so SPEC rule 15 sets a BASELINE schedule (X units spread over the UTC day at a 3-6 minute minimum spacing, Reddit per-coin searches spread over the day with `t=week`, comments feeds every 2 hours, posts feeds every 6 hours, enrichment once a day, Reddit budget 250) and rule 10 keeps the T135 small-window behaviour only as DEGRADED MODE; the X read budget stays the binding limit; Q11 superseded; AC24 and AC30 reworded; AC37-AC40; Annex J (server host requirements); Q19 (Trends on the server) and Q20 (spread reading and Reddit budget); new slice W8e2 (host guide and health line); W8b 6-8 USD, W8e 4-6 USD, total 34-46 USD; (2) 'quality over speed' (rule 16, AC38, hard stop; the cross-source host profile is the separate audit task T164). Gates re-run on branch `claude/t163-reddit-engagement-spec`: V1 plan validator failures []; V2 prints nothing; V3 prints 0; V4 hits only in ban or guard sentences; V5 prints nothing; V6 exit 0; V7 count 40 and AC1..AC40 mapped; V8 eleven slices. No code exists. Verdict: Gate: PASS for the PLAN artifact. Not proven: that the spare laptop will exist, that the Task Scheduler and power commands behave as written (examples, not run), that Reddit honours `t=week` on `search.rss`, or that a 24/7 pace stays inside X's unofficial caps (P-X6, P-X8).
+
+## Validation record (T166, 24-10-26)
+
+Re-validation after the X redesign (owner: "learn from both, make the best of it", throwaway account only, ban and terms-of-service risk accepted, focus only on quality data, 24/7 server available), planner instruction T166. Decision: twscrape is the X primary reader behind a reader interface, pinned to one full commit as an optional dependency group, 0.21.0 raising semantics only; API Anything is demoted to an optional fallback that is not built unless twscrape fails; the pure core of W8b is unchanged. SPEC rule 17, Annex A.1b, AC41-AC48 (48 ACs), Q21-Q24, Q20 recorded as recommended, awaiting owner, probe P-X9 (exact PowerShell), slices W8a2 (vet twscrape, sonnet, 2-3 USD), W8d1 (pure core, opus, 4-5 USD) and W8d2 (reader, opus high, 4-6 USD, owner approval needed for `api/pyproject.toml` and `api/uv.lock`); total 39-53 USD. The twscrape facts are the planner's relay of a reference by session "repo x"; the reference report had not landed (branch `claude/t165-twscrape-reference` absent on origin when checked) and nothing from twscrape was installed or run; W8a2 re-reads the code at the pinned commit. Gates re-run on branch `claude/t163-reddit-engagement-spec` (PR #167): V1 plan validator failures []; V2 prints nothing; V3 prints 0; V4 hits only in ban or guard sentences; V5 prints nothing; V6 exit 0; V7 count 48 and AC1..AC48 mapped; V8 thirteen slices. No code exists. Verdict: Gate: PASS for the PLAN artifact. Not proven: the pinned SHA and its safety, that twscrape works with the throwaway account, that `since_time`/`until_time` or the date operators are honoured, the shape and presence of viewCount and cashtags, the real rate-limit headers, and the owner's approval of the T166 changes.
