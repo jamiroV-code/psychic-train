@@ -97,3 +97,12 @@ Owner runs the checker on the new terms; terms that fail should move to topic id
 
 ## 11 Context cost
 Extra docs opened: `api/data/attention/trends.py`, `api/scripts/check_trends_keywords.py`, `api/analytics/attention/discovery.py`, `universe_classes.py`, `universe.py`, `wiki_articles.json`, `cache/attention/universe.json`. Not CLAUDE.md-listed docs.
+
+## T185 update
+Merged `origin/main` (PR #166, checker block-stop, d968e44) into this branch as a merge commit; no rebase, history append-only.
+- Conflict in `api/tests/scripts/test_check_trends_keywords.py` (`test_rev_coverage_with_symbols_counts_unchecked_coins_apart`): kept main's new `not run` field and this PR's new counts, giving `term: 1 | nothing: 0 | not run: 0 | not checked: 2`. Main's T161 tests are otherwise unchanged.
+- `test_t161_coverage_counts_not_run_apart_from_nothing` failed after the merge because AVAX now has a term in `trends_keywords.json`, so it counts as `term` and is no longer checked under `--only-unresolved`. Test expectations only: `term: 1 | nothing: 3` and `nothing: 2 | not run: 1`. This is a legitimate data effect, not a data problem. No data, checker or other file changed.
+- Result: `tests/scripts` + `tests/data/attention` 710 passed; full `pytest api` 2074 passed, 1 skipped, 5 deselected, 0 failed.
+
+T183 review table, 10 WEAK terms (likely junk Trends results, 0 WRONG): JST, PEARL, DASH, ASTER, SKY, NIGHT, RENDER, QNT, PAXG, ETHFI.
+Owner runs the checker (`check_trends_keywords.py --only-unresolved`) to confirm; no term changed here.

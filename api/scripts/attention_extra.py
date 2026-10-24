@@ -23,27 +23,38 @@ EXTRA_SOURCES = ("exchange_volume", "hyperliquid_volume", "trends", "reddit")
 # Exception classes that mean "the provider said no / was unreachable", not "our code is broken".
 PROVIDER_CLASSES = ("HTTPStatusError", "ConnectError", "ConnectTimeout", "ReadTimeout", "ReadError", "TimeoutException",
                     "RemoteProtocolError", "NetworkError", "RequestTimeout", "ExchangeNotAvailable",
-                    "RateLimitExceeded", "DDoSProtection", "TooManyRequests")
+                    "RateLimitExceeded", "DDoSProtection", "TooManyRequests",
+                    # requests / urllib3 / builtin transport classes (Google refusing or dropping a runner)
+                    "ConnectionError", "Timeout", "SSLError", "ProxyError", "ChunkedEncodingError", "ConnectionResetError",
+                    "ConnectionAbortedError", "ConnectionRefusedError", "TimeoutError", "ProtocolError", "MaxRetryError",
+                    "IncompleteRead", "TooManyRequestsError", "ResponseError", "HTTPError")
+FAILURE_CLASS = {"ok": "none", "unavailable": "provider block (429/ConnectionError/capped)",
+                 "failed": "code error", "not-probed": "not probed"}
+
+
+def failure_class(status: str) -> str:
+    """The one-line failure class the workflow prints for a classify() status."""
+    return FAILURE_CLASS.get(status, status)
 
 
 # Reasons that are data outcomes (nothing to fix in our code); never trip the breaker, never make a line red.
 DATA_REASONS = ("no keyword mapped", "bad date", "partial row dropped", "empty response", "presumed-dead",
                 "symbol not listed or no volume", "snapshot unavailable")
 DATA_CLASSES = ("BadSymbol",)
-_CODE_REASON = re.compile(r"(?:fetch|parse|store)-failed: (\w+)")
+_CODE_REASON = re.compile(r"(fetch|parse|store)-failed: (\w+)")
 
 
 def reason_kind(reason: str) -> str:
-    """'code' = an exception class outside PROVIDER_CLASSES with no HTTP status; 'data' = a plain data outcome;
-    'provider' = everything else (HTTP status, provider class, rate limit, token/search failure, skips)."""
+    """'code' = a fetch-failed class outside PROVIDER_CLASSES (no HTTP status) or any parse/store failure;
+    'data' = a plain data outcome; 'provider' = everything else (HTTP status, provider class, rate limit, token/search failure, skips)."""
     r = reason.strip()
     if r in DATA_REASONS:
         return "data"
     m = _CODE_REASON.fullmatch(r)
-    if m and m.group(1) in DATA_CLASSES:
+    if m and m.group(2) in DATA_CLASSES:
         return "data"
-    if m and m.group(1) not in PROVIDER_CLASSES:
-        return "code"
+    if m and (m.group(1) != "fetch" or m.group(2) not in PROVIDER_CLASSES):
+        return "code"  # parse/store failures are ours whatever the class; fetch needs a network class to be a block
     return "provider"
 
 

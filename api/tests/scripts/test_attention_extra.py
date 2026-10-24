@@ -100,3 +100,44 @@ def test_mixed_reasons_unavailable_only_with_provider_majority():
 
 def test_line_without_reasons_unchanged():
     assert x.classify("trends", "trends: 0/10 ok, 0 rows written [other 10]").status == "unavailable"
+
+
+# T181: a Google refusal of the runner is a provider block (yellow); our own bugs stay code errors (red).
+@pytest.mark.parametrize("reason", [
+    "fetch-failed: ConnectionError", "fetch-failed: ReadTimeout", "fetch-failed: Timeout", "fetch-failed: SSLError",
+    "fetch-failed: ConnectionResetError", "fetch-failed: TimeoutError", "fetch-failed: ChunkedEncodingError",
+    "fetch-failed: ConnectionError(HTTP 503)", "fetch-failed: ResponseError(HTTP 500)", "fetch-failed: HTTPError(HTTP 429)",
+    "rate-limited: TooManyRequestsError(HTTP 429)", "capped", "time budget reached", "skipped after repeated HTTP 429",
+    "session-failed: ConnectionError", "session-failed: ReadTimeout", "session-failed: no client",
+])
+def test_provider_refusals_classify_as_provider(reason):
+    assert x.reason_kind(reason) == "provider", reason
+    assert x.classify("trends", _line(f"{reason} x75")).status == "unavailable"
+
+
+@pytest.mark.parametrize("reason", [
+    "fetch-failed: TypeError", "fetch-failed: KeyError", "fetch-failed: AttributeError", "fetch-failed: ValueError",
+    "fetch-failed: RuntimeError", "fetch-failed: SomethingUnknownError",
+    "parse-failed: ValueError", "parse-failed: KeyError", "parse-failed: ConnectionError",
+    "store-failed: OSError", "store-failed: ValueError", "store-failed: ConnectionError", "store-failed: TimeoutError",
+])
+def test_our_own_errors_classify_as_code(reason):
+    assert x.reason_kind(reason) == "code", reason
+    assert x.classify("trends", _line(f"{reason} x75")).status == "failed"
+
+
+def test_network_class_set_is_class_names_only():
+    assert {"ConnectionError", "Timeout", "SSLError", "ReadTimeout"} <= set(x.PROVIDER_CLASSES)
+    assert not {"TypeError", "KeyError", "AttributeError", "ValueError", "Exception", "RuntimeError", "OSError"} & set(x.PROVIDER_CLASSES)
+    assert all(c.isidentifier() for c in x.PROVIDER_CLASSES)
+
+
+def test_error_line_with_connection_error_is_unavailable():
+    assert x.classify("trends", "trends: error ConnectionError: refused").status == "unavailable"
+    assert x.classify("trends", "trends: error ValueError: bad").status == "failed"
+
+
+def test_failure_class_labels_cover_every_status():
+    assert set(x.FAILURE_CLASS) == {"ok", "unavailable", "failed", "not-probed"}
+    assert x.failure_class("unavailable").startswith("provider block")
+    assert x.failure_class("failed") == "code error"

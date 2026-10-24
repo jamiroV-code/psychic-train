@@ -107,7 +107,7 @@ def test_three_consecutive_429_stop_the_run():
     res, text = _run(names, client)
     assert client.suggestion_calls == ["Name0", "Name1", "Name2", "Name3"]
     assert [r.verdict for r in res] == ["PASS", "FAIL", "FAIL", "FAIL", "NOT-RUN", "NOT-RUN"]
-    assert text.count("NOT-RUN (stopped after 3 consecutive HTTP 429)") == 2
+    assert text.count("NOT-RUN (stopped after 3 consecutive failed requests)") == 2
     assert "NOT-RUN: 2" in text
 
 
@@ -548,7 +548,7 @@ def test_v3_plan_line_prints_expected_requests_and_minutes_before_the_first_requ
     client = FakeTrendReq()
     _, text = _run3(mapping, client)
     first = text.splitlines()[0]
-    assert first == "plan: 34 coins, 136 requests, about 7 min (3 s apart)"
+    assert first == "plan: 34 coins, 136 requests, about 8 min (3 s apart, 20 s pause every 40)"
     assert len(client.suggestion_calls) == 136
 
 
@@ -635,14 +635,14 @@ def test_v3_only_unresolved_checks_coins_without_a_topic_and_uses_variants():
     assert c.unresolved_symbols(m, m.entries) == unresolved and "SOL" not in unresolved and "AVAX" in unresolved
     client = FakeTrendReq()
     out = io.StringIO()
-    assert c.main(["--only-unresolved"], trendreq_factory=factory(client), sleep=lambda s: None, out=out,
-                  now=STAMP_23, universe_rows=[]) == 0
+    assert c.main(["--only-unresolved", "--variants"], trendreq_factory=factory(client), sleep=lambda s: None,
+                  out=out, now=STAMP_23, universe_rows=[]) == 0
     expected = [q for s in unresolved for q in c.queries_for(s, m.entries[s]["label"])]
     assert client.suggestion_calls == expected
     assert "Solana" not in client.suggestion_calls
     assert out.getvalue().startswith(f"plan: {len(unresolved)} coins, {len(expected)} requests")
     client2 = FakeTrendReq()
-    assert c.main(["--only-unresolved", "--symbols", "SOL,AVAX"], trendreq_factory=factory(client2),
+    assert c.main(["--only-unresolved", "--variants", "--symbols", "SOL,AVAX"], trendreq_factory=factory(client2),
                   sleep=lambda s: None, out=io.StringIO(), universe_rows=[]) == 0
     assert client2.suggestion_calls == c.queries_for("AVAX", "Avalanche")
 
@@ -724,7 +724,7 @@ def test_ext_default_run_is_keyword_file_then_eligible_coins_without_an_entry():
 def test_ext_only_unresolved_takes_eligible_coins_with_no_entry():
     m = k.load()
     client = FakeTrendReq()
-    assert _main(["--only-unresolved"], client) == 0
+    assert _main(["--only-unresolved", "--variants"], client) == 0
     want = [s for s, e in m.entries.items() if "topic" not in e] + ["NEWA", "NEWB", "NOID"]
     names = {**{s: e["label"] for s, e in m.entries.items()}, "NEWA": "New Alpha", "NEWB": "Beta Chain", "NOID": "NOID"}
     assert client.suggestion_calls == [q for s in want for q in c.queries_for(s, names[s])]
@@ -734,13 +734,13 @@ def test_ext_only_unresolved_takes_eligible_coins_with_no_entry():
 def test_ext_outside_block_and_coverage_line():
     script = {"New Alpha crypto": _cands([("/g/11newa", "New Alpha", "Cryptocurrency")])}
     out = io.StringIO()
-    assert _main(["--only-unresolved", "--symbols", "AVAX,NEWA,NEWB,NOID"], NoiseClient(script), out) == 0
+    assert _main(["--only-unresolved", "--variants", "--symbols", "AVAX,NEWA,NEWB,NOID"], NoiseClient(script), out) == 0
     text = out.getvalue()
     assert set(_block(text)) == {"NEWA"}
     assert set(_qualified(text)) == {"AVAX", "NEWB"} and _qualified(text)["NEWB"]["term"] == "beta chain crypto"
     tail = text.split(c.OUTSIDE_HEADER)[1]
     assert tail.splitlines()[1] == "NEWA, NEWB"
-    assert "discovery eligible: 5 | topic: 2 | qualified-term: 2 | term: 0 | nothing: 1 | not checked: 0" in tail
+    assert "discovery eligible: 5 | topic: 2 | qualified-term: 2 | term: 0 | nothing: 1 | not run: 0 | not checked: 0" in tail
     # The loader takes the merged blocks today; the outside symbols only raise the placed-set warning.
     seed = json.loads(k.KEYWORDS_PATH.read_text(encoding="utf-8"))
     merged = {**seed, **_block(text), **_qualified(text)}
@@ -781,7 +781,7 @@ def test_rev_ticker_and_bracket_pass_are_marked_leads():
 def test_rev_derived_name_pass_is_marked_a_guess():
     script = {"New Alpha crypto": _cands([("/g/11newa", "New Alpha", "Cryptocurrency")])}
     out = io.StringIO()
-    assert _main(["--only-unresolved", "--symbols", "NEWA,NEWB"], NoiseClient(script), out) == 0
+    assert _main(["--only-unresolved", "--variants", "--symbols", "NEWA,NEWB"], NoiseClient(script), out) == 0
     text = out.getvalue()
     assert _block(text)["NEWA"]["note"] == "checker PASS 23-10-26, name from CoinGecko id"
     assert _qualified(text)["NEWB"]["note"] == "qualified-term fallback 23-10-26, not checker PASS, name from CoinGecko id"
@@ -801,9 +801,9 @@ def test_rev_no_qualified_term_for_a_symbol_that_holds_a_topic():
 def test_rev_coverage_with_symbols_counts_unchecked_coins_apart():
     script = {"New Alpha crypto": _cands([("/g/11newa", "New Alpha", "Cryptocurrency")])}
     out = io.StringIO()
-    assert _main(["--only-unresolved", "--symbols", "NEWA"], NoiseClient(script), out) == 0
+    assert _main(["--only-unresolved", "--variants", "--symbols", "NEWA"], NoiseClient(script), out) == 0
     tail = out.getvalue().split(c.OUTSIDE_HEADER)[1]
-    assert ("discovery eligible: 5 | topic: 2 | qualified-term: 0 | term: 1 | nothing: 0 | not checked: 2"
+    assert ("discovery eligible: 5 | topic: 2 | qualified-term: 0 | term: 1 | nothing: 0 | not run: 0 | not checked: 2"
             " (this run checked 1 of them)") in tail
     assert "T156" not in c.OUTSIDE_HEADER
 
@@ -833,3 +833,129 @@ def test_rev_universe_or_config_failure_exits_1_with_class_only(monkeypatch, cap
     assert cap.err.count("cannot read the Discovery universe: ValueError") == 2
     assert SECRET not in cap.out + cap.err and "discovery config" not in cap.out + cap.err
     assert client.suggestion_calls == []
+
+
+# --- T161: stop when Google refuses, pacing options, variants opt-in. Evidence: the owner's run of 23-10-26 got
+# ConnectionError on every request after about 100 (13 of 39 coins) and kept sending to 137. ---
+
+
+class RefuseAfter(FakeTrendReq):
+    """Answers [] for the first `ok` requests, then raises the scripted errors in turn (the last one repeats)."""
+
+    def __init__(self, ok: int, errors=None, clock=None):
+        super().__init__()
+        self.ok, self.errors, self.clock = ok, list(errors or [ConnectionError("refused " + SECRET)]), clock
+        self.times: list[float] = []
+
+    def suggestions(self, keyword: str):
+        self.suggestion_calls.append(keyword)
+        if self.clock is not None:
+            self.times.append(self.clock.t)
+        n = len(self.suggestion_calls)
+        if n <= self.ok:
+            return []
+        raise self.errors[min(n - self.ok - 1, len(self.errors) - 1)]
+
+
+TEN = {f"S{i}": f"Name{i}" for i in range(10)}
+
+
+def _cli(argv, client, sleep=lambda s: None, mapping=TEN, tmp=None):
+    out, err = io.StringIO(), io.StringIO()
+    args = list(argv)
+    if mapping is not None:
+        path = tmp / "map.json"
+        path.write_text(json.dumps(mapping), encoding="utf-8")
+        args = ["--file", str(path), *args]
+    code = c.main(args, trendreq_factory=factory(client), sleep=sleep, out=out, err=err, now=STAMP_23,
+                  universe_rows=[])
+    return code, out.getvalue(), err.getvalue()
+
+
+def test_t161_three_failures_of_any_kind_stop_the_run(tmp_path):
+    client = RefuseAfter(4)
+    code, text, _ = _cli([], client, tmp=tmp_path)
+    assert code == c.STOPPED_EXIT == 4
+    assert client.suggestion_calls == [f"Name{i}" for i in range(7)]
+    res = [line.split(" | ")[-1] for line in text.splitlines() if line.startswith("S")]
+    assert [r.split(" ")[0] for r in res[:10]] == ["FAIL"] * 7 + ["NOT-RUN"] * 3  # [] -> FAIL, then 3 refused
+    assert "stopped: Google is refusing connections after 7 requests; wait 30-60 minutes, then run again with" in text
+    assert "--symbols 'S4,S5,S6,S7,S8,S9'" in text
+    assert "NOT-RUN: 3" in text and "requests sent: 7" in text
+    for bad in FORBIDDEN_IN_OUTPUT + ("refused",):
+        assert bad not in text
+
+
+def test_t161_mixed_failures_count_together_and_a_success_resets(tmp_path):
+    from api.tests.trends_fixtures import FakeResponse, ResponseError
+    mixed = [TimeoutError("t"), ResponseError("x", FakeResponse(503)), too_many()]
+    client = RefuseAfter(2, mixed)
+    code, text, _ = _cli([], client, tmp=tmp_path)
+    assert code == 4 and len(client.suggestion_calls) == 5
+    assert "TimeoutError" in text and "ResponseError(HTTP 503)" in text and "TooManyRequestsError(HTTP 429)" in text
+    script = {"Name0": forbidden(), "Name1": forbidden(), "Name2": [], "Name3": forbidden(), "Name4": forbidden(),
+              "Name5": []}
+    client = FakeTrendReq(script)
+    code, text, _ = _cli([], client, tmp=tmp_path, mapping={f"S{i}": f"Name{i}" for i in range(6)})
+    assert code == 0 and len(client.suggestion_calls) == 6 and "stopped:" not in text
+
+
+def test_t161_streak_counts_requests_inside_a_variant_coin(tmp_path):
+    client = RefuseAfter(1)
+    code, text, _ = _cli(["--variants"], client, tmp=tmp_path, mapping={"AVAX": "Avalanche", "SUI": "Sui"})
+    assert code == 4 and client.suggestion_calls == ["Avalanche", "Avalanche crypto", "Avalanche coin", "AVAX crypto"]
+    assert "--symbols 'AVAX,SUI'" in text  # the incomplete coin is re-run too
+
+
+def test_t161_only_unresolved_is_one_request_per_coin_unless_variants():
+    m = k.load()
+    unresolved = [s for s, e in m.entries.items() if "topic" not in e]
+    client = NoiseClient()
+    out = io.StringIO()
+    assert c.main(["--only-unresolved"], trendreq_factory=factory(client), sleep=lambda s: None, out=out,
+                  now=STAMP_23, universe_rows=[]) == 0
+    assert client.suggestion_calls == [m.entries[s]["label"] for s in unresolved]
+    assert c.QUALIFIED_HEADER in out.getvalue()  # still proposes qualified terms
+    assert "AVAX" in _qualified(out.getvalue())
+    assert "13 of 13" in c.__doc__ and "--variants" in c.__doc__
+
+
+def test_t161_pause_every_and_delay_with_an_injected_clock(tmp_path):
+    clock = Clock()
+    client = RefuseAfter(10**6, clock=clock)
+    many = {f"S{i}": f"Name{i}" for i in range(90)}
+    code, text, _ = _cli([], client, sleep=clock.sleep, tmp=tmp_path, mapping=many)
+    assert code == 0 and clock.sleeps.count(20.0) == 2 and clock.sleeps.count(3.0) == 89
+    gaps = [b - a for a, b in zip(client.times, client.times[1:])]
+    assert gaps[39] == 23.0 and gaps[79] == 23.0 and all(g == 3.0 for i, g in enumerate(gaps) if i not in (39, 79))
+    clock = Clock()
+    client = RefuseAfter(10**6, clock=clock)
+    code, text, _ = _cli(["--delay", "4.5", "--pause-every", "5", "--pause-s", "7"], client, sleep=clock.sleep,
+                         tmp=tmp_path)
+    assert code == 0 and clock.sleeps == [4.5] * 4 + [7.0, 4.5] + [4.5] * 4
+    assert text.splitlines()[0] == "plan: 10 coins, 10 requests, about 1 min (4.5 s apart, 7 s pause every 5)"
+    clock = Clock()
+    code, text, _ = _cli(["--pause-every", "0"], RefuseAfter(10**6), sleep=clock.sleep, tmp=tmp_path, mapping=many)
+    assert 20.0 not in clock.sleeps and "pause" not in text.splitlines()[0]
+
+
+def test_t161_bad_pacing_options_exit_2(tmp_path):
+    for argv in (["--delay", "2"], ["--delay", "x"], ["--pause-every", "-1"], ["--pause-s", "-5"]):
+        client = FakeTrendReq()
+        code, _, err = _cli(argv, client, tmp=tmp_path)
+        assert code == 2 and client.suggestion_calls == [], argv
+        assert argv[1] == "x" or "--delay must be >= 3" in err  # "x" is refused by argparse itself
+
+
+def test_t161_coverage_counts_not_run_apart_from_nothing():
+    client = RefuseAfter(1)
+    out = io.StringIO()
+    assert _main(["--only-unresolved", "--symbols", "AVAX,NEWA,NEWB,NOID"], client, out) == 4
+    tail = out.getvalue().split(c.OUTSIDE_HEADER)[1]
+    # AVAX already has a term (T160 data), so it counts as term; the 3 others get [] or refuse, the streak ends on NOID.
+    assert "discovery eligible: 5 | topic: 1 | qualified-term: 0 | term: 1 | nothing: 3 | not run: 0" in tail
+    client = RefuseAfter(0)
+    out = io.StringIO()
+    assert _main(["--only-unresolved", "--symbols", "AVAX,NEWA,NEWB,NOID"], client, out) == 4
+    tail = out.getvalue().split(c.OUTSIDE_HEADER)[1]
+    assert "nothing: 2 | not run: 1 | not checked: 0" in tail
