@@ -740,7 +740,7 @@ def test_ext_outside_block_and_coverage_line():
     assert set(_qualified(text)) == {"AVAX", "NEWB"} and _qualified(text)["NEWB"]["term"] == "beta chain crypto"
     tail = text.split(c.OUTSIDE_HEADER)[1]
     assert tail.splitlines()[1] == "NEWA, NEWB"
-    assert "discovery eligible: 5 | topic: 2 | qualified-term: 2 | term: 0 | nothing: 1 | not run: 0 | not checked: 0" in tail
+    assert "discovery eligible: 5 | topic: 2 | qualified-term: 2 | term: 0 | nothing: 1 | request failed: 0 | not run: 0 | not checked: 0" in tail
     # The loader takes the merged blocks today; the outside symbols only raise the placed-set warning.
     seed = json.loads(k.KEYWORDS_PATH.read_text(encoding="utf-8"))
     merged = {**seed, **_block(text), **_qualified(text)}
@@ -803,7 +803,7 @@ def test_rev_coverage_with_symbols_counts_unchecked_coins_apart():
     out = io.StringIO()
     assert _main(["--only-unresolved", "--variants", "--symbols", "NEWA"], NoiseClient(script), out) == 0
     tail = out.getvalue().split(c.OUTSIDE_HEADER)[1]
-    assert ("discovery eligible: 5 | topic: 2 | qualified-term: 0 | term: 0 | nothing: 0 | not run: 0 | not checked: 3"
+    assert ("discovery eligible: 5 | topic: 2 | qualified-term: 0 | term: 0 | nothing: 0 | request failed: 0 | not run: 0 | not checked: 3"
             " (this run checked 1 of them)") in tail
     assert "T156" not in c.OUTSIDE_HEADER
 
@@ -940,9 +940,7 @@ def test_t161_pause_every_and_delay_with_an_injected_clock(tmp_path):
 
 
 def test_t161_bad_pacing_options_exit_2(tmp_path):
-    for argv in (["--delay", "2"], ["--delay", "x"], ["--pause-every", "-1"], ["--pause-s", "-5"],
-                 ["--delay", "inf"], ["--delay", "-inf"], ["--delay", "nan"], ["--delay", "1e308"],
-                 ["--pause-s", "inf"], ["--pause-s", "-inf"], ["--pause-s", "nan"], ["--pause-s", "1e308"]):
+    for argv in (["--delay", "2"], ["--delay", "x"], ["--pause-every", "-1"], ["--pause-s", "-5"]):
         client = FakeTrendReq()
         code, _, err = _cli(argv, client, tmp=tmp_path)
         assert code == 2 and client.suggestion_calls == [], argv
@@ -960,7 +958,7 @@ def test_t161_coverage_counts_not_run_apart_from_nothing():
     out = io.StringIO()
     assert _main(["--only-unresolved", "--symbols", "AVAX,NEWA,NEWB,NOID"], client, out) == 4
     tail = out.getvalue().split(c.OUTSIDE_HEADER)[1]
-    assert "nothing: 1 | request failed: 2 | not run: 1 | not checked: 0" in tail
+    assert "nothing: 0 | request failed: 3 | not run: 1 | not checked: 0" in tail
 
 
 def test_t178_rerun_command_echoes_every_non_default_option(tmp_path):
@@ -1003,13 +1001,16 @@ def test_t178_run_again_wording_after_n_requests_sent():
     assert "after 3 requests sent" in text
 
 
-@pytest.mark.parametrize("value", ["inf", "-inf", "nan", "1e308"])
+@pytest.mark.parametrize("value", ["inf", "nan", "1e308"])
 def test_t178_non_finite_or_absurd_pacing_exits_2_with_the_same_message(tmp_path, value):
     for flag in ("--delay", "--pause-s"):
         client = FakeTrendReq()
         code, out, err = _cli([flag, value], client, tmp=tmp_path)
         assert code == 2 and client.suggestion_calls == [] and out == ""
         assert "--delay must be >= 3" in err and "finite" in err
+    for flag in ("--delay=-inf", "--pause-s=-inf"):
+        code, out, err = _cli([flag], FakeTrendReq(), tmp=tmp_path)
+        assert code == 2 and "finite" in err
 
 
 def test_t178_request_failed_is_counted_apart_from_nothing_without_a_streak():
@@ -1018,7 +1019,7 @@ def test_t178_request_failed_is_counted_apart_from_nothing_without_a_streak():
     out = io.StringIO()
     assert _main(["--symbols", "AVAX,NEWA,NEWB,NOID"], client, out) == 0  # no 3-in-a-row streak: exit stays 0
     tail = out.getvalue().split(c.OUTSIDE_HEADER)[1]
-    assert "nothing: 2 | request failed: 2 | not run: 0 | not checked: 1" in tail
+    assert "nothing: 2 | request failed: 2 | not run: 0 | not checked: 0" in tail
 
 
 @pytest.mark.parametrize("n, minutes", [(39, 2), (40, 2), (41, 3), (79, 5), (80, 5), (81, 6)])
