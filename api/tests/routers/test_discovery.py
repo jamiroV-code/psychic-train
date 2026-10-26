@@ -39,7 +39,7 @@ def test_ok_payload_shape(wired):
                          "excluded_counts", "min_category_coins",
                          "rising_threshold_pct", "min_covered_weight", "categories",
                          "narratives_status", "unassigned", "hidden_narratives", "weights_version",
-                         "tradeability_unknown", "venue_lists"}
+                         "tradeability_unknown", "venue_lists", "tradeability_data_suspect"}
     assert set(body["excluded"]) == {"exclusion_list", "below_volume_floor", "no_category", "no_source_data"}
     c = body["categories"][0]
     assert set(c) == {"id", "name", "score", "median", "coins_used", "gaining_count", "ranked", "coins"}
@@ -103,7 +103,8 @@ def test_payload_is_backward_compatible_with_a_not_tradeable_coin(isolated_cache
     world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7, "JAAA": 0}, cats={"ai": ["A", "B", "JAAA"]})
     gain("A"), gain("B", factor=3.0), gain("JAAA")
     body = TestClient(app).get(URL, params={"window": 30}).json()
-    assert OLD_TOP <= set(body) and set(body) - OLD_TOP == {"tradeability_unknown", "venue_lists"}
+    assert OLD_TOP <= set(body) and set(body) - OLD_TOP == {"tradeability_unknown", "venue_lists",
+                                                             "tradeability_data_suspect"}
     assert set(body["excluded_counts"]) == OLD_REASONS | {"not-tradeable"}
     assert all(body["excluded_counts"][k] == 0 for k in OLD_REASONS)
     assert body["excluded_counts"]["not-tradeable"] == 1
@@ -111,7 +112,7 @@ def test_payload_is_backward_compatible_with_a_not_tradeable_coin(isolated_cache
     assert body["excluded"] == {"exclusion_list": 1, "below_volume_floor": 0, "no_category": 0, "no_source_data": 0}
     assert (body["universe_size"], body["eligible_size"], body["shown_size"]) == (3, 2, 2)
     assert [c["tradeability"] for c in body["categories"][0]["coins"]] == ["unverified", "unverified"]
-    assert body["tradeability_unknown"] == 2
+    assert body["tradeability_unknown"] == 2 and body["tradeability_data_suspect"] is False
     assert body["venue_lists"] == [{"venue": "binance", "status": "missing", "as_of": None},
                                    {"venue": "hyperliquid", "status": "missing", "as_of": None}]
 

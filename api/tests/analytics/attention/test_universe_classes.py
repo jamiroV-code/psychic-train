@@ -129,7 +129,7 @@ def test_alias_pepe_shib_found_on_hyperliquid_k_names():
 def test_eligibility_reads_the_stored_lists_point_in_time(isolated_cache):
     """No `venues` passed: the stored lists are read for `today` (here: none stored -> unknown, nothing cut)."""
     from api.data import cache
-    cache.write_exchange_market_snapshot("2026-10-15", ["BTC"])
+    cache.write_exchange_market_snapshot("2026-10-15", ["BTC"] + [f"ZZFILL{i}" for i in range(tm.MIN_SYMBOLS["hyperliquid"])])
     rows = [{"symbol": "BTC", "volume_24h": 5e7}, {"symbol": "ETH", "volume_24h": 5e7}]
     c = disc.load_config()
     assert disc.eligibility(c, rows, today=TODAY).tradeability == {"BTC": "tradeable", "ETH": "unverified"}
@@ -305,3 +305,41 @@ def test_discovery_on_fixture_with_zero_volume_fund_and_failed_venue_file(snap, 
         "LEO": "unverified", "PEPE": "tradeable", "SHIB": "tradeable", "BTC": "tradeable"}
     assert res.tradeability_unknown == sum(c.tradeability == "unverified" for c in shown.values()) >= 3
     assert [(v.venue, v.status) for v in res.venue_lists] == [("binance", "failed"), ("hyperliquid", "ok")]
+
+
+def test_no_market_safety_share_flags_data_suspect_and_keeps_coins():
+    """Round 2: more than MAX_NO_MARKET_SHARE of the venue-checked coins at once = a data fault: the market rule
+    excludes none, the universe is flagged, the zero-volume rule still applies."""
+    rows = [{"symbol": "BTC", "volume_24h": 5e8}, {"symbol": "JAAA", "volume_24h": 0}] + [
+        {"symbol": f"C{i}", "volume_24h": 5e7} for i in range(4)]
+    u = shipped(rows, venues(binance={"BTC": 1e9}, hyperliquid={"BTC": 1e9}))
+    assert u.data_suspect is True
+    assert u.out == {"JAAA": ("not-tradeable", "zero 24h volume")}
+    assert u.eligible == ["BTC", "C0", "C1", "C2", "C3"]
+    assert u.tradeability == {"BTC": "tradeable", **{f"C{i}": "unverified" for i in range(4)}}
+
+
+def test_no_market_at_the_safety_share_still_excludes():
+    n = 8
+    rows = [{"symbol": f"T{i}", "volume_24h": 5e7} for i in range(n)]
+    listed = {f"T{i}": 1e7 for i in range(n - int(n * tm.MAX_NO_MARKET_SHARE))}   # exactly the share is missing
+    u = shipped(rows, venues(binance=listed, hyperliquid={}))
+    assert u.data_suspect is False
+    assert sorted(s for s, (r, _) in u.out.items() if r == "not-tradeable") == ["T6", "T7"]
+
+
+def test_safety_share_counts_only_coins_that_reach_the_venue_check():
+    """Stablecoins and config exclusions are not in the denominator nor the numerator."""
+    rows = [{"symbol": s, "volume_24h": 5e7} for s in ("USDT", "USDC", "DAI", "BTC", "ETH", "SOL", "XRP", "GONE")]
+    u = shipped(rows, venues(binance={"BTC": 1, "ETH": 1, "SOL": 1}, hyperliquid={"XRP": 1}))
+    assert u.data_suspect is False and u.out["GONE"] == ("not-tradeable", tm.NO_MARKET)
+
+
+def test_discovery_payload_carries_the_data_suspect_flag(isolated_cache, tmp_path, monkeypatch):
+    world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7}, cats={"ai": ["A", "B"]})
+    gain("A"), gain("B")
+    assert disc.build_discovery(30, today=TODAY).tradeability_data_suspect is False
+    monkeypatch.setattr(disc.universe_classes.tradeable_markets, "load_venues",
+                        lambda today=None, symbols=None: venues(binance={"Q": 1}, hyperliquid={"Q": 1}))
+    res = disc.build_discovery(30, today=TODAY)
+    assert res.tradeability_data_suspect is True and res.excluded_counts["not-tradeable"] == 0 and res.shown_size == 2
