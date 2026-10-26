@@ -188,8 +188,8 @@ def test_defaults_come_from_keyword_file_and_pytrends_missing_exits_3(monkeypatc
     _, text, client = _run([daily_frame(R1), daily_frame(R2), daily_frame(R3)])
     assert client.payloads[0][0][0] == m.anchor_keyword()
     assert client.payloads[1][0][:2] == [m.keyword_for("BTC"), m.keyword_for("ETH")]
-    _, text, client = _run([daily_frame(R1)], ["--coins", "GRAM,SOL", "--no-evidence"])
-    assert "skip GRAM" in text and client.payloads[0][0][1] == SOL
+    _, text, client = _run([daily_frame(R1)], ["--coins", "ZZNONE,SOL", "--no-evidence"])  # T192: no shipped no-keyword coin is left
+    assert "skip ZZNONE" in text and client.payloads[0][0][1] == SOL
     monkeypatch.setitem(sys.modules, "pytrends", None)
     monkeypatch.setitem(sys.modules, "pytrends.request", None)
     out, err = io.StringIO(), io.StringIO()

@@ -14,7 +14,20 @@
   "reddit_request_delay_min_s": 60,
   "reddit_request_delay_max_s": 120,
   "reddit_daily_request_budget": 150,
-  "reddit_sample_min": 10
+  "reddit_sample_min": 10,
+  "x_lang": "en",
+  "x_window_syntax": "since_time",
+  "x_min_account_age_days": 30,
+  "x_min_followers": 10,
+  "x_max_cashtags": 5,
+  "x_raw_retention_days": 180,
+  "x_canary_query": "bitcoin",
+  "x_canary_min_results": 15,
+  "x_unit_max_restarts": 1,
+  "x_canary_tolerance": 0.25,
+  "x_canary_min_overlap": 0.6,
+  "x_parse_drop_threshold": 0.2,
+  "x_allow_curl_backend": false
  },
  "subreddits": [
   "CryptoCurrency",
