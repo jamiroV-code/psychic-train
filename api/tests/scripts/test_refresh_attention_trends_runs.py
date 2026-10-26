@@ -238,6 +238,10 @@ def test_fetch_alone_stats_are_per_call():
 
 # --- (b) the deferred retry of an `empty response` (T200): after the whole main pass, once per coin ---
 
+def _ok(term, day):
+    return fx.daily_frame([term], 100, end=day - timedelta(days=1))
+
+
 def _many(path, n):
     """A keyword file with n term coins C000.. (term T000..) besides the anchor."""
     kw = {"_anchor": {"term": "Bitcoin", "label": "Bitcoin"}}
@@ -279,6 +283,7 @@ def test_empty_is_retried_after_the_main_pass_not_inline(monkeypatch, capsys):
     assert sleeps == [3.0, 10.0]  # usual spacing first, then the retry wait
     c = load(_day(0, 2))["coins"]["AAVE"]
     assert c["outcome"] == "ok" and c["attempts"] == 2 and c["retried"] is True and c["retry_skipped"] is None
+    assert c["median"] is not None and c["zero_share_pct"] is not None  # the retry's own stats, not the empty pull's
     assert load(_day(0, 2))["coins"]["INJ"]["attempts"] == 1
     t = load(_day(0, 2))["totals"]
     assert t["retried"] == 1 and t["recovered"] == 1 and t["retry_skipped"] == 0
@@ -333,7 +338,7 @@ def test_other_failures_are_never_retried(monkeypatch, item):
     assert c["retried"] is False and c["retry_skipped"] is None
 
 
-def test_retry_skipped_when_the_budget_has_no_room(monkeypatch):
+def test_retry_skipped_when_the_budget_has_no_room(monkeypatch, capsys):
     t, sleep, sleeps = _fake_clock(monkeypatch, budget=100)
     client = ClockClient(t, 45.0, {"Aave": [EMPTY]}, _day(0, 2))
     _install(monkeypatch, client)
@@ -347,10 +352,12 @@ def test_retry_skipped_when_the_budget_has_no_room(monkeypatch):
     assert c["retry_skipped"] == "retry-skipped-budget"
     t_ = load(_day(0, 2))["totals"]
     assert t_["retried"] == 0 and t_["retry_skipped"] == 1
+    line = next(ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("trends detail:"))
+    assert line.endswith(", retried 0 (recovered 0, skipped 1)")
 
 
 def test_retry_is_checked_against_the_budget_including_its_sleep(monkeypatch):
-    t, sleep, sleeps = _fake_clock(monkeypatch, budget=106)
+    t, sleep, _ = _fake_clock(monkeypatch, budget=106)
     client = ClockClient(t, 45.0, {"Aave": [EMPTY]}, _day(0, 2))
     _install(monkeypatch, client)
     monkeypatch.setattr(refresh_attention, "_jitter", lambda: 4.0)  # 93 + 10 + 4 = 107 > 106, though 93 + 10 fits
@@ -360,10 +367,10 @@ def test_retry_is_checked_against_the_budget_including_its_sleep(monkeypatch):
 
 def test_twenty_empties_among_92_cost_no_healthy_coin(monkeypatch, _env):
     syms, terms = _many(_env, 92)
-    t, sleep, sleeps = _fake_clock(monkeypatch)  # the real 540 s budget
-    empties = set(syms[::4][:20])
-    script = {terms[syms.index(s)]: [EMPTY, fx.daily_frame([terms[syms.index(s)]], 100)] for s in empties}
+    t, sleep, _ = _fake_clock(monkeypatch)  # the real 540 s budget
     day = _day(0, 92)
+    empties = set(syms[::4][:20])
+    script = {terms[syms.index(s)]: [EMPTY, _ok(terms[syms.index(s)], day)] for s in empties}
     client = ClockClient(t, 2.0, script, day)
     _install(monkeypatch, client)
     series = refresh_attention._run_trends(syms, None, day, sleep)
@@ -387,7 +394,7 @@ def test_retries_are_capped_per_run(monkeypatch, _env):
     syms, terms = _many(_env, 25)
     monkeypatch.setattr(refresh_attention, "TRENDS_TIME_BUDGET_S", 10 ** 6)
     day = _day(0, 25)
-    client = TermClient({t_: [EMPTY, fx.daily_frame([t_], 100)] for t_ in terms}, day)
+    client = TermClient({t_: [EMPTY, _ok(t_, day)] for t_ in terms}, day)
     _install(monkeypatch, client)
     sleeps: list[float] = []
     refresh_attention._run_trends(syms, None, day, sleeps.append)
