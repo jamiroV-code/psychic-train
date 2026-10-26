@@ -151,8 +151,40 @@ def test_safe_load_without_placed_symbols_names_none():
 
 
 def test_shipped_file_names_keys_that_are_not_eligible():
-    eligible = discovery.eligible_discovery_symbols()
-    m, reason = k.safe_load(placed_symbols=eligible)
+    """Pinned set: the live set would make safe_load fail on any new snapshot coin without an entry (T186)."""
+    m, reason = k.safe_load(placed_symbols=PINNED_ELIGIBLE)
     assert reason == ""
-    assert m.not_placed == sorted(set(m.entries) - set(eligible))
+    assert m.not_placed == sorted(set(m.entries) - set(PINNED_ELIGIBLE))
     assert m.warnings == [f"keywords: {s} is not a placed coin" for s in m.not_placed]
+
+
+def test_new_live_coin_without_keyword_fails_no_shipped_data_test(tmp_path, monkeypatch):
+    """T186 regression: a bot snapshot that adds an eligible coin with no keyword must not turn CI red. Every
+    argument-free test that reads the shipped files (this module and test_trends_keywords) is re-run against a
+    snapshot copy with such a coin; the full `pytest api` run against it is in the T180 report."""
+    import inspect
+    import json
+    import shutil
+
+    from api.data import cache
+    from api.tests.data.attention import test_trends_keywords
+
+    src = cache.CACHE_ROOT / "attention" / "universe.json"
+    (tmp_path / "attention").mkdir()
+    doc = json.loads(src.read_text())
+    doc["snapshots"][-1]["coins"].insert(0, {"id": "zz-fake", "symbol": "ZZFAKE", "market_cap": 9e12,
+                                             "volume_24h": 1e9})
+    (tmp_path / "attention" / "universe.json").write_text(json.dumps(doc))
+    shutil.copy(cache.CACHE_ROOT / "attention" / "categories.json", tmp_path / "attention" / "categories.json")
+    monkeypatch.setattr(cache, "CACHE_ROOT", tmp_path)
+    assert "ZZFAKE" in discovery.eligible_discovery_symbols()
+    assert "ZZFAKE (no-entry)" in k.gap_report(k.load(), discovery.eligible_discovery_symbols())
+    me = inspect.currentframe().f_code.co_name
+    ran = []
+    for mod in (__import__(__name__, fromlist=["_"]), test_trends_keywords):
+        for name, fn in vars(mod).items():
+            if name.startswith("test_") and name != me and inspect.isfunction(fn) \
+                    and not inspect.signature(fn).parameters:
+                fn()
+                ran.append(name)
+    assert "test_shipped_file_names_keys_that_are_not_eligible" in ran and len(ran) > 20
