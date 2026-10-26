@@ -143,3 +143,103 @@ Loaded: CLAUDE.md, the envelope, `probe_trends.py`, `trends_cli_common.py`, `tre
 `trends_keywords.py`, `store.py`, `registry.py`, `check_trends_keywords.py` (breaker and exit-code conventions),
 `api/tests/trends_fixtures.py`, parts of `test_probe_trends.py`, master-planner.md section 9 (report template).
 About 60k tokens. Tools: shell, file edit, GitHub MCP. No subagents spawned.
+
+## Round 2 (T201)
+
+Envelope T201 (owner ENTER EXECUTE MODE for stage 1, 26-10-26). Same branch and PR; `origin/main` merged first
+(merge commit, no rebase). Red commit, then green commit, then this report.
+
+### Decisions on the round-1 questions
+
+1. One-term spike: flagged only when the top term's share of the last-7-day rise is >= `SPIKE_SHARE` (0.8) AND >=
+   its share of the group's prior-28-day baseline + `SPIKE_TAKEOVER` (0.2). A dominant but steady term (90% of the
+   searches, 90% of the rise) is not flagged; a term that jumps from 10% to most of the rise is. The output prints
+   both shares. Boundary is now `>=` (was `>`); the old boundary test was updated to the new rule.
+2. Groups are separate requests on separate 0-100 scales: medians are never compared. Ranking is usable verdict,
+   then clean rising, then lower zero-day share, then more distinct values, then higher volume correlation (missing
+   last). Every median prints as "(own scale only)" and the --try header says "never compared across groups".
+3. The paste-ready JSON is labelled "stage-2 shape, not accepted by the loader yet". Loader unchanged.
+4. (Q4, quiet-then-surge) not decided by the envelope: still only `ok` counts as usable.
+
+### Campaign mode
+
+- `--all-eligible`: the coins `eligible_discovery_symbols()` returns (excluded / not-tradeable / stablecoin / fund
+  coins are never tested). Per coin, `trends_candidates.candidate_groups` (pure) builds up to
+  `--max-groups-per-coin` (default 3, max 6) groups from repo data only: the current topic/term (baseline), the best
+  single name variant, a bundle (current term + best variants, at most 3 terms), then the bare name and bare ticker
+  ("needs qualifier word"; never for `NAME_RISK_SYMBOLS`), then more variants. Names: keyword label, then the
+  attention_queries display name, then the CoinGecko id, then the ticker; qualifier words crypto, coin, token,
+  protocol, network, chain. Every term passes the loader's `is_valid_term`; one-letter names are skipped.
+- Priority: keyword missing / no stored series / weak first (latest `cache/attention/trends_runs/*.json` outcome
+  when that file exists, else the stored series under the daily rule), then the rest, universe (cap) order inside.
+- `--state FILE` (default `~/trends_campaign.json`): refused inside the repository (any path under the repo root,
+  so api/data/cache and every tracked dir). Per coin: groups {terms, kind, note, loader_flags, outcome, metrics,
+  tested_at, tester_version}, plus last_tested, best_group, verdict. Saved atomically after every group (temp +
+  fsync + rename). A corrupt file is refused (exit 2) and left untouched. A missing file starts a new campaign for
+  `--all-eligible` (its folder must exist) and is refused by `--report`.
+- `--max-requests` (default 40, 1-60), 3 s + up to 1 s jitter, 20 s pause every 40. Breaker as before: first 429 or
+  3 failed requests in a row -> exit 4; Ctrl-C -> exit 130; state kept to the last finished group. A failed request
+  is retried next run; a rejected frame counts as tested. Groups tested within `--max-age-days` (default 14) skip.
+- `--report FILE` (or `--report - --state FILE`): table from the state file, never starts a Trends client. Per
+  eligible coin: current keyword and its verdict, best tested group, clean rising, identity hint, recommendation
+  (keep / switch to [group] / needs owner). Switch only for a gain in usability or clean rising, and only to an
+  all-loader-valid group. "tested X of N eligible coins"; untested coins listed separately, never as passed; coins
+  in the state but no longer eligible are listed as "no longer eligible".
+- Stage-2 hook (not built): the report notes that the Discovery gate could require "keyword tested"; the state's
+  last_tested / best_group / verdict carry what it needs.
+
+### Files (round 2)
+
+- `api/data/attention/trends_groups.py` (spike rule, `distinct`, `rank_values`, `metrics_record`)
+- `api/data/attention/trends_candidates.py` (new, pure)
+- `api/scripts/trends_campaign.py` (new: state file, health, priority, plan, report)
+- `api/scripts/probe_trends.py` (flags, campaign loop, report, labels)
+- tests: `test_trends_candidates.py`, `test_probe_trends_campaign.py` (new); `test_trends_groups.py`,
+  `test_probe_trends_try.py` (updated for the two decided behaviour changes)
+
+### Owner commands
+
+From the repo root (PowerShell; create `C:\vet` first, the state file's folder must exist). Repeat the first until it says every group is tested (about 231 groups for 77
+coins: 6 runs of 40; wait 30-60 min after an exit 4):
+
+```
+uv run --project api --with pytrends==4.9.2 python -m api.scripts.probe_trends --all-eligible --state C:\vet\trends_campaign.json --max-requests 40
+uv run --project api --with pytrends==4.9.2 python -m api.scripts.probe_trends --report C:\vet\trends_campaign.json
+```
+
+The hand-typed first batch from round 1 still works as is (`--try`, 8 requests).
+
+### Tests (round 2, UTC 2026-10-26)
+
+- `pytest api/tests/scripts api/tests/data/attention`: 1189 passed.
+- `pytest api`: 2609 passed, 1 skipped, 5 deselected. `main` @ `a155901` (clean worktree): 2468 passed, 1 skipped,
+  5 deselected. +141 = round-1 72 + round-2 69 new tests; two existing round-1 assertions changed for decided
+  behaviour (spike boundary `>=` with the takeover rule; group/rising line now prints own scale, distinct and the
+  baseline share); none removed.
+- ruff on the 8 touched Python files: clean. `git diff --check`: clean. Secret scan of the new code: no hit; tests
+  assert the sentinel secret, cookies and bodies never reach the output or the state file.
+- No network import in `trends_candidates` (AST test, same ban list as `trends_groups`).
+- File set vs main: the 8 Python files above plus this report. No `.github/`, pyproject, uv.lock, data, cache or
+  keyword-file edit. All tests use fake clients; no Google contact.
+- Mutation check (50 hand mutants on the spike rule, ranking, candidates, state validation/atomic write/path
+  refusal, freshness, priority, health, report rules, caps, pause, breaker, argument rules): first pass 38 killed,
+  12 survived. Two survivors were redundant guards (removed: the variant qualified-check and the topic check before
+  bundling; both always true by construction). Tests added for 9. Final: **46 of 47 killed**, 1 equivalent survivor
+  (`len(bundle) >= 2` -> `>= 1`: a one-term bundle equals the single variant and is deduped).
+
+### Deviations (round 2)
+
+- A missing state file starts a new campaign for `--all-eligible` (otherwise the first run could never start);
+  `--report` refuses it. Its folder must exist.
+- Path refusal covers the whole repository, not only api/data/cache and the tracked dirs (an untracked file at the
+  root could be committed by accident).
+- A rejected frame counts as tested (Google answered); only a failed request is retried next run.
+- Recommendation rule (not in the envelope): switch only for a gain in usability or clean rising, and only to an
+  all-loader-valid group; ties keep the current keyword.
+
+### Open questions
+
+1. Q4 from round 1 (quiet-then-surge as usable) is still open.
+2. Bare-name / bare-ticker candidates rank after the bundle, so with the default 3 groups they are only tested when
+   a coin has few variants; raise `--max-groups-per-coin` to include them.
+3. `trends_runs/*.json` is read with an assumed shape (`{"coins": {SYM: {"outcome"}}}`); align once that PR lands.
