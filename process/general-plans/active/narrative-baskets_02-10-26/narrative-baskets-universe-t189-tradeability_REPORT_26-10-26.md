@@ -40,7 +40,7 @@ DONE within the narrowed scope. First pass STOPPED under the envelope's stop rul
    `status` other than `ok`, a missing `markets` list, unreadable JSON, a market without `symbol`, or an `as_of` that is not an ISO date = `failed`. **Sanity (round 2):** fewer distinct coins than `MIN_SYMBOLS[venue]` (Hyperliquid 50, Binance 200) = `failed`, so `unknown` for every coin. `volume_24h` absent or null = listed, volume not stored; a value that is not a finite number >= 0 (NaN, Infinity, negative, text, bool) = that coin `unknown` on that venue ("Binance volume invalid"). Several markets for one coin (spot + perp, PEPE + 1000PEPE) merge: positive volume wins, then null, then 0. Staleness: the older of the file-name date and `as_of`; older than 2 days = `stale` (2 days old is still fresh). A store file wins over the fallback below.
 2. Hyperliquid fallback while (1) is empty: the narrative job's perp list `cache/narrative/exchange/markets/{date}.json` (names only) plus 24h volume from `cache/attention/hyperliquid_volume/{SYM}.parquet` (newest point within 2 days of the list date, else "not stored").
 
-Aliases: a reviewed explicit table (`ALIASES`), no generic prefix strip (KAS, KAITO are real). Hyperliquid `kPEPE kSHIB kBONK kFLOKI kNEIRO kLUNC` (seen in the stored list); Binance `1000PEPE 1000SHIB 1000BONK 1000FLOKI 1000LUNC 1000SATS 1000RATS 1000CAT 1000CHEEMS 1000XEC 1MBABYDOGE 1000000MOG` (Binance USD-M naming, UNVERIFIED until P-VEN). Case folded.
+Aliases: a reviewed explicit table (`ALIASES`), no generic prefix strip (KAS, KAITO are real). Hyperliquid `kPEPE kSHIB kBONK kFLOKI kNEIRO kLUNC` (seen in the stored list); Binance `1000PEPE`, `1MBABYDOGE`, `1000000MOG` etc. (12 entries, USD-M naming, UNVERIFIED until P-VEN). Case folded.
 
 A later `markets` runner plugs in by writing (1); Discovery, the module API and the web need no change. With both lists fresh, the `no listed market` rule starts excluding.
 
@@ -78,21 +78,21 @@ Round 1 numbers (head 32c20a4); the merged round-2 tree is under "Round 2" at th
 
 - Gate set `pytest api/tests/analytics/attention api/tests/data/attention api/tests/routers api/tests/scripts api/tests/tooling_guards`: 1528 passed, 1 deselected, 0 failed (run before the two mutation tests; the full run below covers the final tree).
 - Full `pytest api` on the final tree: **2265 passed, 1 skipped, 5 deselected, 0 failed**; `main` 112e32c baseline 2213 passed, 1 skipped, 5 deselected (+52 = 42 new module cases + 10 new Discovery/router tests, 4 replaced in place, see 8; skipped and deselected unchanged).
-- Web: `pnpm test` 577 passed in 63 files; touched files 42 passed; `tsc --noEmit` exit 0; `pnpm build:islands` exit 0.
+- Web: `pnpm test` 577 passed; `tsc` 0; `build:islands` 0.
 - ruff on touched files: new module clean; the remaining findings (I001 import style, TRY004, C401, C408, UP037) are the same as on `main`.
-- `git diff --check` clean; secret scan (grep for key/token/secret patterns on the diff) clean; file-set check clean.
-- Mutation check, 17 hand mutants on the verdict, staleness, aliases, case folding, merge, point in time, HL volume window, store status, the build branch, force_include, legacy sum, the unknown count and the `today` pass-through: 15 killed first pass; 2 survived (store `status` ignored when `markets` present; unknown count over eligible instead of shown), two tests added, both killed: 17/17.
+- `git diff --check`, secret scan, file-set check: clean.
+- Mutation check, 17 hand mutants (verdict, staleness, aliases, merge, point in time, store status, build, legacy sum, unknown count): 15 killed first pass, 2 survivors killed by two added tests: 17/17.
 
 ## 7 Tests NOT run
 
-Playwright e2e (`web/e2e/narrative.spec.ts`; it mocks routes; coins with `tradeability: "unverified"` now also show the new tag; no assertion counts tags). Live Binance/Hyperliquid (not reachable from the container; owner probe below).
+Playwright e2e (route mocks; no assertion counts the new tag). Live Binance/Hyperliquid (not reachable from the container; owner probe below).
 
 ## 8 Deviations
 
 - Replaced tests: `test_no_volume_cut_zero_and_null_volume_stays` -> `test_zero_volume_is_not_tradeable_null_and_low_volume_stay` (owner rule reverses it); `test_thin_volume_label_below_20m_only_label` uses `TINY: 1.0` instead of `ZERO: 0` (zero is now excluded); `test_failed_venue_list_is_unknown_coin_stays_in` rewritten for the new venue type (old stub API removed); `test_excluded_counts_sum_to_universe_minus_shown` gains a zero-volume coin and the new key.
 - Per-coin tag added in `DiscoveryTable.tsx` (the envelope asked for a "visible flag"); beyond the counts-line text.
 - A positive venue volume beats a zero snapshot volume (a fresh market is proof of a market); stated in the module docstring.
-- Discovery history, sources and the Trends checker call `eligibility` without `today`: they read the stored lists as of the UTC date (only the flag differs; exclusion uses the row's own volume).
+- History, sources and the Trends checker call `eligibility` without `today` (stored lists as of the UTC date).
 
 ## 9 Blockers
 
