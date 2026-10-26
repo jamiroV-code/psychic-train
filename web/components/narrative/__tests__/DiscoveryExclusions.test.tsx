@@ -39,12 +39,12 @@ describe("DiscoveryExclusions", () => {
   });
 
   it("gives each reason one plain sentence and keeps unknown reasons readable", () => {
-    const all = ["stablecoin", "wrapped-staked", "no-market", "not-tradeable-config", "unassigned", "hidden-narrative", "no-source-data", "brand-new"]
+    const all = ["stablecoin", "wrapped-staked", "no-market", "not-tradeable-config", "not-tradeable", "unassigned", "hidden-narrative", "no-source-data", "brand-new"]
       .map((reason, i) => ({ symbol: `C${i}`, reason, detail: "" }));
     render(<DiscoveryExclusions coins={all} counts={{}} minCategoryCoins={3} />);
     fireEvent.click(screen.getByTestId("discovery-exclusions-toggle"));
     const groups = screen.getAllByTestId(/^discovery-excluded-/);
-    expect(groups).toHaveLength(8);
+    expect(groups).toHaveLength(9);
     for (const g of groups) {
       const sentence = g.querySelector(".discovery-exclusions__why")?.textContent ?? "";
       expect(sentence).toMatch(/^[A-Z].*\.$/);
@@ -58,10 +58,28 @@ describe("DiscoveryExclusions", () => {
   it("says once in the footer how tradeability is checked, only when a coin is unverified", () => {
     const { rerender } = render(<DiscoveryExclusions coins={coins} counts={counts} minCategoryCoins={3} tradeabilityUnverified />);
     fireEvent.click(screen.getByTestId("discovery-exclusions-toggle"));
-    const notes = screen.getAllByText(/tradeability is checked against exchange lists once they are built; until then no coin is excluded for it/i);
+    const notes = screen.getAllByText(
+      "Coins whose tradeability is unknown stay in: a missing or out-of-date exchange list never excludes a coin.",
+    );
     expect(notes).toHaveLength(1);
     rerender(<DiscoveryExclusions coins={coins} counts={counts} minCategoryCoins={3} tradeabilityUnverified={false} />);
-    expect(screen.queryByText(/tradeability is checked/i)).toBeNull();
+    expect(screen.queryByText(/tradeability is unknown/i)).toBeNull();
+  });
+
+  it("lists not-tradeable coins with the rule that excluded them", () => {
+    const jaaa = [{ symbol: "JAAA", reason: "not-tradeable", detail: "zero 24h volume" }];
+    render(<DiscoveryExclusions coins={jaaa} counts={{ "not-tradeable": 1 }} minCategoryCoins={3} />);
+    fireEvent.click(screen.getByTestId("discovery-exclusions-toggle"));
+    const group = screen.getByTestId("discovery-excluded-not-tradeable");
+    expect(group.querySelector("h3")).toHaveTextContent(/^1 not tradeable \(zero trading volume\)$/);
+    expect(group).toHaveTextContent("No trading market: zero 24h trading volume, or not listed on Binance or Hyperliquid.");
+    expect(group).toHaveTextContent("JAAA (zero 24h volume)");
+  });
+
+  it("tokenized funds sentence no longer claims a venue check", () => {
+    render(<DiscoveryExclusions coins={coins} counts={counts} minCategoryCoins={3} />);
+    fireEvent.click(screen.getByTestId("discovery-exclusions-toggle"));
+    expect(screen.getByTestId("discovery-excluded-no-market")).toHaveTextContent("Tokenized funds: no exchange market to trade them on.");
   });
 
   it("renders nothing when no coin is excluded", () => {

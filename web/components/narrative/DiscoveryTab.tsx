@@ -46,6 +46,19 @@ function coverageLine(data: DiscoveryResponse): string {
   return `${head}, ${rest} excluded${reasons.length > 0 ? `: ${reasons.join(", ")}` : ""}`;
 }
 
+const VENUE_NAME: Record<string, string> = { binance: "Binance", hyperliquid: "Hyperliquid" };
+const VENUE_GAP: Record<string, string> = { missing: "not loaded yet", failed: "failed to load", stale: "out of date" };
+
+/** "Tradeability unknown: N (Binance list not loaded yet)", or null when no shown coin is unknown. */
+function tradeabilityNote(data: DiscoveryResponse): string | null {
+  const n = data.tradeability_unknown ?? 0;
+  if (n <= 0) return null;
+  const gaps = (data.venue_lists ?? [])
+    .filter((v) => v.status !== "ok")
+    .map((v) => `${VENUE_NAME[v.venue] ?? v.venue} list ${VENUE_GAP[v.status] ?? v.status}`);
+  return `Tradeability unknown: ${n}${gaps.length > 0 ? ` (${gaps.join(", ")})` : ""}`;
+}
+
 /** Discovery tab: 7d/30d/90d selector, then a ranked category table or one plain state line. */
 export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault, fetchSources, history }: DiscoveryTabProps) {
   const [window, setWindow] = useState<DiscoveryWindow>(30);
@@ -136,6 +149,9 @@ export function DiscoveryTab({ fetchDiscovery = fetchDiscoveryDefault, fetchSour
       )}
       {data && data.status === "ok" && (
         <p data-testid="discovery-coverage" className="basket-note">{coverageLine(data)}</p>
+      )}
+      {data && data.status === "ok" && tradeabilityNote(data) && (
+        <p data-testid="discovery-tradeability-unknown" className="basket-note">{tradeabilityNote(data)}</p>
       )}
       {data && data.status === "ok" && (
         <DiscoveryExclusions
