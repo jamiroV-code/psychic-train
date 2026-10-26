@@ -118,9 +118,8 @@ def test_fake_reader_satisfies_protocol_and_pin_is_data_only():
 
 def test_none_short_empty_exception_is_missing_never_zero():
     cases = {
-        "none_result": [None],
-        "empty_page": [page([])],
         "short_result": [page(tweets(5, END - timedelta(minutes=1), 1))] * 3,  # page cap, < N_min read
+        "window_not_reached": [page(tweets(20, END + timedelta(hours=2), 1))] * 3,  # all after the window end
         "failed": [xrd.ReaderFailure("api", status=500)],
     }
     for reason, items in cases.items():
@@ -679,3 +678,57 @@ def test_env_guard_refuses_start_for_each_variable():
     assert xrd.env_problems({**GOOD_ENV, "TWS_HTTP_BACKEND": "httpx"}, fallback_process=True) == ["TWS_HTTP_BACKEND"]
     # Only names are reported, never values.
     assert not [p for p in xrd.env_problems({**GOOD_ENV, "TWS_PROXY": "secret"}) if "secret" in p]
+
+
+# --- T187 review fixes (M2, M3) ---------------------------------------------------------------------------------
+
+def _sparse(items):
+    reset_state()
+    _, pool, src = setup(("acct_a",))
+    pass_canary(pool)
+    return unit(pool, {"acct_a": reader("acct_a", items)}, src)
+
+
+def test_sparse_coin_window_reached_on_first_page_is_exact_below_n_min():
+    tws = tweets(3, END - timedelta(hours=2), 60) + tweets(1, END - timedelta(days=1, minutes=5))
+    out = _sparse([page(tws)])
+    assert out.reason == "window_start" and (out.result.value, out.result.capped) == (3.0, False)
+    assert xr.read_x_rows("SOL")[0]["value"] == 3.0
+
+
+def test_cursor_exhausted_exactly_at_window_start_is_exact():
+    tws = tweets(4, END - timedelta(hours=6), 60)
+    tws.append(xf.Tweet(next(_ids), END - timedelta(days=1), "Solana at the start", tws[0].user, "en", ("SOL",)))
+    out = _sparse([page(tws), page([])])
+    assert out.reason == "cursor_exhausted" and out.result.value == 4.0
+    row = xr.read_x_rows("SOL")[0]
+    assert row["stop"] == "cursor_exhausted" and row["pages"] == 2
+
+
+def test_empty_or_none_first_page_with_canary_is_an_exact_zero():
+    for first in ([page([])], [None]):
+        out = _sparse(first)
+        assert out.reason == "cursor_exhausted" and out.result.value == 0.0 and not out.result.capped
+        assert xr.read_x_rows("SOL")[0]["value"] == 0.0
+
+
+def test_canary_window_is_the_last_hour_of_the_previous_utc_day():
+    start, end = xp.canary_window(T0)
+    assert end == datetime(2026, 10, 21, tzinfo=timezone.utc) and end - start == timedelta(hours=1)
+    assert xp.canary_window(datetime(2026, 10, 21, 23, 59, tzinfo=timezone.utc)) == (start, end)
+
+
+def test_canary_query_both_syntaxes_cover_the_fixed_past_hour():
+    start, end = xp.canary_window(T0)
+    assert xp.canary_query(cfg(), start, end) == (
+        f"bitcoin since_time:{int(start.timestamp())} until_time:{int(end.timestamp())}")
+    assert xp.canary_query(cfg(x_window_syntax="date"), start, end) == "bitcoin since:2026-10-20 until:2026-10-21"
+
+
+def test_canary_with_date_syntax_passes_on_the_last_hour_tweets():
+    _, pool, src = setup()
+    tws = tweets(20, xp.canary_window(T0)[1] - timedelta(seconds=30), 2, "bitcoin")
+    readers = {x: reader(x, [page(tws)]) for x in ("acct_a", "acct_b")}
+    out = xp.run_daily_canary(pool, readers, src, cfg(x_window_syntax="date"), rng=random.Random(1),
+                              sleep=lambda s: None)
+    assert out.passed and readers["acct_a"].calls[0][0] == "bitcoin since:2026-10-20 until:2026-10-21"

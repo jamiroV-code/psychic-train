@@ -112,3 +112,29 @@ def test_per_coin_lang_override_validated():
     d["coins"]["SOL"]["x_lang"] = "spanish"
     with pytest.raises(wq.QueriesError, match="x_lang"):
         wq.validate(d)
+
+
+def test_paging_continues_while_all_read_tweets_are_after_the_window_end():
+    """T187 M1: entries read after the window end never fill the sample; keep paging to the page cap."""
+    after = END + timedelta(minutes=5)
+    stop = xw.stop_reason
+    assert stop(pages=2, entries_read=40, oldest_read=after, day=DAY, sample_n=40, page_cap=3) is None
+    assert stop(pages=2, entries_read=40, oldest_read=END, day=DAY, sample_n=40, page_cap=3) is None
+    assert stop(pages=3, entries_read=60, oldest_read=after, day=DAY, sample_n=40, page_cap=3) == "page_cap"
+    assert stop(pages=2, entries_read=40, oldest_read=END - timedelta(seconds=1), day=DAY, sample_n=40,
+                page_cap=3) == "sample"
+
+
+def test_exhausted_cursor_is_a_complete_read_of_the_window():
+    """T187 M3: an empty page (or None) ends the cursor: everything matching was read, so the count is exact."""
+    stop = xw.stop_reason
+    inside = START + timedelta(hours=3)
+    assert stop(pages=1, entries_read=0, oldest_read=None, day=DAY, sample_n=40, page_cap=3,
+                exhausted=True) == "cursor_exhausted"
+    assert stop(pages=2, entries_read=20, oldest_read=inside, day=DAY, sample_n=40, page_cap=3,
+                exhausted=True) == "cursor_exhausted"
+    assert stop(pages=2, entries_read=20, oldest_read=START, day=DAY, sample_n=40, page_cap=3,
+                exhausted=True) == "cursor_exhausted"
+    assert stop(pages=2, entries_read=20, oldest_read=START - timedelta(seconds=1), day=DAY, sample_n=40,
+                page_cap=3, exhausted=True) == "window_start"
+    assert xw.COMPLETE_STOPS == ("window_start", "cursor_exhausted")
