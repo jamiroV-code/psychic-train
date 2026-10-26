@@ -154,6 +154,12 @@ File-set check: `git diff --stat 691c923..HEAD` lists exactly these files. There
   - `ruff check` on all new and changed files passes. The base already has 48 ruff findings elsewhere, so ruff is
     not a gate.
 
+- T187 review fix round (26-10), on the tree with `origin/main` merged in again:
+  - `pytest api`: 2321 passed, 0 failed, 1 skipped, 5 deselected.
+  - 12 new test functions: 4 in density, 2 in window, 6 in reader. Red came first (17 failing), then green.
+  - Mutation check on the changed logic and the reworded lines: 49 of 49 mutants killed (45 + 4).
+  - Ruff, `git diff --check`, the secret scan and the banned-name grep are clean.
+
 ## 7 Tests NOT run
 
 - Anything live: X is not reachable from the sandbox, and nothing from twscrape is installed.
@@ -207,6 +213,20 @@ overrule it.
 - D12: The environment guard also refuses lowercase proxy variables and `ALL_PROXY`, and it requires
   `TWS_RAISE_WHEN_NO_ACCOUNT=1` (rule 20b).
 - D13: `reparse` uses the first completed run of a coin-day, matching the first-wins value.
+
+- T187 fixes, from the planner's relay of the independent review (verdict MERGE-AFTER-FIXES: 3 Medium,
+  6 Low):
+  - M1: when every read tweet is at or after the window end, the coin-day is missing with
+    `window_not_reached`, never a capped 0. Entries read that way never fill the sample, so paging continues
+    to the page cap.
+  - M2: the canary uses a fixed past hour, the last hour of the previous UTC day. The date form
+    `since:D-1 until:D` reads it newest first, so `x_window_syntax="date"` no longer fails `empty_results`.
+  - M3: an empty page, or None (rule 20b), is an exhausted cursor. It counts as a complete read of the window,
+    so k is exact even below N_min. A 0 is kept only with the day's canary (`canary_ok`, also stored in the
+    completion manifest); otherwise it is missing with `zero_without_canary`. The reasons `none_result` and
+    `empty_page` no longer exist.
+  - M10: a boundary test for the page cap at `n_read == x_sample_min`.
+  - Low findings: their text was not in the relay or on the PR, so I did not fix them.
 
 ## 9 Blockers
 
