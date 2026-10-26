@@ -15,8 +15,9 @@ whole weight to the rising weight (covered weight and score are unchanged). A co
 `weights_history` covers the days up to its `until`, so a past day is never rescored with newer weights.
 
 Categories are the narratives of `attention_narratives.json` (U1): membership comes from that file, never from
-CoinGecko categories. Eligibility (U2) is `universe_classes`: class exclusion, then tradeability, then IN; there
-is no volume cut, and every top-N coin that is not shown carries a reason from a closed list.
+CoinGecko categories. Eligibility (U2) is `universe_classes`: class exclusion, then tradeability, then IN; the only
+volume rule is that exactly zero 24h volume means no trading market (T189), and every top-N coin that is not shown
+carries a reason from a closed list.
 """
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ from api.analytics.attention import narratives, universe_classes
 from api.analytics.attention.universe import load_universe_rows
 from api.data.attention import registry
 from api.models.discovery import (DiscoveryCategory, DiscoveryCoin, DiscoveryExcluded, DiscoveryExcludedCoin,
-                                  DiscoveryHiddenNarrative, DiscoveryResponse, DiscoverySource)
+                                  DiscoveryHiddenNarrative, DiscoveryResponse, DiscoverySource, DiscoveryVenueList)
 
 CONFIG_PATH = Path(__file__).resolve().parents[2] / "data" / "discovery.json"
 
@@ -273,9 +274,10 @@ def series_names(cfg: dict) -> set[str]:
     return weighted | set(EXCHANGE_SERIES.values()) | {FALLBACK_SERIES}
 
 
-def eligibility(cfg: dict, rows: list[dict], venues=None) -> universe_classes.Universe:
-    """Class exclusion -> tradeability -> IN over the universe rows; `.eligible` is the IN set in universe order."""
-    return universe_classes.build(rows, cfg["universe_rules"], venues)
+def eligibility(cfg: dict, rows: list[dict], venues=None, today: date | None = None) -> universe_classes.Universe:
+    """Class exclusion -> tradeability -> IN over the universe rows; `.eligible` is the IN set in universe order.
+    `venues` None reads the stored venue lists as of `today`."""
+    return universe_classes.build(rows, cfg["universe_rules"], venues, today)
 
 
 def _excluded(u: universe_classes.Universe, nm: narratives.Memberships, shown: set[str]) -> dict:
@@ -298,7 +300,8 @@ def _excluded(u: universe_classes.Universe, nm: narratives.Memberships, shown: s
         coins.append(DiscoveryExcludedCoin(symbol=s, reason=reason, detail=detail))
     counts = {k: sum(c.reason == k for c in coins) for k in universe_classes.REASONS}
     legacy = DiscoveryExcluded(
-        exclusion_list=sum(counts[k] for k in ("stablecoin", "wrapped-staked", "no-market", "not-tradeable-config")),
+        exclusion_list=sum(counts[k] for k in ("stablecoin", "wrapped-staked", "no-market", "not-tradeable-config",
+                                               "not-tradeable")),
         below_volume_floor=0, no_category=counts["unassigned"] + counts["hidden-narrative"],
         no_source_data=counts["no-source-data"])
     return {"excluded_coins": coins, "excluded_counts": counts, "excluded": legacy}
@@ -316,13 +319,15 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
     if not urows:
         return _empty(window, as_of, doc["as_of"], "no-data", reason, narratives_status=doc["status"],
                       weights_version=wver)
-    u = eligibility(cfg, urows)
+    u = eligibility(cfg, urows, today=today)
     eligible = u.eligible
     min_coins = min_narrative_coins(cfg)
     nm = narratives.memberships(eligible, min_coins, doc)
     cats_asof = nm.as_of
     flags = {"narratives_status": nm.status, "unassigned": nm.unassigned, "weights_version": wver,
-             "hidden_narratives": [DiscoveryHiddenNarrative(**h) for h in nm.hidden]}
+             "hidden_narratives": [DiscoveryHiddenNarrative(**h) for h in nm.hidden],
+             "venue_lists": [DiscoveryVenueList(venue=v.venue, status=v.state, as_of=v.as_of)
+                             for v in u.venues.values()]}
 
     series = series_names(cfg)
     data = {(src, sym): registry.read_series(src, sym, today, probe_path) for src in series for sym in eligible}
@@ -350,6 +355,7 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
     out.sort(key=lambda c: (not c.ranked, c.score is None, -(c.score or 0.0)))
     shown = {r.symbol for c in out for r in c.coins}
     return _empty(window, as_of, cats_asof, "ok", "", len(urows), len(eligible), out, shown_size=len(shown),
+                  tradeability_unknown=sum(u.tradeability[s] == "unverified" for s in shown),
                   **_excluded(u, nm, shown),
                   min_category_coins=min_coins, rising_threshold_pct=float(cfg["rising_threshold_pct"]),
                   min_covered_weight=float(cfg["min_covered_weight"]), **flags)

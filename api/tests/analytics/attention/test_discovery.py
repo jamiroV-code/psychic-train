@@ -655,3 +655,12 @@ def test_shipped_config_has_no_categories_key():
     raw = json.loads(disc.CONFIG_PATH.read_text())
     assert "categories" not in raw and "min_category_coins" not in raw
     assert raw["universe_rules"]["min_narrative_coins"] == 3
+
+
+def test_tradeability_unknown_counts_shown_coins_only(isolated_cache, tmp_path, monkeypatch):
+    """T189: the web note counts coins on the page; an IN coin with no source data is not shown and not counted."""
+    world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7, "NODATA": 5e7}, cats={"ai": ["A", "B", "NODATA"]})
+    gain("A"), gain("B")
+    res = disc.build_discovery(30, today=TODAY)
+    assert res.shown_size == 2 and res.excluded_counts["no-source-data"] == 1
+    assert res.tradeability_unknown == 2

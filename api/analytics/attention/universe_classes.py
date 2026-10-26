@@ -1,9 +1,11 @@
 """Discovery universe classes (T115 U2): why a top-100 coin is OUT, from a closed reason list.
 
-Order per coin: `force_include` wins over a class and over a venue `no-market`; then the class (stablecoin,
-wrapped-staked, tokenized fund = `no-market`), then `not_tradeable` (config), then the venue lists. A venue
-list that failed or is not built is `unknown`: the coin stays IN as `unverified`, never cut. Volume never
-excludes; under `thin_volume_label_below_usd` it only labels the coin `thin_volume`.
+Order per coin: `force_include` wins over a class and over `not-tradeable`; then the class (stablecoin,
+wrapped-staked, tokenized fund = `no-market`), then `not_tradeable` (config), then the venue lists
+(`tradeable_markets`, T189): no trading market = zero 24h volume, or no listing on any fresh tracked venue list,
+reason `not-tradeable`. A venue list that failed, is stale or is not built is `unknown`: the coin stays IN as
+`unverified`, never cut. Otherwise volume never excludes; under `thin_volume_label_below_usd` it only labels the
+coin `thin_volume`.
 
 Baskets does not read this module: it keeps `universe.load_reference` (Q-V1).
 """
@@ -11,15 +13,15 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Literal
+
+from api.data.attention import tradeable_markets
 
 # Closed list for `excluded_coins` / `excluded_counts`. The last three are not exclusions: an IN coin that is not
 # shown (no narrative, only hidden narratives, no usable source until U5), so shown + sum(counts) = universe.
-REASONS = ("stablecoin", "wrapped-staked", "no-market", "not-tradeable-config", "unassigned", "hidden-narrative",
-           "no-source-data")
+REASONS = ("stablecoin", "wrapped-staked", "no-market", "not-tradeable-config", "not-tradeable", "unassigned",
+           "hidden-narrative", "no-source-data")
 CLASS_REASON = {"stablecoin": ("stablecoin", "stablecoin"), "wrapped_staked": ("wrapped-staked", "wrapped or staked"),
                 "tokenized_fund": ("no-market", "tokenized fund")}
-VENUES = ("binance", "coinbase", "kraken", "hyperliquid")
 THIN_VOLUME_DEFAULT_USD = 20_000_000
 SYMBOL_PATTERN = r"^[A-Z0-9_\-]{1,24}$"
 # Removed by U2: a stale local config fails loudly instead of being half-read.
@@ -27,8 +29,6 @@ REMOVED_KEYS = {"min_volume_24h_usd": "no volume cut; volume only sets thin_volu
                 "exclude": "use universe_rules.classes or universe_rules.not_tradeable",
                 "exclude_category_ids": "no category exclusion; exchange tokens are IN",
                 "include_despite_category": "no category exclusion; use universe_rules.force_include"}
-
-Tradeability = Literal["tradeable", "no-market", "unknown"]
 
 
 @dataclass
@@ -40,6 +40,7 @@ class Universe:
     tradeability: dict[str, str] = field(default_factory=dict)          # IN symbol -> tradeable | unverified
     volume: dict[str, float | None] = field(default_factory=dict)
     thin: dict[str, bool] = field(default_factory=dict)
+    venues: dict[str, tradeable_markets.VenueList] = field(default_factory=dict)   # the lists the answer used
 
 
 def _symbols(value, name: str) -> set[str]:
@@ -84,25 +85,15 @@ def classify(symbol: str, rules: dict) -> str:
     return "normal"
 
 
-def venue_lists() -> dict[str, set[str] | None]:
-    """Per venue: the symbols with a market, or None when the list failed or is not built. Stub until U5."""
-    return {v: None for v in VENUES}
-
-
-def tradeability(symbol: str, venues: dict[str, set[str] | None]) -> Tradeability:
-    if any(symbol in (m or ()) for m in venues.values()):
-        return "tradeable"
-    if venues and all(m is not None for m in venues.values()):
-        return "no-market"
-    return "unknown"
-
-
-def build(rows: list[dict], rules: dict, venues: dict[str, set[str] | None] | None = None) -> Universe:
-    venues = venue_lists() if venues is None else venues
+def build(rows: list[dict], rules: dict, venues: dict[str, tradeable_markets.VenueList] | None = None,
+          today=None) -> Universe:
+    """`venues` None: the stored lists, point in time at `today` (None = the UTC date)."""
+    if venues is None:
+        venues = tradeable_markets.load_venues(today, [str(r["symbol"]) for r in rows])
     force = set(rules.get("force_include", []))
     nt = rules.get("not_tradeable", {})
     thin_below = float(rules.get("thin_volume_label_below_usd", THIN_VOLUME_DEFAULT_USD))
-    u = Universe(rows=rows)
+    u = Universe(rows=rows, venues=venues)
     for r in rows:
         s = str(r["symbol"]).upper()
         if s in u.out or s in u.tradeability:
@@ -110,7 +101,7 @@ def build(rows: list[dict], rules: dict, venues: dict[str, set[str] | None] | No
         vol = r.get("volume_24h")
         vol = float(vol) if isinstance(vol, (int, float)) and not isinstance(vol, bool) else None
         cls = classify(s, rules)
-        t = tradeability(s, venues)
+        t = tradeable_markets.tradeability(s, venues, vol)
         if s in force:
             pass
         elif cls != "normal":
@@ -119,11 +110,11 @@ def build(rows: list[dict], rules: dict, venues: dict[str, set[str] | None] | No
         elif s in nt:
             u.out[s] = ("not-tradeable-config", nt[s])
             continue
-        elif t == "no-market":
-            u.out[s] = ("no-market", "no market on " + "/".join(VENUES))
+        elif t.status == "not_tradeable":
+            u.out[s] = ("not-tradeable", t.detail)
             continue
         u.eligible.append(s)
-        u.tradeability[s] = "tradeable" if t == "tradeable" else "unverified"
+        u.tradeability[s] = "tradeable" if t.status == "tradeable" else "unverified"
         u.volume[s] = vol
         u.thin[s] = vol is not None and vol < thin_below
     return u

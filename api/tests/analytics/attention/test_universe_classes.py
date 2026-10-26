@@ -279,8 +279,10 @@ def test_discovery_on_fixture_with_zero_volume_fund_and_failed_venue_file(snap, 
     fresh Hyperliquid perp list: JAAA is the only new exclusion; coins off Hyperliquid stay in, unverified."""
     from api.data import cache
     from api.data.attention import universe_store
-    rows = [*snap, {"id": "janus-henderson-anemoy-aaa-clo-fund", "symbol": "JAAA", "market_cap": 1, "volume_24h": 0}]
-    universe_store.write_snapshot("2026-10-18", rows)
+    assert snap[-1]["symbol"] == "EUTBL"   # the 100th coin (a tokenized fund) makes room for JAAA at its cap
+    rows = [*snap[:-1], {"id": "janus-henderson-anemoy-aaa-clo-fund", "symbol": "JAAA",
+                         "market_cap": snap[-1]["market_cap"], "volume_24h": 0}]
+    universe_store.write_snapshot("2026-10-19", rows)   # newer than the fixture copy
     hl = [r["symbol"] for r in snap if r["symbol"] not in {"LEO", "CRO", "GT", "PEPE", "SHIB"}] + ["kPEPE", "kSHIB"]
     cache.write_exchange_market_snapshot((TODAY - timedelta(days=1)).isoformat(), hl)
     failed = cache.CACHE_ROOT.joinpath(*tm.MARKETS_DIR, "binance", f"{TODAY.isoformat()}.json")
@@ -294,9 +296,9 @@ def test_discovery_on_fixture_with_zero_volume_fund_and_failed_venue_file(snap, 
     res = disc.build_discovery(30, today=TODAY)
     out = {c.symbol: (c.reason, c.detail) for c in res.excluded_coins}
     assert out["JAAA"] == ("not-tradeable", "zero 24h volume") and res.excluded_counts["not-tradeable"] == 1
-    assert res.universe_size == 101 and res.eligible_size == 76
+    assert res.universe_size == 100 and res.eligible_size == 76 and res.excluded_counts["no-market"] == 7
     assert res.shown_size + sum(res.excluded_counts.values()) == res.universe_size
-    assert res.excluded.exclusion_list == 16 + 8 + 1
+    assert res.excluded.exclusion_list == 16 + 7 + 1
     shown = {c.symbol: c for n in res.categories for c in n.coins}
     assert {"LEO", "CRO", "GT"} <= set(shown)
     assert {s: shown[s].tradeability for s in ("LEO", "PEPE", "SHIB", "BTC")} == {

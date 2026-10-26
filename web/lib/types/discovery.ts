@@ -26,7 +26,7 @@ export interface DiscoveryCoin {
   volume_24h?: number | null;
   /** Low 24h volume: a label only, the coin stays in. */
   thin_volume?: boolean;
-  /** "unverified" while a venue list is unknown; never excludes. */
+  /** "unverified" = tradeability unknown (no fresh Binance or Hyperliquid list has the coin); never excludes. */
   tradeability?: "tradeable" | "unverified";
 }
 
@@ -57,9 +57,17 @@ export type DiscoveryExclusionReason =
   | "wrapped-staked"
   | "no-market"
   | "not-tradeable-config"
+  | "not-tradeable"
   | "unassigned"
   | "hidden-narrative"
   | "no-source-data";
+
+/** One tracked venue's stored market list; only "ok" proves or rules out a market. */
+export interface DiscoveryVenueList {
+  venue: string;
+  status: "ok" | "missing" | "failed" | "stale";
+  as_of: string | null;
+}
 
 /** A top-N coin that is not shown, with its reason. */
 export interface DiscoveryExcludedCoin {
@@ -93,6 +101,10 @@ export interface DiscoveryResponse {
   excluded_coins?: DiscoveryExcludedCoin[];
   /** Reason -> count; `shown_size` plus the sum is `universe_size`. Absent on an older API. */
   excluded_counts?: Record<string, number>;
+  /** Shown coins whose tradeability is unknown. Absent on an older API. */
+  tradeability_unknown?: number;
+  /** Per tracked venue, the state of its stored market list. Absent on an older API. */
+  venue_lists?: DiscoveryVenueList[];
   min_category_coins: number;
   /** A source change at or above this percent counts as rising. */
   rising_threshold_pct: number;

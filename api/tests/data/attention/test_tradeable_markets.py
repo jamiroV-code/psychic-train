@@ -194,6 +194,7 @@ def test_markets_store_wins_over_the_narrative_list_for_hyperliquid(isolated_cac
 
 
 @pytest.mark.parametrize("doc", [{"status": "failed", "reason": "HTTP 451"}, {"status": "ok"}, "{bad",
+                                 {"status": "failed", "markets": [{"symbol": "LEO", "volume_24h": 1e7}]},
                                  {"status": "ok", "markets": [{"kind": "spot"}]}, "[]"])
 def test_failed_or_malformed_store_file_is_failed_never_no_market(isolated_cache, doc):
     write_store("binance", TODAY, doc)

@@ -26,7 +26,8 @@ class DiscoveryCoin(BaseModel):
     primary: bool = False  # this category is the coin's primary narrative
     volume_24h: float | None = None   # snapshot 24h volume (USD); never excludes
     thin_volume: bool = False         # volume under universe_rules.thin_volume_label_below_usd: a label only
-    tradeability: Literal["tradeable", "unverified"] = "unverified"   # unverified = a venue list is unknown
+    tradeability: Literal["tradeable", "unverified"] = "unverified"   # unverified = tradeability unknown: no fresh
+    # venue list has the coin and not every tracked list is loaded (never excludes)
 
 
 class DiscoveryCategory(BaseModel):
@@ -43,7 +44,7 @@ class DiscoveryCategory(BaseModel):
 class DiscoveryExcluded(BaseModel):
     """Legacy (deprecated, kept for the old web; U2): `excluded_counts` folded into the old four keys.
     They add up to universe - shown."""
-    exclusion_list: int = 0       # stablecoin + wrapped-staked + no-market + not-tradeable-config
+    exclusion_list: int = 0       # stablecoin + wrapped-staked + no-market + not-tradeable-config + not-tradeable
     below_volume_floor: int = 0   # always 0: there is no volume cut
     no_category: int = 0          # unassigned + hidden-narrative
     no_source_data: int = 0       # in a visible narrative but no source has usable data
@@ -62,6 +63,13 @@ class DiscoveryHiddenNarrative(BaseModel):
     coins: list[str]       # its in-universe members
 
 
+class DiscoveryVenueList(BaseModel):
+    """One tracked venue's stored market list as Discovery used it (T189)."""
+    venue: str             # binance | hyperliquid
+    status: Literal["ok", "missing", "failed", "stale"]   # only ok proves or rules out a market
+    as_of: str | None = None
+
+
 class DiscoveryResponse(BaseModel):
     window: Literal[7, 30, 90]
     as_of: str
@@ -74,6 +82,8 @@ class DiscoveryResponse(BaseModel):
     excluded: DiscoveryExcluded = DiscoveryExcluded()
     excluded_coins: list[DiscoveryExcludedCoin] = []   # every universe coin not shown, with its reason
     excluded_counts: dict[str, int] = {}               # reason -> count; shown_size + sum = universe_size
+    tradeability_unknown: int = 0                      # shown coins with tradeability "unverified"
+    venue_lists: list[DiscoveryVenueList] = []         # per tracked venue: the list state behind tradeability
     min_category_coins: int = 3          # value of universe_rules.min_narrative_coins (name kept for the web)
     rising_threshold_pct: float = 10.0
     min_covered_weight: float = 30.0
