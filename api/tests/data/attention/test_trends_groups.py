@@ -295,7 +295,7 @@ def test_rank_never_compares_medians_across_groups():
     assert sorted([zeros_high, low_steady], key=g.rank_key) == [low_steady, zeros_high]
     varied = g.analyze({"a": wave(mid=10)}, DATES)
     assert varied.group.distinct > low_steady.group.distinct == 1
-    assert sorted([g.analyze({"a": flat(90)}, DATES), varied], key=g.rank_key)[0] is varied
+    assert min([g.analyze({"a": flat(90)}, DATES), varied], key=g.rank_key) is varied
 
 
 def test_rank_values_order_and_identity_last():
@@ -334,3 +334,8 @@ def test_module_has_no_network_import():
 
 def test_dates_cover_100_days():
     assert DATES[-1] == YESTERDAY and len(DATES) == N and isinstance(DATES[0], date)
+
+
+def test_spike_from_an_all_zero_baseline_is_a_takeover():
+    m = g.analyze({"a": rise(0, 10), "b": rise(0, 1)}, DATES)
+    assert m.spike_base_share == 0.0 and m.spike is True

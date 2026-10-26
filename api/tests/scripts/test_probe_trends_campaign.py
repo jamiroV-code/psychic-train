@@ -14,7 +14,6 @@ from api.scripts import probe_trends as p
 from api.scripts import trends_campaign as tc
 from api.tests.trends_fixtures import (
     SECRET,
-    TODAY,
     FakeTrendReq,
     block_network,
     daily_frame,
@@ -66,7 +65,7 @@ def run(argv, client=None, eligible=("AKE", "BTW", "GRAM"), health=None, sleeps=
                   clock=iter(x * 0.25 for x in range(10_000)).__next__, today=lambda: now.date(),
                   version=lambda: "4.9.2", out=out, err=err, jitter=lambda: 0.5,
                   volume_reader=lambda sym, day: (None, "n/a: no stored volume"),
-                  eligible_reader=lambda: (list(eligible), ROWS), names_reader=lambda: {},
+                  eligible_reader=lambda: (list(eligible), ROWS), names_reader=dict,
                   health_reader=lambda km, syms: {s: (health or {}).get(s, "ok") for s in syms}, now=lambda: now)
     return code, out.getvalue() + err.getvalue(), client
 
@@ -245,7 +244,9 @@ def test_no_eligible_coins_refuses(tmp_path):
 # --- state file safety ---
 
 @pytest.mark.parametrize("body", ["{not json", "[]", '{"version": 1}', '{"version": 99, "coins": {}}',
-                                  '{"version": 1, "coins": {"AKE": {"groups": {"x": {"terms": "x"}}}}}'])
+                                  '{"version": 1, "coins": {"AKE": {"groups": {"x": {"terms": "x"}}}}}',
+                                  ('{"version": 1, "coins": {"AKE": {"groups": {"x": {"terms": "x", "outcome": "ok", '
+                                   '"metrics": null, "tested_at": "2026-10-21T12:00:00+00:00"}}}}}')])
 def test_corrupt_state_refused_and_never_overwritten(tmp_path, body):
     st = tmp_path / "c.json"
     st.write_text(body)
@@ -400,3 +401,65 @@ def test_try_output_labels_json_as_stage_2_and_medians_own_scale():
     assert "stage-2 shape, not accepted by the loader yet" in text
     assert "own scale only" in text
     assert "never compared across groups" in text
+
+
+def test_failures_not_in_a_row_do_not_stop(tmp_path):
+    script = [forbidden(), forbidden(), None, forbidden(), forbidden()]
+    code, _, c = run(["--all-eligible", "--state", str(tmp_path / "c.json"), "--max-requests", "6"],
+                     client=AutoTrendReq(script))
+    assert code == 0 and len(c.payloads) == 6
+
+
+@pytest.mark.parametrize("extra", [["--all-eligible"], ["--state", "OTHER"]])
+def test_report_with_an_existing_state_still_refuses_bad_combinations(tmp_path, extra):
+    st = tmp_path / "c.json"
+    tc.save_state(st, tc.new_state())
+    argv = ["--report", str(st)] + [str(st) if x == "OTHER" else x for x in extra]
+    code, text, _ = run(argv, factory=no_client)
+    assert code == 2 and "campaign report" not in text
+
+
+def _metrics(verdict="ok", clean=False):
+    return {"verdict": verdict, "clean": clean, "zero_pct": 0, "distinct": 5, "identity_corr": None,
+            "identity_reason": "n/a: no stored volume", "median": 10}
+
+
+def _coin(state, sym, groups):
+    from api.data.attention import trends_candidates as tcand
+    for terms, outcome, metrics, flag in groups:
+        cand = tcand.Candidate(tuple(terms), "variant")
+        tc.record(state, sym, cand, {t: flag for t in terms}, outcome, metrics, NOW)
+
+
+def _report(state, eligible):
+    from api.data.attention import trends_keywords as tk
+    lines = tc.report_lines(state, eligible, tk.load(), {})
+    return {ln.split(" | ")[0]: ln for ln in lines if " | " in ln}, "\n".join(lines)
+
+
+def test_report_switch_rules():
+    st = tc.new_state()
+    # baseline usable but not clean, a loader-valid variant is clean -> switch
+    _coin(st, "AKE", [(["akedo crypto"], "ok", _metrics(), "loader-valid"),
+                      (["ake crypto"], "ok", _metrics(clean=True), "loader-valid")])
+    # the clean group is not loader-valid and the baseline is usable -> keep
+    _coin(st, "BTW", [(["bitway crypto"], "ok", _metrics(), "loader-valid"),
+                      (["bitway"], "ok", _metrics(clean=True), "needs qualifier word")])
+    # the baseline is unusable and the only usable group is not loader-valid -> needs owner
+    _coin(st, "OKB", [(["okb crypto"], "ok", _metrics("too-little-interest"), "loader-valid"),
+                      (["okb"], "ok", _metrics(), "needs qualifier word")])
+    lines, _ = _report(st, ["AKE", "BTW", "OKB"])
+    assert "recommend: switch to [ake crypto]" in lines["AKE"]
+    assert "recommend: keep" in lines["BTW"]
+    assert "recommend: needs owner (best usable group is not loader-valid)" in lines["OKB"]
+
+
+def test_failed_requests_only_are_untested_and_set_no_last_tested():
+    st = tc.new_state()
+    _coin(st, "AKE", [(["akedo crypto"], "request-failed: ResponseError (HTTP 403)", None, "loader-valid")])
+    assert st["coins"]["AKE"]["last_tested"] is None
+    _coin(st, "BTW", [(["bitway crypto"], "frame-rejected: gap", None, "loader-valid")])
+    assert st["coins"]["BTW"]["last_tested"] == NOW.isoformat()
+    lines, text = _report(st, ["AKE", "BTW"])
+    assert "AKE" not in lines and "AKE" in text.split("untested")[1]
+    assert "tested 1 of 2 eligible coins" in text and "needs owner" in lines["BTW"]

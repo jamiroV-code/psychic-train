@@ -71,7 +71,9 @@ def test_every_term_passes_the_loader_safe_check():
     assert all(len(t) <= 40 for g in c.candidate_groups("ABC", None, query_name=long_name, max_groups=6)
                for t in g.terms)
     # an underscore or one-letter ticker is never a bare candidate
-    assert all(g.terms != ("M",) for g in c.candidate_groups("M", None, query_name="Memecore", max_groups=6))
+    memecore = c.candidate_groups("M", None, query_name="Memecore", max_groups=6)
+    assert all(g.terms != ("M",) for g in memecore)
+    assert not any(t.startswith("m ") for g in memecore for t in g.terms)   # a one-letter name is never a source
 
 
 def test_dedupe_case_insensitive_and_already_qualified_names_kept_as_is():

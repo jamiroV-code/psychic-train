@@ -22,7 +22,11 @@ RECENT_DAYS = 7  # "last week" of the rising measure
 BASELINE_DAYS = 28  # the 4 weeks before it: the baseline
 MIN_RISE_RATIO = 1.10  # median of the last 7 days over the prior-28-day median
 MIN_DAYS_ABOVE = 4  # of the last 7 days, at least this many above the prior-28-day median (not a one-day spike)
-SPIKE_SHARE = 0.80  # one term carrying more than this share of the group's last-7-day increase: a one-term spike
+# One-term spike (T201): one term carries at least SPIKE_SHARE of the group's last-7-day increase AND that share is
+# at least its baseline share of the group plus SPIKE_TAKEOVER (a dominant but steady term is not a spike).
+SPIKE_SHARE = 0.80
+SPIKE_TAKEOVER = 0.20
+SHARE_EPS = 1e-9  # float slack on the share comparisons (0.6 + 0.2 is not exactly 0.8)
 MOVES_ALONE_CORR = 0.2  # a term whose smoothed series correlates below this with the best term "moves alone"
 IDENTITY_MIN_DAYS = 60  # overlapping days needed before the volume correlation is computed
 IDENTITY_MIN_CORR = 0.2  # below this the group "does not track this coin's volume" (a hint, not proof)
@@ -61,6 +65,7 @@ class GroupStats:
     median: float
     max: float
     zero_pct: float
+    distinct: int
 
 
 @dataclass
@@ -73,6 +78,7 @@ class GroupMetrics:
     spike_share: float | None
     spike: bool
     spike_reason: str
+    spike_base_share: float | None
     best_term: str
     correlations: dict[str, float | None]
     moves_alone: list[str]
@@ -114,17 +120,24 @@ def _increase(values: list[float]) -> float:
     return max(0.0, sum(v - base for v in values[-RECENT_DAYS:]))
 
 
-def one_term_spike(grp: Group) -> tuple[float | None, bool, str]:
-    """(largest term's share of the group's last-7-day increase, flagged, reason when the share is missing)."""
+def one_term_spike(grp: Group) -> tuple[float | None, bool, str, float | None]:
+    """(largest term's share of the group's last-7-day increase, flagged, reason when the share is missing, that
+    term's share of the group over the prior-28-day baseline). Flagged only when the term takes over: its share of
+    the rise is >= SPIKE_SHARE and >= its baseline share + SPIKE_TAKEOVER."""
     if len(grp.terms) < 2:
-        return None, False, "n/a: one term"
+        return None, False, "n/a: one term", None
     if len(grp.total) < RECENT_DAYS + BASELINE_DAYS:
-        return None, False, "missing: too few days"
-    inc = [_increase(v) for v in grp.terms.values()]
-    if not sum(inc):
-        return None, False, "missing: no increase over baseline"
-    share = max(inc) / sum(inc)
-    return share, share > SPIKE_SHARE, ""
+        return None, False, "missing: too few days", None
+    inc = {t: _increase(v) for t, v in grp.terms.items()}
+    if not sum(inc.values()):
+        return None, False, "missing: no increase over baseline", None
+    top = max(inc, key=inc.get)
+    share = inc[top] / sum(inc.values())
+    window = slice(-RECENT_DAYS - BASELINE_DAYS, -RECENT_DAYS)
+    base_total = sum(grp.total[window])
+    base = sum(grp.terms[top][window]) / base_total if base_total else 0.0
+    flagged = share >= SPIKE_SHARE - SHARE_EPS and share >= base + SPIKE_TAKEOVER - SHARE_EPS
+    return share, flagged, "", base
 
 
 def smooth(values: list[float], n: int = SMOOTH_DAYS) -> list[float]:
@@ -174,7 +187,7 @@ def analyze(series: dict[str, list[float]], dates: list[date], volume=None) -> G
     zero_pct = term_stats(total).zero_pct
     verdict = trends.interest_verdict(total)
     rise = rising(total)
-    spike_share, spike, spike_reason = one_term_spike(grp)
+    spike_share, spike, spike_reason, spike_base = one_term_spike(grp)
     best, corr, alone = term_correlations(grp, share)
     ident = identity(total, dates, volume)
     reasons = []
@@ -188,19 +201,45 @@ def analyze(series: dict[str, list[float]], dates: list[date], volume=None) -> G
         if rise.days_above < MIN_DAYS_ABOVE:
             reasons.append(f"{rise.days_above}/{RECENT_DAYS} days above baseline < {MIN_DAYS_ABOVE}")
     if spike:
-        reasons.append(f"one-term spike ({100 * spike_share:.0f}% of the increase from one term)")
+        reasons.append(f"one-term spike ({100 * spike_share:.0f}% of the increase from one term, "
+                       f"{100 * spike_base:.0f}% of its baseline)")
     if ident.corr is not None and ident.corr < IDENTITY_MIN_CORR:
         reasons.append(f"does not track this coin's volume ({ident.corr:.2f} < {IDENTITY_MIN_CORR:g})")
     return GroupMetrics(
         terms={t: term_stats(v) for t, v in grp.terms.items()}, shares=share,
-        group=GroupStats(len(total), min(total), statistics.median(total), max(total), zero_pct),
+        group=GroupStats(len(total), min(total), statistics.median(total), max(total), zero_pct, len(set(total))),
         verdict=verdict, rising=rise, spike_share=spike_share, spike=spike, spike_reason=spike_reason,
+        spike_base_share=spike_base,
         best_term=best, correlations=corr, moves_alone=alone, identity=ident, clean=not reasons, reasons=reasons)
 
 
+def rank_values(verdict: str, clean: bool, zero_pct: float, distinct: int, identity_corr: float | None) -> tuple:
+    """Best first (T201): usable, then clean rising, then fewer zero days, then more distinct values, then the higher
+    volume correlation (missing last). Never the median: every group is its own request on its own 0-100 scale."""
+    return (verdict != "ok", not clean, zero_pct, -distinct,
+            -identity_corr if identity_corr is not None else math.inf)
+
+
 def rank_key(m: GroupMetrics) -> tuple:
-    """Best first: usable, then clean rising, then the highest group median (each request has its own scale)."""
-    return (m.verdict != "ok", not m.clean, -m.group.median)
+    return rank_values(m.verdict, m.clean, m.group.zero_pct, m.group.distinct, m.identity.corr)
+
+
+def _r(x: float | None) -> float | None:
+    return None if x is None else round(x, 4)
+
+
+def metrics_record(m: GroupMetrics) -> dict:
+    """The numbers the campaign state keeps for one tested group: no series, no response content."""
+    gs = m.group
+    return {
+        "verdict": m.verdict, "clean": m.clean, "reasons": list(m.reasons),
+        "days": gs.days, "min": gs.min, "median": gs.median, "max": gs.max, "zero_pct": _r(gs.zero_pct),
+        "distinct": gs.distinct, "rise_ratio": _r(m.rising.ratio), "days_above": m.rising.days_above,
+        "spike": m.spike, "spike_share": _r(m.spike_share), "spike_base_share": _r(m.spike_base_share),
+        "best_term": m.best_term, "moves_alone": list(m.moves_alone),
+        "identity_corr": _r(m.identity.corr), "identity_reason": m.identity.reason,
+        "shares": {t: _r(v) for t, v in m.shares.items()},
+    }
 
 
 def check_group_frame(frame, terms: list[str], today: date) -> tuple[dict[str, list[float]] | None, list[date], str]:

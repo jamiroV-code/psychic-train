@@ -120,8 +120,10 @@ def test_group_report_lines():
     assert code == 0
     assert "outcome: ok" in text and "latency: 0.25 s" in text
     assert "  toncoin crypto | 10 | 0% | 50%" in text
-    assert "  group | days 100 | min 20 | median 20 | max 28 | zero 0% | verdict: ok" in text
-    assert "  rising | last7/prior28 1.4 | days above baseline 7/7 | one-term spike: no (largest share 50%)" in text
+    assert ("  group | days 100 | min 20 | median 20 (own scale only) | max 28 | zero 0% | distinct 2 | verdict: ok"
+            in text)
+    assert ("  rising | last7/prior28 1.4 | days above baseline 7/7 | one-term spike: no (largest share of the rise "
+            "50%, its baseline share 50%)") in text
     assert "correlation (7-day smoothed) vs best term" in text
     assert "  identity | n/a: no stored volume" in text and "a hint, not proof" in text
     assert "  clean rising: yes" in text
