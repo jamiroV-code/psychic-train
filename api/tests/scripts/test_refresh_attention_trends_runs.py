@@ -14,11 +14,18 @@ import pandas as pd
 import pytest
 
 from api.data import cache
-from api.data.attention import store, trends_keywords
+from api.data.attention import store, trends, trends_keywords
 from api.scripts import attention_extra, refresh_attention
 from api.tests import trends_fixtures as fx
 from api.tests.scripts.test_refresh_attention_trends import (
-    KEYWORDS, TermClient, _day, _install, _main, _run, _zeros)
+    KEYWORDS,
+    TermClient,
+    _day,
+    _install,
+    _main,
+    _run,
+    _zeros,
+)
 
 OUTCOMES = {"ok", "too-little-interest", "quiet-then-surge", "no-keyword", "skipped-unqualified", "failed",
             "capped", "time-budget"}
@@ -42,10 +49,6 @@ def run_file(day=fx.TODAY) -> Path:
 
 def load(day=fx.TODAY) -> dict:
     return json.loads(run_file(day).read_text(encoding="utf-8"))
-
-
-def runs_of(doc: dict) -> list[dict]:
-    return doc["runs"] if "runs" in doc else [doc]
 
 
 EMPTY = pd.DataFrame()
@@ -86,7 +89,7 @@ def test_run_file_records_every_outcome(monkeypatch):
     for sym in ("OP", "TIA", "LINK", "USDX"):
         assert (coins[sym]["median"], coins[sym]["zero_share_pct"], coins[sym]["last7_vs_prior28_ratio"]) == \
             (None, None, None)
-    flat = fx.daily_frame(["Aave"], 100, values={"Aave": [10] * 72 + [20] * 28})
+    flat = fx.daily_frame(["Aave"], 100, end=fx.TODAY, values={"Aave": [10] * 93 + [20] * 7})
     _run(monkeypatch, ["AAVE"], {"Aave": [flat]}, today=fx.TODAY + timedelta(days=1))
     c = load(fx.TODAY + timedelta(days=1))["coins"]["AAVE"]
     assert c["median"] == 10 and c["zero_share_pct"] == 0 and c["last7_vs_prior28_ratio"] == 2.0
@@ -100,15 +103,15 @@ def test_run_file_records_time_budget_outcome(monkeypatch):
     t = [0.0]
     monkeypatch.setattr(refresh_attention, "_clock", lambda: t[0])
     monkeypatch.setattr(refresh_attention, "TRENDS_TIME_BUDGET_S", 100)
-    _install(monkeypatch, TermClient())
+    _install(monkeypatch, TermClient(today=_day(0, 3)))
 
     def sleep(s):
         t[0] += 200.0
     refresh_attention._run_trends(["AAVE", "INJ", "ARB"], None, _day(0, 3), sleep)
     coins = load(_day(0, 3))["coins"]
-    assert coins["AAVE"]["outcome"] == "ok" and coins["INJ"]["outcome"] == "time-budget"
+    assert coins["AAVE"]["outcome"] == "ok" and coins["INJ"]["outcome"] == "ok"  # the budget is checked before a sleep
     assert coins["ARB"]["outcome"] == "time-budget" and coins["ARB"]["attempts"] == 0
-    assert coins["INJ"]["reason"] == "time budget reached"
+    assert coins["ARB"]["reason"] == "time budget reached" and coins["ARB"]["keyword_kind"] == "term"
 
 
 def test_second_run_same_day_appends_never_overwrites(monkeypatch):
@@ -200,6 +203,37 @@ def test_run_file_is_read_by_no_store_logic(monkeypatch):
     assert store.read_pull_archive("trends", fx.TODAY).keys() == {"AAVE"}
 
 
+def test_coin_record_reason_is_cleaned_and_cut():
+    from api.data.attention.types import SourceSeries
+    hostile = "fetch-failed: " + "Err\n::error::{" + fx.SECRET + "}" * 30
+    rec = refresh_attention._run_coin_record(SourceSeries("trends", "X", [], "unavailable", hostile), {})
+    assert rec["reason"] and len(rec["reason"]) <= 80 and "::" not in rec["reason"]
+    assert not set("\n{}") & set(rec["reason"])
+    long = SourceSeries("trends", "X", [], "unavailable", "fetch-failed: " + "E" * 500)
+    assert len(refresh_attention._run_coin_record(long, {})["reason"]) == 80
+    assert rec["keyword_kind"] == "none" and rec["attempts"] == 0 and rec["retried"] is False
+    ok = refresh_attention._run_coin_record(SourceSeries("trends", "X", [(fx.TODAY, 5.0)], "ok", ""), {})
+    assert ok["outcome"] == "ok" and ok["reason"] is None
+
+
+def test_series_stats_arithmetic():
+    values = [1.0] * 20 + [0.0] * 10 + [30.0] * 63 + [60.0] * 7
+    st = trends.series_stats(values)
+    assert st["median"] == 30.0 and st["zero_share_pct"] == 10.0
+    assert st["last7_vs_prior28_ratio"] == 2.0  # 60 over the 28 days of 30
+    assert trends.series_stats([0.0] * 100)["last7_vs_prior28_ratio"] is None
+    assert trends.series_stats([5.0] * 20)["last7_vs_prior28_ratio"] is None  # fewer than 35 days
+
+
+def test_fetch_alone_stats_are_per_call():
+    client = TermClient({"Aave": [fx.daily_frame(["Aave"], 100), EMPTY]})
+    stats: dict = {}
+    trends.fetch_alone("AAVE", "Aave", client, today=fx.TODAY, stats=stats)
+    assert stats["median"] is not None
+    trends.fetch_alone("AAVE", "Aave", client, today=fx.TODAY, stats=stats)  # empty response
+    assert stats == {}
+
+
 # --- (b) one retry of an empty response ---
 
 def test_empty_then_ok_is_recovered(monkeypatch, capsys):
@@ -234,7 +268,7 @@ def test_empty_twice_is_failed_not_capped(monkeypatch, capsys):
 
 
 def test_429_is_never_retried_by_the_empty_rule(monkeypatch):
-    out, client, sleeps, _ = _run(monkeypatch, ["AAVE"], {"Aave": [fx.too_many()]})
+    _, client, sleeps, _ = _run(monkeypatch, ["AAVE"], {"Aave": [fx.too_many()]})
     assert client.terms() == ["Aave"] * 4 and sleeps == [30, 60, 120]  # the existing backoff, no extra 10 s retry
     c = load()["coins"]["AAVE"]
     assert c["outcome"] == "capped" and c["retried"] is False and c["attempts"] == 4
@@ -251,7 +285,7 @@ def test_429_is_never_retried_by_the_empty_rule(monkeypatch):
     _zeros("Aave"),                                                                       # too-little-interest
 ])
 def test_other_failures_are_never_retried(monkeypatch, item):
-    out, client, sleeps, _ = _run(monkeypatch, ["AAVE"], {"Aave": [item]})
+    _, client, sleeps, _ = _run(monkeypatch, ["AAVE"], {"Aave": [item]})
     assert client.terms() == ["Aave"] and sleeps == []
     c = load()["coins"]["AAVE"]
     assert c["attempts"] == 1 and c["retried"] is False
@@ -348,5 +382,5 @@ def test_run_file_failure_is_last_line_with_block_buffered_stdout(tmp_path):
     assert len(lines) >= 2, proc.stdout[-2000:]
     assert re.fullmatch(r"trends: error store-failed: \w+ x1", lines[-1]), lines[-1]
     assert attention_extra.classify("trends", lines[-1]).status == "failed" and proc.returncode == 1
-    out, _, failed = attention_extra.verify({"trends": proc.stdout}, tmp_path / "attention", fx.TODAY)
+    _, _, failed = attention_extra.verify({"trends": proc.stdout}, tmp_path / "attention", fx.TODAY)
     assert "trends" in failed
