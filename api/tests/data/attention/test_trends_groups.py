@@ -32,6 +32,10 @@ def wave(n: int = N, period: int = 20, amp: float = 5, mid: float = 20, phase: f
 
 # --- group series, per-term stats, shares ---
 
+def test_group_stats_count_distinct_values():
+    assert g.analyze({"a": [1.0, 2.0, 2.0] * 33 + [3.0]}, DATES).group.distinct == 3
+
+
 def test_group_series_sums_and_keeps_each_term():
     grp = g.group_series({"a": [1, 2, 3], "b": [0, 5, 1]})
     assert grp.total == [1, 7, 4]
@@ -90,6 +94,21 @@ def test_one_day_spike_is_not_a_sustained_rise():
 
 # --- one-term spike ---
 
+def test_dominant_but_steady_term_is_not_a_spike():
+    # T201: a term that is most of the searches and carries the same share of the rise is not flagged
+    m = g.analyze({"a": rise(90, 99), "b": rise(10, 11)}, DATES)
+    assert m.spike_share == pytest.approx(0.9) and m.spike_base_share == pytest.approx(0.9) and m.spike is False
+    near = g.analyze({"a": rise(65, 69), "b": rise(35, 36)}, DATES)   # 80% of the rise, 65% of the baseline
+    assert near.spike_share == pytest.approx(0.8) and near.spike is False
+
+
+def test_term_that_suddenly_takes_over_is_a_spike():
+    m = g.analyze({"a": rise(10, 40), "b": rise(90, 91)}, DATES)
+    assert m.spike_base_share == pytest.approx(0.1) and m.spike_share > 0.95 and m.spike is True
+    assert any("one-term spike" in r for r in m.reasons) and m.clean is False
+    assert g.SPIKE_SHARE == 0.8 and g.SPIKE_TAKEOVER == 0.2
+
+
 def test_one_term_dominance_flags_spike():
     m = g.analyze({"a": rise(10, 30), "b": rise(10, 11)}, DATES)
     assert m.spike_share == pytest.approx(20 / 21)
@@ -100,8 +119,11 @@ def test_one_term_dominance_flags_spike():
 
 
 def test_spike_boundary_and_falling_term():
-    at = g.analyze({"a": rise(10, 14), "b": rise(10, 11)}, DATES)   # increases 28 and 7: exactly 80%
-    assert at.spike_share == pytest.approx(0.8) and at.spike is False
+    # T201: the share of the rise must be >= SPIKE_SHARE (was >) and >= the baseline share + SPIKE_TAKEOVER
+    at = g.analyze({"a": rise(10, 14), "b": rise(10, 11)}, DATES)   # increases 28 and 7: exactly 80%, base 50%
+    assert at.spike_share == pytest.approx(0.8) and at.spike_base_share == pytest.approx(0.5) and at.spike is True
+    below = g.analyze({"a": rise(10, 13), "b": rise(10, 11)}, DATES)   # 21 of 28: 75%
+    assert below.spike_share == pytest.approx(0.75) and below.spike is False
     # a falling term adds no increase (floored at 0), so the rising term carries all of it
     m = g.analyze({"a": rise(10, 15), "b": rise(10, 5)}, DATES)
     assert m.spike_share == 1.0 and m.spike is True
@@ -263,6 +285,37 @@ def test_rank_usable_then_clean_then_median():
     unusable = g.analyze({"a": flat(1)}, DATES)
     ranked = sorted([unusable, usable_flat, clean_low], key=g.rank_key)
     assert ranked == [clean_low, usable_flat, unusable]
+
+
+def test_rank_never_compares_medians_across_groups():
+    # T201: each group is its own request on its own 0-100 scale; a higher median is never a reason to rank first
+    zeros_high = g.analyze({"a": [0.0] * 10 + [100.0] * (N - 10)}, DATES)   # median 100, 10% zero days
+    low_steady = g.analyze({"a": flat(5)}, DATES)   # median 5, no zero day
+    assert zeros_high.verdict == low_steady.verdict == "ok" and not zeros_high.clean and not low_steady.clean
+    assert sorted([zeros_high, low_steady], key=g.rank_key) == [low_steady, zeros_high]
+    varied = g.analyze({"a": wave(mid=10)}, DATES)
+    assert varied.group.distinct > low_steady.group.distinct == 1
+    assert sorted([g.analyze({"a": flat(90)}, DATES), varied], key=g.rank_key)[0] is varied
+
+
+def test_rank_values_order_and_identity_last():
+    rv = g.rank_values
+    assert rv("ok", True, 50, 1, None) < rv("ok", False, 0, 99, 0.9)
+    assert rv("ok", False, 50, 1, None) < rv("too-little-interest", True, 0, 99, 0.9)
+    assert rv("ok", False, 10, 1, None) < rv("ok", False, 20, 99, 0.9)
+    assert rv("ok", False, 10, 9, None) < rv("ok", False, 10, 8, 0.9)
+    assert rv("ok", False, 10, 9, 0.5) < rv("ok", False, 10, 9, 0.1) < rv("ok", False, 10, 9, None)
+
+
+def test_metrics_record_is_small_and_json_ready():
+    import json
+    m = g.analyze({"a": rise(10, 14), "b": rise(10, 11)}, DATES)
+    rec = g.metrics_record(m)
+    json.dumps(rec, allow_nan=False)
+    assert rec["verdict"] == "ok" and rec["clean"] is False and rec["spike"] is True
+    assert rec["distinct"] == m.group.distinct and rec["zero_pct"] == 0 and rec["median"] == m.group.median
+    assert set(rec["shares"]) == {"a", "b"} and rec["identity_corr"] is None
+    assert not any(isinstance(v, list) and len(v) > 10 for v in rec.values())   # no series stored
 
 
 # --- purity ---
