@@ -38,7 +38,8 @@ def test_ok_payload_shape(wired):
                          "universe_size", "eligible_size", "shown_size", "excluded", "excluded_coins",
                          "excluded_counts", "min_category_coins",
                          "rising_threshold_pct", "min_covered_weight", "categories",
-                         "narratives_status", "unassigned", "hidden_narratives", "weights_version"}
+                         "narratives_status", "unassigned", "hidden_narratives", "weights_version",
+                         "tradeability_unknown", "venue_lists"}
     assert set(body["excluded"]) == {"exclusion_list", "below_volume_floor", "no_category", "no_source_data"}
     c = body["categories"][0]
     assert set(c) == {"id", "name", "score", "median", "coins_used", "gaining_count", "ranked", "coins"}
@@ -86,3 +87,37 @@ def test_router_discovery_new_fields_present(wired):
     assert (body["unassigned"], body["min_category_coins"]) == ([], 1)
     assert body["hidden_narratives"] == [{"id": "defi", "name": "DeFi", "coins": []}]
     assert [c["primary"] for c in body["categories"][0]["coins"]] == [True, True]
+
+
+# Fields and reason keys served before T189: they keep their names and their values (additive change only).
+OLD_TOP = {"window", "as_of", "categories_as_of", "status", "reason", "universe_size", "eligible_size", "shown_size",
+           "excluded", "excluded_coins", "excluded_counts", "min_category_coins", "rising_threshold_pct",
+           "min_covered_weight", "categories", "narratives_status", "unassigned", "hidden_narratives",
+           "weights_version"}
+OLD_REASONS = {"stablecoin", "wrapped-staked", "no-market", "not-tradeable-config", "unassigned", "hidden-narrative",
+               "no-source-data"}
+
+
+def test_payload_is_backward_compatible_with_a_not_tradeable_coin(isolated_cache, tmp_path, monkeypatch):
+    monkeypatch.setattr(router_mod, "utc_today", lambda: TODAY)
+    world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7, "JAAA": 0}, cats={"ai": ["A", "B", "JAAA"]})
+    gain("A"), gain("B", factor=3.0), gain("JAAA")
+    body = TestClient(app).get(URL, params={"window": 30}).json()
+    assert OLD_TOP <= set(body) and set(body) - OLD_TOP == {"tradeability_unknown", "venue_lists"}
+    assert set(body["excluded_counts"]) == OLD_REASONS | {"not-tradeable"}
+    assert all(body["excluded_counts"][k] == 0 for k in OLD_REASONS)
+    assert body["excluded_counts"]["not-tradeable"] == 1
+    assert body["excluded_coins"] == [{"symbol": "JAAA", "reason": "not-tradeable", "detail": "zero 24h volume"}]
+    assert body["excluded"] == {"exclusion_list": 1, "below_volume_floor": 0, "no_category": 0, "no_source_data": 0}
+    assert (body["universe_size"], body["eligible_size"], body["shown_size"]) == (3, 2, 2)
+    assert [c["tradeability"] for c in body["categories"][0]["coins"]] == ["unverified", "unverified"]
+    assert body["tradeability_unknown"] == 2
+    assert body["venue_lists"] == [{"venue": "binance", "status": "missing", "as_of": None},
+                                   {"venue": "hyperliquid", "status": "missing", "as_of": None}]
+
+
+def test_no_data_payload_carries_the_new_fields_with_defaults(isolated_cache, tmp_path, monkeypatch):
+    monkeypatch.setattr(router_mod, "utc_today", lambda: TODAY)
+    world(tmp_path, monkeypatch, {"A": 5e7}, cats={"ai": ["A"]})
+    body = TestClient(app).get(URL, params={"window": 30}).json()
+    assert body["status"] == "no-data" and body["tradeability_unknown"] == 0

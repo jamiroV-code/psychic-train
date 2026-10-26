@@ -123,24 +123,27 @@ def test_coingecko_category_tag_no_longer_excludes(isolated_cache, tmp_path, mon
     assert all(c.id != "cex" for c in res.categories)
 
 
-def test_no_volume_cut_zero_and_null_volume_stays(isolated_cache, tmp_path, monkeypatch):
+def test_zero_volume_is_not_tradeable_null_and_low_volume_stay(isolated_cache, tmp_path, monkeypatch):
+    """T189: exactly zero 24h volume = no trading market (excluded with a reason); null and low volume stay."""
     coins = {"ZERO": 0, "NULL": None, "LOW": 1.0, "HIGH": 9e8}
     world(tmp_path, monkeypatch, coins, cats={"ai": list(coins)})
     for s in coins:
         gain(s)
     res = disc.build_discovery(30, today=TODAY)
-    assert sorted(c.symbol for c in cat(res, "ai").coins) == ["HIGH", "LOW", "NULL", "ZERO"]
-    assert res.excluded_coins == [] and coin(res, "ai", "NULL").volume_24h is None
+    assert sorted(c.symbol for c in cat(res, "ai").coins) == ["HIGH", "LOW", "NULL"]
+    assert [(c.symbol, c.reason, c.detail) for c in res.excluded_coins] == [
+        ("ZERO", "not-tradeable", "zero 24h volume")]
+    assert coin(res, "ai", "NULL").volume_24h is None and res.excluded.exclusion_list == 1
 
 
 def test_thin_volume_label_below_20m_only_label(isolated_cache, tmp_path, monkeypatch):
-    coins = {"LOW": 19_999_999, "EDGE": 20_000_000, "HIGH": 9e8, "ZERO": 0, "NULL": None}
+    coins = {"LOW": 19_999_999, "EDGE": 20_000_000, "HIGH": 9e8, "TINY": 1.0, "NULL": None}
     world(tmp_path, monkeypatch, coins, cats={"ai": list(coins)})
     for s in coins:
         gain(s)
     res = disc.build_discovery(30, today=TODAY)
     thin = {c.symbol: c.thin_volume for c in cat(res, "ai").coins}
-    assert thin == {"LOW": True, "EDGE": False, "HIGH": False, "ZERO": True, "NULL": False}
+    assert thin == {"LOW": True, "EDGE": False, "HIGH": False, "TINY": True, "NULL": False}
     assert coin(res, "ai", "LOW").volume_24h == 19_999_999 and res.shown_size == 5
 
 
