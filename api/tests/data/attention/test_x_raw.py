@@ -156,13 +156,14 @@ def test_mark_suspect_flags_earlier_rows_of_that_account_only():
 def test_scrub_replaces_account_names_and_ids_by_value_in_nested_text():
     names = {"RealHandle": "acct_a", "4455667788": "acct_a"}
     body = {"entries": [{"text": "hi @realhandle and REALHANDLE", "nested": [{"user": "RealHandle"}],
-                         "uid": 4455667788, "s": "id=4455667788;", "other": "notrealhandlex 44556677889"}]}
+                         "uid": 4455667788, "s": "id=4455667788;", "other": "notrealhandlex 44556677889", "pre": "xrealhandle 14455667788"}]}
     out = xr.scrub(body, names)
     flat = json.dumps(out)
     assert "4455667788;" not in flat and '"uid": "acct_a"' in flat
     e = out["entries"][0]
     assert e["text"] == "hi @acct_a and acct_a" and e["nested"][0]["user"] == "acct_a"
     assert e["other"] == "notrealhandlex 44556677889"  # whole tokens only
+    assert e["pre"] == "xrealhandle 14455667788"
     path = xr.write_page("SOL", DAY, attempt=1, page=0, body=body, entry_ids=("tweet-1",), retries=0, headers={},
                          collected_at=AT, parser_version="x-parse-1", reader_version="fake-1", scrub_names=names)
     raw = gzip.decompress(path.read_bytes()).decode("utf-8")

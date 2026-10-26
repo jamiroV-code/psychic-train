@@ -12,9 +12,14 @@ unit across the pool. Pure logic over injected readers, clock, RNG and sleep; no
   budget, and a second failure leaves the coin-day missing (`account_failed`). Zero usable accounts pause X for
   the rest of the UTC day; budget, sample size and spacing are global (one `PcSource` for the whole pool).
 - Fail closed: a None, empty or short result, an exception or a block page is missing with a reason, never 0.
-  Cloudflare and HTML blocks pause the day (the curl fallback of rule 19 first, once, when the owner flag is on);
-  an inconclusive canary sits the canaried accounts out for the UTC day while the others continue;
-  three consecutive parse, 404 or transaction-id failures, or a parse drop, stop X with `layout_changed`.
+  An empty page after a FULL page, or a page of repeated ids, is a stalled cursor (`x_window.cursor_end`), never
+  an exact count. An exact count from an exhausted cursor needs the unit's account among the accounts that passed
+  today's canary (`canary_labels`), else it is missing `account_not_canaried`.
+  Cloudflare and HTML blocks pause the day (the curl fallback of rule 19 first when the owner flag is on: one
+  retry per unit and one per daily canary; the next block pauses the day for the whole pool);
+  an inconclusive canary sits the canaried accounts out for the UTC day while the others continue (no account
+  passed, so their exact counts are missing); three consecutive parse, 404 or transaction-id failures, or a
+  small-page parse drop, count toward `layout_changed`; a parse drop (`x_reader.parse_drop`) stops X at once.
 - Quality over speed: nothing is cut for a time budget; only the safety limits above stop reading.
 """
 from __future__ import annotations
@@ -40,7 +45,7 @@ ALERT_REASONS = ("x_account_suspended", "x_login_required", SUSPECT_REASON)
 DRIFT_STOP = 3
 SINGLE_ACCOUNT_NOTE = "comparison skipped: single active account"
 TOP_KEYS = {"accounts", "alerts", "pause_until", "pause_reason", "stopped", "drift_streak", "canary_day",
-            "canary_note", "curl_uses", "curl_last_use"}
+            "canary_note", "canary_labels", "curl_uses", "curl_last_use"}
 ACCOUNT_KEYS = {"state", "reason", "last_used", "lock_until", "last_canary", "suspect_since"}
 
 
@@ -77,6 +82,7 @@ def _valid(s) -> bool:
         s["pause_reason"] is None or s["pause_reason"] in DAY_PAUSE_REASONS,
         s["stopped"] in (None, "layout_changed"),
         isinstance(s["drift_streak"], int) and isinstance(s["curl_uses"], int),
+        isinstance(s["canary_labels"], list) and all(isinstance(x, str) for x in s["canary_labels"]),
     ))
 
 
@@ -102,12 +108,15 @@ class XPool:
     def _load(self) -> dict:
         if not self.path.exists():
             s = {"accounts": {}, "alerts": [], "pause_until": None, "pause_reason": None, "stopped": None,
-                 "drift_streak": 0, "canary_day": None, "canary_note": None, "curl_uses": 0, "curl_last_use": None}
+                 "drift_streak": 0, "canary_day": None, "canary_note": None, "canary_labels": [], "curl_uses": 0,
+                 "curl_last_use": None}
         else:
             try:
                 s = json.loads(self.path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 raise XPoolStateError("pool state unreadable") from None
+            if isinstance(s, dict):
+                s.setdefault("canary_labels", [])  # a state file from before T190: no account passed yet
             if not _valid(s):
                 raise XPoolStateError("pool state invalid")
             if set(s["accounts"]) - set(self.labels):
@@ -242,12 +251,20 @@ class XPool:
         self._save()
 
     # --- canary ---
-    def set_canary_passed(self, note: str | None = None) -> None:
+    def set_canary_passed(self, note: str | None = None, *, labels) -> None:
+        """Today's canary passed; `labels` are the accounts that passed it (an exact count needs one of them)."""
+        if set(labels) - set(self.labels):
+            raise ValueError("unknown label")
         self._s["canary_day"], self._s["canary_note"] = self._now().date().isoformat(), note
+        self._s["canary_labels"] = [x for x in self.labels if x in set(labels)]
         self._save()
 
     def canary_passed_today(self) -> bool:
         return self._s["canary_day"] == self._now().date().isoformat()
+
+    def canary_labels(self) -> list[str]:
+        """The accounts that passed today's canary; empty on another day."""
+        return list(self._s["canary_labels"]) if self.canary_passed_today() else []
 
     def canary_accounts(self) -> list[str]:
         """The least recently canaried usable accounts: two, or three when there are three or more (a majority)."""
@@ -336,10 +353,40 @@ def _account_failure(pool: XPool, label: str, reader: xr.XReader, failure: xr.Re
     return reason
 
 
+Fallback = Callable[[str, str, dict, int], "xr.RawPage | None"]
+
+
+def _on_block(pool: XPool, f: xr.ReaderFailure, config: CollectorConfig, fallback: Fallback | None, state: dict,
+              label: str, query: str, kv: dict, page_no: int, events: list) -> tuple[xr.RawPage | None, str | None]:
+    """A Cloudflare or HTML block: (the fallback's page, None) after the one curl retry of this unit or canary
+    (`state["curl_retried"]`), else (None, block reason) with the UTC day paused for the whole pool."""
+    block = f"{f.abort}_block"
+    decision = xr.fallback_decision(f.abort, allow_curl=config.x_allow_curl_backend, retried=state["curl_retried"])
+    if decision == "curl_retry" and fallback is not None:
+        state["curl_retried"] = True
+        pool.note_curl()
+        try:
+            raw = fallback(label, query, kv, page_no)
+        except xr.ReaderFailure:
+            events.append({"backend": "curl", "reason": block, "outcome": "blocked"})
+            pool.pause_day(block)
+            return None, block
+        events.append({"backend": "curl", "reason": block, "outcome": "ok"})
+        return raw, None
+    pool.pause_day(block)
+    return None, block
+
+
+def _is_block(f: xr.ReaderFailure) -> bool:
+    return f.kind == "abort" and f.abort in ("cloudflare", "html")
+
+
 def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, config: CollectorConfig, *,
-                     rng: random.Random, sleep: Callable[[float], None]) -> CanaryOutcome:
+                     rng: random.Random, sleep: Callable[[float], None],
+                     fallback: Fallback | None = None) -> CanaryOutcome:
     """The day's canary before any unit: one page of the canary query over the last complete hour on the least
-    recently canaried accounts, read at the global spacing and counted against the global budget."""
+    recently canaried accounts, read at the global spacing and counted against the global budget. A block goes
+    through the same fallback rule as a unit read (one curl retry for the canary, then the day pauses)."""
     if pool.canary_passed_today():
         return CanaryOutcome(True, reason="already_passed")
     if pool.is_paused() or src.is_paused():
@@ -351,6 +398,7 @@ def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcS
     start, end = canary_window(pool._now())
     query, kv = canary_query(config, start, end), x_window.search_kv()
     results: dict[str, set] = {}
+    state, events = {"curl_retried": False}, []
     for i, label in enumerate(labels):
         if not src.can_spend(xr.PAGE_ENTRIES):
             src.mark_spent()
@@ -363,12 +411,13 @@ def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcS
             raw = reader.search_raw(query, kv, 0)
         except xr.ReaderFailure as f:
             src.stamp_attempt()
-            if f.kind == "abort" and f.abort in ("cloudflare", "html"):
-                pool.pause_day(f"{f.abort}_block")
-                return CanaryOutcome(False, reason=f"{f.abort}_block")
-            if f.kind == "no_account":
-                _account_failure(pool, label, reader, f)
-            continue
+            if not _is_block(f):
+                if f.kind == "no_account":
+                    _account_failure(pool, label, reader, f)
+                continue
+            raw, block = _on_block(pool, f, config, fallback, state, label, query, kv, 0, events)
+            if block:
+                return CanaryOutcome(False, reason=block)
         if raw is None:
             src.stamp_attempt()
             results[label] = set()
@@ -391,14 +440,14 @@ def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcS
             if not pool.usable():
                 pool.pause_day("canary_disagree")
                 return CanaryOutcome(False, reason="canary_disagree")
-            pool.set_canary_passed(f"inconclusive: {', '.join(results)} sit out the day")
+            pool.set_canary_passed(f"inconclusive: {', '.join(results)} sit out the day", labels=[])
             return CanaryOutcome(True, reason="canary_disagree")
         for x in suspects:
             pool.flag_suspect(x)
     if max(len(results[x]) for x in results if x not in suspects) < config.x_canary_min_results:
         pool.pause_day("empty_results")
         return CanaryOutcome(False, suspects, "empty_results")
-    pool.set_canary_passed(note)
+    pool.set_canary_passed(note, labels=[x for x in results if x not in suspects])
     return CanaryOutcome(True, suspects)
 
 
@@ -422,6 +471,12 @@ class _Attempt:
     tweets: list = field(default_factory=list)
     n_read: int = 0
     events: list = field(default_factory=list)
+    seen: set = field(default_factory=set)  # entry ids read by this attempt
+    last_entries: int | None = None  # entries on the last non-empty page
+    raw_oldest: datetime | None = None  # oldest raw entry time, when the reader exposes it
+
+    def oldest(self) -> datetime | None:
+        return x_density.oldest_read(self.tweets, self.raw_oldest)
 
 
 def _drift(pool: XPool) -> str:
@@ -444,21 +499,11 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
             raw = reader.search_raw(query, kv, page_no)
         except xr.ReaderFailure as f:
             src.stamp_attempt()
-            decision = xr.fallback_decision(f.abort or f.kind, allow_curl=config.x_allow_curl_backend, retried=False)
-            if decision == "curl_retry" and fallback is not None:
-                block = f"{f.abort}_block"
-                pool.note_curl()
-                try:
-                    raw = fallback(label, query, kv, page_no)
-                except xr.ReaderFailure:
-                    out.events.append({"backend": "curl", "reason": block, "outcome": "blocked"})
-                    pool.pause_day(block)
+            if _is_block(f):
+                raw, block = _on_block(pool, f, config, fallback, counts, label, query, kv, page_no, out.events)
+                if block:
                     return _Attempt("stop", block, events=out.events)
-                out.events.append({"backend": "curl", "reason": block, "outcome": "ok"})
                 backend = "curl"
-            elif f.kind == "abort" and f.abort in ("cloudflare", "html"):
-                pool.pause_day(f"{f.abort}_block")
-                return _Attempt("stop", f"{f.abort}_block")
             elif f.kind == "no_account":
                 step = _account_failure(pool, label, reader, f)
                 return _Attempt("restart" if step == "restart" else "stop", step)
@@ -478,12 +523,15 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
         x_raw.write_page(symbol, day, attempt=attempt, page=page_no, body=raw.body, entry_ids=raw.entry_ids,
                          retries=raw.retries, headers=raw.headers(), collected_at=collected_at,
                          parser_version=xr.PARSER_VERSION, reader_version=reader.version,
-                         reader_commit=reader.commit, backend=backend)
-        if n == 0:
-            # The cursor ran out: every matching tweet was read, so the count is exact (the canary passed today).
-            out.reason = x_window.stop_reason(pages=page_no + 1, entries_read=out.n_read,
-                                              oldest_read=min((t.date for t in out.tweets), default=None), day=day,
-                                              sample_n=config.x_sample_n, page_cap=config.x_page_cap, exhausted=True)
+                         reader_commit=reader.commit, backend=backend,
+                         scrub_names={name: label for name in reader.account_names}, entry_times=raw.entry_times)
+        end = x_window.cursor_end(raw.entry_ids, seen=out.seen, last_entries=out.last_entries,
+                                  page_size=xr.PAGE_ENTRIES)
+        if end:
+            # Exhausted (exact, given the account passed today's canary) or stalled (never exact).
+            out.reason = x_window.stop_reason(pages=page_no + 1, entries_read=out.n_read, oldest_read=out.oldest(),
+                                              day=day, sample_n=config.x_sample_n, page_cap=config.x_page_cap,
+                                              exhausted=end == "cursor_exhausted", stalled=end == x_window.STALLED)
             return out
         try:
             tweets = reader.parse_tweets(raw.body)
@@ -495,11 +543,17 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
             pool.stop("layout_changed")
             src.stamp_attempt()
             return _Attempt("stop", "layout_changed")
+        if xr.small_page_drop(entries=n, parsed=len(tweets)):
+            src.stamp_attempt()
+            return _Attempt("stop", _drift(pool))
         pool.clear_drift()
         out.tweets += tweets
         out.n_read += n
-        stop = x_window.stop_reason(pages=page_no + 1, entries_read=out.n_read,
-                                    oldest_read=min(t.date for t in out.tweets) if out.tweets else None, day=day,
+        out.seen.update(raw.entry_ids)
+        out.last_entries = n
+        if raw.entry_times:
+            out.raw_oldest = min(_utc(t) for t in (*raw.entry_times, *([out.raw_oldest] if out.raw_oldest else [])))
+        stop = x_window.stop_reason(pages=page_no + 1, entries_read=out.n_read, oldest_read=out.oldest(), day=day,
                                     sample_n=config.x_sample_n, page_cap=config.x_page_cap)
         if stop:
             out.reason = stop
@@ -510,11 +564,11 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
 def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, config: CollectorConfig, *,
              symbol: str, day: date, query: str, coin: x_filters.Coin, policy: x_filters.FilterPolicy,
              rng: random.Random, sleep: Callable[[float], None],
-             fallback: Callable[[str, str, dict, int], xr.RawPage | None] | None = None) -> XUnitOutcome:
+             fallback: Fallback | None = None) -> XUnitOutcome:
     """One X coin-day across the pool: one account end to end, at most `x_unit_max_restarts` restarts.
 
     `fallback(label, query, kv, page)` is the owner-allowed curl process of rule 19 (W8d2); it is called at most
-    once per blocked request and only when `fallback_decision` says so. On a value the raw pages are marked
+    once per unit (restarts included) and only when `fallback_decision` says so; the next block pauses the day. On a value the raw pages are marked
     complete and the X evidence row is built by `x_raw.reparse` from them, so a re-parse gives the same row.
     """
     if pool.is_paused() or src.is_paused():
@@ -525,7 +579,7 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
     now = _utc(src.clock())
     if due is not None and now < due:
         return XUnitOutcome(None, "too_early")
-    counts = {"reads": 0, "pages": 0}
+    counts = {"reads": 0, "pages": 0, "curl_retried": False}  # one curl retry per unit, across restarts
     attempts = restarts = 0
     label = None
 
@@ -551,11 +605,13 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
         if att.status == "stop":
             return done(None, att.reason)
         src.record_unit()
-        canary_ok = pool.canary_passed_today()
+        canary_ok = label in pool.canary_labels()
         summary = x_density.summarize(day, att.tweets, n_read=att.n_read,
                                       window_start_reached=att.reason in x_window.COMPLETE_STOPS,
                                       page_cap_hit=att.reason == "page_cap", canary_ok=canary_ok, coin=coin,
-                                      policy=policy, n_target=config.x_sample_n, n_min=config.x_sample_min, now=now)
+                                      policy=policy, n_target=config.x_sample_n, n_min=config.x_sample_min, now=now,
+                                      cursor_exhausted=att.reason == "cursor_exhausted",
+                                      cursor_stalled=att.reason == x_window.STALLED, raw_oldest=att.raw_oldest)
         if summary.result is None:
             return done(None, summary.missing_reason)
         meta = {"attempt": attempts, "label": label, "attempts": attempts, "restarts": restarts,

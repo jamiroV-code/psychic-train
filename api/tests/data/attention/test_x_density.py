@@ -152,10 +152,10 @@ def test_oldest_read_from_raw_entries_when_given_else_parsed():
     read = [xf.Tweet(i, END - timedelta(minutes=10 * i + 1), "Solana", xf.XUser(
         100 + i, datetime(2024, 1, 1, tzinfo=timezone.utc), 100, 100, "https://img/p.jpg", False), "en", ("SOL",))
         for i in range(40)]
-    kw = dict(n_read=40, window_start_reached=False, page_cap_hit=False, canary_ok=True, coin=xf.Coin("SOL", "Solana"),
-              policy=xf.FilterPolicy(), n_target=40, n_min=20, now=END + timedelta(hours=1))
+    kw = {"n_read": 40, "window_start_reached": False, "page_cap_hit": False, "canary_ok": True, "coin": xf.Coin("SOL", "Solana"),
+              "policy": xf.FilterPolicy(), "n_target": 40, "n_min": 20, "now": END + timedelta(hours=1)}
     parsed = xd.summarize(DAY, read, **kw)
-    assert parsed.result.span_hours == pytest.approx((391 / 60))
+    assert parsed.result.span_hours == pytest.approx(391 / 60)
     raw = xd.summarize(DAY, read, raw_oldest=END - timedelta(hours=10), **kw)
     assert raw.result.span_hours == pytest.approx(10.0)
     assert xd.summarize(DAY, read, raw_oldest=END - timedelta(hours=1), **kw).result.span_hours == pytest.approx(

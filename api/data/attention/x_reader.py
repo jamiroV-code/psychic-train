@@ -11,9 +11,12 @@ objects and exceptions onto `RawPage`, `PoolRow`, `ReaderFailure` and `x_filters
   search lock is a rate limit, anything else is a server error.
 - `fallback_decision`: the owner-allowed curl backend fallback (rule 19, amended by T179) applies only to an abort
   whose text starts with `Blocked by Cloudflare` or `Blocked by HTML` on the default backend, only with
-  `x_allow_curl_backend` true, and only once; it never applies to a rate limit, a login or ban code, or anything
+  `x_allow_curl_backend` true, and only once per unit (and once per daily canary); it never applies to a rate limit, a login or ban code, or anything
   else.
-- `parse_drop`: raw timeline entries compared with parsed tweets (the library drops a tweet it cannot parse).
+- `parse_drop`: raw timeline entries compared with parsed tweets (the library drops a tweet it cannot parse): a
+  page of several entries with none parsed, or a drop rate above the threshold on a page of at least
+  `PARSE_DROP_RATE_MIN_ENTRIES` entries, stops X; a drop on a smaller page (`small_page_drop`) counts toward the
+  three-failure `layout_changed` streak instead (one dropped tweet of five is no evidence of a layout change).
 - `env_problems`: the process environment check, a pure function over a dict of variables.
 """
 from __future__ import annotations
@@ -24,7 +27,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Protocol, runtime_checkable
 
-from api.data.attention import x_filters
+from api.data.attention import x_filters, x_window
 
 TWSCRAPE_PACKAGE = "twscrape"
 TWSCRAPE_REPO = "https://github.com/vladkens/twscrape"
@@ -34,8 +37,9 @@ SEARCH_QUEUE = "SearchTimeline"
 CLOUDFLARE_PREFIX = "Blocked by Cloudflare"
 HTML_PREFIX = "Blocked by HTML"
 PARSER_VERSION = "x-parse-1"
-PAGE_ENTRIES = 20  # entries the library asks for per search page
+PAGE_ENTRIES = x_window.PAGE_ENTRIES
 PARSE_DROP_MIN_ENTRIES = 2  # "several" raw entries with zero parsed is a layout change
+PARSE_DROP_RATE_MIN_ENTRIES = 10  # the drop-rate test needs a page this large
 INACTIVE_CODES = {88: "x_account_suspended", 326: "x_account_suspended", 32: "x_login_required"}
 FAILURE_KINDS = ("no_account", "abort", "api", "gql_outdated", "xclid_parse", "not_found", "parse")
 DRIFT_KINDS = frozenset({"gql_outdated", "xclid_parse", "not_found", "parse"})
@@ -47,13 +51,15 @@ LOG_LEVELS_OK = frozenset({"WARNING", "ERROR", "CRITICAL"})
 
 @dataclass(frozen=True)
 class RawPage:
-    """One `search_raw` response: the JSON body, the tweet entry ids in it, the rate-limit numbers, retries."""
+    """One `search_raw` response: the JSON body, the tweet entry ids in it, the rate-limit numbers, retries, and
+    the entries' own timestamps when the wrapper can read them without the parser (`entry_times`, may be empty)."""
 
     body: dict
     entry_ids: tuple[str, ...]
     rate_limit_remaining: int | None = None
     rate_limit_limit: int | None = None
     retries: int = 0  # extra requests the library made for this page (counted as pages)
+    entry_times: tuple[datetime, ...] = ()
 
     def headers(self) -> dict:
         return {"x-rate-limit-remaining": self.rate_limit_remaining, "x-rate-limit-limit": self.rate_limit_limit}
@@ -92,6 +98,7 @@ class XReader(Protocol):
     version: str
     commit: str | None
     overhead_requests: int  # per-process setup requests (transaction-id pages), unmetered by the budget
+    account_names: tuple[str, ...]  # the account's real screen name and id, scrubbed from archived pages
 
     def search_raw(self, query: str, kv: dict, page: int) -> RawPage | None: ...
 
@@ -151,7 +158,12 @@ def parse_drop(*, entries: int, parsed: int, threshold: float) -> bool:
         return False
     if entries >= PARSE_DROP_MIN_ENTRIES and parsed == 0:
         return True
-    return (entries - parsed) / entries > threshold
+    return entries >= PARSE_DROP_RATE_MIN_ENTRIES and (entries - parsed) / entries > threshold
+
+
+def small_page_drop(*, entries: int, parsed: int) -> bool:
+    """A page below the rate-test size that lost tweets without tripping `parse_drop`: a drift failure."""
+    return parsed < entries < PARSE_DROP_RATE_MIN_ENTRIES and not (parsed == 0 and entries >= PARSE_DROP_MIN_ENTRIES)
 
 
 def env_problems(env: Mapping[str, str], *, fallback_process: bool = False) -> list[str]:
@@ -204,6 +216,7 @@ class FakeXReader:
     version: str = "fake-1"
     commit: str | None = None
     overhead_requests: int = 0
+    account_names: tuple[str, ...] = ()
     calls: list = field(default_factory=list)
 
     @staticmethod
@@ -215,7 +228,8 @@ class FakeXReader:
         """A raw page of `tweets`; the last `broken` of them cannot be parsed."""
         n = len(tweets)
         entries = [cls.entry(t, broken=i >= n - broken) for i, t in enumerate(tweets)]
-        return RawPage({"entries": entries}, tuple(e["entryId"] for e in entries), remaining, 50, retries)
+        return RawPage({"entries": entries}, tuple(e["entryId"] for e in entries), remaining, 50, retries,
+                       tuple(t.date for t in tweets))
 
     def search_raw(self, query: str, kv: dict, page: int) -> RawPage | None:
         self.calls.append((query, dict(kv), page))

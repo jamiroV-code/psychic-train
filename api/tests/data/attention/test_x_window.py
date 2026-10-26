@@ -150,6 +150,6 @@ def test_cursor_end_exhausted_only_after_a_short_last_page():
     assert ce(("c",), seen={"a"}, last_entries=20, page_size=20) is None
     day = date(2026, 10, 20)
     end = datetime(2026, 10, 21, tzinfo=timezone.utc)
-    kw = dict(pages=1, entries_read=20, oldest_read=end - timedelta(minutes=10), day=day, sample_n=40, page_cap=3)
+    kw = {'pages': 1, 'entries_read': 20, 'oldest_read': end - timedelta(minutes=10), 'day': day, 'sample_n': 40, 'page_cap': 3}
     assert xw.stop_reason(**kw, stalled=True) == "cursor_stalled"
     assert xw.stop_reason(**{**kw, "oldest_read": end - timedelta(days=2)}, stalled=True) == "window_start"

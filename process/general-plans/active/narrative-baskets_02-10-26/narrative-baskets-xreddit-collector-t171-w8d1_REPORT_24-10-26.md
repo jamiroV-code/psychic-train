@@ -242,7 +242,9 @@ Envelope owner questions answered with the SPEC's recommended value:
 My questions QA-QE were decided by the planner on 24-10-26 (recorded as decided-by-planner):
 
 - QA: an inconclusive canary sits the canaried accounts out for the day, and the units go missing, but not for
-  the whole pool unless fewer than 2 usable accounts remain. Implemented as described in D7.
+  the whole pool unless NO usable account remains (corrected in T190 round 2: the earlier "fewer than 2" wording
+  was wrong; the planner's decision and the code are "pause only at 0 usable", pinned by a test: 1 usable
+  continues, 0 usable pauses). Implemented as described in D7.
 - QB: a bare 403 makes the account inactive with `x_login_required` and raises an alert. This was already the
   behaviour.
 - QC: "several" means 2 or more. Already the behaviour.
@@ -274,3 +276,82 @@ and the W8a2 report sections 9.3 and 10 (C1-C11). W8b modules were opened as nee
 `test_pc_collector_guards.py` (extended), and `conftest.py`. Extra docs opened beyond the envelope:
 `process/context/tests/all-tests.md` (a grep for the pytest command only) and the T140 report (heading layout
 only). The session cannot meter USD; no stop threshold was signalled.
+
+## Round 2 (T190)
+
+Fresh worker, fix round 2 on the independent review T187 (re-check at `40f9068`). `origin/main` merged first
+(merge commit, no rebase). Red commit first (46 failing), then green. The PR diff against `main` is still exactly
+the 15 W8d1 files (14 code and test files plus this report).
+
+Fixes:
+
+- B-1 (blocker), stalled cursor. `x_window.cursor_end` decides when a page ends the cursor. An empty page or None
+  counts as EXHAUSTED only when the last non-empty page was SHORT (fewer than `PAGE_ENTRIES` = 20 entries) or
+  there was no earlier page. An empty page after a FULL page, or a page that repeats an id already read, is
+  `cursor_stalled`. A stall is never exact: the value is capped `24 * k / span` when `n_read >= N_min`, else the
+  unit is missing with `cursor_stalled`. The repeated page still counts against the read budget but is not
+  counted twice. `x_raw.reparse` applies the same rule.
+- M-A (medium), canary gate. The pool now records the LABELS of the accounts that passed today's canary
+  (`canary_labels`, persisted; a state file from before this change loads with none).
+  - An inconclusive canary passes no account, and a suspect account does not pass.
+  - An exact count from an exhausted cursor (any k, not only 0) needs the unit's account in that set, else the
+    unit is missing with `account_not_canaried`.
+  - A window start seen in the data needs no canary.
+  - The unit's `canary_ok` is written to `_complete.json` and to the X row. The re-parse uses that recorded
+    value and is never forced to True, so N9 is killed.
+- L1, curl retry. At most ONE curl retry per unit, restarts included. The next block in that unit pauses the
+  UTC day for the whole pool. A new unit starts on the default backend again (AC53 "next unit default first",
+  kept).
+- L2, canary blocks. A block inside the canary goes through the same `_on_block` / `fallback_decision` path:
+  same flag, one retry for the canary, still blocked pauses the day.
+- L3, parse drop. The drop-RATE test applies only to pages with at least 10 entries
+  (`PARSE_DROP_RATE_MIN_ENTRIES`). "Several entries (2 or more), zero parsed" still stops X. A drop on a smaller
+  page (`small_page_drop`) makes the unit missing with `drift` and counts toward the 3-failure `layout_changed`
+  streak.
+- L4, scrub by value. `x_raw.scrub(body, names)` replaces the account's real screen names and ids with its label
+  anywhere in the body: whole tokens, case-insensitive, nested text, and integer ids. The names come from the
+  reader's `account_names` (a new `XReader` attribute that the W8d2 wrapper fills in).
+- L5, oldest read. `RawPage.entry_times`, archived as `entry_times`, carries the raw entries' own timestamps when
+  the wrapper can read them. The oldest read is the older of those and the oldest parsed tweet
+  (`x_density.oldest_read`). The bias that remains when only parsed tweets are available (span short, capped
+  value high) is documented in the `x_density` docstring. The parse-drop guard bounds it to 20 percent of a page
+  of 10 or more entries.
+- L6, pause wording. QA in heading 9 is corrected to "pause only when no usable account remains". The code was
+  already right; a test now pins it: 1 usable continues, 0 usable pauses. The SPEC has no "fewer than 2"
+  wording: rule 18(d) and AC46/AC49 already say "zero usable accounts".
+
+Test fixture changes, made in the green commit so the existing tests fit the new rules:
+
+- `pass_canary` now passes labels (all accounts by default).
+- The `short_result` case used the same page object three times. Under B-1 that is repeated ids, which is a
+  stall, so the case now uses three distinct short pages.
+
+Tests:
+
+- 21 new test functions: 14 in reader, 3 in density, 3 in raw, 1 in window.
+- `pytest api/tests/data/attention api/tests/scripts api/tests/tooling_guards`: 1039 passed, 0 failed.
+- Full `pytest api`: 2342 passed, 0 failed, 1 skipped, 5 deselected. `origin/main` (separate worktree): 2213
+  passed, 1 skipped, 5 deselected. The +129 are the W8d1 tests (2321 at round 1 plus the 21 new ones).
+- Mutation check on all changed logic, by hand (mutant applied, `tests/data/attention` run): 28 mutants.
+  - First pass: 23 killed and 5 survived. The survivors were the token boundary in scrub, the pool ignoring the
+    raw oldest time, canary labels kept from another day, the re-parse not tracking seen ids, and the legacy
+    state default.
+  - Each survivor was a test gap, so a test was added for each.
+  - Re-run: 28 of 28 killed. N9 (re-parse forces `canary_ok` True) is M8 and is killed.
+- Hygiene: `git diff --check`, the secret scan over the diff, and the no-network-import grep are clean. The
+  banned-name guard tests pass.
+- Ruff on the touched files: no new findings beyond the base's existing UP017 and I001 style findings. Those
+  match the files' existing `timezone.utc` idiom and are not a gate. Ruff's C408 and UP034 findings in the new
+  tests were fixed.
+
+Not provable here: live X (P-X9 belongs to the owner).
+
+Open questions:
+
+- L1 reading. "One curl retry per UNIT; the next block (any unit) pauses" is implemented as: each unit, and the
+  daily canary, gets one retry, and the second block in that same unit pauses the day. AC53 says the next unit
+  starts on the default backend again, so a later unit that is blocked gets its own one retry. If the intent was
+  ONE retry per UTC day for the whole pool, this is a two-line change (keep the flag in the pool state).
+- M-A coverage. Accounts with no canary today (any unit after an inconclusive canary, or a third account
+  outside the two canaried) can still give capped or window-start values. Only exact counts from an exhausted
+  cursor are refused.

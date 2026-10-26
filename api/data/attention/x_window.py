@@ -14,7 +14,9 @@ from api.data.attention import density
 from api.data.attention.web_queries import X_WINDOW_SYNTAXES, Queries, valid_lang
 
 LATEST = "Latest"
+PAGE_ENTRIES = 20  # entries the library asks for per search page
 COMPLETE_STOPS = ("window_start", "cursor_exhausted")  # every tweet of the day was read: the count is exact
+STALLED = "cursor_stalled"  # the library stopped without proof that the cursor ran out: never exact
 QUERY_FILTERS = "-filter:replies -filter:retweets"
 
 
@@ -64,12 +66,28 @@ def in_window(ts: datetime, day: date) -> bool:
     return start <= _utc(ts) < end
 
 
+def cursor_end(entry_ids, *, seen: set, last_entries: int | None, page_size: int) -> str | None:
+    """Whether a page ends the cursor: None (a page of new entries), `cursor_exhausted` or `cursor_stalled`.
+
+    The library stops silently both when the cursor runs out and when it stalls (no new cursor, or ids it has
+    already returned), so an empty page proves exhaustion only when the last non-empty page was SHORT (fewer
+    than `page_size` entries) or there was none. A page that repeats an id already read is a stall.
+    """
+    ids = set(entry_ids)
+    if ids & seen:
+        return STALLED
+    if ids:
+        return None
+    return "cursor_exhausted" if last_entries is None or last_entries < page_size else STALLED
+
+
 def stop_reason(*, pages: int, entries_read: int, oldest_read: datetime | None, day: date, sample_n: int,
-                page_cap: int, exhausted: bool = False) -> str | None:
+                page_cap: int, exhausted: bool = False, stalled: bool = False) -> str | None:
     """Why paging stops after `pages` pages, or None to read the next page.
 
     The window start wins over the sample size: once a read tweet is older than the window start every tweet of
-    the day has been read, so the count is exact. An exhausted cursor (an empty page) means the same. Entries read
+    the day has been read, so the count is exact. An exhausted cursor (see `cursor_end`) means the same; a stalled
+    one does not. Entries read
     while every read tweet is still at or after the window end never fill the sample: paging goes on to the page
     cap.
     """
@@ -78,6 +96,8 @@ def stop_reason(*, pages: int, entries_read: int, oldest_read: datetime | None, 
         return "window_start"
     if exhausted:
         return "cursor_exhausted"
+    if stalled:
+        return STALLED
     if entries_read >= sample_n and oldest_read is not None and _utc(oldest_read) < end:
         return "sample"
     if pages >= page_cap:

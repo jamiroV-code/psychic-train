@@ -3,14 +3,18 @@
 Every raw page the reader returns is stored gzipped under the git-ignored cache
 (`<cache>/attention/xsearch_raw/<date>/<SYMBOL>/r<run>_a<attempt>_p<page>.json.gz`) with `collected_at`, the parser
 and reader versions, the timeline entry ids and the rate-limit numbers. Header values other than the two
-rate-limit numbers are never stored, and keys that could hold a cookie or token are removed from the body. The
-archive keeps entries the parser dropped (they exist nowhere else).
+rate-limit numbers are never stored, keys that could hold a cookie or token are removed from the body, and the
+account's real screen name and id are replaced by its label anywhere in the body (whole tokens, case-folded), so
+no real account name is written. The archive keeps entries the parser dropped (they exist nowhere else) and the
+entries' own timestamps when the reader exposes them.
 
 A unit that produced a value is marked complete (`_complete.json`: run, attempt, account label, attempts, restarts,
 fallback events, setup overhead). `reparse` rebuilds the X evidence row of the first completed run from its raw pages
 only, so the same parser version gives an identical row. X evidence rows live at
 `<cache>/attention/xsearch_web/_xmeta/<SYMBOL>.json`, one per (date, parser version), first write wins: a new parser
-version adds a row and never overwrites one. Pure file I/O; no network.
+version adds a row and never overwrites one. The re-parse applies the same cursor rule as the live run
+(`x_window.cursor_end`: a repeated id or an empty page after a full one is a stall) and the canary evidence the
+unit recorded (`canary_ok`, never assumed). Pure file I/O; no network.
 """
 from __future__ import annotations
 
@@ -51,14 +55,35 @@ def raw_dir(day: date, symbol: str) -> Path:
     return raw_root() / day.isoformat() / _symbol(symbol)
 
 
-def scrub(value):
-    """A copy of a JSON body without keys that could carry a cookie, token or header."""
-    if isinstance(value, dict):
-        return {k: scrub(v) for k, v in value.items()
-                if not (str(k).casefold() in SCRUB_KEYS or "cookie" in str(k).casefold())}
-    if isinstance(value, list):
-        return [scrub(v) for v in value]
-    return value
+def _name_pattern(names: Mapping[str, str]) -> re.Pattern | None:
+    keys = sorted((str(k) for k in names if str(k)), key=len, reverse=True)
+    if not keys:
+        return None
+    return re.compile(r"(?<![0-9A-Za-z_])(" + "|".join(re.escape(k) for k in keys) + r")(?![0-9A-Za-z_])",
+                      re.IGNORECASE)
+
+
+def scrub(value, names: Mapping[str, str] | None = None):
+    """A copy of a JSON body without keys that could carry a cookie, token or header, and with every whole-token
+    occurrence of a configured account name or id (`names`: real value to label) replaced by the label."""
+    folded = {str(k).casefold(): v for k, v in (names or {}).items()}
+    pattern = _name_pattern(names or {})
+
+    def walk(v):
+        if isinstance(v, dict):
+            return {k: walk(x) for k, x in v.items()
+                    if not (str(k).casefold() in SCRUB_KEYS or "cookie" in str(k).casefold())}
+        if isinstance(v, list):
+            return [walk(x) for x in v]
+        if pattern is None or isinstance(v, bool) or v is None:
+            return v
+        if isinstance(v, int):
+            return folded.get(str(v), v)
+        if isinstance(v, str):
+            return pattern.sub(lambda m: folded[m.group(1).casefold()], v)
+        return v
+
+    return walk(value)
 
 
 def _rate_numbers(headers: Mapping) -> dict:
@@ -88,7 +113,8 @@ def run_id(collected_at: datetime) -> int:
 
 def write_page(symbol: str, day: date, *, attempt: int, page: int, body: dict, entry_ids, retries: int,
                headers: Mapping, collected_at: datetime, parser_version: str, reader_version: str,
-               reader_commit: str | None = None, backend: str = "default") -> Path:
+               reader_commit: str | None = None, backend: str = "default",
+               scrub_names: Mapping[str, str] | None = None, entry_times=()) -> Path:
     if not (isinstance(attempt, int) and 1 <= attempt <= 99 and isinstance(page, int) and 0 <= page <= 99):
         raise ValueError("bad attempt or page")
     ids = [str(e) for e in entry_ids]
@@ -96,7 +122,8 @@ def write_page(symbol: str, day: date, *, attempt: int, page: int, body: dict, e
            "collected_at": collected_at.astimezone(timezone.utc).isoformat(), "parser_version": parser_version,
            "reader_version": reader_version, "reader_commit": reader_commit, "backend": backend,
            "entries": len(ids), "entry_ids": ids, "retries": int(retries), **_rate_numbers(headers),
-           "body": scrub(body)}
+           "entry_times": sorted(t.astimezone(timezone.utc).isoformat() for t in entry_times),
+           "body": scrub(body, scrub_names)}
     path = raw_dir(day, symbol) / f"r{run_id(collected_at)}_a{attempt}_p{page:02d}.json.gz"
     _atomic_bytes(gzip.compress(json.dumps(rec, sort_keys=True).encode("utf-8"), mtime=0), path)
     return path
@@ -162,16 +189,27 @@ def reparse(symbol: str, day: date, *, parse: Callable[[dict], list[x_filters.Tw
     recs = read_pages(symbol, day, run=meta["run"], attempt=meta["attempt"])
     if not recs:
         return None
-    read = [t for rec in recs for t in parse(rec["body"])]
-    n_read = sum(rec["entries"] for rec in recs)
-    oldest = min((t.date for t in read), default=None)
+    read, seen, n_read, last, end, raw_times = [], set(), 0, None, None, []
+    for rec in recs:
+        end = x_window.cursor_end(rec["entry_ids"], seen=seen, last_entries=last, page_size=x_window.PAGE_ENTRIES)
+        if end:
+            break
+        seen.update(rec["entry_ids"])
+        read += parse(rec["body"])
+        n_read += rec["entries"]
+        last = rec["entries"]
+        raw_times += [datetime.fromisoformat(t) for t in rec.get("entry_times", [])]
+    oldest = x_density.oldest_read(read, min(raw_times, default=None))
     stop = x_window.stop_reason(pages=len(recs), entries_read=n_read, oldest_read=oldest, day=day,
-                                sample_n=cfg.x_sample_n, page_cap=cfg.x_page_cap, exhausted=recs[-1]["entries"] == 0)
+                                sample_n=cfg.x_sample_n, page_cap=cfg.x_page_cap,
+                                exhausted=end == "cursor_exhausted", stalled=end == x_window.STALLED)
     collected_at = datetime.fromisoformat(recs[0]["collected_at"])
+    canary_ok = meta.get("canary_ok") is True
     s = x_density.summarize(day, read, n_read=n_read, window_start_reached=stop in x_window.COMPLETE_STOPS,
-                            page_cap_hit=stop == "page_cap", canary_ok=meta.get("canary_ok", False), coin=coin,
+                            page_cap_hit=stop == "page_cap", canary_ok=canary_ok, coin=coin,
                             policy=policy or x_filters.FilterPolicy.from_config(cfg), n_target=cfg.x_sample_n,
-                            n_min=cfg.x_sample_min, now=collected_at)
+                            n_min=cfg.x_sample_min, now=collected_at, cursor_exhausted=stop == "cursor_exhausted",
+                            cursor_stalled=stop == x_window.STALLED, raw_oldest=min(raw_times, default=None))
     r, last = s.result, recs[-1]
     return {
         "date": day.isoformat(), "value": None if r is None else r.value, "n": None if r is None else r.n,
@@ -185,6 +223,7 @@ def reparse(symbol: str, day: date, *, parse: Callable[[dict], list[x_filters.Tw
         "rate_limit_limit": last["rate_limit_limit"], "collected_at": recs[0]["collected_at"],
         "account": meta["label"], "attempts": meta["attempts"], "restarts": meta["restarts"],
         "backend_events": meta["backend_events"], "overhead_requests": meta["overhead_requests"],
+        "canary_ok": canary_ok,
     }
 
 
