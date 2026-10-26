@@ -93,8 +93,9 @@ def unit(pool, readers, src, config=None, fallback=None, symbol="SOL", day=DAY):
                        policy=POLICY, rng=random.Random(1), sleep=lambda s: None, fallback=fallback)
 
 
-def pass_canary(pool):
-    pool.set_canary_passed(note="test")
+def pass_canary(pool, labels=None):
+    """Today's canary passed on `labels` (default: every configured account)."""
+    pool.set_canary_passed(note="test", labels=pool.labels if labels is None else labels)
 
 
 def inactive_row(msg: str | None) -> xrd.PoolRow:
@@ -732,3 +733,171 @@ def test_canary_with_date_syntax_passes_on_the_last_hour_tweets():
     out = xp.run_daily_canary(pool, readers, src, cfg(x_window_syntax="date"), rng=random.Random(1),
                               sleep=lambda s: None)
     assert out.passed and readers["acct_a"].calls[0][0] == "bitcoin since:2026-10-20 until:2026-10-21"
+
+
+# --- T190 review fixes (B-1, M-A, L1-L6) -------------------------------------------------------------------------
+
+def _run(items, *, canaried=("acct_a",), labels=("acct_a",), config=None, fallback=None, names=()):
+    reset_state()
+    _, pool, src = setup(labels)
+    pass_canary(pool, list(canaried))
+    readers = {x: reader(x, items if x == labels[0] else ()) for x in labels}
+    readers[labels[0]].account_names = tuple(names)
+    return unit(pool, readers, src, config=config, fallback=fallback), pool, readers
+
+
+def test_full_page_then_none_is_a_stalled_cursor_capped_never_exact():
+    tws = tweets(20, END - timedelta(minutes=1), 0.5)  # 20 entries over 10 minutes
+    for tail in (None, page([])):
+        out, _, _ = _run([page(tws), tail])
+        assert out.reason == "cursor_stalled" and out.result.capped and out.result.n == 20
+        span = max((END - tws[-1].date).total_seconds() / 3600, 0.25)
+        assert out.result.value == pytest.approx(24 * 20 / span) and out.result.value > 20
+        row = xr.read_x_rows("SOL")[0]
+        assert row["stop"] == "cursor_stalled" and row["value"] == pytest.approx(out.result.value)
+
+
+def test_full_page_then_none_below_n_min_is_missing_cursor_stalled():
+    tws = tweets(20, END - timedelta(minutes=1), 0.5)
+    out, _, _ = _run([page(tws), None], config=cfg(x_sample_min=30, x_sample_n=40))
+    assert out.result is None and out.reason == "cursor_stalled" and xr.read_x_rows("SOL") == []
+
+
+def test_short_last_page_then_none_is_exhausted_and_exact():
+    out, _, _ = _run([page(tweets(19, END - timedelta(minutes=1), 30)), None])
+    assert out.reason == "cursor_exhausted" and (out.result.value, out.result.capped) == (19.0, False)
+    out, _, _ = _run([page(tweets(3, END - timedelta(hours=1), 60)), None])
+    assert out.reason == "cursor_exhausted" and out.result.value == 3.0
+    assert xr.read_x_rows("SOL")[0]["value"] == 3.0
+
+
+def test_full_page_then_repeated_ids_is_a_stalled_cursor_without_double_count():
+    tws = tweets(20, END - timedelta(minutes=1), 0.5)
+    out, _, _ = _run([page(tws), page(tws), None])
+    assert out.reason == "cursor_stalled" and out.result.n == 20 and out.reads == 40  # read twice, counted once
+    assert xr.read_x_rows("SOL")[0]["n_counted"] == 20
+
+
+def test_exact_count_from_exhausted_cursor_needs_the_account_in_todays_canary():
+    for items in ([page(tweets(3, END - timedelta(hours=1), 60)), None], [None], [page([])]):
+        out, _, _ = _run(items, canaried=())
+        assert out.result is None and out.reason == "account_not_canaried"
+        assert xr.read_x_rows("SOL") == []
+    # The unit runs on acct_a; only acct_b passed the canary (acct_a carried on after an inconclusive canary).
+    out, _, _ = _run([page(tweets(3, END - timedelta(hours=1), 60)), None], canaried=("acct_b",),
+                     labels=("acct_a", "acct_b"))
+    assert out.label == "acct_a" and out.reason == "account_not_canaried"
+    # A window start seen in the data needs no canary: the older tweet proves the whole day was read.
+    tws = tweets(3, END - timedelta(hours=2), 60) + tweets(1, END - timedelta(days=1, minutes=5))
+    out, _, _ = _run([page(tws)], canaried=())
+    assert out.reason == "window_start" and out.result.value == 3.0
+
+
+def test_canary_records_the_labels_that_passed():
+    _, pool, src = setup(("acct_a", "acct_b"))
+    tws = _hour_tweets(20)
+    assert _canary(pool, src, {"acct_a": tws, "acct_b": tws}).passed
+    assert pool.canary_labels() == ["acct_a", "acct_b"]
+    reset_state()
+    _, pool, src = setup(("acct_a", "acct_b"))
+    out = _canary(pool, src, {"acct_a": tws, "acct_b": tws[:12]})
+    assert out.suspects == ["acct_b"] and pool.canary_labels() == ["acct_a"]
+    reset_state()
+    _, pool, src = setup(("acct_a", "acct_b", "acct_c", "acct_d"))
+    out = _canary(pool, src, {"acct_a": _hour_tweets(20), "acct_b": _hour_tweets(10), "acct_c": _hour_tweets(3)})
+    assert out.reason == "canary_disagree" and pool.canary_labels() == []  # acct_d continues, not canaried
+    clock = pool.clock
+    clock.advance(days=1)
+    assert pool.canary_labels() == []  # yesterday's canary is no evidence today
+
+
+def test_one_curl_retry_per_unit_then_the_next_block_pauses_the_day():
+    tws = tweets(40, END - timedelta(minutes=1), 10)
+    calls = []
+
+    def fallback(label, query, kv, page_no):
+        calls.append(page_no)
+        return page(tws[:20])
+
+    items = [xrd.ReaderFailure("abort", text="Blocked by Cloudflare"),
+             xrd.ReaderFailure("abort", text="Blocked by HTML"), page(tws[20:])]
+    out, pool, _ = _run(items, config=cfg(x_allow_curl_backend=True), fallback=fallback)
+    assert calls == [0] and out.result is None and out.reason == "html_block"
+    assert pool.pause_reason() == "html_block" and pool.health()["curl_uses"] == 1
+
+
+def _block_canary(fallback, allow):
+    reset_state()
+    _, pool, src = setup(("acct_a", "acct_b"))
+    tws = _hour_tweets(20)
+    readers = {"acct_a": reader("acct_a", [xrd.ReaderFailure("abort", text="Blocked by Cloudflare")]),
+               "acct_b": reader("acct_b", [page(tws)])}
+    out = xp.run_daily_canary(pool, readers, src, cfg(x_allow_curl_backend=allow), rng=random.Random(1),
+                              sleep=lambda s: None, fallback=fallback)
+    return out, pool
+
+
+def test_canary_block_goes_through_the_same_fallback_rule():
+    calls = []
+
+    def ok(label, query, kv, page_no):
+        calls.append(label)
+        return page(_hour_tweets(20))
+
+    out, pool = _block_canary(ok, True)
+    assert out.passed and calls == ["acct_a"] and pool.health()["curl_uses"] == 1
+    assert pool.canary_labels() == ["acct_a", "acct_b"]
+
+    def still(*args):
+        calls.append("still")
+        raise xrd.ReaderFailure("abort", text="Blocked by Cloudflare")
+
+    out, pool = _block_canary(still, True)
+    assert not out.passed and out.reason == "cloudflare_block" and pool.pause_reason() == "cloudflare_block"
+    calls.clear()
+    out, pool = _block_canary(ok, False)
+    assert out.reason == "cloudflare_block" and calls == [] and pool.health()["curl_uses"] == 0
+
+
+def test_parse_drop_rate_only_from_ten_entries_zero_parsed_rule_kept():
+    assert xrd.PARSE_DROP_RATE_MIN_ENTRIES == 10
+    assert not xrd.parse_drop(entries=5, parsed=4, threshold=0.2)  # 0.2 rate on a small page: not a stop
+    assert not xrd.parse_drop(entries=9, parsed=6, threshold=0.2)
+    assert xrd.parse_drop(entries=10, parsed=7, threshold=0.2)
+    assert xrd.parse_drop(entries=3, parsed=0, threshold=0.2) and xrd.parse_drop(entries=9, parsed=0, threshold=0.9)
+    assert xrd.small_page_drop(entries=5, parsed=4) and not xrd.small_page_drop(entries=5, parsed=5)
+    assert not xrd.small_page_drop(entries=10, parsed=9) and not xrd.small_page_drop(entries=5, parsed=0)
+
+
+def test_small_page_drop_counts_toward_layout_changed_instead_of_stopping():
+    reset_state()
+    clock, pool, src = setup(("acct_a",))
+    pass_canary(pool)
+    for i in range(3):
+        tws = tweets(5, END - timedelta(hours=1), 30)
+        out = unit(pool, {"acct_a": reader("acct_a", [page(tws, broken=1)])}, src, symbol=f"C{i}")
+        clock.advance(minutes=10)
+        if i < 2:
+            assert out.reason == "drift" and out.result is None and pool.stopped_reason() is None
+    assert out.reason == "layout_changed" and pool.stopped_reason() == "layout_changed"
+
+
+def test_account_screen_name_and_id_scrubbed_from_archived_pages():
+    tws = tweets(3, END - timedelta(hours=1), 60, prefix="RealHandle said hi to @realhandle id 4455667788")
+    out, _, _ = _run([page(tws), None], names=("RealHandle", "4455667788"))
+    assert out.result is not None
+    raw = str(xr.read_pages("SOL", DAY))
+    assert "realhandle" not in raw.casefold() and "4455667788" not in raw and "acct_a" in raw
+
+
+def test_pool_pauses_only_when_no_usable_account_remains():
+    reset_state()
+    _, pool, src = setup(("acct_a", "acct_b"))
+    pass_canary(pool)
+    pool.mark_inactive("acct_a", "x_login_required")
+    assert pool.usable() == ["acct_b"]
+    out = unit(pool, {"acct_a": reader("acct_a"), "acct_b": reader("acct_b", day_pages())}, src)
+    assert out.label == "acct_b" and out.result is not None and not pool.is_paused()  # 1 usable: continues
+    pool.mark_inactive("acct_b", "x_account_suspended")
+    out = unit(pool, {"acct_a": reader("acct_a"), "acct_b": reader("acct_b")}, src, symbol="ETH")
+    assert out.reason == "no_usable_account" and pool.pause_reason() == "no_usable_account"  # 0 usable: pause

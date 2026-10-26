@@ -138,3 +138,18 @@ def test_exhausted_cursor_is_a_complete_read_of_the_window():
     assert stop(pages=2, entries_read=20, oldest_read=START - timedelta(seconds=1), day=DAY, sample_n=40,
                 page_cap=3, exhausted=True) == "window_start"
     assert xw.COMPLETE_STOPS == ("window_start", "cursor_exhausted")
+
+
+def test_cursor_end_exhausted_only_after_a_short_last_page():
+    ce = xw.cursor_end
+    assert ce((), seen=set(), last_entries=None, page_size=20) == "cursor_exhausted"  # empty first page
+    assert ce((), seen={"a"}, last_entries=19, page_size=20) == "cursor_exhausted"
+    assert ce((), seen={"a"}, last_entries=20, page_size=20) == "cursor_stalled"
+    assert ce(("a", "b"), seen={"a"}, last_entries=20, page_size=20) == "cursor_stalled"  # repeated ids
+    assert ce(("a", "b"), seen={"a"}, last_entries=5, page_size=20) == "cursor_stalled"
+    assert ce(("c",), seen={"a"}, last_entries=20, page_size=20) is None
+    day = date(2026, 10, 20)
+    end = datetime(2026, 10, 21, tzinfo=timezone.utc)
+    kw = dict(pages=1, entries_read=20, oldest_read=end - timedelta(minutes=10), day=day, sample_n=40, page_cap=3)
+    assert xw.stop_reason(**kw, stalled=True) == "cursor_stalled"
+    assert xw.stop_reason(**{**kw, "oldest_read": end - timedelta(days=2)}, stalled=True) == "window_start"

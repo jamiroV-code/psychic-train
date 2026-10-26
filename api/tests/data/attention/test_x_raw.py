@@ -149,3 +149,41 @@ def test_mark_suspect_flags_earlier_rows_of_that_account_only():
     assert xr.mark_suspect("acct_a", since) == 1
     assert xr.read_x_rows("SOL")[0]["suspect_since"] == since.isoformat()
     assert xr.mark_suspect("acct_a", since + timedelta(days=1)) == 0  # first flag kept
+
+
+# --- T190 (L4, M-A re-parse evidence, L5) --------------------------------------------------------------------------
+
+def test_scrub_replaces_account_names_and_ids_by_value_in_nested_text():
+    names = {"RealHandle": "acct_a", "4455667788": "acct_a"}
+    body = {"entries": [{"text": "hi @realhandle and REALHANDLE", "nested": [{"user": "RealHandle"}],
+                         "uid": 4455667788, "s": "id=4455667788;", "other": "notrealhandlex 44556677889"}]}
+    out = xr.scrub(body, names)
+    flat = json.dumps(out)
+    assert "4455667788;" not in flat and '"uid": "acct_a"' in flat
+    e = out["entries"][0]
+    assert e["text"] == "hi @acct_a and acct_a" and e["nested"][0]["user"] == "acct_a"
+    assert e["other"] == "notrealhandlex 44556677889"  # whole tokens only
+    path = xr.write_page("SOL", DAY, attempt=1, page=0, body=body, entry_ids=("tweet-1",), retries=0, headers={},
+                         collected_at=AT, parser_version="x-parse-1", reader_version="fake-1", scrub_names=names)
+    raw = gzip.decompress(path.read_bytes()).decode("utf-8")
+    assert "realhandle\"" not in raw.casefold() and "@acct_a" in raw
+
+
+def test_reparse_carries_the_original_canary_evidence():
+    write(1, 0, [entry(1, 1), entry(2, 3)])
+    write(1, 1, [])
+    xr.mark_complete("SOL", DAY, meta(canary_ok=False))
+    row = xr.reparse("SOL", DAY, parse=fake_parse, coin=SOL, cfg=CFG, parser_version="x-parse-1")
+    assert row["value"] is None and row["missing_reason"] == "account_not_canaried"
+    assert row["stop"] == "cursor_exhausted" and row["canary_ok"] is False
+
+
+def test_reparse_reads_raw_entry_times_for_the_oldest_read():
+    entries = [entry(i, 0.1 * i + 0.05) for i in range(40)]
+    xr.write_page("SOL", DAY, attempt=1, page=0, body={"entries": entries},
+                  entry_ids=tuple(e["entryId"] for e in entries), retries=0, headers={}, collected_at=AT,
+                  parser_version="x-parse-1", reader_version="fake-1",
+                  entry_times=[END - timedelta(hours=10)] + [datetime.fromisoformat(e["date"]) for e in entries])
+    xr.mark_complete("SOL", DAY, meta(canary_ok=True))
+    row = xr.reparse("SOL", DAY, parse=fake_parse, coin=SOL, cfg=CFG, parser_version="x-parse-1")
+    assert row["span_hours"] == pytest.approx(10.0) and row["capped"]

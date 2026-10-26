@@ -122,3 +122,41 @@ def test_page_cap_boundary_at_n_min():
     assert outcome(n_read=19, counted_times=times(8), oldest_read=oldest, page_cap_hit=True) == (None, "short_result")
     # read_sample_value is the value part of the outcome.
     assert value(n_read=19, counted_times=times(8), oldest_read=oldest, page_cap_hit=True) is None
+
+
+# --- T190 (B-1, M-A, L5) -----------------------------------------------------------------------------------------
+
+def test_stalled_cursor_is_capped_from_n_min_else_missing():
+    before = END - timedelta(minutes=10)
+    r, why = outcome(n_read=20, counted_times=times(20, step_min=0.5), oldest_read=before, cursor_stalled=True)
+    assert why is None and r.capped and r.value == pytest.approx(24 * 20 / 0.25)
+    assert outcome(n_read=19, counted_times=times(19, step_min=0.5), oldest_read=before,
+                   cursor_stalled=True) == (None, "cursor_stalled")
+
+
+def test_exact_from_exhausted_cursor_needs_canary_for_any_k():
+    before = START - timedelta(minutes=5)
+    for k in (0, 3):
+        assert outcome(n_read=k, counted_times=times(k), oldest_read=None if k == 0 else times(k)[-1],
+                       window_start_reached=True, cursor_exhausted=True, canary_ok=False) == (
+            None, "account_not_canaried")
+        r, why = outcome(n_read=k, counted_times=times(k), oldest_read=None if k == 0 else times(k)[-1],
+                         window_start_reached=True, cursor_exhausted=True, canary_ok=True)
+        assert why is None and r.value == float(k)
+    r, why = outcome(n_read=4, counted_times=times(3), oldest_read=before, window_start_reached=True,
+                     canary_ok=False)
+    assert why is None and r.value == 3.0  # a window start seen in the data needs no canary
+
+
+def test_oldest_read_from_raw_entries_when_given_else_parsed():
+    read = [xf.Tweet(i, END - timedelta(minutes=10 * i + 1), "Solana", xf.XUser(
+        100 + i, datetime(2024, 1, 1, tzinfo=timezone.utc), 100, 100, "https://img/p.jpg", False), "en", ("SOL",))
+        for i in range(40)]
+    kw = dict(n_read=40, window_start_reached=False, page_cap_hit=False, canary_ok=True, coin=xf.Coin("SOL", "Solana"),
+              policy=xf.FilterPolicy(), n_target=40, n_min=20, now=END + timedelta(hours=1))
+    parsed = xd.summarize(DAY, read, **kw)
+    assert parsed.result.span_hours == pytest.approx((391 / 60))
+    raw = xd.summarize(DAY, read, raw_oldest=END - timedelta(hours=10), **kw)
+    assert raw.result.span_hours == pytest.approx(10.0)
+    assert xd.summarize(DAY, read, raw_oldest=END - timedelta(hours=1), **kw).result.span_hours == pytest.approx(
+        391 / 60)  # the older of the two wins
