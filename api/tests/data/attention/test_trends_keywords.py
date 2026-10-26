@@ -280,7 +280,7 @@ def test_t154_topics_carry_owner_notes_and_labels():
 
 
 # T160: qualified terms for the coins the owner's checker could not resolve to a topic id.
-UNIDENTIFIED = {"AKE", "BTW", "GRAM", "LIT", "PRL", "RAIN", "STABLE"}
+UNIDENTIFIED: set[str] = set()   # T192: the owner named every one
 # Eligible Discovery coins outside the narratives (cache snapshot 2026-10-24); the placed coins are read live.
 DISCOVERY_EXTRA = {"DASH", "ETHFI", "M", "PEARL", "VET", "BDX"}
 CHECKER_GIVEN = {"APT": "aptos crypto", "ATOM": "cosmos crypto", "AVAX": "avalanche crypto", "CC": "canton coin",
@@ -292,11 +292,28 @@ def test_t160_topics_unchanged_and_no_new_topic():
     assert {s: e["topic"] for s, e in m.entries.items() if "topic" in e} == ALL_TOPICS
 
 
-def test_t160_unidentified_stay_no_keyword():
+# T192: owner-named projects (CoinGecko pages, 26-10-26). Untested search phrases, not checker PASS. The wanted
+# shapes "lighter exchange" and "stable blockchain" have no loader qualifier word, so they are "lighter crypto" and
+# "stable chain"; PRL and PEARL are one project (pearl-research / pearl-2) but a term must be unique, so PRL differs.
+T192_TERMS = {
+    "AKE": ("akedo crypto", "Akedo"), "BTW": ("bitway crypto", "Bitway"),
+    "GRAM": ("the open network toncoin", "The Open Network"), "LIT": ("lighter crypto", "Lighter"),
+    "STABLE": ("stable chain", "Stable"), "RAIN": ("rain protocol", "Rain"),
+    "PRL": ("pearl ai coin", "Pearl"), "PEARL": ("pearl ai crypto", "Pearl"), "OKB": ("okb crypto", "OKB"),
+}
+T192_NOTE = "owner-named 26-10-26, qualified-term, not checker PASS"
+
+
+def test_t192_named_tickers_have_exact_qualified_terms():
+    from api.data.attention import trends
     m = k.load()
-    for sym in UNIDENTIFIED:
-        e = m.entries[sym]
-        assert e["no-keyword"] is True and "UNVERIFIED" in e["note"], sym
+    for sym, (term, label) in T192_TERMS.items():
+        assert m.entries[sym] == {"term": term, "label": label, "note": T192_NOTE}, sym
+        assert trends.is_qualified_term(term) and k.keyword_status(m, sym) == "term", sym
+
+
+def test_t192_no_unidentified_entry_is_left():
+    assert not [s for s, e in k.load().entries.items() if e.get("no-keyword")]
 
 
 def test_t160_name_risk_symbols_never_have_a_bare_term():
