@@ -128,10 +128,10 @@ def test_evidence_uses_two_requests_with_both_anchors_and_five_coins():
     code, _, client = _run([daily_frame(R1), daily_frame(R2), daily_frame(R3)])
     assert code == 0
     assert [t for t, _ in client.payloads] == [R1, R2, R3]
-    _, _, client = _run([daily_frame(["Bitcoin", "Aptos"]), daily_frame(["Bitcoin", "Ethereum", "Aptos"])],
+    _, _, client = _run([daily_frame(["Bitcoin", "aptos crypto"]), daily_frame(["Bitcoin", "Ethereum", "aptos crypto"])],
                         ["--coins", "APT", "--anchor-a", "Bitcoin", "--anchor-b", "Ethereum"])
-    assert client.payloads[0][0][:2] == ["Bitcoin", "Aptos"]
-    assert client.payloads[1][0][:3] == ["Bitcoin", "Ethereum", "Aptos"]
+    assert client.payloads[0][0][:2] == ["Bitcoin", "aptos crypto"]
+    assert client.payloads[1][0][:3] == ["Bitcoin", "Ethereum", "aptos crypto"]
 
 
 def test_evidence_prints_raw_stats_and_percent_of_each_anchor():
@@ -188,8 +188,8 @@ def test_defaults_come_from_keyword_file_and_pytrends_missing_exits_3(monkeypatc
     _, text, client = _run([daily_frame(R1), daily_frame(R2), daily_frame(R3)])
     assert client.payloads[0][0][0] == m.anchor_keyword()
     assert client.payloads[1][0][:2] == [m.keyword_for("BTC"), m.keyword_for("ETH")]
-    _, text, client = _run([daily_frame(R1)], ["--coins", "ATOM,SOL", "--no-evidence"])
-    assert "skip ATOM" in text and client.payloads[0][0][1] == SOL
+    _, text, client = _run([daily_frame(R1)], ["--coins", "GRAM,SOL", "--no-evidence"])
+    assert "skip GRAM" in text and client.payloads[0][0][1] == SOL
     monkeypatch.setitem(sys.modules, "pytrends", None)
     monkeypatch.setitem(sys.modules, "pytrends.request", None)
     out, err = io.StringIO(), io.StringIO()
