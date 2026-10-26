@@ -152,3 +152,25 @@ def test_100_coin_fixture_is_fast_and_cached(isolated_cache, tmp_path, monkeypat
     print(f"sources 100 coins: cold {1000 * (t1 - t0):.0f} ms, warm {1000 * (t2 - t1):.0f} ms")
     assert row(cold, "wikipedia").coins_with_data == 100 and cold == warm
     assert (t1 - t0) < 5.0 and (t2 - t1) < 1.0
+
+
+def _keywords(tmp_path, monkeypatch, text):
+    p = tmp_path / "kw.json"
+    p.write_text(text)
+    monkeypatch.setattr(src.trends_keywords, "KEYWORDS_PATH", p)   # the module object sources reads (a test reimports it)
+
+
+def test_trends_keyword_coverage_over_eligible_coins(live, monkeypatch):
+    """T180: every eligible coin without a usable keyword is listed with reason no-trends-keyword."""
+    _keywords(live, monkeypatch, '{"_anchor": {"term": "Bitcoin", "label": "B"}, "A": {"topic": "/m/0a", "label": "A"},'
+              ' "B": {"no-keyword": true, "label": "B", "note": "unidentified"}, "OLD": {"term": "Old", "label": "O"}}')
+    tk = src.build_sources(TODAY).trends_keyword
+    assert (tk.eligible_size, tk.with_keyword) == (3, 1)
+    assert [(g.symbol, g.reason, g.detail) for g in tk.missing] == [
+        ("B", "no-trends-keyword", "no-keyword"), ("C", "no-trends-keyword", "no-entry")]
+
+
+def test_trends_keyword_bad_file_counts_every_coin_missing(live, monkeypatch):
+    _keywords(live, monkeypatch, "{bad")
+    tk = src.build_sources(TODAY).trends_keyword
+    assert tk.with_keyword == 0 and [g.detail for g in tk.missing] == ["bad-file"] * 3

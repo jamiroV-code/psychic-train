@@ -402,3 +402,20 @@ def test_store_failed_reason_is_a_code_reason():
     assert attention_extra.reason_kind("store-failed: OSError") == "code"
     line = "trends: 0/2 ok, 0 rows written [other 2] reasons: store-failed: OSError x2"
     assert attention_extra.classify("trends", line).status == "failed"  # all stores failed: red, not a warning
+
+
+@pytest.mark.parametrize("sym,reason,outcome", [
+    ("ZZZ", "no keyword mapped", "no-keyword"),          # no entry
+    ("USDX", "no keyword mapped", "no-keyword"),         # no-keyword entry
+    ("LINK", trends.NAME_AMBIGUOUS, "skipped-unqualified"),
+])
+def test_coin_without_usable_keyword_is_missing_never_zero(monkeypatch, capsys, sym, reason, outcome):
+    """T180: the runner's skip follows trends_keywords.keyword_status; the reason is the existing pinned one."""
+    km = trends_keywords.load()
+    assert trends_keywords.keyword_status(km, sym) in trends_keywords.MISSING_STATUSES
+    out, client, _, _ = _run(monkeypatch, [sym])
+    assert (out[sym].state, out[sym].reason, out[sym].points) == ("unavailable", reason, [])
+    assert client.payloads == []
+    assert refresh_attention.MISSING_KEYWORD_REASON[trends_keywords.keyword_status(km, sym)] == reason
+    line = next(ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("trends detail:"))
+    assert line == f"trends detail: {outcome} 1"

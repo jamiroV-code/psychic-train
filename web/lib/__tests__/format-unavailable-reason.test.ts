@@ -38,6 +38,10 @@ describe("formatUnavailableReason", () => {
 describe("formatNarrativeReason (RFC-5)", () => {
   const generic = formatUnavailableReason("source-unavailable", "window");
 
+  it("says plainly that a coin has no Google Trends keyword yet (T180)", () => {
+    expect(formatNarrativeReason("no-trends-keyword")).toBe("No Google Trends keyword yet");
+  });
+
   it("returns null only for a null reason", () => {
     expect(formatNarrativeReason(null)).toBeNull();
   });

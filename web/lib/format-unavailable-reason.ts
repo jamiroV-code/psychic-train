@@ -50,6 +50,7 @@ const NARRATIVE_REASON_COPY: Record<string, string> = {
   "empty-market-list": "Exchange returned no markets",
   "credentials-not-configured": "Reddit credentials not configured for the nightly job — source skipped",
   "no-keyword": "No search keyword configured for this category",
+  "no-trends-keyword": "No Google Trends keyword yet",
   stale: "Stale — showing the last archived data",
   "presumed-dead": "Presumed dead — no fresh data for a long time",
   unavailable: "Unavailable",
