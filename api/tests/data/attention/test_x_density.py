@@ -102,17 +102,25 @@ def test_sparse_coin_exact_count_below_n_min_when_window_reached():
         assert why is None and (r.value, r.n, r.capped) == (float(k), k, False)
 
 
-def test_zero_exact_needs_canary_else_missing_zero_without_canary():
+def test_every_value_needs_the_account_canaried_else_account_not_canaried():
+    """T190 planner decision (quality first): exact, capped, window-start and zero values all need the unit's
+    account in today's canary; otherwise the coin-day is missing `account_not_canaried`."""
     before = START - timedelta(minutes=1)
     r, why = outcome(n_read=1, counted_times=[], oldest_read=before, window_start_reached=True)
     assert why is None and r.value == 0.0
-    assert outcome(n_read=1, counted_times=[], oldest_read=before, window_start_reached=True,
-                   canary_ok=False) == (None, "zero_without_canary")
-    assert outcome(n_read=0, counted_times=[], oldest_read=None, window_start_reached=True,
-                   canary_ok=False) == (None, "zero_without_canary")
-    # A nonzero exact count needs no canary.
-    assert outcome(n_read=2, counted_times=times(1), oldest_read=before, window_start_reached=True,
-                   canary_ok=False)[0].value == 1.0
+    cases = [
+        dict(n_read=1, counted_times=[], oldest_read=before, window_start_reached=True),  # zero
+        dict(n_read=0, counted_times=[], oldest_read=None, window_start_reached=True, cursor_exhausted=True),
+        dict(n_read=2, counted_times=times(1), oldest_read=before, window_start_reached=True),  # window start
+        dict(n_read=40, counted_times=times(30), oldest_read=END - timedelta(hours=6)),  # capped at N
+        dict(n_read=20, counted_times=times(8), oldest_read=END - timedelta(hours=4), page_cap_hit=True),
+        dict(n_read=20, counted_times=times(20, step_min=0.5), oldest_read=END - timedelta(minutes=10),
+             cursor_stalled=True),
+    ]
+    for kw in cases:
+        assert outcome(**kw)[1] is None, kw
+        assert outcome(**kw, canary_ok=False) == (None, "account_not_canaried"), kw
+        assert outcome(**kw, canary_ok=None) == (None, "account_not_canaried"), kw
 
 
 def test_page_cap_boundary_at_n_min():
@@ -143,9 +151,8 @@ def test_exact_from_exhausted_cursor_needs_canary_for_any_k():
         r, why = outcome(n_read=k, counted_times=times(k), oldest_read=None if k == 0 else times(k)[-1],
                          window_start_reached=True, cursor_exhausted=True, canary_ok=True)
         assert why is None and r.value == float(k)
-    r, why = outcome(n_read=4, counted_times=times(3), oldest_read=before, window_start_reached=True,
-                     canary_ok=False)
-    assert why is None and r.value == 3.0  # a window start seen in the data needs no canary
+    assert outcome(n_read=4, counted_times=times(3), oldest_read=before, window_start_reached=True,
+                   canary_ok=False) == (None, "account_not_canaried")  # a window start needs it too
 
 
 def test_oldest_read_from_raw_entries_when_given_else_parsed():

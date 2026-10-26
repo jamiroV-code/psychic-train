@@ -257,14 +257,21 @@ def test_curl_fallback_flag_true_retries_once_then_pauses_and_logs():
     assert pool.health()["curl_uses"] == 1 and pool.health()["curl_last_use"] == T0.isoformat()
     assert src.used == 40  # the reads through the fallback count against the global budget
 
-    # Next unit: default backend first again; still blocked through the fallback pauses the day.
+    # Next unit: default backend first again; the day's one curl retry is spent, so the block pauses the day.
     clock.advance(minutes=10)
+    calls.clear()
     a.items = [xrd.ReaderFailure("abort", text="Blocked by Cloudflare")]
-    still = lambda *args: (_ for _ in ()).throw(xrd.ReaderFailure("abort", text="Blocked by Cloudflare"))
-    out2 = unit(pool, {"acct_a": a}, src, config=cfg(x_allow_curl_backend=True), fallback=still, symbol="ETH")
+    out2 = unit(pool, {"acct_a": a}, src, config=cfg(x_allow_curl_backend=True), fallback=fallback, symbol="ETH")
     assert a.calls[-1][2] == 0  # the default reader was called first for the new unit
-    assert out2.reason == "cloudflare_block" and pool.pause_reason() == "cloudflare_block"
-    assert pool.health()["curl_uses"] == 2
+    assert out2.reason == "cloudflare_block" and pool.pause_reason() == "cloudflare_block" and calls == []
+    assert pool.health()["curl_uses"] == 1
+    # The next UTC day has its own one retry.
+    clock.now = datetime(2026, 10, 22, 10, 0, tzinfo=timezone.utc)
+    pass_canary(pool)
+    a.items = [xrd.ReaderFailure("abort", text="Blocked by Cloudflare"), day_pages()[1]]
+    out3 = unit(pool, {"acct_a": a}, src, config=cfg(x_allow_curl_backend=True), fallback=fallback,
+                symbol="ADA", day=date(2026, 10, 21))
+    assert calls == [("acct_a", 0)] and out3.reason != "cloudflare_block" and pool.health()["curl_uses"] == 2
 
 
 def test_curl_never_for_rate_limit_login_or_ban_codes():
@@ -788,10 +795,14 @@ def test_exact_count_from_exhausted_cursor_needs_the_account_in_todays_canary():
     out, _, _ = _run([page(tweets(3, END - timedelta(hours=1), 60)), None], canaried=("acct_b",),
                      labels=("acct_a", "acct_b"))
     assert out.label == "acct_a" and out.reason == "account_not_canaried"
-    # A window start seen in the data needs no canary: the older tweet proves the whole day was read.
+    # Every value needs it (planner, T190): a window start and a capped sample from that account are missing too.
     tws = tweets(3, END - timedelta(hours=2), 60) + tweets(1, END - timedelta(days=1, minutes=5))
     out, _, _ = _run([page(tws)], canaried=())
-    assert out.reason == "window_start" and out.result.value == 3.0
+    assert out.result is None and out.reason == "account_not_canaried"
+    out, _, _ = _run(day_pages(), canaried=())
+    assert out.result is None and out.reason == "account_not_canaried" and xr.read_x_rows("SOL") == []
+    out, _, _ = _run(day_pages(), canaried=("acct_a",))
+    assert out.result.capped and out.row["canary_ok"] is True
 
 
 def test_canary_records_the_labels_that_passed():
@@ -930,3 +941,22 @@ def test_pool_state_from_before_canary_labels_loads_with_no_account_canaried():
     pool.path.write_text(json.dumps(state))
     again = xp.XPool(["acct_a", "acct_b"], clock=clock)
     assert again.canary_passed_today() and again.canary_labels() == []
+
+
+def test_one_curl_retry_per_utc_day_pool_wide_canary_then_unit():
+    """Rule 19 (planner, T190): one curl retry per UTC day for the whole pool, canary and units together."""
+    calls = []
+
+    def ok(label, query, kv, page_no):
+        calls.append(label)
+        return page(CANARY_TWS)
+
+    out, pool = _block_canary(ok, True)
+    assert out.passed and calls == ["acct_a"]
+    pool.clock.advance(minutes=10)
+    src = pp.PcSource("xsearch_web", configured_budget=800, floor=40, adaptive=True, clock=pool.clock)
+    a = reader("acct_a", [xrd.ReaderFailure("abort", text="Blocked by HTML")])
+    got = unit(pool, {"acct_a": a, "acct_b": reader("acct_b")}, src, config=cfg(x_allow_curl_backend=True),
+               fallback=ok)
+    assert got.reason == "html_block" and pool.pause_reason() == "html_block" and calls == ["acct_a"]
+    assert pool.health()["curl_uses"] == 1
