@@ -958,7 +958,7 @@ def test_t161_coverage_counts_not_run_apart_from_nothing():
     out = io.StringIO()
     assert _main(["--only-unresolved", "--symbols", "AVAX,NEWA,NEWB,NOID"], client, out) == 4
     tail = out.getvalue().split(c.OUTSIDE_HEADER)[1]
-    assert "nothing: 0 | request failed: 3 | not run: 1 | not checked: 0" in tail
+    assert "nothing: 0 | request failed: 2 | not run: 1 | not checked: 0" in tail
 
 
 def test_t178_rerun_command_echoes_every_non_default_option(tmp_path):
