@@ -10,11 +10,11 @@ the window end to the oldest READ tweet.
   yet, `short_result` below N_min;
 - a stalled cursor (`x_window.cursor_end`: a full page, then nothing or repeated ids) is never exact: the same
   formula from N_min read entries (`capped`, `pagecap`), else missing `cursor_stalled`;
-- an exact count from an exhausted cursor (any k, not only 0) needs the unit's account in today's canary
-  (`canary_ok`), else it is missing (`account_not_canaried`): only an account shown to see full results can prove
-  that nothing more exists. A window start seen in the data needs no canary;
-- a value of 0 needs the day's canary data, else it is missing (`zero_without_canary`). `density.finalize` still
-  applies the trailing-median part of AC3 when the value is stored.
+- every value (exact, capped, window start, zero) needs the unit's account in today's canary (`canary_ok`), else
+  the coin-day is missing (`account_not_canaried`) and nothing else is computed (planner decision T190, quality
+  first: an account not shown today to see full results, e.g. one continuing after an inconclusive canary, gives
+  no value). This also covers AC3's "zero only after a canary"; `density.finalize` still applies the
+  trailing-median part of AC3 when the value is stored.
 The window start counts as reached when a read tweet is older than it or the cursor ran out (`x_window`); then
 k is the exact count even below N_min (low attention is a valid measurement).
 
@@ -44,11 +44,11 @@ def read_sample_outcome(day: date, *, n_read: int, counted_times: list[datetime]
         raise ValueError("need 0 < n_min <= n_target")
     if not isinstance(n_read, int) or isinstance(n_read, bool) or n_read < 0:
         raise ValueError("n_read must be a non-negative int")
+    if canary_ok is not True:
+        return None, "account_not_canaried"
     end = density.window(day)[1]
     k = sum(1 for t in counted_times if x_window.in_window(t, day))
     if window_start_reached:
-        if cursor_exhausted and canary_ok is not True:
-            return None, "account_not_canaried"
         result = density.DayResult(float(k), k, 24.0, False, False)
     elif oldest_read is None or oldest_read.astimezone(timezone.utc) >= end:
         return None, "window_not_reached"
@@ -58,8 +58,6 @@ def read_sample_outcome(day: date, *, n_read: int, counted_times: list[datetime]
         result = density.DayResult(24.0 * k / span, k, span, True, n_read < n_target)
     else:
         return None, "cursor_stalled" if cursor_stalled else "short_result"
-    if result.value == 0 and canary_ok is not True:
-        return None, "zero_without_canary"
     return result, None
 
 

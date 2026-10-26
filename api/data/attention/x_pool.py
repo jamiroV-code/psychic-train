@@ -14,12 +14,13 @@ unit across the pool. Pure logic over injected readers, clock, RNG and sleep; no
 - Fail closed: a None, empty or short result, an exception or a block page is missing with a reason, never 0.
   An empty page after a FULL page, or a page of repeated ids, is a stalled cursor (`x_window.cursor_end`), never
   an exact count. An exact count from an exhausted cursor needs the unit's account among the accounts that passed
-  today's canary (`canary_labels`), else it is missing `account_not_canaried`.
-  Cloudflare and HTML blocks pause the day (the curl fallback of rule 19 first when the owner flag is on: one
-  retry per unit and one per daily canary; the next block pauses the day for the whole pool);
+  today's canary (`canary_labels`), else it is missing `account_not_canaried`; so does every other value.
+  Cloudflare and HTML blocks pause the day (the curl fallback of rule 19 first when the owner flag is on: ONE
+  retry per UTC day for the whole pool, canary and units together; the next block anywhere pauses the day for
+  the pool; every unit still tries the default backend first while the day is not paused);
   an inconclusive canary sits the canaried accounts out for the UTC day while the others continue (no account
-  passed, so their exact counts are missing); three consecutive parse, 404 or transaction-id failures, or a
-  small-page parse drop, count toward `layout_changed`; a parse drop (`x_reader.parse_drop`) stops X at once.
+  passed, so their units are missing `account_not_canaried`); three consecutive parse, 404 or transaction-id
+  failures, or a small-page parse drop, count toward `layout_changed`; a parse drop (`x_reader.parse_drop`) stops X at once.
 - Quality over speed: nothing is cut for a time budget; only the safety limits above stop reading.
 """
 from __future__ import annotations
@@ -245,6 +246,11 @@ class XPool:
             self._s["drift_streak"] = 0
             self._save()
 
+    def curl_used_today(self) -> bool:
+        """The day's one curl retry (rule 19) is spent: the next block pauses the day for the pool."""
+        last = self._s["curl_last_use"]
+        return last is not None and datetime.fromisoformat(last).astimezone(timezone.utc).date() == self._now().date()
+
     def note_curl(self) -> None:
         self._s["curl_uses"] += 1
         self._s["curl_last_use"] = self._now().isoformat()
@@ -356,14 +362,13 @@ def _account_failure(pool: XPool, label: str, reader: xr.XReader, failure: xr.Re
 Fallback = Callable[[str, str, dict, int], "xr.RawPage | None"]
 
 
-def _on_block(pool: XPool, f: xr.ReaderFailure, config: CollectorConfig, fallback: Fallback | None, state: dict,
-              label: str, query: str, kv: dict, page_no: int, events: list) -> tuple[xr.RawPage | None, str | None]:
-    """A Cloudflare or HTML block: (the fallback's page, None) after the one curl retry of this unit or canary
-    (`state["curl_retried"]`), else (None, block reason) with the UTC day paused for the whole pool."""
+def _on_block(pool: XPool, f: xr.ReaderFailure, config: CollectorConfig, fallback: Fallback | None, label: str,
+              query: str, kv: dict, page_no: int, events: list) -> tuple[xr.RawPage | None, str | None]:
+    """A Cloudflare or HTML block: (the fallback's page, None) after the pool's one curl retry of the UTC day,
+    else (None, block reason) with the UTC day paused for the whole pool."""
     block = f"{f.abort}_block"
-    decision = xr.fallback_decision(f.abort, allow_curl=config.x_allow_curl_backend, retried=state["curl_retried"])
+    decision = xr.fallback_decision(f.abort, allow_curl=config.x_allow_curl_backend, retried=pool.curl_used_today())
     if decision == "curl_retry" and fallback is not None:
-        state["curl_retried"] = True
         pool.note_curl()
         try:
             raw = fallback(label, query, kv, page_no)
@@ -398,7 +403,7 @@ def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcS
     start, end = canary_window(pool._now())
     query, kv = canary_query(config, start, end), x_window.search_kv()
     results: dict[str, set] = {}
-    state, events = {"curl_retried": False}, []
+    events = []
     for i, label in enumerate(labels):
         if not src.can_spend(xr.PAGE_ENTRIES):
             src.mark_spent()
@@ -415,7 +420,7 @@ def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcS
                 if f.kind == "no_account":
                     _account_failure(pool, label, reader, f)
                 continue
-            raw, block = _on_block(pool, f, config, fallback, state, label, query, kv, 0, events)
+            raw, block = _on_block(pool, f, config, fallback, label, query, kv, 0, events)
             if block:
                 return CanaryOutcome(False, reason=block)
         if raw is None:
@@ -500,7 +505,7 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
         except xr.ReaderFailure as f:
             src.stamp_attempt()
             if _is_block(f):
-                raw, block = _on_block(pool, f, config, fallback, counts, label, query, kv, page_no, out.events)
+                raw, block = _on_block(pool, f, config, fallback, label, query, kv, page_no, out.events)
                 if block:
                     return _Attempt("stop", block, events=out.events)
                 backend = "curl"
@@ -568,8 +573,9 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
     """One X coin-day across the pool: one account end to end, at most `x_unit_max_restarts` restarts.
 
     `fallback(label, query, kv, page)` is the owner-allowed curl process of rule 19 (W8d2); it is called at most
-    once per unit (restarts included) and only when `fallback_decision` says so; the next block pauses the day. On a value the raw pages are marked
-    complete and the X evidence row is built by `x_raw.reparse` from them, so a re-parse gives the same row.
+    once per UTC day for the whole pool (`XPool.curl_used_today`) and only when `fallback_decision` says so; the
+    next block pauses the day. On a value the raw pages are marked complete and the X evidence row is built by
+    `x_raw.reparse` from them, so a re-parse gives the same row.
     """
     if pool.is_paused() or src.is_paused():
         return XUnitOutcome(None, "paused")
@@ -579,7 +585,7 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
     now = _utc(src.clock())
     if due is not None and now < due:
         return XUnitOutcome(None, "too_early")
-    counts = {"reads": 0, "pages": 0, "curl_retried": False}  # one curl retry per unit, across restarts
+    counts = {"reads": 0, "pages": 0}
     attempts = restarts = 0
     label = None
 

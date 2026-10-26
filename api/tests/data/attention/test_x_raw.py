@@ -52,8 +52,9 @@ def write(attempt: int, page: int, entries: list[dict], *, retries: int = 0, hea
 
 
 def meta(**over) -> dict:
+    """A completed unit's manifest; a real one always records `canary_ok` (True, or no value was stored)."""
     return {"attempt": 1, "label": "acct_a", "attempts": 1, "restarts": 0, "backend_events": [],
-            "overhead_requests": 7, **over}
+            "overhead_requests": 7, "canary_ok": True, **over}
 
 
 def test_raw_page_gzipped_with_versions_and_no_cookies():

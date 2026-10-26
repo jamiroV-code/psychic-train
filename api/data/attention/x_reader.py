@@ -11,8 +11,8 @@ objects and exceptions onto `RawPage`, `PoolRow`, `ReaderFailure` and `x_filters
   search lock is a rate limit, anything else is a server error.
 - `fallback_decision`: the owner-allowed curl backend fallback (rule 19, amended by T179) applies only to an abort
   whose text starts with `Blocked by Cloudflare` or `Blocked by HTML` on the default backend, only with
-  `x_allow_curl_backend` true, and only once per unit (and once per daily canary); it never applies to a rate limit, a login or ban code, or anything
-  else.
+  `x_allow_curl_backend` true, and only once per UTC day for the whole pool (canary and units together); it never
+  applies to a rate limit, a login or ban code, or anything else.
 - `parse_drop`: raw timeline entries compared with parsed tweets (the library drops a tweet it cannot parse): a
   page of several entries with none parsed, or a drop rate above the threshold on a page of at least
   `PARSE_DROP_RATE_MIN_ENTRIES` entries, stops X; a drop on a smaller page (`small_page_drop`) counts toward the

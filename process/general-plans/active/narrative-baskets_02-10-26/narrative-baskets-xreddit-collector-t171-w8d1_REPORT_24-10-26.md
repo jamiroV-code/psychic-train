@@ -294,16 +294,17 @@ Fixes:
 - M-A (medium), canary gate. The pool now records the LABELS of the accounts that passed today's canary
   (`canary_labels`, persisted; a state file from before this change loads with none).
   - An inconclusive canary passes no account, and a suspect account does not pass.
-  - An exact count from an exhausted cursor (any k, not only 0) needs the unit's account in that set, else the
-    unit is missing with `account_not_canaried`.
-  - A window start seen in the data needs no canary.
+  - Planner decision after round 2 (quality first): EVERY stored value (exact, capped, window start, zero)
+    needs the unit's account in that set, else the unit is missing with `account_not_canaried` and nothing else
+    is computed. This replaces `zero_without_canary`, which became unreachable and was removed.
   - The unit's `canary_ok` is written to `_complete.json` and to the X row. The re-parse uses that recorded
     value and is never forced to True, so N9 is killed.
-- L1, curl retry. At most ONE curl retry per unit, restarts included. The next block in that unit pauses the
-  UTC day for the whole pool. A new unit starts on the default backend again (AC53 "next unit default first",
-  kept).
+- L1, curl retry (planner decision after round 2, SPEC rule 19). ONE curl retry per UTC day for the whole pool,
+  canary and units together (`XPool.curl_used_today`, from the persisted last-use time). The next Cloudflare or
+  HTML block anywhere pauses the UTC day for the pool, with reason `cloudflare_block` or `html_block` by the
+  block's kind. Every unit still tries the default backend first while the day is not paused (AC53).
 - L2, canary blocks. A block inside the canary goes through the same `_on_block` / `fallback_decision` path:
-  same flag, one retry for the canary, still blocked pauses the day.
+  same flag, the same pool-wide daily retry, still blocked pauses the day.
 - L3, parse drop. The drop-RATE test applies only to pages with at least 10 entries
   (`PARSE_DROP_RATE_MIN_ENTRIES`). "Several entries (2 or more), zero parsed" still stops X. A drop on a smaller
   page (`small_page_drop`) makes the unit missing with `drift` and counts toward the 3-failure `layout_changed`
@@ -323,12 +324,17 @@ Fixes:
 Test fixture changes, made in the green commit so the existing tests fit the new rules:
 
 - `pass_canary` now passes labels (all accounts by default).
+- The `x_raw` test manifest helper now records `canary_ok` True, as every real completed unit does.
+- The old zero-canary density test became the "every value needs the canary" test. The round-1 curl test now
+  expects the second unit's block to pause the day with no second retry, and the next UTC day to get a new
+  retry.
 - The `short_result` case used the same page object three times. Under B-1 that is repeated ids, which is a
   stall, so the case now uses three distinct short pages.
 
 Tests:
 
-- 21 new test functions: 14 in reader, 3 in density, 3 in raw, 1 in window.
+- 22 new test functions: 15 in reader, 3 in density, 3 in raw, 1 in window. The planner-answer round committed
+  its failing tests first (`cbab49e`, 5 failing).
 - `pytest api/tests/data/attention api/tests/scripts api/tests/tooling_guards`: 1039 passed, 0 failed.
 - Full `pytest api`: 2342 passed, 0 failed, 1 skipped, 5 deselected. `origin/main` (separate worktree): 2213
   passed, 1 skipped, 5 deselected. The +129 are the W8d1 tests (2321 at round 1 plus the 21 new ones).
@@ -338,6 +344,8 @@ Tests:
     state default.
   - Each survivor was a test gap, so a test was added for each.
   - Re-run: 28 of 28 killed. N9 (re-parse forces `canary_ok` True) is M8 and is killed.
+  - After the planner answers, the mutants were updated to the new code and two were added: the canary gate
+    moved after the computation, and the curl use not recorded. 30 of 30 killed, N9 included.
 - Hygiene: `git diff --check`, the secret scan over the diff, and the no-network-import grep are clean. The
   banned-name guard tests pass.
 - Ruff on the touched files: no new findings beyond the base's existing UP017 and I001 style findings. Those
@@ -346,12 +354,4 @@ Tests:
 
 Not provable here: live X (P-X9 belongs to the owner).
 
-Open questions:
-
-- L1 reading. "One curl retry per UNIT; the next block (any unit) pauses" is implemented as: each unit, and the
-  daily canary, gets one retry, and the second block in that same unit pauses the day. AC53 says the next unit
-  starts on the default backend again, so a later unit that is blocked gets its own one retry. If the intent was
-  ONE retry per UTC day for the whole pool, this is a two-line change (keep the flag in the pool state).
-- M-A coverage. Accounts with no canary today (any unit after an inconclusive canary, or a third account
-  outside the two canaried) can still give capped or window-start values. Only exact counts from an exhausted
-  cursor are refused.
+Open questions: none. The L1 and M-A questions were answered by the planner and applied as above.

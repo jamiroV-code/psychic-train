@@ -109,13 +109,13 @@ def test_every_value_needs_the_account_canaried_else_account_not_canaried():
     r, why = outcome(n_read=1, counted_times=[], oldest_read=before, window_start_reached=True)
     assert why is None and r.value == 0.0
     cases = [
-        dict(n_read=1, counted_times=[], oldest_read=before, window_start_reached=True),  # zero
-        dict(n_read=0, counted_times=[], oldest_read=None, window_start_reached=True, cursor_exhausted=True),
-        dict(n_read=2, counted_times=times(1), oldest_read=before, window_start_reached=True),  # window start
-        dict(n_read=40, counted_times=times(30), oldest_read=END - timedelta(hours=6)),  # capped at N
-        dict(n_read=20, counted_times=times(8), oldest_read=END - timedelta(hours=4), page_cap_hit=True),
-        dict(n_read=20, counted_times=times(20, step_min=0.5), oldest_read=END - timedelta(minutes=10),
-             cursor_stalled=True),
+        {"n_read": 1, "counted_times": [], "oldest_read": before, "window_start_reached": True},  # zero
+        {"n_read": 0, "counted_times": [], "oldest_read": None, "window_start_reached": True, "cursor_exhausted": True},
+        {"n_read": 2, "counted_times": times(1), "oldest_read": before, "window_start_reached": True},  # window start
+        {"n_read": 40, "counted_times": times(30), "oldest_read": END - timedelta(hours=6)},  # capped at N
+        {"n_read": 20, "counted_times": times(8), "oldest_read": END - timedelta(hours=4), "page_cap_hit": True},
+        {"n_read": 20, "counted_times": times(20, step_min=0.5), "oldest_read": END - timedelta(minutes=10),
+             "cursor_stalled": True},
     ]
     for kw in cases:
         assert outcome(**kw)[1] is None, kw
