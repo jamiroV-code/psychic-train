@@ -30,7 +30,7 @@ from api.tests.scripts.test_refresh_attention_trends import (
 OUTCOMES = {"ok", "too-little-interest", "quiet-then-surge", "no-keyword", "skipped-unqualified", "failed",
             "capped", "time-budget"}
 COIN_KEYS = {"outcome", "reason", "keyword_kind", "median", "zero_share_pct", "last7_vs_prior28_ratio",
-             "attempts", "retried"}
+             "attempts", "retried", "retry_skipped"}
 
 
 @pytest.fixture(autouse=True)
@@ -96,7 +96,7 @@ def test_run_file_records_every_outcome(monkeypatch):
     t = doc["totals"]
     assert t["ok"] == 2 and t["failed"] == 1 and t["capped"] == 1 and t["no-keyword"] == 2
     assert t["too-little-interest"] == 1 and t["quiet-then-surge"] == 1 and t["skipped-unqualified"] == 1
-    assert t["retried"] == 0 and t["recovered"] == 0
+    assert t["retried"] == 0 and t["recovered"] == 0 and t["retry_skipped"] == 0
 
 
 def test_run_file_records_time_budget_outcome(monkeypatch):
@@ -221,6 +221,8 @@ def test_series_stats_arithmetic():
     st = trends.series_stats(values)
     assert st["median"] == 30.0 and st["zero_share_pct"] == 10.0
     assert st["last7_vs_prior28_ratio"] == 2.0  # 60 over the 28 days of 30
+    ramp = [10.0] * 65 + [float(i) for i in range(1, 29)] + [29.0] * 7  # a VARYING prior window pins its 28 days
+    assert trends.series_stats(ramp)["last7_vs_prior28_ratio"] == 2.0  # 29 over a prior mean of 14.5
     assert trends.series_stats([0.0] * 100)["last7_vs_prior28_ratio"] is None
     assert trends.series_stats([5.0] * 20)["last7_vs_prior28_ratio"] is None  # fewer than 35 days
 
@@ -234,20 +236,59 @@ def test_fetch_alone_stats_are_per_call():
     assert stats == {}
 
 
-# --- (b) one retry of an empty response ---
+# --- (b) the deferred retry of an `empty response` (T200): after the whole main pass, once per coin ---
 
-def test_empty_then_ok_is_recovered(monkeypatch, capsys):
+def _many(path, n):
+    """A keyword file with n term coins C000.. (term T000..) besides the anchor."""
+    kw = {"_anchor": {"term": "Bitcoin", "label": "Bitcoin"}}
+    kw.update({f"C{i:03d}": {"term": f"T{i:03d}", "label": f"T{i:03d}"} for i in range(n)})
+    path.write_text(json.dumps(kw))
+    return [f"C{i:03d}" for i in range(n)], [f"T{i:03d}" for i in range(n)]
+
+
+class ClockClient(TermClient):
+    """Every request takes `cost` fake seconds on the shared clock `t`."""
+
+    def __init__(self, t, cost, *a, **k):
+        super().__init__(*a, **k)
+        self.t, self.cost = t, cost
+
+    def interest_over_time(self):
+        self.t[0] += self.cost
+        return super().interest_over_time()
+
+
+def _fake_clock(monkeypatch, budget=None):
+    t = [0.0]
+    monkeypatch.setattr(refresh_attention, "_clock", lambda: t[0])
+    if budget is not None:
+        monkeypatch.setattr(refresh_attention, "TRENDS_TIME_BUDGET_S", budget)
+
+    def sleep(s):
+        t[0] += s
+        sleeps.append(s)
+    sleeps: list[float] = []
+    return t, sleep, sleeps
+
+
+def test_empty_is_retried_after_the_main_pass_not_inline(monkeypatch, capsys):
     out, client, sleeps, _ = _run(monkeypatch, ["AAVE", "INJ"], {"Aave": [EMPTY, fx.daily_frame(["Aave"], 100)]},
                                   today=_day(0, 2))
     assert out["AAVE"].state == "ok" and len(out["AAVE"].points) == 100
-    assert client.terms() == ["Aave", "Aave", "Injective"]
-    assert sleeps == [10.0, 3.0]  # retry wait, then the usual spacing before the next coin
+    assert client.terms() == ["Aave", "Injective", "Aave"]  # the retry waits for INJ
+    assert sleeps == [3.0, 10.0]  # usual spacing first, then the retry wait
     c = load(_day(0, 2))["coins"]["AAVE"]
-    assert c["outcome"] == "ok" and c["attempts"] == 2 and c["retried"] is True
+    assert c["outcome"] == "ok" and c["attempts"] == 2 and c["retried"] is True and c["retry_skipped"] is None
+    assert load(_day(0, 2))["coins"]["INJ"]["attempts"] == 1
     t = load(_day(0, 2))["totals"]
-    assert t["retried"] == 1 and t["recovered"] == 1
+    assert t["retried"] == 1 and t["recovered"] == 1 and t["retry_skipped"] == 0
     line = next(ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("trends detail:"))
-    assert line == "trends detail: ok 2, retried 1 (recovered 1)"
+    assert line == "trends detail: ok 2, retried 1 (recovered 1, skipped 0)"
+
+
+def test_recovered_coin_is_stored_like_an_ok_coin(monkeypatch):
+    rc, _ = _main(monkeypatch, ["AAVE", "INJ"], {"Aave": [EMPTY, fx.daily_frame(["Aave"], 100)]})
+    assert rc == 0 and len(store.read_points("trends", "AAVE")) == 100
 
 
 def test_retry_wait_has_jitter(monkeypatch):
@@ -263,7 +304,7 @@ def test_empty_twice_is_failed_not_capped(monkeypatch, capsys):
     c = load()["coins"]["AAVE"]
     assert (c["outcome"], c["reason"], c["attempts"], c["retried"]) == ("failed", "empty response", 2, True)
     line = next(ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("trends detail:"))
-    assert line == "trends detail: failed(empty response) 1, retried 1 (recovered 0)"
+    assert line == "trends detail: failed(empty response) 1, retried 1 (recovered 0, skipped 0)"
     assert load()["totals"]["retried"] == 1 and load()["totals"]["recovered"] == 0
 
 
@@ -271,7 +312,7 @@ def test_429_is_never_retried_by_the_empty_rule(monkeypatch):
     _, client, sleeps, _ = _run(monkeypatch, ["AAVE"], {"Aave": [fx.too_many()]})
     assert client.terms() == ["Aave"] * 4 and sleeps == [30, 60, 120]  # the existing backoff, no extra 10 s retry
     c = load()["coins"]["AAVE"]
-    assert c["outcome"] == "capped" and c["retried"] is False and c["attempts"] == 4
+    assert c["outcome"] == "capped" and c["retried"] is False and c["attempts"] == 4 and c["retry_skipped"] is None
 
 
 @pytest.mark.parametrize("item", [
@@ -285,50 +326,119 @@ def test_429_is_never_retried_by_the_empty_rule(monkeypatch):
     _zeros("Aave"),                                                                       # too-little-interest
 ])
 def test_other_failures_are_never_retried(monkeypatch, item):
-    _, client, sleeps, _ = _run(monkeypatch, ["AAVE"], {"Aave": [item]})
-    assert client.terms() == ["Aave"] and sleeps == []
-    c = load()["coins"]["AAVE"]
-    assert c["attempts"] == 1 and c["retried"] is False
+    _, client, sleeps, _ = _run(monkeypatch, ["AAVE", "INJ"], {"Aave": [item]}, today=_day(0, 2))
+    assert client.terms() == ["Aave", "Injective"] and sleeps in ([3.0], [3.0, 30], [3.0, 30, 60, 120])
+    assert 10.0 not in sleeps
+    c = load(_day(0, 2))["coins"]["AAVE"]
+    assert c["retried"] is False and c["retry_skipped"] is None
 
 
-def test_retry_refused_when_it_would_end_past_budget(monkeypatch):
-    t = [0.0]
-    monkeypatch.setattr(refresh_attention, "_clock", lambda: t[0])
-    monkeypatch.setattr(refresh_attention, "TRENDS_TIME_BUDGET_S", 100)
-
-    class Slow(TermClient):
-        def interest_over_time(self):
-            t[0] += 95.0  # the first request itself takes 95 s: 95 + 10 > 100
-            return super().interest_over_time()
-    client = Slow({"Aave": [EMPTY]})
+def test_retry_skipped_when_the_budget_has_no_room(monkeypatch):
+    t, sleep, sleeps = _fake_clock(monkeypatch, budget=100)
+    client = ClockClient(t, 45.0, {"Aave": [EMPTY]}, _day(0, 2))
     _install(monkeypatch, client)
-    sleeps = []
-    series = refresh_attention._run_trends(["AAVE", "INJ"], None, _day(0, 2), sleeps.append)
+    series = refresh_attention._run_trends(["AAVE", "INJ"], None, _day(0, 2), sleep)
     out = {s.symbol: s for s in series}
-    assert sleeps == [] and client.terms() == ["Aave"]  # no retry, no wait
-    assert out["AAVE"].state == "capped" and out["AAVE"].reason == "time budget reached"
-    assert out["INJ"].state == "capped" and out["INJ"].reason == "time budget reached"
-    coins = load(_day(0, 2))["coins"]
-    assert coins["AAVE"]["outcome"] == "time-budget" and coins["AAVE"]["retried"] is False
-    assert coins["AAVE"]["attempts"] == 1 and coins["INJ"]["outcome"] == "time-budget"
+    assert t[0] == 93.0 and sleeps == [3.0]  # 93 + 10 > 100: no retry wait is started
+    assert client.terms() == ["Aave", "Injective"]
+    assert out["AAVE"].state == "unavailable" and out["AAVE"].reason == "empty response"
+    c = load(_day(0, 2))["coins"]["AAVE"]
+    assert (c["outcome"], c["reason"], c["attempts"], c["retried"]) == ("failed", "empty response", 1, False)
+    assert c["retry_skipped"] == "retry-skipped-budget"
+    t_ = load(_day(0, 2))["totals"]
+    assert t_["retried"] == 0 and t_["retry_skipped"] == 1
+
+
+def test_retry_is_checked_against_the_budget_including_its_sleep(monkeypatch):
+    t, sleep, sleeps = _fake_clock(monkeypatch, budget=106)
+    client = ClockClient(t, 45.0, {"Aave": [EMPTY]}, _day(0, 2))
+    _install(monkeypatch, client)
+    monkeypatch.setattr(refresh_attention, "_jitter", lambda: 4.0)  # 93 + 10 + 4 = 107 > 106, though 93 + 10 fits
+    refresh_attention._run_trends(["AAVE", "INJ"], None, _day(0, 2), sleep)
+    assert client.terms() == ["Aave", "Injective"] and load(_day(0, 2))["coins"]["AAVE"]["retried"] is False
+
+
+def test_twenty_empties_among_92_cost_no_healthy_coin(monkeypatch, _env):
+    syms, terms = _many(_env, 92)
+    t, sleep, sleeps = _fake_clock(monkeypatch)  # the real 540 s budget
+    empties = set(syms[::4][:20])
+    script = {terms[syms.index(s)]: [EMPTY, fx.daily_frame([terms[syms.index(s)]], 100)] for s in empties}
+    day = _day(0, 92)
+    client = ClockClient(t, 2.0, script, day)
+    _install(monkeypatch, client)
+    series = refresh_attention._run_trends(syms, None, day, sleep)
+    out = {s.symbol: s for s in series}
+    healthy = [s for s in syms if s not in empties]
+    assert len(empties) == 20 and all(out[s].state == "ok" for s in healthy)  # no healthy coin lost
+    assert t[0] <= 540 + 2.0  # at most the last request that started inside the budget
+    coins = load(day)["coins"]
+    retried = [s for s in syms if coins[s]["retried"]]
+    skipped = [s for s in syms if coins[s]["retry_skipped"]]
+    assert retried and skipped and len(retried) + len(skipped) == 20
+    assert {coins[s]["retry_skipped"] for s in skipped} == {"retry-skipped-budget"}
+    assert all(coins[s]["outcome"] == "ok" and coins[s]["attempts"] == 2 for s in retried)
+    assert all(coins[s]["outcome"] == "failed" and coins[s]["reason"] == "empty response" for s in skipped)
+    assert [s for s in syms if s in retried] == sorted(retried)  # stable order: the main-pass order
+    assert max(syms.index(s) for s in retried) < min(syms.index(s) for s in skipped)
+
+
+def test_retries_are_capped_per_run(monkeypatch, _env):
+    assert refresh_attention.TRENDS_MAX_RETRIES_PER_RUN == 20
+    syms, terms = _many(_env, 25)
+    monkeypatch.setattr(refresh_attention, "TRENDS_TIME_BUDGET_S", 10 ** 6)
+    day = _day(0, 25)
+    client = TermClient({t_: [EMPTY, fx.daily_frame([t_], 100)] for t_ in terms}, day)
+    _install(monkeypatch, client)
+    sleeps: list[float] = []
+    refresh_attention._run_trends(syms, None, day, sleeps.append)
+    coins = load(day)["coins"]
+    assert client.terms() == terms + terms[:20] and sleeps.count(10.0) == 20
+    assert [coins[s]["retried"] for s in syms] == [True] * 20 + [False] * 5
+    assert {coins[s]["retry_skipped"] for s in syms[20:]} == {"retry-skipped-cap"}
+    assert all(coins[s]["outcome"] == "failed" and coins[s]["attempts"] == 1 for s in syms[20:])
+    t_ = load(day)["totals"]
+    assert (t_["retried"], t_["recovered"], t_["retry_skipped"]) == (20, 20, 5)
+
+
+def test_detail_line_counts_skipped(monkeypatch, capsys, _env):
+    syms, terms = _many(_env, 22)
+    monkeypatch.setattr(refresh_attention, "TRENDS_TIME_BUDGET_S", 10 ** 6)
+    day = _day(0, 22)
+    _install(monkeypatch, TermClient({t_: [EMPTY] for t_ in terms[:21]}, day))
+    refresh_attention._run_trends(syms, None, day, lambda s: None)
+    line = next(ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("trends detail:"))
+    assert line == "trends detail: ok 1, failed(empty response) 21, retried 20 (recovered 0, skipped 1)"
 
 
 def test_empty_twice_does_not_feed_the_429_breaker(monkeypatch):
     syms = ["AAVE", "INJ", "ARB", "OP", "TIA"]
     script = {t: [EMPTY] for t in ("Aave", "Injective", "Arbitrum", "Optimism", "Celestia")}
     out, client, _, _ = _run(monkeypatch, syms, script, today=_day(0, 5))
-    assert client.terms() == ["Aave", "Aave", "Injective", "Injective", "Arbitrum", "Arbitrum", "Optimism", "Optimism",
-                              "Celestia", "Celestia"]
+    assert client.terms() == ["Aave", "Injective", "Arbitrum", "Optimism", "Celestia"] * 2
     assert all(out[s].reason == "empty response" for s in syms)
 
 
-def test_retry_that_hits_429_counts_once_toward_the_breaker(monkeypatch):
+def test_429_in_the_deferred_pass_ends_it(monkeypatch, capsys):
+    syms = ["AAVE", "INJ", "ARB"]
+    script = {t: [EMPTY, fx.too_many()] for t in ("Aave", "Injective", "Arbitrum")}
+    out, client, sleeps, _ = _run(monkeypatch, syms, script, today=_day(0, 3))
+    # one request for the 429 coin, no backoff, and no further retry
+    assert client.terms() == ["Aave", "Injective", "Arbitrum", "Aave"] and sleeps == [3.0, 3.0, 10.0]
+    coins = load(_day(0, 3))["coins"]
+    assert out["AAVE"].state == "capped" and out["AAVE"].reason.endswith("(HTTP 429)")
+    assert (coins["AAVE"]["outcome"], coins["AAVE"]["attempts"], coins["AAVE"]["retried"]) == ("capped", 2, True)
+    for s in ("INJ", "ARB"):
+        assert (coins[s]["outcome"], coins[s]["reason"], coins[s]["attempts"], coins[s]["retried"]) == \
+            ("failed", "empty response", 1, False)
+        assert coins[s]["retry_skipped"] == "retry-skipped-rate-limit"
+    assert load(_day(0, 3))["totals"]["retried"] == 1
+
+
+def test_main_pass_breaker_is_unchanged_by_the_deferred_pass(monkeypatch):
     syms = ["AAVE", "INJ", "ARB", "OP", "TIA"]
-    script = {t: [EMPTY, fx.too_many()] for t in ("Aave", "Injective", "Arbitrum", "Optimism", "Celestia")}
+    script = {t: [fx.too_many()] for t in ("Aave", "Injective", "Arbitrum")}
     out, client, _, _ = _run(monkeypatch, syms, script, today=_day(0, 5))
-    # each coin: empty, then the retry is 429 -> the usual backoff (3 more requests), capped
-    assert client.terms() == (["Aave"] * 5) + (["Injective"] * 5) + (["Arbitrum"] * 5)
-    assert all(out[s].state == "capped" for s in syms)
+    assert client.terms() == ["Aave"] * 4 + ["Injective"] * 4 + ["Arbitrum"] * 4
     assert all(out[s].reason == "skipped after repeated HTTP 429" for s in ("OP", "TIA"))
 
 
