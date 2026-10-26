@@ -803,7 +803,7 @@ def test_rev_coverage_with_symbols_counts_unchecked_coins_apart():
     out = io.StringIO()
     assert _main(["--only-unresolved", "--variants", "--symbols", "NEWA"], NoiseClient(script), out) == 0
     tail = out.getvalue().split(c.OUTSIDE_HEADER)[1]
-    assert ("discovery eligible: 5 | topic: 2 | qualified-term: 0 | term: 0 | nothing: 0 | not run: 0 | not checked: 3"
+    assert ("discovery eligible: 5 | topic: 2 | qualified-term: 0 | term: 1 | nothing: 0 | not run: 0 | not checked: 2"
             " (this run checked 1 of them)") in tail
     assert "T156" not in c.OUTSIDE_HEADER
 
@@ -952,10 +952,10 @@ def test_t161_coverage_counts_not_run_apart_from_nothing():
     out = io.StringIO()
     assert _main(["--only-unresolved", "--symbols", "AVAX,NEWA,NEWB,NOID"], client, out) == 4
     tail = out.getvalue().split(c.OUTSIDE_HEADER)[1]
-    # AVAX answered [] (nothing), NEWA/NEWB/NOID refused: the streak ends on NOID, so NOID is FAIL, not NOT-RUN.
-    assert "discovery eligible: 5 | topic: 1 | qualified-term: 0 | term: 0 | nothing: 4 | not run: 0" in tail
+    # AVAX already has a term (T160 data), so it counts as term; the 3 others get [] or refuse, the streak ends on NOID.
+    assert "discovery eligible: 5 | topic: 1 | qualified-term: 0 | term: 1 | nothing: 3 | not run: 0" in tail
     client = RefuseAfter(0)
     out = io.StringIO()
     assert _main(["--only-unresolved", "--symbols", "AVAX,NEWA,NEWB,NOID"], client, out) == 4
     tail = out.getvalue().split(c.OUTSIDE_HEADER)[1]
-    assert "nothing: 3 | not run: 1 | not checked: 0" in tail
+    assert "nothing: 2 | not run: 1 | not checked: 0" in tail
