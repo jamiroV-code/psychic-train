@@ -10,10 +10,19 @@ requests counted above. PowerShell: quote comma lists, e.g. --coins 'SOL,LINK,AA
 --alone 'LINK,AAVE' (T100b, probe P-RES): instead of the requests above, one request per coin with only its
 keyword, by default over the daily run's explicit 100-day range ending yesterday; prints days, min, median, max, days at 0 and at 0 or 1, distinct values, zero share and the verdict of
 the daily run's too-little-interest rule. Stops at the first HTTP 429.
+--try 'SYM=term1|term2' (T196, repeatable, at most 12): one request per term group (1 to 5 topic ids or terms, all on
+one 0-100 scale) over the same explicit range; prints per-term and group numbers, the daily usable rule, a rising
+measure (last 7 days vs the prior 28), one-term spike and correlation flags, a volume identity hint, a clean-rising
+verdict, a ranked summary per coin and a paste-ready JSON suggestion (written nowhere). Requests go 3 s apart plus
+up to 1 s jitter; the run stops at the first HTTP 429 or after 3 failed requests in a row (exit 4, no retry), and
+Ctrl-C prints the partial summary (exit 130). Example:
+  uv run --project api --with pytrends python -m api.scripts.probe_trends --try 'GRAM=toncoin crypto|ton coin'
 """
 from __future__ import annotations
 
 import argparse
+import json
+import random
 import re
 import statistics
 import sys
@@ -21,7 +30,8 @@ import time
 from datetime import date, datetime, timezone
 from itertools import pairwise
 
-from api.data.attention import trends
+from api.data.attention import store, trends
+from api.data.attention import trends_groups as tg
 from api.data.attention import trends_keywords as tk
 from api.scripts.trends_cli_common import (
     http_status,
@@ -37,6 +47,16 @@ REQUEST1_COINS = 4
 DEFAULT_TIMEFRAME = "today 3-m"
 TIMEFRAME_RE = re.compile(r"(today [0-9]{1,2}-[my]|now [0-9]{1,2}-[dH]|[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{4}-[0-9]{2}-[0-9]{2})")
 INTERVAL_SECONDS = 3.0
+# --try (T196)
+MAX_GROUPS = 12
+TRY_JITTER_SECONDS = 1.0
+MAX_CONSECUTIVE_FAILURES = 3
+STOPPED_EXIT = 4
+INTERRUPTED_EXIT = 130
+VOLUME_SOURCE = "exchange_volume"
+# Looser than the loader's TERM_RE so bare words and '+' or ':' can be tried; never '|', quotes, shell or control
+# characters. Each term is still flagged with the real loader check.
+LOOSE_TERM_RE = re.compile(r"[\w .'&+:-]{2,60}")
 
 
 class ArgError(ValueError):
@@ -230,6 +250,159 @@ def _run_alone(client, km: tk.KeywordMap, symbols: list[str], timeframe: str, da
     return 0
 
 
+def _loose_term_ok(term: str) -> bool:
+    return tk.is_valid_topic(term) or (LOOSE_TERM_RE.fullmatch(term) is not None and term == term.strip())
+
+
+def _try_arg(value: str) -> tuple[str, list[str]]:
+    sym, sep, rest = value.partition("=")
+    if not sep or not tk.SYMBOL_RE.fullmatch(sym):
+        raise ArgError(f"--try must be SYM=term1|term2 with SYM matching {tk.SYMBOL_RE.pattern}")
+    terms = [t.strip() for t in rest.split("|")]
+    if not 1 <= len(terms) <= tg.MAX_TERMS:
+        raise ArgError(f"--try takes 1 to {tg.MAX_TERMS} terms per group")
+    if not all(_loose_term_ok(t) for t in terms):
+        raise ArgError("--try terms must be topic ids or 2-60 letters, digits, space . ' & + : -")
+    if len({t.casefold() for t in terms}) != len(terms):
+        raise ArgError("--try terms must differ within a group")
+    return sym, terms
+
+
+def loader_flag(sym: str, term: str) -> str:
+    """The daily runner's own check: a topic or safe term, and a name-risk coin's term needs a qualifier word."""
+    if tk.is_valid_topic(term):
+        return "loader-valid"
+    if not tk.is_valid_term(term):
+        return "not loader-safe (length or characters)"
+    if sym in trends.NAME_RISK_SYMBOLS and not trends.is_qualified_term(term):
+        return "needs qualifier word"
+    return "loader-valid"
+
+
+def _stored_volume(sym: str, day: date):
+    """The coin's stored daily exchange volume on completed days (read only); (None, reason) when absent."""
+    try:
+        pts = [(d, v) for d, v in store.read_points(VOLUME_SOURCE, sym) if d < day]
+    except store.StoreReadError:
+        return None, "n/a: stored volume unreadable"
+    return (pts, "") if pts else (None, "n/a: no stored volume")
+
+
+def _pct0(x: float) -> str:
+    return f"{round(100 * x, 1):g}%"
+
+
+def _print_metrics(m: tg.GroupMetrics, out) -> None:
+    print("  term | median | zero % | share of group", file=out)
+    for t, st in m.terms.items():
+        share = m.shares[t]
+        print(f"  {t} | {st.median:g} | {round(st.zero_pct, 1):g}% | "
+              f"{_pct0(share) if share is not None else 'missing: group total 0'}", file=out)
+    gs = m.group
+    print(f"  group | days {gs.days} | min {gs.min:g} | median {gs.median:g} | max {gs.max:g} | "
+          f"zero {round(gs.zero_pct, 1):g}% | verdict: {m.verdict}", file=out)
+    r = m.rising
+    ratio = f"last7/prior28 {r.ratio:.3g} | days above baseline {r.days_above}/{tg.RECENT_DAYS}" if (
+        r.ratio is not None) else f"last7/prior28 {r.reason}"
+    spike = (f"{'yes' if m.spike else 'no'} (largest share {_pct0(m.spike_share)})" if m.spike_share is not None
+             else m.spike_reason)
+    print(f"  rising | {ratio} | one-term spike: {spike}", file=out)
+    if m.correlations:
+        cells = " | ".join(f"{t} {'missing: flat series' if c is None else f'{c:.2f}'}"
+                           f"{' moves alone' if t in m.moves_alone else ''}" for t, c in m.correlations.items())
+        print(f"  correlation (7-day smoothed) vs best term '{m.best_term}' | {cells}", file=out)
+    else:
+        print("  correlation | n/a: one term", file=out)
+    ident = m.identity
+    if ident.corr is None:
+        text = ident.reason
+    else:
+        flag = " does not track this coin's volume" if ident.corr < tg.IDENTITY_MIN_CORR else ""
+        text = f"vs log(1+stored daily volume) over {ident.days} days: {ident.corr:.2f}{flag}"
+    print(f"  identity | {text} (a hint, not proof)", file=out)
+    print(f"  clean rising: {'yes' if m.clean else 'no (' + '; '.join(m.reasons) + ')'}", file=out)
+
+
+def _run_try(client, groups, day: date, sleep, clock, jitter, volume_reader, out) -> int:
+    """--try: one request per group; stops at the first HTTP 429 or MAX_CONSECUTIVE_FAILURES failures in a row."""
+    timeframe = trends.explicit_timeframe(day)
+    print(f"try: {len(groups)} group(s), one request each, timeframe \"{timeframe}\"; {INTERVAL_SECONDS:g} s apart "
+          f"plus up to {TRY_JITTER_SECONDS:g} s jitter; stops at the first HTTP 429 or after "
+          f"{MAX_CONSECUTIVE_FAILURES} failed requests in a row", file=out)
+    print(f"usable: median >= {trends.TRENDS_MIN_MEDIAN} and zero share < {trends.TRENDS_MAX_ZERO_DAY_PCT}% "
+          f"(the daily rule); clean rising: usable, last7/prior28 >= {tg.MIN_RISE_RATIO:g}, >= {tg.MIN_DAYS_ABOVE} "
+          f"of the last {tg.RECENT_DAYS} days above the prior-{tg.BASELINE_DAYS}-day median, no one-term spike "
+          f"(> {tg.SPIKE_SHARE:.0%}), volume correlation >= {tg.IDENTITY_MIN_CORR:g} when available", file=out)
+    results: list[tuple[str, list[str], tg.GroupMetrics | None, str]] = []
+    streak, code, stop = 0, 0, ""
+    try:
+        for n, (sym, terms) in enumerate(groups):
+            if n:
+                sleep(INTERVAL_SECONDS + jitter())
+            print(f"\ngroup {n + 1}/{len(groups)}: {sym} [{' | '.join(terms)}]", file=out)
+            for t in terms:
+                print(f"  term {t}: {loader_flag(sym, t)}", file=out)
+            frame, error, latency = _fetch(client, terms, timeframe, clock)
+            print(f"outcome: {_outcome(error)}", file=out)
+            print(f"latency: {latency:.2f} s", file=out)
+            if error is not None:
+                results.append((sym, terms, None, "missing: request failed"))
+                print("  missing: request failed", file=out)
+                streak += 1
+                if is_rate_limited(error) or streak >= MAX_CONSECUTIVE_FAILURES:
+                    stop = ("stopped after HTTP 429" if is_rate_limited(error)
+                            else f"stopped after {MAX_CONSECUTIVE_FAILURES} failed requests in a row")
+                    code = STOPPED_EXIT
+                    break
+                continue
+            streak = 0
+            series, dates, reason = tg.check_group_frame(frame, terms, day)
+            if series is None:
+                results.append((sym, terms, None, f"missing: frame rejected ({reason})"))
+                print(f"  missing: frame rejected ({reason})", file=out)
+                continue
+            volume, _ = volume_reader(sym, day)
+            m = tg.analyze(series, dates, volume)
+            results.append((sym, terms, m, ""))
+            _print_metrics(m, out)
+    except KeyboardInterrupt:
+        stop, code = "interrupted (Ctrl-C)", INTERRUPTED_EXIT
+    if stop:
+        print(f"\n{stop}", file=out)
+        for sym, terms in groups[len(results):]:  # after Ctrl-C the group in flight has no result either
+            results.append((sym, terms, None, f"not run ({stop})"))
+            print(f"{sym} [{' | '.join(terms)}]: not run ({stop})", file=out)
+    _print_summary(results, out)
+    return code
+
+
+def _print_summary(results, out) -> None:
+    print("\n--- ranked summary (best first: usable, then clean rising, then highest median; every group is on its "
+          "own request's 0-100 scale) ---", file=out)
+    suggestion: dict[str, dict] = {}
+    none: list[str] = []
+    for sym in dict.fromkeys(r[0] for r in results):
+        print(sym, file=out)
+        mine = [r for r in results if r[0] == sym]
+        ranked = sorted((r for r in mine if r[2] is not None), key=lambda r: tg.rank_key(r[2]))
+        for i, (_, terms, m, _) in enumerate(ranked, start=1):
+            print(f"  {i}. [{' | '.join(terms)}] | verdict {m.verdict} | clean rising {'yes' if m.clean else 'no'} | "
+                  f"median {m.group.median:g}", file=out)
+        for _, terms, _, reason in (r for r in mine if r[2] is None):
+            print(f"  -  [{' | '.join(terms)}] | {reason}", file=out)
+        best = next((terms for _, terms, m, _ in ranked if m.verdict == "ok"
+                     and all(loader_flag(sym, t) == "loader-valid" for t in terms)), None)
+        if best is None:
+            none.append(sym)
+        else:
+            suggestion[sym] = {"terms": best}
+    print("\n--- paste-ready JSON (best loader-valid usable group per coin; informational, written nowhere) ---",
+          file=out)
+    print(json.dumps(suggestion, indent=2), file=out)
+    for sym in none:
+        print(f"{sym}: no loader-valid usable group", file=out)
+
+
 def _parse(argv, km: tk.KeywordMap):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--coins", default=",".join(DEFAULT_COINS))
@@ -239,6 +412,8 @@ def _parse(argv, km: tk.KeywordMap):
                     "run's explicit 100-day range ending yesterday")
     ap.add_argument("--no-evidence", action="store_true")
     ap.add_argument("--alone", default=None, help="comma list of symbols: one request per coin, only its keyword")
+    ap.add_argument("--try", dest="groups", action="append", default=None,
+                    help="SYM=term1|term2 (repeatable, at most 12): one request per term group")
     try:
         args = ap.parse_args(argv)
     except SystemExit as exc:
@@ -255,6 +430,13 @@ def _parse(argv, km: tk.KeywordMap):
         if not alone or not all(tk.SYMBOL_RE.fullmatch(s) for s in alone):
             raise ArgError(f"--alone must be comma-separated symbols matching {tk.SYMBOL_RE.pattern}")
         args.alone = list(dict.fromkeys(alone))
+    if args.groups is not None:
+        if args.alone is not None or args.timeframe is not None:
+            raise ArgError("--try cannot be combined with --alone or --timeframe")
+        if len(args.groups) > MAX_GROUPS:
+            raise ArgError(f"--try takes at most {MAX_GROUPS} groups per run")
+        args.groups = [_try_arg(v) for v in args.groups]
+        return args, coins, a, b
     if args.timeframe is None and args.alone is None:
         args.timeframe = DEFAULT_TIMEFRAME
     if args.timeframe is not None and not TIMEFRAME_RE.fullmatch(args.timeframe):
@@ -263,7 +445,8 @@ def _parse(argv, km: tk.KeywordMap):
 
 
 def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep=time.sleep, clock=time.monotonic,
-         today=None, version=pytrends_version, out=None, err=None) -> int:
+         today=None, version=pytrends_version, out=None, err=None,
+         jitter=lambda: random.uniform(0, TRY_JITTER_SECONDS), volume_reader=_stored_volume) -> int:
     out, err = out or sys.stdout, err or sys.stderr
     today = today or (lambda: datetime.now(timezone.utc).date())
     km, reason = tk.safe_load()
@@ -280,6 +463,11 @@ def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep
     client, code = start_client(trendreq_factory, "probe_trends", err)
     if client is None:
         return code
+
+    if args.groups is not None:
+        print("probe_trends: read-only, writes nothing", file=out)
+        print(f"pytrends version: {version()}", file=out)
+        return _run_try(client, args.groups, today(), sleep, clock, jitter, volume_reader, out)
 
     if args.alone is not None:
         print("probe_trends: read-only, writes nothing", file=out)

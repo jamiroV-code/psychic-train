@@ -281,3 +281,10 @@ def test_json_skips_groups_that_are_not_loader_valid():
     block = text.split("paste-ready JSON")[1]
     assert json.loads(block[block.index("{"):block.rindex("}") + 1]) == {}
     assert "MORPHO: no loader-valid usable group" in block
+
+
+def test_json_skips_unusable_groups():
+    _, text, _ = _run([frame(["akedo"], values={"akedo": 1})], ["--try", "AKE=akedo"])
+    block = text.split("paste-ready JSON")[1]
+    assert json.loads(block[block.index("{"):block.rindex("}") + 1]) == {}
+    assert "AKE: no loader-valid usable group" in block

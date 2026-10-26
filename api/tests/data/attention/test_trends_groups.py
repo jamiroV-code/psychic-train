@@ -99,6 +99,14 @@ def test_one_term_dominance_flags_spike():
     assert even.spike_share == 0.5 and even.spike is False
 
 
+def test_spike_boundary_and_falling_term():
+    at = g.analyze({"a": rise(10, 14), "b": rise(10, 11)}, DATES)   # increases 28 and 7: exactly 80%
+    assert at.spike_share == pytest.approx(0.8) and at.spike is False
+    # a falling term adds no increase (floored at 0), so the rising term carries all of it
+    m = g.analyze({"a": rise(10, 15), "b": rise(10, 5)}, DATES)
+    assert m.spike_share == 1.0 and m.spike is True
+
+
 def test_spike_share_missing_without_increase_and_single_term_not_flagged():
     m = g.analyze({"a": flat(10), "b": flat(10)}, DATES)
     assert m.spike_share is None and m.spike is False
@@ -118,6 +126,12 @@ def test_correlated_vs_unrelated_terms():
     assert m.correlations["c"] == pytest.approx(-1.0)
     assert m.moves_alone == ["c"]
     assert "b" not in m.correlations
+
+
+def test_uncorrelated_term_moves_alone():
+    m = g.analyze({"a": wave(mid=30), "q": wave(phase=5)}, DATES)   # a quarter period apart: about 0
+    assert -g.MOVES_ALONE_CORR < m.correlations["q"] < g.MOVES_ALONE_CORR
+    assert m.moves_alone == ["q"]
 
 
 def test_correlation_missing_for_flat_series():
