@@ -84,6 +84,7 @@ class DiscoveryResponse(BaseModel):
     excluded_counts: dict[str, int] = {}               # reason -> count; shown_size + sum = universe_size
     tradeability_unknown: int = 0                      # shown coins with tradeability "unverified"
     venue_lists: list[DiscoveryVenueList] = []         # per tracked venue: the list state behind tradeability
+    tradeability_data_suspect: bool = False            # no-market rule hit > 25% of checked coins: it cut none
     min_category_coins: int = 3          # value of universe_rules.min_narrative_coins (name kept for the web)
     rising_threshold_pct: float = 10.0
     min_covered_weight: float = 30.0

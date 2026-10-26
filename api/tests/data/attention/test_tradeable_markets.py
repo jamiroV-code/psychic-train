@@ -313,3 +313,13 @@ def test_as_of_after_the_file_date_does_not_make_a_stale_file_fresh(isolated_cac
     day = TODAY - timedelta(days=tm.STALE_AFTER_DAYS + 1)
     write_store("binance", day, {"status": "ok", "as_of": TODAY.isoformat(), "markets": []})
     assert tm.load_venues(TODAY)["binance"].state == "stale"
+
+
+def test_invalid_volume_beside_a_zero_volume_market_is_unknown_not_no_market(isolated_cache):
+    pad = ",".join(f'{{"symbol": "{s}", "volume_24h": 1.0}}' for s in filler("binance"))
+    write_store("binance", TODAY, f'{{"status": "ok", "markets": [{pad}, {{"symbol": "LEO", "kind": "spot", '
+                                  f'"volume_24h": 0}}, {{"symbol": "LEO", "kind": "perp", "volume_24h": NaN}}]}}')
+    write_hl_list(["BTC"], TODAY)
+    v = tm.load_venues(TODAY)
+    assert v["binance"].volumes["LEO"] == 0.0 and "LEO" in v["binance"].invalid
+    assert tm.tradeability("LEO", v, 3e6) == tm.Verdict("unknown", "Binance volume invalid")

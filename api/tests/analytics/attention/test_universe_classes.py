@@ -86,9 +86,11 @@ def test_failed_venue_list_is_unknown_coin_stays_in():
     u = shipped(rows, partial)
     assert u.eligible == ["BTC", "ETH"] and u.tradeability == {"BTC": "tradeable", "ETH": "unverified"}
     assert tm.tradeability("ETH", partial, 5e7).status == "unknown"
-    # every tracked list loaded and fresh and none has it: not-tradeable (no listed market)
-    u = shipped(rows, venues(binance={"BTC": 1e9}, hyperliquid={}))
-    assert u.eligible == ["BTC"] and u.out["ETH"] == ("not-tradeable", tm.NO_MARKET)
+    # every tracked list loaded and fresh and none has it: not-tradeable (no listed market); 1 of 4 checked coins
+    # stays within MAX_NO_MARKET_SHARE (round 2)
+    more = rows + [{"symbol": s, "volume_24h": 5e7} for s in ("SOL", "XRP")]
+    u = shipped(more, venues(binance={"BTC": 1e9, "SOL": 1e8}, hyperliquid={"XRP": 1e8}))
+    assert u.eligible == ["BTC", "SOL", "XRP"] and u.out["ETH"] == ("not-tradeable", tm.NO_MARKET)
     # nothing loaded at all: nothing is cut, every coin unverified
     assert shipped(rows, venues()).tradeability == {"BTC": "unverified", "ETH": "unverified"}
 
@@ -343,3 +345,10 @@ def test_discovery_payload_carries_the_data_suspect_flag(isolated_cache, tmp_pat
                         lambda today=None, symbols=None: venues(binance={"Q": 1}, hyperliquid={"Q": 1}))
     res = disc.build_discovery(30, today=TODAY)
     assert res.tradeability_data_suspect is True and res.excluded_counts["not-tradeable"] == 0 and res.shown_size == 2
+
+
+def test_safety_share_uses_the_checked_coin_count():
+    """2 of 6 checked coins without a market (33%) is over the 25% share: suspect, nothing cut."""
+    rows = [{"symbol": f"S{i}", "volume_24h": 5e7} for i in range(6)]
+    u = shipped(rows, venues(binance={f"S{i}": 1e7 for i in range(4)}, hyperliquid={}))
+    assert u.data_suspect is True and u.out == {} and len(u.eligible) == 6

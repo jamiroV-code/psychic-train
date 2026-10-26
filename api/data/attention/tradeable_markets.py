@@ -7,12 +7,18 @@ Binance and Hyperliquid, spot or perpetual. Per symbol:
 - `not_tradeable` (detail NO_MARKET): every tracked list is loaded and fresh and none has it with volume;
 - `unknown`: anything else. A list that is missing, failed or stale (older than STALE_AFTER_DAYS) proves
   nothing either way, so a coin is never excluded on a missing source (fail-closed toward keeping coins).
+  A list with fewer distinct coins than MIN_SYMBOLS[venue] is a truncated fetch and counts as `failed`. A
+  market whose stored volume is not a finite number >= 0 proves nothing for that coin (`unknown`).
+The caller (`universe_classes.build`) also caps the no-market rule: more than MAX_NO_MARKET_SHARE of the coins it
+checks at once is treated as a data fault, and the rule then excludes none.
 
 Inputs, the newest file dated on or before `today`:
 - `attention/markets/{venue}/{YYYY-MM-DD}.json`, the store a later `markets` runner writes (MARKETS_DIR):
   {"venue": "binance", "as_of": "YYYY-MM-DD", "status": "ok" | "failed", "reason": "...",
    "markets": [{"symbol": "1000PEPE", "kind": "spot" | "perp", "volume_24h": 123.4 | null}]}
-  `symbol` is the venue's own base name; ALIASES maps scaled names to the universe symbol.
+  `symbol` is the venue's own base name; ALIASES maps scaled names to the universe symbol. `volume_24h` absent
+  or null = listed, volume not stored. `as_of`, when present, must be an ISO date; the older of it and the file
+  date decides staleness.
 - Hyperliquid, while that store has no file: the narrative job's perp name list
   (`narrative/exchange/markets/{date}.json`, names only) with 24h volume from the `hyperliquid_volume` store.
 Binance has no stored list yet, so today it is `missing` and only the zero-volume rule can exclude.
@@ -22,7 +28,7 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -32,6 +38,11 @@ from api.data.attention import store
 TRACKED_VENUES = ("binance", "hyperliquid")
 VENUE_NAMES = {"binance": "Binance", "hyperliquid": "Hyperliquid"}
 STALE_AFTER_DAYS = 2
+# Sanity minimum of distinct coins per stored list: fewer = a truncated fetch, the list counts as failed. The
+# Hyperliquid perp list held 178 names on 2026-10-25; Binance lists well over a thousand base assets.
+MIN_SYMBOLS = {"hyperliquid": 50, "binance": 200}
+# More than this share of the venue-checked coins newly without a market at once = a data fault (see build).
+MAX_NO_MARKET_SHARE = 0.25
 MARKETS_DIR = ("attention", "markets")
 HL_VOLUME_SOURCE = "hyperliquid_volume"
 ZERO_VOLUME = "zero 24h volume"
@@ -57,6 +68,7 @@ class VenueList:
     as_of: str | None = None
     # universe symbol -> best 24h volume over its markets; None = listed, volume not stored
     volumes: dict[str, float | None] = field(default_factory=dict)
+    invalid: frozenset[str] = frozenset()   # coins with a stored volume that is not a finite number >= 0
 
 
 @dataclass(frozen=True)
@@ -109,14 +121,24 @@ def _from_store(venue: str, today: date) -> VenueList | None:
         doc = json.loads(path.read_text(encoding="utf-8"))
         if doc.get("status") != "ok" or not isinstance(doc.get("markets"), list):
             return VenueList(venue, "failed", day.isoformat())
+        if "as_of" in doc:   # not an ISO string -> TypeError/ValueError -> failed
+            day = min(day, date.fromisoformat(doc["as_of"]))
         volumes: dict[str, float | None] = {}
+        invalid: set[str] = set()
         for m in doc["markets"]:
             sym = canonical(m["symbol"])
-            vol = _volume(m.get("volume_24h"))
+            raw = m.get("volume_24h")
+            vol = _volume(raw)
+            if raw is not None and vol is None:
+                invalid.add(sym)
+                continue
             volumes[sym] = _best(volumes[sym], vol) if sym in volumes else vol
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
         return VenueList(venue, "failed", day.isoformat())
-    return VenueList(venue, "stale" if _stale(day, today) else "ok", day.isoformat(), volumes)
+    if len(set(volumes) | invalid) < MIN_SYMBOLS.get(venue, 0):
+        return VenueList(venue, "failed", day.isoformat())
+    return VenueList(venue, "stale" if _stale(day, today) else "ok", day.isoformat(), volumes,
+                     frozenset(invalid))
 
 
 def _hl_volume(symbol: str, day: date) -> float | None:
@@ -139,6 +161,8 @@ def _hyperliquid_perps(today: date, symbols) -> VenueList:
         listed = {canonical(n) for n in names}
     except (OSError, ValueError, TypeError, AttributeError):
         return VenueList("hyperliquid", "failed", day.isoformat())
+    if len(listed) < MIN_SYMBOLS["hyperliquid"]:
+        return VenueList("hyperliquid", "failed", day.isoformat())
     wanted = listed if symbols is None else listed & {canonical(s) for s in symbols}
     volumes = {s: _hl_volume(s, day) for s in sorted(wanted)}
     return VenueList("hyperliquid", "stale" if _stale(day, today) else "ok", day.isoformat(), volumes)
@@ -147,7 +171,7 @@ def _hyperliquid_perps(today: date, symbols) -> VenueList:
 def load_venues(today: date | None = None, symbols=None) -> dict[str, VenueList]:
     """One VenueList per tracked venue, point in time at `today`. `symbols` (optional) limits the Hyperliquid
     volume reads to those coins; the listing itself is never limited."""
-    today = today or datetime.now(timezone.utc).date()
+    today = today or datetime.now(UTC).date()
     out = {}
     for venue in TRACKED_VENUES:
         got = _from_store(venue, today)
@@ -165,6 +189,9 @@ def tradeability(symbol: str, venues: dict[str, VenueList], volume_24h: float | 
         return Verdict("tradeable")
     if _volume(volume_24h) == 0.0:
         return Verdict("not_tradeable", ZERO_VOLUME)
+    bad = [VENUE_NAMES.get(v.venue, v.venue) for v in fresh if s in v.invalid]
+    if bad:
+        return Verdict("unknown", "; ".join(f"{name} volume invalid" for name in bad))
     if all(venues.get(name) is not None and venues[name].state == "ok" for name in TRACKED_VENUES):
         return Verdict("not_tradeable", NO_MARKET)
     gaps = [f"{VENUE_NAMES.get(n, n)} list {venues[n].state if n in venues else 'missing'}"

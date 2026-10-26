@@ -327,7 +327,8 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
     flags = {"narratives_status": nm.status, "unassigned": nm.unassigned, "weights_version": wver,
              "hidden_narratives": [DiscoveryHiddenNarrative(**h) for h in nm.hidden],
              "venue_lists": [DiscoveryVenueList(venue=v.venue, status=v.state, as_of=v.as_of)
-                             for v in u.venues.values()]}
+                             for v in u.venues.values()],
+             "tradeability_data_suspect": u.data_suspect}
 
     series = series_names(cfg)
     data = {(src, sym): registry.read_series(src, sym, today, probe_path) for src in series for sym in eligible}

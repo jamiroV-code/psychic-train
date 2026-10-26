@@ -4,7 +4,8 @@ Order per coin: `force_include` wins over a class and over `not-tradeable`; then
 wrapped-staked, tokenized fund = `no-market`), then `not_tradeable` (config), then the venue lists
 (`tradeable_markets`, T189): no trading market = zero 24h volume, or no listing on any fresh tracked venue list,
 reason `not-tradeable`. A venue list that failed, is stale or is not built is `unknown`: the coin stays IN as
-`unverified`, never cut. Otherwise volume never excludes; under `thin_volume_label_below_usd` it only labels the
+`unverified`, never cut. If the no-market rule would cut more than `MAX_NO_MARKET_SHARE` of the coins that
+reach the venue check, the lists are suspect: it cuts none and `data_suspect` is set. Otherwise volume never excludes; under `thin_volume_label_below_usd` it only labels the
 coin `thin_volume`.
 
 Baskets does not read this module: it keeps `universe.load_reference` (Q-V1).
@@ -41,6 +42,7 @@ class Universe:
     volume: dict[str, float | None] = field(default_factory=dict)
     thin: dict[str, bool] = field(default_factory=dict)
     venues: dict[str, tradeable_markets.VenueList] = field(default_factory=dict)   # the lists the answer used
+    data_suspect: bool = False      # the no-market rule hit more than MAX_NO_MARKET_SHARE: it excluded none
 
 
 def _symbols(value, name: str) -> set[str]:
@@ -94,24 +96,35 @@ def build(rows: list[dict], rules: dict, venues: dict[str, tradeable_markets.Ven
     nt = rules.get("not_tradeable", {})
     thin_below = float(rules.get("thin_volume_label_below_usd", THIN_VOLUME_DEFAULT_USD))
     u = Universe(rows=rows, venues=venues)
+    decided, seen, checked, no_market = [], set(), 0, 0
     for r in rows:
         s = str(r["symbol"]).upper()
-        if s in u.out or s in u.tradeability:
+        if s in seen:
             continue
+        seen.add(s)
         vol = r.get("volume_24h")
         vol = float(vol) if isinstance(vol, (int, float)) and not isinstance(vol, bool) else None
         cls = classify(s, rules)
         t = tradeable_markets.tradeability(s, venues, vol)
+        out = None
         if s in force:
             pass
         elif cls != "normal":
-            u.out[s] = CLASS_REASON[cls]
-            continue
+            out = CLASS_REASON[cls]
         elif s in nt:
-            u.out[s] = ("not-tradeable-config", nt[s])
-            continue
-        elif t.status == "not_tradeable":
-            u.out[s] = ("not-tradeable", t.detail)
+            out = ("not-tradeable-config", nt[s])
+        else:
+            checked += 1
+            if t.status == "not_tradeable":
+                out = ("not-tradeable", t.detail)
+                no_market += t.detail == tradeable_markets.NO_MARKET
+        decided.append((s, vol, t, out))
+    u.data_suspect = no_market > tradeable_markets.MAX_NO_MARKET_SHARE * checked
+    for s, vol, t, out in decided:
+        if out is not None and u.data_suspect and out[1] == tradeable_markets.NO_MARKET:
+            out = None
+        if out is not None:
+            u.out[s] = out
             continue
         u.eligible.append(s)
         u.tradeability[s] = "tradeable" if t.status == "tradeable" else "unverified"
