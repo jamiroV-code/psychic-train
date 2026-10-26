@@ -3,11 +3,12 @@
 ## 1 Task ID
 
 T171, slice W8d1 "X pure core for twscrape (incl. account-pool logic)". Worker session. Branch
-`claude/t171-w8d1-x-core`, created from W8b (`claude/t140-w8b-collector-core`, PR #161, head `691c923`). The planner
-reported #161 as merged and retargeted draft PR #173 to `main`; `origin/main` was merged into the branch with a merge
-commit (`833340a`, no conflicts, no rebase). Checked on GitHub at 22:2x UTC: #161 is still OPEN and NOT merged
-(head `691c923`), and `origin/main` (`d968e44`) does not contain the W8b modules. So #173 against `main` currently
-also carries W8b's 15 files (heading 9). Approval: the owner's
+`claude/t171-w8d1-x-core`, created from W8b (`claude/t140-w8b-collector-core`, PR #161, head `691c923`). #161 has
+since been squash-merged into `main`, and PR #173 targets `main`. `origin/main` was merged into the branch twice
+with merge commits, no rebase: first `833340a`, then on 26-10 the second merge. In the second merge, three
+add/add conflicts (`web_queries.py`, `attention_queries.json`, `test_pc_collector_guards.py`) were resolved to this
+branch, because main's copies were byte-identical to the W8b base `691c923`. The PR diff against `main` is now
+exactly the 15 W8d1 files. Approval: the owner's
 ENTER EXECUTE MODE W8d1 of 24-10-26, relayed in the envelope.
 
 ## 2 Outcome
@@ -110,13 +111,18 @@ File-set check: `git diff --stat 691c923..HEAD` lists exactly these files. There
 6. `833340a` merge of `origin/main` (#161 merged).
 7. Red: HTML block triggers the fallback (T179), and an inconclusive canary sits out its accounts (planner QA).
 8. `f432b33` feat: green for 7.
-9. This report update (docs).
+9. `3ddfa89` docs: report update.
+10. Merge of `origin/main` on 26-10 (#161, #166, #170 and #172 merged).
+11. This report update (docs).
 
 ## 6 Tests run
 
 - New files: `test_x_window` 9 functions (24 cases with the parametrized config test), `test_x_filters` 14,
   `test_x_density` 5, `test_x_raw` 7, `test_x_reader` 38. All pass.
 - `api/tests/data/attention` + `api/tests/scripts` + `api/tests/tooling_guards`: 813 passed, 1 skipped.
+- Full `uv run --project api pytest api -q` after the second main merge (26-10): 2302 passed, 0 failed, 1 skipped,
+  5 deselected. Also on that tree: ruff on the touched files passes, `git diff --check` is clean, the secret scan,
+  banned-name grep and guards are clean, and no logic changed, so there was no mutation re-run.
 - Full `uv run --project api pytest api -q` on the merged tree at `f432b33`: 2242 passed, 0 failed, 1 skipped,
   5 deselected. On `origin/main` (`d968e44`, a separate worktree): 2028 passed, 1 skipped, 5 deselected. The +214
   is W8b's 118 tests (main does not have #161 yet) plus this slice's 96 (91 cases in the five new files plus 5
@@ -203,10 +209,6 @@ overrule it.
 - D13: `reparse` uses the first completed run of a coin-day, matching the first-wins value.
 
 ## 9 Blockers
-
-Base question for the planner: #161 is not merged (checked on GitHub). With base `main`, #173 shows W8b plus
-W8d1 (27 files). Either retarget #173 back to `claude/t140-w8b-collector-core` until #161 merges, or keep `main` and
-merge #161 first. I did not change the base.
 
 Envelope owner questions answered with the SPEC's recommended value:
 
