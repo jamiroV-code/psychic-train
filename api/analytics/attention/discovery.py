@@ -228,9 +228,11 @@ def _rising_weight(found: list[tuple[str, float, DiscoverySource]], groups: dict
     return rising + sum(tot for tot, up in per_group.values() if up >= GROUP_RISING_SHARE * tot)
 
 
-def _coin(symbol, cfg, data, end, recent, window, max_lag) -> tuple[float, float, float, bool, list, int] | None:
+def _coin(symbol, cfg, data, end, recent, window, max_lag, frozen=None
+          ) -> tuple[float, float, float, bool, list, int] | None:
     """(raw change %, covered weight, rising weight, trigger, sources, weights version) or None when no source
-    is usable. `end` is the scored day and picks the weights version."""
+    is usable. `end` is the scored day and picks the weights version. `frozen` (history only, T175): source ->
+    DiscoverySource already recorded for `end`, used instead of recomputing that source from `data`."""
     wv = weights_for_day(cfg, end)
     found = []
     for src, w in wv["source_weights"].items():
@@ -240,6 +242,8 @@ def _coin(symbol, cfg, data, end, recent, window, max_lag) -> tuple[float, float
             s = _exchange_slot(symbol, cfg["exchange_sub_weights"], data, end, recent, window, max_lag)
             if s is None:
                 s = _series_source(FALLBACK_SERIES, data, FALLBACK_SERIES, symbol, end, recent, window, max_lag)
+        elif frozen and src in frozen:
+            s = frozen[src]
         else:
             s = _series_source(src, data, src, symbol, end, recent, window, max_lag)
         if s is not None:
