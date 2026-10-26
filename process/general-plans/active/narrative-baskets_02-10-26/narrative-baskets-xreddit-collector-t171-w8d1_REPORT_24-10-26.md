@@ -108,7 +108,7 @@ File-set check: `git diff --stat 691c923..HEAD` lists exactly these files. There
 4. `9475e94` test: boundary tests from the mutation check, and removal of an equivalent (dead) unit-wide drop
    check.
 5. `6f40425` docs: this report.
-6. `833340a` merge of `origin/main` (#161 merged).
+6. `833340a` merge of `origin/main` (#161 not yet merged at that time).
 7. Red: HTML block triggers the fallback (T179), and an inconclusive canary sits out its accounts (planner QA).
 8. `f432b33` feat: green for 7.
 9. `3ddfa89` docs: report update.
@@ -243,7 +243,7 @@ W8e or W8e2 needs to:
 - run the canary, then the units, honouring `XPool.is_paused()`, `XPool.health()` and `x_raw.prune`;
 - commit values via `web_evidence.commit_day` with `canary_ok` from the canary.
 
-The planner needs to retarget this PR to `main` after #161 merges.
+The PR already targets `main`; #161 is merged.
 
 ## 11 Context and cost
 
