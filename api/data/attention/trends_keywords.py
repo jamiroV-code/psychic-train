@@ -29,7 +29,8 @@ KIND_FIELDS = ("topic", "term", "no-keyword")
 ALLOWED_FIELDS = frozenset(KIND_FIELDS + ("label", "note"))
 # Tickers nobody has identified yet (T160): they keep a no-keyword entry until the owner names the coin. The
 # guard test fails when one gains a topic or term, so this list only shrinks; every other Discovery coin needs one.
-UNIDENTIFIED_TICKERS = frozenset({"AKE", "BTW", "GRAM", "LIT", "PRL", "RAIN", "STABLE"})
+# T192: the owner named all seven, so it is empty now; a future unidentified ticker is added here on purpose.
+UNIDENTIFIED_TICKERS: frozenset[str] = frozenset()
 MISSING_STATUSES = ("no-entry", "no-keyword", "skipped-unqualified", "bad-file")
 
 
