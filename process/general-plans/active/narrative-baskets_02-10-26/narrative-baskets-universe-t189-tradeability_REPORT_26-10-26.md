@@ -37,7 +37,7 @@ DONE within the narrowed scope. First pass STOPPED under the envelope's stop rul
 
 1. `cache/attention/markets/{venue}/{YYYY-MM-DD}.json`: the store a later `markets` runner writes. **Contract for that slice:**
    `{"venue": "binance", "as_of": "YYYY-MM-DD", "status": "ok" | "failed", "reason": "...", "markets": [{"symbol": "<venue base name>", "kind": "spot" | "perp", "volume_24h": float | null}]}`.
-   `status` other than `ok`, a missing `markets` list, unreadable JSON or a market without `symbol` = `failed`. Several markets for one coin (spot + perp, PEPE + 1000PEPE) merge: positive volume wins, then null, then 0. Staleness: `today - as_of > 2 days` = `stale` (2 days old is still fresh). A store file wins over the fallback below.
+   `status` other than `ok`, a missing `markets` list, unreadable JSON, a market without `symbol`, or an `as_of` that is not an ISO date = `failed`. **Sanity (round 2):** fewer distinct coins than `MIN_SYMBOLS[venue]` (Hyperliquid 50, Binance 200) = `failed`, so `unknown` for every coin. `volume_24h` absent or null = listed, volume not stored; a value that is not a finite number >= 0 (NaN, Infinity, negative, text, bool) = that coin `unknown` on that venue ("Binance volume invalid"). Several markets for one coin (spot + perp, PEPE + 1000PEPE) merge: positive volume wins, then null, then 0. Staleness: the older of the file-name date and `as_of`; older than 2 days = `stale` (2 days old is still fresh). A store file wins over the fallback below.
 2. Hyperliquid fallback while (1) is empty: the narrative job's perp list `cache/narrative/exchange/markets/{date}.json` (names only) plus 24h volume from `cache/attention/hyperliquid_volume/{SYM}.parquet` (newest point within 2 days of the list date, else "not stored").
 
 Aliases: a reviewed explicit table (`ALIASES`), no generic prefix strip (KAS, KAITO are real). Hyperliquid `kPEPE kSHIB kBONK kFLOKI kNEIRO kLUNC` (seen in the stored list); Binance `1000PEPE 1000SHIB 1000BONK 1000FLOKI 1000LUNC 1000SATS 1000RATS 1000CAT 1000CHEEMS 1000XEC 1MBABYDOGE 1000000MOG` (Binance USD-M naming, UNVERIFIED until P-VEN). Case folded.
@@ -73,6 +73,8 @@ Eligible: 77 (78 before: JAAA out). The planner's "unknown 47" was coins not on 
 2. green: implementation, two mutation-driven tests, a fix to one red test (JAAA appended as row 101 was cut by TOP_N; it now replaces the 100th coin EUTBL at the same cap) and this report.
 
 ## 6 Tests run
+
+Round 1 numbers (head 32c20a4); the merged round-2 tree is under "Round 2" at the end.
 
 - Gate set `pytest api/tests/analytics/attention api/tests/data/attention api/tests/routers api/tests/scripts api/tests/tooling_guards`: 1528 passed, 1 deselected, 0 failed (run before the two mutation tests; the full run below covers the final tree).
 - Full `pytest api` on the final tree: **2265 passed, 1 skipped, 5 deselected, 0 failed**; `main` 112e32c baseline 2213 passed, 1 skipped, 5 deselected (+52 = 42 new module cases + 10 new Discovery/router tests, 4 replaced in place, see 8; skipped and deselected unchanged).
@@ -112,4 +114,21 @@ Expect: binance `missing`, hyperliquid `ok` with today's or yesterday's date; JA
 
 ## 11 Context cost
 
-Read: CLAUDE.md, the envelope and planner message, PLAN sections U2/U5/9/10 and the SPEC tradeability section (grep), `discovery.py`, `universe_classes.py`, `models/discovery.py`, `refresh_attention.py` (runners), `exchange_volume.py`, `hyperliquid_narrative_adapter.py` (head), `cache.py` exchange-store helpers, `store.py`, web Discovery components and tests, PR #174's guard test. No other root context docs opened.
+CLAUDE.md, envelope and planner messages, PLAN U2/U5/9/10 and SPEC section 4 (grep), the Discovery modules, refresh/exchange/cache/store helpers, web Discovery files, PR #174's guard test. No other root context docs.
+
+## Round 2 (T191 review fixes, 26-10-26)
+
+Review T191 of #177 @32c20a4: MERGE-AFTER-FIXES, no blocker. Fixed on the same branch, red first (d70f5ad), then green; `main` merged in with a merge commit (no rebase, no force-push).
+
+- **M, sanity minimum:** `MIN_SYMBOLS = {"hyperliquid": 50, "binance": 200}` distinct coins per list (store file and the Hyperliquid fallback list; the fallback held 178 on 2026-10-25). Fewer = `failed` -> `unknown` for every coin, never `not_tradeable`. Tests: 0, 3, min-1, min (both venues), distinct-coin count, one sane + one empty, both empty.
+- **M, safety share:** `MAX_NO_MARKET_SHARE = 0.25`. In `universe_classes.build`, if the no-market rule would cut more than 25% of the coins that reach the venue check (not force_include, class or config), it cuts none, they stay IN as `unverified`, and `Universe.data_suspect` / response `tradeability_data_suspect` (new additive bool) is set. The zero-volume rule still applies. Tests: over, exactly at (still cuts), classes not counted, 2 of 6, payload flag. One round-1 test (2 coins, 1 without a market = 50%) now trips the guard by design; widened to 1 of 4.
+- **L1, invalid volume:** NaN / Infinity / negative / text / bool / list in a store file = `invalid` set on the venue -> `unknown` ("Binance volume invalid"). A valid positive market of the same coin still counts. An invalid entry beside a valid zero entry stays `unknown`, not no-market (stricter than round 1).
+- **L2, ruff:** UP017 (`datetime.UTC`) in the module, I001 in the new test file; both clean.
+- **L3, `as_of`:** used for staleness (older of it and the file date); a non-string or non-ISO `as_of` = `failed`. Tests: stale `as_of` + fresh name, 2-day edge, absent, unreadable, newer `as_of` cannot freshen an old file.
+- **Web:** unchanged (flag is payload-only; showing it is a follow-up).
+
+Today's outcome is unchanged (the stored Hyperliquid list has 178 names, Binance missing): JAAA excluded, 22 unknown, `tradeability_data_suspect` false.
+
+**Tests (merged tree):** `pytest api` 2336 passed, 1 skipped, 5 deselected, 0 failed (`main` 27d0a2d: 2253 / 1 / 5; round 1 merged on that base: 2305 per T191). Web `pnpm test` 580 passed in 63 files; `tsc` 0; `build:islands` 0. ruff on new files and `universe_classes.py` clean; diff --check, secret scan, file set clean.
+
+**Mutation (round-2 logic), 17 hand mutants:** 13 killed first pass. Of 4 survivors: 2 were equivalent (`None if raw is None else _volume(raw)` and an `as_of` isinstance check that the parse already enforces), so the code was simplified to remove them; 2 were real (invalid-entry handling beside a valid entry; the share denominator), and two tests were added that kill them. Result 15/15 non-equivalent killed.
