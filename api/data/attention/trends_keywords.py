@@ -2,7 +2,10 @@
 
 One entry per placed coin: exactly one of `topic` (a Trends topic id), `term` (a safe search term) or
 `"no-keyword": true` (with a `note`). `_anchor` is the shared scale term, not a coin. Pure: no network,
-no pytrends, no import from api.analytics (the caller passes the placed symbols).
+no pytrends, no import from api.analytics (the caller passes the placed or Discovery-eligible symbols).
+
+T180: `keyword_status` is the one rule for whether a coin has a usable keyword (the daily runner and the
+Sources payload both use it); `guard_gaps` and `coverage` report the coins without one.
 """
 from __future__ import annotations
 
@@ -10,6 +13,8 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from api.data.attention import trends
 
 KEYWORDS_PATH = Path(__file__).resolve().parents[1] / "trends_keywords.json"
 ANCHOR_KEY = "_anchor"
@@ -22,6 +27,10 @@ LABEL_MAX = 60
 NOTE_MAX = 200
 KIND_FIELDS = ("topic", "term", "no-keyword")
 ALLOWED_FIELDS = frozenset(KIND_FIELDS + ("label", "note"))
+# Tickers nobody has identified yet (T160): they keep a no-keyword entry until the owner names the coin. The
+# guard test fails when one gains a topic or term, so this list only shrinks; every other Discovery coin needs one.
+UNIDENTIFIED_TICKERS = frozenset({"AKE", "BTW", "GRAM", "LIT", "PRL", "RAIN", "STABLE"})
+MISSING_STATUSES = ("no-entry", "no-keyword", "skipped-unqualified", "bad-file")
 
 
 class KeywordFileError(ValueError):
@@ -106,8 +115,11 @@ def validate(doc, placed_symbols=None) -> dict:
         missing = sorted(placed - set(entries))
         if missing:
             raise KeywordFileError(f"keywords: {len(missing)} placed coin(s) have no entry: {', '.join(missing[:5])}")
-        warnings = [f"keywords: {s} is not a placed coin" for s in sorted(set(entries) - placed)]
-    return {"entries": entries, "anchor": anchor, "warnings": warnings}
+        not_placed = sorted(set(entries) - placed)
+        warnings = [f"keywords: {s} is not a placed coin" for s in not_placed]
+    else:
+        not_placed = []
+    return {"entries": entries, "anchor": anchor, "warnings": warnings, "not_placed": not_placed}
 
 
 @dataclass
@@ -115,6 +127,7 @@ class KeywordMap:
     entries: dict[str, dict]
     anchor: dict
     warnings: list[str] = field(default_factory=list)
+    not_placed: list[str] = field(default_factory=list)   # keys outside the placed symbols passed to load
 
     def keyword_for(self, symbol: str) -> str | None:
         e = self.entries.get(symbol)
@@ -141,7 +154,7 @@ def _no_duplicate_keys(pairs):
 def load(path: Path | None = None, placed_symbols=None) -> KeywordMap:
     text = (path or KEYWORDS_PATH).read_bytes().decode("utf-8")
     out = validate(json.loads(text, object_pairs_hook=_no_duplicate_keys), placed_symbols)
-    return KeywordMap(out["entries"], out["anchor"], out["warnings"])
+    return KeywordMap(**out)
 
 
 def safe_load(path: Path | None = None, placed_symbols=None) -> tuple[KeywordMap | None, str]:
@@ -150,3 +163,65 @@ def safe_load(path: Path | None = None, placed_symbols=None) -> tuple[KeywordMap
         return load(path, placed_symbols), ""
     except Exception:  # noqa: BLE001 - any failure is the same fixed reason
         return None, BAD_FILE_REASON
+
+
+def keyword_status(km: KeywordMap | None, symbol: str) -> str:
+    """"topic" or "term" when the runner pulls the coin, else one of MISSING_STATUSES. A name-risk symbol's bare
+    (unqualified) term is not pulled."""
+    if km is None:
+        return "bad-file"
+    e = km.entries.get(symbol)
+    if e is None:
+        return "no-entry"
+    if "topic" in e:
+        return "topic"
+    if "term" not in e:
+        return "no-keyword"
+    if symbol in trends.NAME_RISK_SYMBOLS and not trends.is_qualified_term(e["term"]):
+        return "skipped-unqualified"
+    return "term"
+
+
+def guard_gaps(km: KeywordMap, eligible) -> dict[str, list[str]]:
+    """Eligible coins without a usable keyword, by status, in `eligible` order; an UNIDENTIFIED_TICKERS coin may
+    stay no-keyword. `allowlist-has-keyword`: allowlisted coins that now have one (drop them from the list)."""
+    gaps: dict[str, list[str]] = {"no-entry": [], "no-keyword": [], "skipped-unqualified": []}
+    for s in dict.fromkeys(eligible):
+        st = keyword_status(km, s)
+        if st in gaps and not (st == "no-keyword" and s in UNIDENTIFIED_TICKERS):
+            gaps[st].append(s)
+    gaps["allowlist-has-keyword"] = sorted(s for s in UNIDENTIFIED_TICKERS
+                                           if keyword_status(km, s) in ("topic", "term"))
+    return gaps
+
+
+@dataclass
+class Coverage:
+    eligible: int
+    with_keyword: int
+    counts: dict[str, int]                 # topic, term, keyword-missing
+    missing: list[tuple[str, str]]         # (symbol, status) in eligible order
+
+
+def coverage(km: KeywordMap | None, eligible) -> Coverage:
+    """How many eligible coins have a usable keyword; a no-keyword entry counts as missing, not as topic/term."""
+    counts = {"topic": 0, "term": 0, "keyword-missing": 0}
+    missing = []
+    symbols = list(dict.fromkeys(eligible))
+    for s in symbols:
+        st = keyword_status(km, s)
+        if st in ("topic", "term"):
+            counts[st] += 1
+        else:
+            counts["keyword-missing"] += 1
+            missing.append((s, st))
+    return Coverage(len(symbols), counts["topic"] + counts["term"], counts, missing)
+
+
+def gap_report(km: KeywordMap | None, eligible) -> str:
+    """One non-failing report line for the live eligible set (the guard test checks a pinned set)."""
+    cov = coverage(km, eligible)
+    line = f"trends keyword: {cov.with_keyword} of {cov.eligible} eligible coins"
+    if cov.missing:
+        line += "; no keyword: " + ", ".join(f"{s} ({st})" for s, st in cov.missing)
+    return line

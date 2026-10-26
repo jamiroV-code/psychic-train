@@ -15,9 +15,10 @@ import pandas as pd
 from api.analytics.attention.discovery import (EXCHANGE_SERIES, FALLBACK_SERIES, SLOT, eligibility, load_config)
 from api.analytics.attention import narratives
 from api.analytics.attention.universe import load_universe_rows
-from api.data.attention import registry, store, universe_store
+from api.data.attention import registry, store, trends_keywords, universe_store
 from api.data.attention.types import MIN_HISTORY_DAYS
-from api.models.discovery import DiscoverySourceRow, DiscoverySourcesResponse
+from api.models.discovery import (DiscoveryKeywordGap, DiscoverySourceRow, DiscoverySourcesResponse,
+                                  DiscoveryTrendsKeyword)
 
 LABELS = {
     "wikipedia": "Wikipedia pageviews", "trends": "Google Trends", "reddit": "Reddit", "xsearch": "X search",
@@ -105,6 +106,14 @@ def _narratives_row() -> DiscoverySourceRow:
                               note="status proposed" if doc["status"] == "proposed" else "")
 
 
+def _trends_keyword(eligible: list[str]) -> DiscoveryTrendsKeyword:
+    """Read from the keyword file with the runner's own rule (`keyword_status`), so the two cannot disagree."""
+    km, _ = trends_keywords.safe_load()
+    cov = trends_keywords.coverage(km, eligible)
+    return DiscoveryTrendsKeyword(eligible_size=cov.eligible, with_keyword=cov.with_keyword,
+                                  missing=[DiscoveryKeywordGap(symbol=s, detail=st) for s, st in cov.missing])
+
+
 def build_sources(today: date, *, probe_path: Path | None = None, universe_path: Path | None = None,
                   config_path: Path | None = None) -> DiscoverySourcesResponse:
     cfg = load_config(config_path)
@@ -158,4 +167,5 @@ def build_sources(today: date, *, probe_path: Path | None = None, universe_path:
     return DiscoverySourcesResponse(
         as_of=end.isoformat(), universe_size=len(rows), eligible_size=n, live_sources=len(live),
         total_sources=len(weighted), live_weight=sum(r.weight or 0 for r in live),
-        newest=max((r.newest for r in live if r.newest), default=None), sources=out)
+        newest=max((r.newest for r in live if r.newest), default=None), sources=out,
+        trends_keyword=_trends_keyword(eligible))

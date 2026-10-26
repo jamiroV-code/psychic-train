@@ -9,9 +9,11 @@ input or an option is bad, 3 if pytrends is not installed, 4 when Google refused
 Starting the session sends one cookie request to Google before the per-coin calls.
 PowerShell: quote comma lists, e.g. --symbols 'LINK,AAVE'.
 Requests go 3 s apart (--delay S raises it), with a 20 s pause every 40 requests (--pause-every N, 0 = never;
---pause-s S); the expected request count and minutes print first. Three failed requests in a row of any kind
+--pause-s S; --delay and --pause-s must be finite and at most 3600); the expected request count and minutes
+print first. Three failed requests in a row of any kind
 (ConnectionError, timeout, 429, 5xx) mean Google is refusing us: the run stops sending, marks the rest NOT-RUN,
-prints the --symbols list to re-run after 30-60 minutes and exits 4 (T161: on 23-10-26 every request after about
+prints the command options to re-run after 30-60 minutes (the NOT-RUN coins plus every coin whose request failed,
+with --file, --only-unresolved, --variants and any non-default pacing echoed) and exits 4 (T161: on 23-10-26 every request after about
 100 failed with ConnectionError and the run kept sending to 137).
 --only-unresolved checks only those coins with no `topic` entry (or no entry at all), one request per coin.
 --variants also queries each coin as '<name> crypto', '<name> coin' and '<ticker> crypto' (at most 4 queries per
@@ -23,7 +25,8 @@ products and apartments), at four times the requests. Examples:
   uv run --project api --with pytrends python -m api.scripts.check_trends_keywords --only-unresolved --variants --delay 5
 With --only-unresolved or --variants, a coin still AMBIGUOUS gets a paste-ready qualified term ('avalanche crypto') in a 'qualified term
 proposals' block: lower confidence than a topic, never a checker PASS. A coin with a failed query cannot PASS and
-gets no term; re-run it. Ctrl-C stops the run, prints the partial results and exits 130. A last block lists
+gets no term; re-run it. A coin whose request failed is counted as 'request failed' in the coverage line, apart from
+'nothing' (a genuine empty answer), even when no 3-in-a-row streak stopped the run (exit stays 0). Ctrl-C stops the run, prints the partial results and exits 130. A last block lists
 the proposed symbols outside the narrative-placed set (the loader only warns on them) and the Discovery coverage.
 PASS needs exactly one crypto-typed candidate whose title equals the name. Failing that, the only crypto-typed
 candidate passes when it is the name plus a generic word ("Kaspa Network") or a 4+ character start of the name
@@ -60,6 +63,7 @@ from api.scripts.trends_cli_common import (
 INTERVAL_SECONDS = 3.0
 # T161: any failure counts (ConnectionError, timeout, 429, 5xx), not only 429.
 MAX_CONSECUTIVE_FAILURES = 3
+MAX_PACING_SECONDS = 3600.0
 PAUSE_EVERY = 40
 PAUSE_SECONDS = 20.0
 STOPPED_EXIT = 4
@@ -99,7 +103,7 @@ LEAD_RULES = ("ticker-title", "bracket")
 LEAD_NOTE = ("a ticker-title or bracket PASS is a LEAD: open its Trends link and confirm the coin before pasting;"
              " notes marked 'name from CoinGecko id' carry a guessed name")
 DERIVED_MARK = "name from CoinGecko id"
-COVERAGE_KINDS = ("topic", "qualified-term", "term", "nothing", "not run", "not checked")
+COVERAGE_KINDS = ("topic", "qualified-term", "term", "nothing", "request failed", "not run", "not checked")
 
 
 @dataclass
@@ -128,7 +132,6 @@ class Result:
     proposed: dict | None = None
     verdict: str = "FAIL"
     reason: str = ""
-    rate_limited: bool = False
     found_by: dict[str, list[str]] = field(default_factory=dict)
     failed: list[str] = field(default_factory=list)
     queries: int = 1
@@ -293,6 +296,25 @@ def _verify_hint(r: Result) -> str | None:
     return f"    verify {_cand(exact)}: {VERIFY_URL.format(quote(exact['mid'], safe=''))}" if exact else None
 
 
+def _ps_quote(text: str) -> str:
+    """PowerShell single-quoted literal: no expansion, a quote is doubled."""
+    return "'" + text.replace("'", "''") + "'"
+
+
+def _rerun_args(symbols: list[str], extra: tuple[str, ...], variants: bool, pacing: Pacing) -> str:
+    """The options for the run-again command: the symbols, then every option the run used that is not a default."""
+    parts = [f"--symbols {_ps_quote(','.join(symbols))}", *extra]
+    if variants:
+        parts.append("--variants")
+    if pacing.delay != INTERVAL_SECONDS:
+        parts.append(f"--delay {pacing.delay:g}")
+    if pacing.pause_every != PAUSE_EVERY:
+        parts.append(f"--pause-every {pacing.pause_every}")
+    if pacing.pause_s != PAUSE_SECONDS:
+        parts.append(f"--pause-s {pacing.pause_s:g}")
+    return " ".join(parts)
+
+
 def _plan_line(n_coins: int, n_requests: int, pacing: Pacing) -> str:
     gaps = max(n_requests - 1, 0)
     pauses = gaps // pacing.pause_every if pacing.pause_every else 0
@@ -375,8 +397,9 @@ def _print_qualified(results: list[Result], stamp: str, out, derived: dict) -> d
 
 
 def _print_scope(proposed: set[str], eligible: list[str], results: list[Result], terms: set[str], out) -> None:
-    """A coin this run did not check and with no keyword is 'not checked', never 'nothing'."""
-    """Symbols the blocks propose that no narrative places, and where every eligible coin stands after the run."""
+    """Symbols the blocks propose that no narrative places, and where every eligible coin stands after the run.
+    A coin this run did not check and with no keyword is 'not checked', never 'nothing'; one whose request failed is
+    'request failed', never 'nothing'."""
     keywords = tk.load().entries
     placed = {c["symbol"] for n in narratives.load_narratives()["narratives"] for c in n["coins"]}
     outside = sorted(proposed - placed)
@@ -387,11 +410,12 @@ def _print_scope(proposed: set[str], eligible: list[str], results: list[Result],
     passed = {r.symbol for r in results if r.verdict == "PASS"}
     checked = {r.symbol for r in results if r.verdict != "NOT-RUN"}
     not_run = {r.symbol for r in results if r.verdict == "NOT-RUN"}
+    req_failed = {r.symbol for r in results if r.failed}
     status = {}
     for s in eligible:
         e = keywords.get(s, {})
         status[s] = ("topic" if "topic" in e or s in passed else "qualified-term" if s in terms
-                     else "term" if "term" in e else "nothing" if s in checked else "not run" if s in not_run else "not checked")
+                     else "term" if "term" in e else "request failed" if s in req_failed else "nothing" if s in checked else "not run" if s in not_run else "not checked")
     counts = {k: sum(v == k for v in status.values()) for k in COVERAGE_KINDS}
     print(f"discovery eligible: {len(eligible)} | " + " | ".join(f"{k}: {n}" for k, n in counts.items())
           + f" (this run checked {len(checked & set(eligible))} of them)", file=out)
@@ -404,8 +428,9 @@ def _pass_note(r: Result, stamp: str, derived: bool) -> str:
 
 def run(mapping: dict, *, client, sleep=time.sleep, out=None, now=None, variants: bool = False,
         eligible: list[str] | None = None, derived: dict | None = None, pacing: Pacing | None = None,
-        qualify: bool | None = None) -> list[Result]:
-    """`qualify` (default: `variants`) prints the qualified term proposals."""
+        qualify: bool | None = None, rerun_extra: tuple[str, ...] = ()) -> list[Result]:
+    """`qualify` (default: `variants`) prints the qualified term proposals; `rerun_extra` are the already-quoted
+    options (--file, --only-unresolved) the printed run-again command repeats."""
     out = out or sys.stdout
     now = now or (lambda: datetime.now(timezone.utc))
     pacing = pacing or Pacing()
@@ -438,9 +463,10 @@ def run(mapping: dict, *, client, sleep=time.sleep, out=None, now=None, variants
     print("\n" + " ".join(f"{v}: {n}" for v, n in counts.items()), file=out)
     print(f"requests sent: {pacing.sent}", file=out)
     if pacing.stopped:
-        rerun = ",".join(r.symbol for r in results if r.verdict == "NOT-RUN" or r.failed)
-        print(f"stopped: Google is refusing connections after {pacing.sent} requests; wait 30-60 minutes, then run"
-              f" again with --symbols '{rerun}'", file=out)
+        rerun = [r.symbol for r in results if r.verdict == "NOT-RUN" or r.failed]
+        print(f"stopped: Google is refusing connections after {pacing.sent} requests sent; wait 30-60 minutes, then"
+              f" re-run the NOT-RUN coins plus every coin whose request failed with: "
+              + _rerun_args(rerun, rerun_extra, variants, pacing), file=out)
 
     stamp = now().strftime("%d-%m-%y")
     block = {r.symbol: {"topic": r.proposed["mid"], "label": r.name if tk.is_valid_label(r.name) else r.symbol,
@@ -488,6 +514,11 @@ def _default_mapping(eligible: list[str], names: dict[str, str]) -> tuple[dict, 
     return {**mapping, **derived}, derived
 
 
+def _rerun_extra(args) -> tuple[str, ...]:
+    extra = [f"--file {_ps_quote(str(args.file))}"] if args.file is not None else []
+    return (*extra, *(["--only-unresolved"] if args.only_unresolved else []))
+
+
 def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep=time.sleep, out=None,
          err=None, now=None, universe_rows: list[dict] | None = None) -> int:
     out, err = out or sys.stdout, err or sys.stderr
@@ -504,8 +535,10 @@ def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep
         args = ap.parse_args(argv)
     except SystemExit as exc:
         return 0 if exc.code == 0 else 2
-    if not args.delay >= INTERVAL_SECONDS or args.pause_every < 0 or not args.pause_s >= 0:
-        print(f"--delay must be >= {INTERVAL_SECONDS:g}, --pause-every >= 0 and --pause-s >= 0", file=err)
+    if (not INTERVAL_SECONDS <= args.delay <= MAX_PACING_SECONDS or args.pause_every < 0
+            or not 0 <= args.pause_s <= MAX_PACING_SECONDS):
+        print(f"--delay must be >= {INTERVAL_SECONDS:g}, --pause-every >= 0 and --pause-s >= 0; --delay and --pause-s"
+              f" must be finite and at most {MAX_PACING_SECONDS:g}", file=err)
         return 2
     try:
         if universe_rows is None:
@@ -542,7 +575,7 @@ def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep
     pacing = Pacing(args.delay, args.pause_every, args.pause_s)
     results = run(mapping, client=client, sleep=sleep, out=out, now=now, variants=args.variants,
                   eligible=eligible if universe_rows else None, derived=derived, pacing=pacing,
-                  qualify=args.variants or args.only_unresolved)
+                  qualify=args.variants or args.only_unresolved, rerun_extra=_rerun_extra(args))
     if any(INTERRUPTED_REASON in r.reason for r in results):
         return INTERRUPTED_EXIT
     return STOPPED_EXIT if pacing.stopped else 0
