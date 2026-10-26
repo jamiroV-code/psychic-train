@@ -278,6 +278,12 @@ def eligibility(cfg: dict, rows: list[dict], venues=None) -> universe_classes.Un
     return universe_classes.build(rows, cfg["universe_rules"], venues)
 
 
+def eligible_discovery_symbols(*, config_path: Path | None = None, universe_path: Path | None = None) -> list[str]:
+    """The coins that pass into Discovery today (`eligibility` over the shipped config and universe snapshot)."""
+    rows, _ = load_universe_rows(universe_path)
+    return eligibility(load_config(config_path), rows).eligible if rows else []
+
+
 def _excluded(u: universe_classes.Universe, nm: narratives.Memberships, shown: set[str]) -> dict:
     """Every universe coin not shown, with one reason; first match wins, so the counts are disjoint."""
     hidden_only = {s for h in nm.hidden for s in h["coins"]} - set().union(set(), *nm.visible.values())

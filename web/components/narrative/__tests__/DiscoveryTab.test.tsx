@@ -358,6 +358,35 @@ describe("DiscoveryTab", () => {
       expect((await screen.findAllByTestId("sources-dot")).at(-1)).toHaveAttribute("data-tone", "ok");
     });
 
+    it("shows Google Trends keyword coverage and the coins without one on the Trends row (T180)", async () => {
+      const trendsRow = { id: "trends", label: "Google Trends", kind: "weighted" as const, weight: 20, state: "not-probed" as const, newest: null, history_days: 0, coins_with_data: 0, eligible_size: 78, note: "not probed yet" };
+      const tk = {
+        eligible_size: 78, with_keyword: 76,
+        missing: [
+          { symbol: "AKE", reason: "no-trends-keyword" as const, detail: "no-keyword" },
+          { symbol: "NEWCOIN", reason: "no-trends-keyword" as const, detail: "no-entry" },
+        ],
+      };
+      render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp())} fetchSources={() => Promise.resolve(src({ sources: [trendsRow], trends_keyword: tk }))} />);
+      const row = await screen.findByTestId("sources-row-trends");
+      expect(row).toHaveTextContent("not probed yet. Trends keyword: 76 of 78 eligible coins. No Google Trends keyword yet: AKE, NEWCOIN");
+    });
+
+    it("says every coin has a keyword when none is missing, lists a single gap, and adds nothing without the field", async () => {
+      const trendsRow = { id: "trends", label: "Google Trends", kind: "weighted" as const, weight: 20, state: "ok" as const, newest: "2026-10-17", history_days: 100, coins_with_data: 3, eligible_size: 3, note: "" };
+      const { unmount } = render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp())} fetchSources={() => Promise.resolve(src({ sources: [trendsRow], trends_keyword: { eligible_size: 3, with_keyword: 3, missing: [] } }))} />);
+      const note = (await screen.findByTestId("sources-row-trends")).querySelector("td:last-child");
+      expect(note?.textContent).toBe("Trends keyword: 3 of 3 eligible coins");
+      unmount();
+      const bare = render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp())} fetchSources={() => Promise.resolve(src({ sources: [trendsRow] }))} />);
+      expect((await screen.findByTestId("sources-row-trends")).querySelector("td:last-child")?.textContent).toBe("");
+      bare.unmount();
+      const one = { eligible_size: 3, with_keyword: 2, missing: [{ symbol: "AKE", reason: "no-trends-keyword" as const, detail: "no-keyword" }] };
+      render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp())} fetchSources={() => Promise.resolve(src({ sources: [trendsRow], trends_keyword: one }))} />);
+      expect((await screen.findByTestId("sources-row-trends")).querySelector("td:last-child")?.textContent).toBe(
+        "Trends keyword: 2 of 3 eligible coins. No Google Trends keyword yet: AKE");
+    });
+
     it("shows plain loading and error states without breaking the table", async () => {
       const { unmount } = render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp())} fetchSources={() => new Promise(() => undefined)} />);
       expect(screen.getByTestId("sources-loading")).toBeInTheDocument();

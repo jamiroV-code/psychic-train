@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchDiscoverySources as fetchDefault } from "@/lib/api/discovery";
+import { formatNarrativeReason } from "@/lib/format-unavailable-reason";
 import type { DiscoverySourceRow, DiscoverySourcesResponse } from "@/lib/types/discovery";
 
 export interface DiscoverySourcesPanelProps {
@@ -20,6 +21,17 @@ function summary(d: DiscoverySourcesResponse): { text: string; tone: "ok" | "par
   const tone = d.live_sources === 0 ? "none" : d.live_sources === d.total_sources ? "ok" : "partial";
   const newest = d.newest ? `, newest data ${d.newest}` : "";
   return { text: `Sources: ${d.live_sources} of ${d.total_sources} live, ${Math.round(d.live_weight)} of 100 weight${newest}`, tone };
+}
+
+/** The Trends row's note gains the keyword coverage and the coins without a keyword (T180). */
+function note(r: DiscoverySourceRow, d: DiscoverySourcesResponse): string {
+  const tk = d.trends_keyword;
+  if (r.id !== "trends" || !tk) return r.note;
+  const parts = [r.note, `Trends keyword: ${tk.with_keyword} of ${tk.eligible_size} eligible coins`];
+  if (tk.missing.length) {
+    parts.push(`${formatNarrativeReason("no-trends-keyword")}: ${tk.missing.map((g) => g.symbol).join(", ")}`);
+  }
+  return parts.filter(Boolean).join(". ");
 }
 
 /** Compact, collapsed-by-default status of every Discovery input. */
@@ -79,7 +91,7 @@ export function DiscoverySourcesPanel({ fetchSources = fetchDefault }: Discovery
                 <td className="basket-table__num">{r.kind === "helper" ? r.coins_with_data : `${r.coins_with_data} / ${r.eligible_size}`}</td>
                 <td className="basket-table__num">{r.kind === "helper" ? "—" : r.history_days}</td>
                 <td>{r.newest ?? "—"}</td>
-                <td className="discovery-muted">{r.note}</td>
+                <td className="discovery-muted">{note(r, data)}</td>
               </tr>
             ))}
           </tbody>
