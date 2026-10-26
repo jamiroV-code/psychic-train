@@ -338,6 +338,8 @@ Tests:
 - `pytest api/tests/data/attention api/tests/scripts api/tests/tooling_guards`: 1039 passed, 0 failed.
 - Full `pytest api`: 2342 passed, 0 failed, 1 skipped, 5 deselected. `origin/main` (separate worktree): 2213
   passed, 1 skipped, 5 deselected. The +129 are the W8d1 tests (2321 at round 1 plus the 21 new ones).
+- After the planner answers and a further `origin/main` merge (main brought 40 new tests of its own):
+  `pytest api` 2383 passed, 0 failed, 1 skipped, 5 deselected; attention+scripts+tooling_guards 1078 passed.
 - Mutation check on all changed logic, by hand (mutant applied, `tests/data/attention` run): 28 mutants.
   - First pass: 23 killed and 5 survived. The survivors were the token boundary in scrub, the pool ignoring the
     raw oldest time, canary labels kept from another day, the re-parse not tracking seen ids, and the legacy
