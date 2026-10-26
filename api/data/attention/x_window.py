@@ -14,6 +14,7 @@ from api.data.attention import density
 from api.data.attention.web_queries import X_WINDOW_SYNTAXES, Queries, valid_lang
 
 LATEST = "Latest"
+COMPLETE_STOPS = ("window_start", "cursor_exhausted")  # every tweet of the day was read: the count is exact
 QUERY_FILTERS = "-filter:replies -filter:retweets"
 
 
@@ -64,15 +65,20 @@ def in_window(ts: datetime, day: date) -> bool:
 
 
 def stop_reason(*, pages: int, entries_read: int, oldest_read: datetime | None, day: date, sample_n: int,
-                page_cap: int) -> str | None:
+                page_cap: int, exhausted: bool = False) -> str | None:
     """Why paging stops after `pages` pages, or None to read the next page.
 
     The window start wins over the sample size: once a read tweet is older than the window start every tweet of
-    the day has been read, so the count is exact.
+    the day has been read, so the count is exact. An exhausted cursor (an empty page) means the same. Entries read
+    while every read tweet is still at or after the window end never fill the sample: paging goes on to the page
+    cap.
     """
-    if oldest_read is not None and _utc(oldest_read) < density.window(day)[0]:
+    start, end = density.window(day)
+    if oldest_read is not None and _utc(oldest_read) < start:
         return "window_start"
-    if entries_read >= sample_n:
+    if exhausted:
+        return "cursor_exhausted"
+    if entries_read >= sample_n and oldest_read is not None and _utc(oldest_read) < end:
         return "sample"
     if pages >= page_cap:
         return "page_cap"

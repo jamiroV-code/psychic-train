@@ -272,9 +272,9 @@ class XPool:
 
 
 def canary_window(now: datetime) -> tuple[datetime, datetime]:
-    """The last complete clock hour before `now`: the same window for every account in one canary."""
-    end_s = int(_utc(now).timestamp()) // 3600 * 3600
-    end = datetime.fromtimestamp(end_s, tz=timezone.utc)
+    """A fixed past hour, the last hour of the previous UTC day: both window syntaxes can express it (the date
+    form as `since:D-1 until:D`, newest first), and it is the same for every account and every run of the day."""
+    end = datetime.combine(_utc(now).date(), time(0), tzinfo=timezone.utc)
     return end - timedelta(hours=1), end
 
 
@@ -282,7 +282,7 @@ def canary_query(config: CollectorConfig, start: datetime, end: datetime) -> str
     if config.x_window_syntax == "since_time":
         window = f"since_time:{int(start.timestamp())} until_time:{int(end.timestamp())}"
     else:
-        window = x_window.window_operator(start.date(), "date")
+        window = f"since:{start.date().isoformat()} until:{end.date().isoformat()}"
     return f"{config.x_canary_query} {window}"
 
 
@@ -470,8 +470,7 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
             src.stamp_attempt()
             raise
         if raw is None:
-            src.stamp_attempt()
-            return _Attempt("stop", "none_result")
+            raw = xr.RawPage({}, ())  # rule 20b: None is not an error, it is an exhausted cursor
         n = len(raw.entry_ids)
         src.record_loaded(n)
         counts["reads"] += n
@@ -481,8 +480,11 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
                          parser_version=xr.PARSER_VERSION, reader_version=reader.version,
                          reader_commit=reader.commit, backend=backend)
         if n == 0:
-            src.stamp_attempt()
-            return _Attempt("stop", "empty_page")
+            # The cursor ran out: every matching tweet was read, so the count is exact (the canary passed today).
+            out.reason = x_window.stop_reason(pages=page_no + 1, entries_read=out.n_read,
+                                              oldest_read=min((t.date for t in out.tweets), default=None), day=day,
+                                              sample_n=config.x_sample_n, page_cap=config.x_page_cap, exhausted=True)
+            return out
         try:
             tweets = reader.parse_tweets(raw.body)
         except Exception:  # noqa: BLE001 - a parse failure is drift, whatever the library raised
@@ -549,14 +551,15 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
         if att.status == "stop":
             return done(None, att.reason)
         src.record_unit()
+        canary_ok = pool.canary_passed_today()
         summary = x_density.summarize(day, att.tweets, n_read=att.n_read,
-                                      window_start_reached=att.reason == "window_start",
-                                      page_cap_hit=att.reason == "page_cap", coin=coin, policy=policy,
-                                      n_target=config.x_sample_n, n_min=config.x_sample_min, now=now)
+                                      window_start_reached=att.reason in x_window.COMPLETE_STOPS,
+                                      page_cap_hit=att.reason == "page_cap", canary_ok=canary_ok, coin=coin,
+                                      policy=policy, n_target=config.x_sample_n, n_min=config.x_sample_min, now=now)
         if summary.result is None:
-            return done(None, "short_result")
+            return done(None, summary.missing_reason)
         meta = {"attempt": attempts, "label": label, "attempts": attempts, "restarts": restarts,
-                "backend_events": att.events, "overhead_requests": reader.overhead_requests}
+                "backend_events": att.events, "overhead_requests": reader.overhead_requests, "canary_ok": canary_ok}
         x_raw.mark_complete(symbol, day, meta, run=x_raw.run_id(now))
         row = x_raw.reparse(symbol, day, parse=reader.parse_tweets, coin=coin, cfg=config,
                             parser_version=xr.PARSER_VERSION, policy=policy)

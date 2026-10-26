@@ -700,7 +700,7 @@ def test_cursor_exhausted_exactly_at_window_start_is_exact():
     tws = tweets(4, END - timedelta(hours=6), 60)
     tws.append(xf.Tweet(next(_ids), END - timedelta(days=1), "Solana at the start", tws[0].user, "en", ("SOL",)))
     out = _sparse([page(tws), page([])])
-    assert out.reason == "cursor_exhausted" and out.result.value == 4.0
+    assert out.reason == "cursor_exhausted" and out.result.value == 5.0  # the 00:00 tweet is inside the window
     row = xr.read_x_rows("SOL")[0]
     assert row["stop"] == "cursor_exhausted" and row["pages"] == 2
 

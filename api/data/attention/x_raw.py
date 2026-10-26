@@ -166,17 +166,17 @@ def reparse(symbol: str, day: date, *, parse: Callable[[dict], list[x_filters.Tw
     n_read = sum(rec["entries"] for rec in recs)
     oldest = min((t.date for t in read), default=None)
     stop = x_window.stop_reason(pages=len(recs), entries_read=n_read, oldest_read=oldest, day=day,
-                                sample_n=cfg.x_sample_n, page_cap=cfg.x_page_cap)
+                                sample_n=cfg.x_sample_n, page_cap=cfg.x_page_cap, exhausted=recs[-1]["entries"] == 0)
     collected_at = datetime.fromisoformat(recs[0]["collected_at"])
-    s = x_density.summarize(day, read, n_read=n_read, window_start_reached=stop == "window_start",
-                            page_cap_hit=stop == "page_cap", coin=coin,
+    s = x_density.summarize(day, read, n_read=n_read, window_start_reached=stop in x_window.COMPLETE_STOPS,
+                            page_cap_hit=stop == "page_cap", canary_ok=meta.get("canary_ok", False), coin=coin,
                             policy=policy or x_filters.FilterPolicy.from_config(cfg), n_target=cfg.x_sample_n,
                             n_min=cfg.x_sample_min, now=collected_at)
     r, last = s.result, recs[-1]
     return {
         "date": day.isoformat(), "value": None if r is None else r.value, "n": None if r is None else r.n,
         "span_hours": None if r is None else r.span_hours, "capped": None if r is None else r.capped,
-        "pagecap": None if r is None else r.pagecap, "stop": stop, "n_read": s.n_read, "n_counted": s.n_counted,
+        "pagecap": None if r is None else r.pagecap, "stop": stop, "missing_reason": s.missing_reason, "n_read": s.n_read, "n_counted": s.n_counted,
         "exclusions": s.exclusions, "unique_authors": s.unique_authors, "top_author_share": s.top_author_share,
         "engagement": s.engagement, "median_views": s.median_views, "read_age_hours": s.read_age_hours,
         "pages": sum(1 + rec["retries"] for rec in recs), "window_syntax": cfg.x_window_syntax,
