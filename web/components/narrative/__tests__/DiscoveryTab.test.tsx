@@ -174,6 +174,24 @@ describe("DiscoveryTab", () => {
     expect(within(coins).getAllByText(/^(Wiki|CG volume|Trends) /)).toHaveLength(3);
   });
 
+  it("labels the CoinGecko volume fallback chip as coverage only when the payload says so", async () => {
+    const c = category("cov", {
+      coins: [{
+        symbol: "AAA", change: 20, raw_change: 20, covered_weight: 40, rising_weight: 25, trigger: true,
+        sources: [
+          { source: "trends", change: 30, as_of: "2026-10-15" },
+          { source: "coingecko", change: 50, as_of: "2026-10-15", coverage_only: true },
+        ],
+      }],
+    });
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ categories: [c] }))} />);
+    fireEvent.click(await within(await screen.findByTestId("discovery-row-cov")).findByRole("button"));
+    const coins = screen.getByTestId("discovery-coins-cov");
+    const cg = within(coins).getByText("CG volume (coverage only) +50.0%");
+    expect(cg.getAttribute("title")).toContain("counts toward coverage only, never as a rising vote");
+    expect(within(coins).getByText("Trends +30.0%").getAttribute("title")).not.toContain("coverage only");
+  });
+
   it("shows_n_of_100_shown_m_excluded_with_reason_counts", async () => {
     render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ universe_size: 100, shown_size: 54 }))} />);
     const line = await screen.findByTestId("discovery-coverage");
