@@ -23,7 +23,8 @@ if __package__ in (None, ""):  # direct invocation
 from api.data import cache  # noqa: E402
 from api.data.attention.http_retry import describe_exc  # noqa: E402
 from api.data.attention import (  # noqa: E402
-    coingecko_attention, exchange_volume, reddit, registry, store, trends, trends_keywords, universe_store,
+    coingecko_attention, exchange_volume, reddit, registry, store, trends, trends_keywords, trends_runs,
+    universe_store,
     categories_store, wikipedia, xsearch)
 from api.scripts.attention_extra import reason_kind  # noqa: E402
 from api.scripts.trends_cli_common import PytrendsMissing, make_trendreq  # noqa: E402
@@ -46,8 +47,15 @@ TRENDS_BACKOFF_S = (30, 60, 120)
 # budget, which stops the source first. It still bounds the loss if the budget or the waits change.
 TRENDS_BREAKER_AFTER = 3
 TRENDS_TIME_BUDGET_S = 540
+# T197/T200: an `empty response` (an empty frame, not a 429 or an error) is retried once, AFTER the whole main pass
+# (healthy coins are never sacrificed for retries), 10 s plus jitter apart, while the budget has room, at most
+# TRENDS_MAX_RETRIES_PER_RUN per run.
+TRENDS_EMPTY_RETRY_WAIT_S = 10
+TRENDS_MAX_RETRIES_PER_RUN = 20
 TRENDS_OUTCOMES = ("ok", "too-little-interest", "quiet-then-surge", "skipped-unqualified", "no-keyword", "non-daily",
                    "rate-limited", "insufficient-history", "time-budget")
+TRENDS_RUN_OUTCOMES = ("ok", "too-little-interest", "quiet-then-surge", "no-keyword", "skipped-unqualified", "failed",
+                       "capped", "time-budget")
 _TRENDS_REASON_OUTCOME = {trends.TOO_LITTLE_INTEREST: "too-little-interest",
                           trends.QUIET_THEN_SURGE: "quiet-then-surge",
                           trends.NAME_AMBIGUOUS: "skipped-unqualified", "no keyword mapped": "no-keyword",
@@ -220,35 +228,122 @@ def trends_summary(series) -> str:
     return ", ".join(f"{k} {counts[k]}" for k in sorted(counts, key=order))
 
 
-def _trends_fetch_429(sym, term, client, today, sleep, deadline):
+def _trends_fetch_once(sym, term, client, today, calls, stats):
+    calls[0] += 1
+    return trends.fetch_alone(sym, term, client, today=today, stats=stats)
+
+
+def _trends_fetch_429(sym, term, client, today, sleep, deadline, calls, stats):
     """fetch_alone with the 429 backoff: TRENDS_BACKOFF_S waits for the same coin, then `capped`. A wait that would
-    end after `deadline` (the source's time budget) is not started: the coin is capped "time budget reached"."""
+    end after `deadline` (the source's time budget) is not started: the coin is capped "time budget reached".
+    `calls` (a one-item list) counts the requests sent; `stats` receives the last pull's series_stats."""
     from api.data.attention.types import SourceSeries
-    item = trends.fetch_alone(sym, term, client, today=today)
+    item = _trends_fetch_once(sym, term, client, today, calls, stats)
     for wait in TRENDS_BACKOFF_S:
         if item.state != "capped":
             break
         if _clock() + wait > deadline:
             return SourceSeries("trends", sym, [], "capped", "time budget reached")
         sleep(wait)
-        item = trends.fetch_alone(sym, term, client, today=today)
+        item = _trends_fetch_once(sym, term, client, today, calls, stats)
     return item
 
 
+def _trends_fetch_coin(sym, term, client, today, sleep, deadline):
+    """One coin of the main pass: the 429 backoff, no empty-response retry (that is deferred, see
+    _trends_retry_empty). Returns (series, meta) with meta = attempts (requests sent), retried, stats."""
+    calls, stats = [0], {}
+    item = _trends_fetch_429(sym, term, client, today, sleep, deadline, calls, stats)
+    return item, {"attempts": calls[0], "retried": False, "stats": dict(stats)}
+
+
+def _trends_retry_empty(todo, out, metas, client, today, sleep, deadline):
+    """The deferred pass: each coin of the main pass left at `empty response`, in main-pass order, is retried once
+    with a single request (no 429 backoff), TRENDS_EMPTY_RETRY_WAIT_S plus jitter after the previous step. The
+    budget is checked before each retry including its wait: one that does not fit is not started and the coin keeps
+    `empty response` with meta["retry_skipped"] "retry-skipped-budget"; beyond TRENDS_MAX_RETRIES_PER_RUN it is
+    "retry-skipped-cap". A 429 answer is recorded for that coin and ends the pass ("retry-skipped-rate-limit" for
+    the rest)."""
+    retries, ended = 0, False
+    for s, kw in todo:
+        item = out[s]
+        if item.state != "unavailable" or item.reason != "empty response":
+            continue
+        if ended:
+            metas[s]["retry_skipped"] = "retry-skipped-rate-limit"
+        elif retries >= TRENDS_MAX_RETRIES_PER_RUN:
+            metas[s]["retry_skipped"] = "retry-skipped-cap"
+        else:
+            wait = TRENDS_EMPTY_RETRY_WAIT_S + _jitter()
+            if _clock() + wait > deadline:
+                metas[s]["retry_skipped"] = "retry-skipped-budget"
+                continue
+            sleep(wait)
+            retries += 1
+            calls, stats = [metas[s]["attempts"]], {}
+            retry = _trends_fetch_once(s, kw, client, today, calls, stats)
+            metas[s].update({"attempts": calls[0], "retried": True, "stats": dict(stats)})
+            out[s] = retry
+            ended = retry.state == "capped"
+
+
+_RUN_OUTCOME = {"rate-limited": "capped", "non-daily": "failed", "insufficient-history": "failed"}
+_REASON_KEEP = re.compile(r"[^\w ():.,\-]")
+
+
+def _run_coin_record(item, meta) -> dict:
+    """One coin of the run file. The reason is the series reason (an exception class / HTTP status or a fixed
+    label by construction), cleaned and cut to 80 characters as a second guard against any message text."""
+    outcome = _trends_outcome(item)
+    outcome = "failed" if outcome.startswith("failed(") else _RUN_OUTCOME.get(outcome, outcome)
+    reason = item.reason or ""
+    reason = reason.removeprefix("fetch-failed: ")
+    if item.state == "insufficient-history":
+        reason = "insufficient-history"
+    reason = re.sub(r":{2,}", ":", _REASON_KEEP.sub("", reason))[:80] if outcome != "ok" else ""
+    st = meta.get("stats") or {}
+    return {"outcome": outcome, "reason": reason or None, "keyword_kind": meta.get("kind", "none"),
+            "median": st.get("median"), "zero_share_pct": st.get("zero_share_pct"),
+            "last7_vs_prior28_ratio": st.get("last7_vs_prior28_ratio"),
+            "attempts": meta.get("attempts", 0), "retried": bool(meta.get("retried")),
+            "retry_skipped": meta.get("retry_skipped")}
+
+
+def _pytrends_version() -> str | None:
+    try:
+        from importlib.metadata import version
+        return version("pytrends")
+    except Exception:  # noqa: BLE001 - evidence only: absent or unreadable metadata is just null
+        return None
+
+
+_utcnow = lambda: datetime.now(timezone.utc)
+_stamp = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
+# Why the run file could not be written in the last _run_trends call (class only); main() turns it into the
+# `store-failed` last line. None when it was written.
+trends_run_error: str | None = None
+
+
 def _run_trends(symbols, client, today, sleep):
-    """One request per coin with only its keyword; writes the per-pull archive; the store write
-    (replace-series) is done by main(). No-keyword, bare (unqualified) name-risk terms and a bad keyword
-    file cost no request."""
+    """One request per coin with only its keyword; writes the per-pull archive and the per-run outcome file
+    (T197); the store write (replace-series) is done by main(). No-keyword, bare (unqualified) name-risk terms
+    and a bad keyword file cost no request."""
+    global trends_run_error
     from api.data.attention.types import SourceSeries
+    trends_run_error = None
+    started = _utcnow()
     km, bad = trends_keywords.safe_load()
     out: dict[str, SourceSeries] = {}
+    metas: dict[str, dict] = {}
     todo: list[tuple[str, str]] = []
     for s in dict.fromkeys(x.upper() for x in symbols):  # a repeated symbol costs one request
         status = trends_keywords.keyword_status(km, s)
         if status in ("topic", "term"):
             todo.append((s, km.keyword_for(s)))
+            metas[s] = {"kind": status}
         else:
             out[s] = SourceSeries("trends", s, [], "unavailable", MISSING_KEYWORD_REASON.get(status, bad))
+            metas[s] = {"kind": "term" if status == "skipped-unqualified" else "none"}
     if todo:
         start = today.toordinal() % len(todo)  # rotate so a budget stop does not always starve the same coins
         todo = todo[start:] + todo[:start]
@@ -264,6 +359,7 @@ def _run_trends(symbols, client, today, sleep):
                 out[s] = SourceSeries("trends", s, [], "unavailable", why)
             todo = []
         t0, streak, stop, sent = _clock(), 0, None, False
+        deadline = t0 + TRENDS_TIME_BUDGET_S
         for s, kw in todo:
             if stop is None and _clock() - t0 >= TRENDS_TIME_BUDGET_S:
                 stop = "time budget reached"
@@ -275,17 +371,34 @@ def _run_trends(symbols, client, today, sleep):
             if sent:
                 sleep(TRENDS_INTERVAL_S + _jitter())
             sent = True
-            item = _trends_fetch_429(s, kw, trendreq, today, sleep, t0 + TRENDS_TIME_BUDGET_S)
+            item, meta = _trends_fetch_coin(s, kw, trendreq, today, sleep, deadline)
+            metas[s].update(meta)
             if item.reason == "time budget reached":
                 stop = item.reason
             streak = streak + 1 if item.state == "capped" else 0
             out[s] = item
+        if trendreq is not None:
+            _trends_retry_empty(todo, out, metas, trendreq, today, sleep, deadline)
     series = [out[s] for s in dict.fromkeys(x.upper() for x in symbols)]
     try:
         store.write_pull_archive("trends", today, series)
     except Exception as exc:  # the archive must not cost the live series
         print(f"trends archive: not written {trends.error_class(exc)}", file=sys.stderr)
-    print(f"trends detail: {trends_summary(series)}")
+    coins = {s.symbol: _run_coin_record(s, metas[s.symbol]) for s in series}
+    retried = sum(1 for c in coins.values() if c["retried"])
+    recovered = sum(1 for c in coins.values() if c["retried"] and c["outcome"] == "ok")
+    skipped = sum(1 for c in coins.values() if c["retry_skipped"])
+    try:  # evidence only: a failed write must not cost the live series (main() ends the source red)
+        totals = {k: sum(1 for c in coins.values() if c["outcome"] == k) for k in TRENDS_RUN_OUTCOMES}
+        trends_runs.append_run(today, {
+            "run_started_utc": _stamp(started), "run_finished_utc": _stamp(_utcnow()),
+            "pytrends_version": _pytrends_version(), "budget_s": TRENDS_TIME_BUDGET_S, "coins": coins,
+            "totals": {**totals, "coins": len(coins), "retried": retried, "recovered": recovered,
+                       "retry_skipped": skipped}})
+    except Exception as exc:  # noqa: BLE001 - class only, never the message
+        trends_run_error = trends.error_class(exc)
+    retry_note = f", retried {retried} (recovered {recovered}, skipped {skipped})" if retried or skipped else ""
+    print(f"trends detail: {trends_summary(series)}{retry_note}")
     return series
 
 
@@ -407,6 +520,8 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
                                 why = f"store-failed: {trends.error_class(exc)}"
                                 store_failed.append(why)
                                 series[i] = SourceSeries(s.source, s.symbol, [], "unavailable", why)
+                if name == "trends" and trends_run_error:  # the run file is evidence, but a failed write is red
+                    store_failed.append(f"store-failed: {trends_run_error}")
                 ok = sum(1 for s in series if s.state == "ok")
                 failed = series and all(
                     s.state == "unavailable" and s.reason != "empty response" for s in series)

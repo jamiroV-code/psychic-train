@@ -245,9 +245,9 @@
     "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "OKB": {
-    "term": "okb crypto",
+    "term": "okb token",
     "label": "OKB",
-    "note": "owner-named 26-10-26, qualified-term, not checker PASS"
+    "note": "qualified term: name equals ticker, so 'okb token' (rule exception, T160); not checker-verified; reverted 26-10-26: 'okb crypto' returned 99% zero days, 'okb token' median 65"
   },
   "ONDO": {
     "term": "ondo crypto",
@@ -260,9 +260,9 @@
     "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "PEARL": {
-    "term": "pearl ai crypto",
+    "term": "pearl crypto",
     "label": "Pearl",
-    "note": "owner-named 26-10-26, qualified-term, not checker PASS"
+    "note": "qualified term: '<project name> crypto' (rule, T160); name from CoinGecko id pearl-2; not checker-verified; reverted 26-10-26: 'pearl ai crypto' 98% zero days, 'pearl crypto' median 7"
   },
   "PEPE": {
     "term": "Pepe coin",
@@ -288,6 +288,11 @@
     "topic": "/g/11wr7k80z3",
     "label": "pump.fun",
     "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "PYTH": {
+    "term": "pyth network crypto",
+    "label": "Pyth Network",
+    "note": "owner-approved 26-10-26 fallback term, untested; name from CoinGecko id"
   },
   "QNT": {
     "term": "quant crypto",

@@ -100,6 +100,12 @@ def test_allowlisted_ticker_without_entry_is_still_a_gap(monkeypatch):
     assert k.guard_gaps(m, ["AKE"])["no-entry"] == ["AKE"]
 
 
+def test_t195_pyth_is_outside_the_pinned_set_and_only_warns():
+    """PYTH is not narrative-placed or Discovery-eligible: it only shows as a 'not a placed coin' warning."""
+    m, reason = k.safe_load(placed_symbols=PINNED_ELIGIBLE)
+    assert reason == "" and "PYTH" in m.not_placed and "PYTH" not in PINNED_ELIGIBLE
+
+
 def test_bdx_is_eligible_and_has_a_keyword():
     """T160 found BDX eligible but missing; #171 added a qualified term."""
     m = k.load()

@@ -42,7 +42,7 @@ def _err(doc, placed=None) -> str:
 
 def test_shipped_file_validates_against_placed_symbols():
     m = k.load(placed_symbols=_placed())
-    assert m.warnings == [f"keywords: {s} is not a placed coin" for s in sorted(DISCOVERY_EXTRA)]  # T160 extras
+    assert m.warnings == [f"keywords: {s} is not a placed coin" for s in sorted(DISCOVERY_EXTRA | {"PYTH"})]  # T160 extras; T195 PYTH (owner-approved, not placed)
     assert m.anchor["term"] == "Bitcoin"
     topics = {s: e["topic"] for s, e in m.entries.items() if "topic" in e}
     assert topics == ALL_TOPICS  # topic ids come only from the owner (checker runs 21-10-26, 22-10-26; T134, T154)
@@ -299,7 +299,7 @@ T192_TERMS = {
     "AKE": ("akedo crypto", "Akedo"), "BTW": ("bitway crypto", "Bitway"),
     "GRAM": ("the open network toncoin", "The Open Network"), "LIT": ("lighter crypto", "Lighter"),
     "STABLE": ("stable chain", "Stable"), "RAIN": ("rain protocol", "Rain"),
-    "PRL": ("pearl ai coin", "Pearl"), "PEARL": ("pearl ai crypto", "Pearl"), "OKB": ("okb crypto", "OKB"),
+    "PRL": ("pearl ai coin", "Pearl"),   # OKB and PEARL were reverted by T195
 }
 T192_NOTE = "owner-named 26-10-26, qualified-term, not checker PASS"
 
@@ -310,6 +310,41 @@ def test_t192_named_tickers_have_exact_qualified_terms():
     for sym, (term, label) in T192_TERMS.items():
         assert m.entries[sym] == {"term": term, "label": label, "note": T192_NOTE}, sym
         assert trends.is_qualified_term(term) and k.keyword_status(m, sym) == "term", sym
+
+
+# T195: owner probes 26-10-26 showed the T192 terms for OKB and PEARL return mostly zero days; both go back to the
+# T160 terms (git history, 235268e). PYTH had no entry; its fallback term is untested.
+T195_OKB = {"term": "okb token", "label": "OKB",
+            "note": "qualified term: name equals ticker, so 'okb token' (rule exception, T160); not checker-verified"}
+T195_PEARL = {"term": "pearl crypto", "label": "Pearl",
+              "note": "qualified term: '<project name> crypto' (rule, T160); name from CoinGecko id pearl-2; "
+                      "not checker-verified"}
+
+
+def test_t195_okb_and_pearl_are_reverted_to_the_t160_terms():
+    m = k.load()
+    for sym, old, why in (("OKB", T195_OKB, "reverted 26-10-26: 'okb crypto' returned 99% zero days, 'okb token' median 65"),
+                          ("PEARL", T195_PEARL, "reverted 26-10-26: 'pearl ai crypto' 98% zero days, 'pearl crypto' median 7")):
+        e = m.entries[sym]
+        assert (e["term"], e["label"]) == (old["term"], old["label"]), sym
+        assert e["note"].startswith(old["note"]) and why in e["note"], sym
+
+
+def test_t195_prl_keeps_its_own_term_and_pyth_is_qualified():
+    from api.data.attention import trends
+    m = k.load()
+    assert m.entries["PRL"]["term"] == "pearl ai coin"
+    assert m.entries["PYTH"] == {"term": "pyth network crypto", "label": "Pyth Network",
+                                 "note": "owner-approved 26-10-26 fallback term, untested; name from CoinGecko id"}
+    assert trends.is_qualified_term("pyth network crypto") and k.keyword_status(m, "PYTH") == "term"
+
+
+def test_t195_no_duplicate_terms_or_topics_and_topics_unchanged():
+    m = k.load()
+    terms = [e["term"].casefold() for e in m.entries.values() if "term" in e]
+    assert len(terms) == len(set(terms))
+    topics = {s: e["topic"] for s, e in m.entries.items() if "topic" in e}
+    assert topics == ALL_TOPICS and len(set(topics.values())) == len(topics)
 
 
 def test_t192_no_unidentified_entry_is_left():
