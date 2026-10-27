@@ -72,23 +72,52 @@ def test_verdict_uses_the_daily_rule():
 
 def test_rising_ratio_and_days_above_baseline():
     r = g.rising(rise(10, 20))
-    assert r.ratio == 2.0 and r.days_above == 7
+    assert r.median_ratio == 2.0 and r.mean_ratio == 2.0 and r.days_above == 7
     r = g.rising(flat(10))
-    assert r.ratio == 1.0 and r.days_above == 0
+    assert r.median_ratio == 1.0 and r.mean_ratio == 1.0 and r.days_above == 0
     r = g.rising(flat(0))
-    assert r.ratio is None and r.days_above is None and "baseline median 0" in r.reason
+    assert r.median_ratio is None and r.mean_ratio is None and r.days_above is None
+    assert "baseline median 0" in r.reason
     r = g.rising(flat(10, n=30))
-    assert r.ratio is None and "35" in r.reason
+    assert r.median_ratio is None and r.mean_ratio is None and "35" in r.reason
+
+
+def test_mean_and_median_ratio_differ_on_a_spiky_series():
+    # T207: the daily run's last7_vs_prior28_ratio is a MEAN ratio; clean-rising uses the MEDIAN ratio. Both are kept.
+    spiky = flat(10)
+    spiky[-1] = 100.0
+    r = g.rising(spiky)
+    assert r.median_ratio == 1.0 and r.days_above == 1
+    assert r.mean_ratio == pytest.approx(160 / 70)   # (6 * 10 + 100) / 7 over 10
+    assert r.mean_ratio == trends.series_stats(spiky)["last7_vs_prior28_ratio"]   # the daily run's own number
+
+
+def test_mean_and_median_ratio_on_a_ramp():
+    ramp = [float(i + 1) for i in range(N)]
+    r = g.rising(ramp)
+    assert r.median_ratio == pytest.approx(97 / 80.5)    # last 7 days 94..100, prior 28 days 67..94
+    assert r.mean_ratio == pytest.approx(97 / 80.5)
+    assert r.mean_ratio == trends.series_stats(ramp)["last7_vs_prior28_ratio"]
+    assert g.rising(ramp).days_above == 7
+
+
+def test_mean_ratio_survives_a_zero_baseline_median():
+    vals = flat(0)
+    vals[-20:-10] = [5.0] * 10     # prior-28 mean 1.78, median 0
+    vals[-7:] = [8.0] * 7
+    r = g.rising(vals)
+    assert r.median_ratio is None and "baseline median 0" in r.reason
+    assert r.mean_ratio == trends.series_stats(vals)["last7_vs_prior28_ratio"] and r.mean_ratio is not None
 
 
 def test_one_day_spike_is_not_a_sustained_rise():
     spike = flat(10)
     spike[-1] = 100.0
     m = g.analyze({"a": spike}, DATES)
-    assert m.rising.days_above == 1 and m.rising.ratio == 1.0
+    assert m.rising.days_above == 1 and m.rising.median_ratio == 1.0
     assert m.clean is False
     sustained = g.analyze({"a": rise(10, 13)}, DATES)
-    assert sustained.rising.days_above == 7 and sustained.rising.ratio == 1.3
+    assert sustained.rising.days_above == 7 and sustained.rising.median_ratio == 1.3
     assert sustained.clean is True
 
 
@@ -127,6 +156,24 @@ def test_spike_boundary_and_falling_term():
     # a falling term adds no increase (floored at 0), so the rising term carries all of it
     m = g.analyze({"a": rise(10, 15), "b": rise(10, 5)}, DATES)
     assert m.spike_share == 1.0 and m.spike is True
+
+
+def test_spike_takeover_boundary_exactly_plus_point_two():
+    # T207: flagged when share of the rise >= 0.8 AND >= baseline share + 0.2; the + 0.2 edge is inclusive
+    at = g.analyze({"a": rise(60, 64), "b": rise(40, 41)}, DATES)       # increases 28 and 7: 80%; baseline 60% + 20%
+    assert at.spike_share == pytest.approx(0.8) and at.spike_base_share == pytest.approx(0.6) and at.spike is True
+    below = g.analyze({"a": rise(61, 65), "b": rise(39, 40)}, DATES)    # 80% of the rise, baseline 61%: needs 81%
+    assert below.spike_share == pytest.approx(0.8) and below.spike_base_share == pytest.approx(0.61)
+    assert below.spike is False
+    over = g.analyze({"a": rise(59, 63), "b": rise(41, 42)}, DATES)     # baseline 59%: 80% clears 79%
+    assert over.spike is True
+
+
+def test_spike_share_boundary_exactly_point_eight_with_low_baseline():
+    at = g.analyze({"a": rise(10, 14), "b": rise(90, 91)}, DATES)       # increases 28 and 7: 80%; baseline 10%
+    assert at.spike_share == pytest.approx(0.8) and at.spike_base_share == pytest.approx(0.1) and at.spike is True
+    just_below = g.analyze({"a": rise(10, 13.9), "b": rise(90, 91)}, DATES)   # 27.3 of 34.3: 79.6%
+    assert just_below.spike_share < 0.8 and just_below.spike_share > 0.79 and just_below.spike is False
 
 
 def test_spike_share_missing_without_increase_and_single_term_not_flagged():
@@ -207,13 +254,13 @@ def test_identity_low_correlation_blocks_clean_rising():
 
 def test_clean_rising_needs_every_condition():
     at_bound = g.analyze({"a": rise(10, 11)}, DATES)                      # ratio 11/10 = 1.10 holds
-    assert at_bound.rising.ratio == pytest.approx(1.1) and at_bound.clean is True
+    assert at_bound.rising.median_ratio == pytest.approx(1.1) and at_bound.clean is True
     low = g.analyze({"a": rise(2, 2.1)}, DATES)
     assert low.verdict != "ok" and low.clean is False and any("not usable" in r for r in low.reasons)
     four = flat(10)
     four[-4:] = [14.0] * 4
     m = g.analyze({"a": four}, DATES)
-    assert m.rising.days_above == 4 and m.rising.ratio == 1.4 and m.clean is True
+    assert m.rising.days_above == 4 and m.rising.median_ratio == 1.4 and m.clean is True
     three = flat(10)
     three[-3:] = [14.0] * 3
     m = g.analyze({"a": three}, DATES)
@@ -224,14 +271,14 @@ def test_clean_rising_at_ratio_boundary():
     vals = flat(100)
     vals[-7:] = [110.0] * 7
     m = g.analyze({"a": [v / 10 for v in vals]}, DATES)
-    assert m.rising.ratio == pytest.approx(1.1) and m.clean is (m.rising.ratio >= g.MIN_RISE_RATIO)
+    assert m.rising.median_ratio == pytest.approx(1.1) and m.clean is (m.rising.median_ratio >= g.MIN_MEDIAN_RISE_RATIO)
     vals[-7:] = [109.0] * 7
     assert g.analyze({"a": [v / 10 for v in vals]}, DATES).clean is False
 
 
 def test_constants_are_the_envelope_placeholders():
     assert (g.MAX_TERMS, g.SMOOTH_DAYS, g.RECENT_DAYS, g.BASELINE_DAYS) == (5, 7, 7, 28)
-    assert (g.MIN_RISE_RATIO, g.MIN_DAYS_ABOVE, g.SPIKE_SHARE) == (1.10, 4, 0.80)
+    assert (g.MIN_MEDIAN_RISE_RATIO, g.MIN_DAYS_ABOVE, g.SPIKE_SHARE) == (1.10, 4, 0.80)
     assert (g.MOVES_ALONE_CORR, g.IDENTITY_MIN_DAYS, g.IDENTITY_MIN_CORR) == (0.2, 60, 0.2)
 
 
@@ -316,6 +363,9 @@ def test_metrics_record_is_small_and_json_ready():
     assert rec["distinct"] == m.group.distinct and rec["zero_pct"] == 0 and rec["median"] == m.group.median
     assert set(rec["shares"]) == {"a", "b"} and rec["identity_corr"] is None
     assert not any(isinstance(v, list) and len(v) > 10 for v in rec.values())   # no series stored
+    # T207: two distinct, honestly named ratios; no field named like the daily run's mean ratio holds a median
+    assert "rise_ratio" not in rec and "last7_vs_prior28_ratio" not in rec
+    assert rec["last7_mean_vs_prior28_mean"] == 1.2 and rec["last7_median_vs_prior28_median"] == 1.2
 
 
 # --- purity ---

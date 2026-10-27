@@ -122,8 +122,9 @@ def test_group_report_lines():
     assert "  toncoin crypto | 10 | 0% | 50%" in text
     assert ("  group | days 100 | min 20 | median 20 (own scale only) | max 28 | zero 0% | distinct 2 | verdict: ok"
             in text)
-    assert ("  rising | last7/prior28 1.4 | days above baseline 7/7 | one-term spike: no (largest share of the rise "
-            "50%, its baseline share 50%)") in text
+    assert ("  rising | ratio (mean, as the daily run) 1.4 | ratio (median, used for clean-rising) 1.4 | "
+            "days above baseline 7/7 | one-term spike: no (largest share of the rise 50%, its baseline share 50%)"
+            ) in text
     assert "correlation (7-day smoothed) vs best term" in text
     assert "  identity | n/a: no stored volume" in text and "a hint, not proof" in text
     assert "  clean rising: yes" in text
@@ -131,7 +132,7 @@ def test_group_report_lines():
 
 def test_clean_rising_no_lists_reasons():
     code, text, _ = _run([frame(["a b"], values={"a b": 10})], ["--try", "AKE=a b"])
-    assert code == 0 and "  clean rising: no (" in text and "last7/prior28 1 < 1.1" in text
+    assert code == 0 and "  clean rising: no (" in text and "last7 median / prior28 median 1 < 1.1" in text
 
 
 def test_identity_line_uses_the_coins_stored_volume():
@@ -290,3 +291,16 @@ def test_json_skips_unusable_groups():
     block = text.split("paste-ready JSON")[1]
     assert json.loads(block[block.index("{"):block.rindex("}") + 1]) == {}
     assert "AKE: no loader-valid usable group" in block
+
+
+def test_header_and_report_say_which_ratio_is_which():
+    code, text, _ = _run([frame(["a b"], values={"a b": 10})], ["--try", "AKE=a b"])
+    assert code == 0 and "daily run uses the mean; clean-rising uses the median" in text
+    assert "last7_vs_prior28_ratio" not in text
+
+
+def test_spiky_group_shows_two_different_ratios():
+    vals = [10.0] * 99 + [100.0]
+    code, text, _ = _run([frame(["a b"], values={"a b": vals})], ["--try", "AKE=a b"])
+    assert code == 0
+    assert "ratio (mean, as the daily run) 2.29 | ratio (median, used for clean-rising) 1 |" in text
