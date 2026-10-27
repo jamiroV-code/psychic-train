@@ -99,9 +99,12 @@ def test_all_eligible_tests_eligible_coins_only_and_records_state(tmp_path):
     assert doc["coins"]["AKE"]["last_tested"] == NOW.isoformat()
 
 
-def test_default_three_groups_per_coin_in_candidate_order(tmp_path):
-    code, _, client = run(["--all-eligible", "--state", str(tmp_path / "c.json")], eligible=("AKE",))
-    assert code == 0 and sent(client) == AKE
+def test_default_depth_weak_coin_four_groups_usable_coin_two(tmp_path):
+    code, _, client = run(["--all-eligible", "--state", str(tmp_path / "c.json")], eligible=("AKE",),
+                          health={"AKE": "weak"})
+    assert code == 0 and sent(client) == [AKE[0], AKE[1], "akedo", "AKE"]
+    code, _, client = run(["--all-eligible", "--state", str(tmp_path / "d.json")], eligible=("AKE",))
+    assert code == 0 and sent(client) == [AKE[0], AKE[2]]
 
 
 def test_priority_weak_missing_empty_first_then_universe_order(tmp_path):
