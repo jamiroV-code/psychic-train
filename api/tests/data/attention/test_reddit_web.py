@@ -17,7 +17,7 @@ import httpx
 import pytest
 
 from api.data import cache
-from api.data.attention import pc_pace, reddit_items, store, web_evidence
+from api.data.attention import density, pc_pace, reddit_items, store, web_evidence
 from api.data.attention import reddit_web as rw
 from api.data.attention import web_queries as wq
 
@@ -40,8 +40,13 @@ class Clock:
         self.t += timedelta(seconds=s)
 
 
-def entry(i: int, when: datetime, *, author: str = "u1", title: str = "SOL news", sub: str = "CryptoCurrency",
+TITLE = "SOL ETH ADA BTC XRP news"  # the default entry mentions every coin the tests query
+
+
+def entry(i: int, when: datetime, *, author: str | None = None, title: str = TITLE, sub: str = "CryptoCurrency",
           published: bool = True, kind: str = "t3") -> str:
+    """One Atom entry; each entry has its own author unless one is given (the author cap is 3 per coin-day)."""
+    author = author or f"u{i}"
     stamp = when.isoformat()
     pub = f"<published>{stamp}</published>" if published else ""
     return (f'<entry><author><name>/u/{author}</name><uri>https://www.reddit.com/user/{author}</uri></author>'
@@ -64,15 +69,27 @@ def at(h: int, m: int = 0, day: date = D) -> datetime:
 
 
 EXACT = feed_at([at(20), at(15), at(3), at(-2)])  # three in D, one before D: the feed reaches the window start
+CANARY_FEED = feed_at([NOW - timedelta(minutes=10 * i) for i in range(100)])
+
+
+def is_canary(request: httpx.Request) -> bool:
+    return request.url.path.endswith("/new.rss")
 
 
 class Fake:
-    """Records every request (and, given a clock, when it was sent); `respond(request)` returns the response."""
+    """Records every search request (and, given a clock, when it was sent); `respond(request)` returns the response.
 
-    def __init__(self, respond, clock: Clock | None = None):
+    A canary request (`new.rss`) is answered by `canary` (a normal 100-entry feed by default) and recorded apart.
+    """
+
+    def __init__(self, respond, clock: Clock | None = None, canary=None):
         self.respond, self.clock, self.requests, self.sent_at = respond, clock, [], []
+        self.canary_respond, self.canary = canary or ok(CANARY_FEED), []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
+        if is_canary(request):
+            self.canary.append(request)
+            return self.canary_respond(request)
         self.requests.append(request)
         if self.clock is not None:
             self.sent_at.append(self.clock())
@@ -96,11 +113,32 @@ def q(attention_cache):
     return wq.load()
 
 
-def unit(fake: Fake, q, clock: Clock, *, symbol="SOL", day=D, degraded=False, ledger=None):
-    """One unit on a fresh Reddit state (no pause or spacing carried over from an earlier call)."""
+def seed_canary(q, clock: Clock, respond=None) -> rw.CanaryOutcome:
+    """Run today's canary through the real path, then drop the pace state so the next unit is not spaced."""
+    pc_pace.state_path(rw.SOURCE).unlink(missing_ok=True)
+    src = rw.reddit_source(q.config, degraded=True, clock=clock)
+    out = rw.run_canary(Fake(ok(b""), canary=respond).client(), src, q)
+    pc_pace.state_path(rw.SOURCE).unlink(missing_ok=True)
+    return out
+
+
+def unit(fake: Fake, q, clock: Clock, *, symbol="SOL", day=D, degraded=False, ledger=None, canary=True):
+    """One unit on a fresh Reddit state (no pause or spacing carried over), after today's canary unless told not to."""
+    if canary:
+        seed_canary(q, clock)
     pc_pace.state_path(rw.SOURCE).unlink(missing_ok=True)
     src = rw.reddit_source(q.config, degraded=degraded, clock=clock)
     return rw.run_search_unit(fake.client(), src, q, symbol=symbol, day=day, ledger=ledger), src
+
+
+def count(entries_body: bytes, *, symbol="SOL", limit=rw.SEARCH_LIMIT, canary_ok=True, searched_from=None,
+          sample_min=10, q=None):
+    """`count_day` for D with the committed query file's terms for `symbol`; returns (result, reason, tally)."""
+    q = q or wq.load()
+    return rw.count_day(D, rw.parse_feed(entries_body, rw.ephemeral_hasher()),
+                        coin=rw.reddit_metrics.coin_term(q, symbol), sample_min=sample_min,
+                        author_cap=q.config.reddit_author_cap, limit=limit, canary_ok=canary_ok,
+                        searched_from=searched_from)
 
 
 # --- parser and A.2 counting ---
@@ -109,7 +147,7 @@ def test_parse_atom_entries_with_updated_timestamps():
     both = rw.parse_feed(feed_at([at(12)]))
     (e,) = both
     assert e.id == "t3_1" and e.created == at(12) and e.updated == at(12) and e.subreddit == "CryptoCurrency"
-    assert "SOL news" in e.text and "body 1" in e.text and "<p>" not in e.text
+    assert TITLE in e.text and "body 1" in e.text and "<p>" not in e.text
     assert e.author_hash is None  # no hasher given: the username is dropped at the parser
     only_updated = rw.parse_feed(atom([entry(2, at(7), published=False)]))
     assert only_updated[0].created == at(7)
@@ -118,42 +156,44 @@ def test_parse_atom_entries_with_updated_timestamps():
 
 
 def test_exact_count_when_feed_reaches_window_start():
-    result, reason = rw.count_day(D, rw.parse_feed(EXACT), sample_min=10)
+    result, reason, _ = count(EXACT)
     assert reason is None and result.value == 3 and not result.capped and result.n == 3
-    zero, _ = rw.count_day(D, rw.parse_feed(feed_at([at(30), at(-5)])), sample_min=10)
+    full, why, _ = count(EXACT, limit=4, canary_ok=False)  # a feed filled to the limit needs no canary
+    assert why is None and full.value == 3 and not full.capped
+    zero, _, _ = count(feed_at([at(30), at(-5)]))
     assert zero.value == 0 and not zero.capped  # exact zero; the AC3 zero rule decides at commit time
 
 
 def test_feed_capped_uses_density_over_covered_span():
-    times = [at(h) for h in range(23, 11, -1)]  # 12 entries, 23:00 .. 12:00, no entry before D
-    result, reason = rw.count_day(D, rw.parse_feed(feed_at(times)), sample_min=10)
+    times = [at(h) for h in range(23, 11, -1)]  # 12 entries, 23:00 .. 12:00, no entry before D, feed at the limit
+    result, reason, _ = count(feed_at(times), limit=12)
     assert reason is None and result.capped and not result.pagecap
     assert result.n == 12 and result.span_hours == pytest.approx(12.0) and result.value == pytest.approx(24.0)
     late = [at(23, 59 - m) for m in range(10)]  # ten entries in the last 10 minutes: span floor 0.25 h
-    floor, _ = rw.count_day(D, rw.parse_feed(feed_at(late)), sample_min=10)
+    floor, _, _ = count(feed_at(late), limit=10)
     assert floor.span_hours == pytest.approx(0.25) and floor.value == pytest.approx(960.0)
 
 
 def test_day_not_reached_is_missing():
-    result, reason = rw.count_day(D, rw.parse_feed(feed_at([at(24 + h) for h in range(5)])), sample_min=10)
+    result, reason, _ = count(feed_at([at(24 + h) for h in range(5)]), limit=5)
     assert result is None and reason == "day_not_reached"
-    empty, why = rw.count_day(D, rw.parse_feed(atom([])), sample_min=10)
-    assert empty is None and why == "empty_feed"
+    empty, why, _ = count(atom([]), canary_ok=False)
+    assert empty is None and why == "no_canary"
 
 
 def test_entries_after_window_end_ignored():
     times = [at(24 + h) for h in range(5)] + [at(12), at(1), at(-1)]
-    result, _ = rw.count_day(D, rw.parse_feed(feed_at(times)), sample_min=10)
+    result, _, _ = count(feed_at(times))
     assert result.value == 2 and not result.capped
-    edge, _ = rw.count_day(D, rw.parse_feed(feed_at([at(24), at(0), at(-1)])), sample_min=10)
+    edge, _, _ = count(feed_at([at(24), at(0), at(-1)]))
     assert edge.value == 1  # D+1 00:00 is outside, D 00:00 is inside
 
 
 def test_below_reddit_sample_min_is_missing():
     nine = [at(23 - h) for h in range(9)]
-    result, reason = rw.count_day(D, rw.parse_feed(feed_at(nine)), sample_min=10)
+    result, reason, _ = count(feed_at(nine), limit=9)
     assert result is None and reason == "below_sample_min"
-    ten, _ = rw.count_day(D, rw.parse_feed(feed_at(nine + [at(10)])), sample_min=10)
+    ten, _, _ = count(feed_at(nine + [at(10)]), limit=10)
     assert ten is not None and ten.capped
 
 
@@ -165,18 +205,19 @@ def test_malformed_entry_is_layout_changed():
 
 # --- URL, terms, user agent ---
 
-def test_search_rss_url_form_sort_new_t_day_and_subreddit_set(q):
-    url = rw.search_url(["CryptoCurrency", "CryptoMarkets"], ["SOL", "Solana"], "day")
+def test_search_rss_url_form_sort_new_t_week_and_subreddit_set(q):
+    url = rw.search_url(["CryptoCurrency", "CryptoMarkets"], ["SOL", "Solana"], "week")
     assert url == ("https://www.reddit.com/r/CryptoCurrency+CryptoMarkets/search.rss"
-                   "?q=%22SOL%22%20OR%20%22Solana%22&restrict_sr=1&sort=new&t=day&limit=100")
+                   "?q=%22SOL%22%20OR%20%22Solana%22&restrict_sr=1&sort=new&t=week&limit=100")
+    assert q.config.reddit_search_time_filter == "week"
     fake = Fake(ok(EXACT))
-    unit(fake, dataclasses.replace(q, config=cfg(reddit_search_time_filter="day")), Clock(NOW))
+    unit(fake, q, Clock(NOW))
     (req,) = fake.requests
     parts = urlsplit(str(req.url))
     assert parts.scheme == "https" and parts.netloc == "www.reddit.com"
     assert parts.path == "/r/" + "+".join(q.subreddits) + "/search.rss"
     qs = parse_qs(parts.query)
-    assert qs["sort"] == ["new"] and qs["restrict_sr"] == ["1"] and qs["t"] == ["day"] and qs["q"] == ['"SOL" OR "Solana"']
+    assert qs["sort"] == ["new"] and qs["restrict_sr"] == ["1"] and qs["t"] == ["week"] and qs["q"] == ['"SOL" OR "Solana"']
 
 
 def test_search_request_uses_t_week_by_config(q):
@@ -328,7 +369,7 @@ def test_ambiguity_list_skips_coin(q, attention_cache):
     src = rw.reddit_source(q.config, degraded=False, clock=clock)
     res = rw.run_pass(fake.client(), src, q, queue=[("SKY", D)], clock=clock, sleep=clock.sleep,
                       rng=random.Random(1), degraded=False)
-    assert fake.requests == [] and res.requests == 0
+    assert fake.requests == [] and fake.canary == [] and res.requests == 0
     assert rw.read_completeness(D)["reasons"] == {"ambiguous": 1}
     assert store.read_points("reddit_web", "SKY") == []
 
@@ -359,14 +400,15 @@ def test_writes_reddit_web_store_not_reddit(q, attention_cache):
 
 
 def test_evidence_row_written(q, attention_cache):
-    times = [at(h) for h in range(23, 11, -1)]
+    times = [at(23, 59) - timedelta(minutes=6 * i) for i in range(100)]  # a full feed, oldest D 14:05
     fake, clock = Fake(ok(feed_at(times))), Clock(NOW)
     src = rw.reddit_source(q.config, degraded=False, clock=clock)
     rw.run_pass(fake.client(), src, q, queue=[("SOL", D)], clock=clock, sleep=clock.sleep,
                 rng=random.Random(1), degraded=False)
     row = web_evidence.read_rows("reddit_web", "SOL")[D]
-    assert row.value == pytest.approx(24.0) and row.n == 12 and row.capped and not row.pagecap
-    assert row.span_hours == pytest.approx(12.0) and row.method == rw.METHOD and not row.backfilled
+    span = (at(24) - at(14, 5)).total_seconds() / 3600
+    assert row.value == pytest.approx(2400 / span) and row.n == 100 and row.capped and not row.pagecap
+    assert row.span_hours == pytest.approx(span) and row.method == rw.METHOD and not row.backfilled
     assert row.collected_at >= NOW
 
 
@@ -404,7 +446,9 @@ def test_budget_150_requests_per_day(q, attention_cache):
     queue = [(s, D - timedelta(days=b)) for b in range(3) for s in syms][:151]
     res = rw.run_pass(fake.client(), src, q, queue=queue, clock=clock, sleep=clock.sleep, rng=random.Random(2),
                       degraded=True, n_coins=len(syms))
-    assert len(fake.requests) == res.requests == 150 and res.stop == "budget_spent" and src.used == 150
+    # the canary is one request of the same budget
+    assert len(fake.canary) == res.canary_requests == 1
+    assert len(fake.requests) == res.requests == 149 and res.stop == "budget_spent" and src.used == 150
     assert any(rw.read_completeness(d)["budget_cut"] for d in {d for _, d in queue})
 
 
@@ -461,8 +505,9 @@ def test_search_completeness_written_attempted_fetched_missing_reasons(q, attent
                       clock=clock, sleep=clock.sleep, rng=random.Random(1), degraded=False)
     assert res.requests == 4
     c = rw.read_completeness(D)
-    assert c["attempted"] == 4 and c["fetched"] == 1 and c["missing"] == 4
-    assert c["reasons"] == {"day_not_reached": 1, "below_sample_min": 1, "offline": 1, "ambiguous": 1}
+    # ETH: a short feed with nothing in D is an exact 0, which needs a trailing median; ADA: a short exact 1
+    assert c["attempted"] == 4 and c["fetched"] == 2 and c["missing"] == 3
+    assert c["reasons"] == {"zero_unconfirmed": 1, "offline": 1, "ambiguous": 1}
     assert c["requests"] == 4 and c["capped"] == 0 and c["budget_cut"] is False
     assert c["newest_entry_at"] == at(30).isoformat()
     assert set(c["coins"]) == {"SOL", "ETH", "ADA", "BTC", "SKY"}
@@ -475,7 +520,7 @@ def test_search_completeness_written_attempted_fetched_missing_reasons(q, attent
     rw.run_pass(fake.client(), src, q, queue=[("BTC", D)], clock=clock, sleep=clock.sleep, rng=random.Random(1),
                 degraded=False)
     c2 = rw.read_completeness(D)
-    assert c2["fetched"] == 2 and c2["missing"] == 3 and "offline" not in c2["reasons"] and c2["requests"] == 5
+    assert c2["fetched"] == 3 and c2["missing"] == 2 and "offline" not in c2["reasons"] and c2["requests"] == 5
 
 
 def test_completeness_marks_budget_cut_and_pause_for_the_rest(q, attention_cache):
@@ -507,7 +552,9 @@ def test_no_fixed_utc_hour_assumption_start_times_0030_0900_1700_2300(q, tmp_pat
         src = rw.reddit_source(q.config, degraded=True, clock=clock)
         res = rw.run_pass(fake.client(), src, q, queue=[("SOL", D), ("ETH", D)], clock=clock, sleep=clock.sleep,
                           rng=random.Random(hh), degraded=True, stop_at=start + timedelta(hours=1))
-        assert res.requests == 2 and sent[0] - start <= timedelta(seconds=pc_pace.BEHIND_DELAY_S)
+        # the canary goes first, then the searches at the degraded 60-120 s
+        assert res.requests == 2 and len(fake.canary) == 1
+        assert sent[0] - start <= timedelta(seconds=pc_pace.BEHIND_DELAY_S + 120)
         assert 60 <= (sent[1] - sent[0]).total_seconds() <= 120
         c = rw.read_completeness(D)
         assert c["coins"]["ETH"]["reason"] == "fetched" and store.read_points("reddit_web", "ETH") == [(D, 1.0)]
@@ -541,7 +588,7 @@ def test_min_spacing_kept_across_a_restart(q, attention_cache):
 
 
 def test_entry_exactly_at_window_start_does_not_prove_coverage():
-    result, reason = rw.count_day(D, rw.parse_feed(feed_at([at(12), at(0)])), sample_min=10)
+    result, reason, _ = count(feed_at([at(12), at(0)]), limit=2)
     assert result is None and reason == "below_sample_min"  # the feed must reach strictly before D 00:00
 
 
@@ -556,3 +603,160 @@ def test_stream_stops_reading_above_the_size_cap(monkeypatch):
     big = feed_at([at(1)] * 40)
     with pytest.raises(rw.FeedRejected):
         rw.fetch_feed(Fake(ok(big)).client(), "https://www.reddit.com/r/x/search.rss")
+
+
+# --- T211 decisions: matched value (Q-b), cashtag_only (Q-c), short feeds and the canary (Q-d), zero (Q-e) ---
+
+def test_value_counts_matched_entries_then_author_cap_not_raw_results(q, attention_cache):
+    ents = [entry(1, at(20), title="Solana breaks out"), entry(2, at(19), title="$sol to the moon"),
+            entry(3, at(18), title="solar panels on sale"),  # a fuzzy search hit that does not mention SOL
+            entry(4, at(17), title="Sole trader tips")]
+    ents += [entry(10 + i, at(10, i), title="SOL again", author="spammer") for i in range(5)]
+    ents.append(entry(30, at(-1)))
+    fake, clock = Fake(ok(atom(ents))), Clock(NOW)
+    src = rw.reddit_source(q.config, degraded=False, clock=clock)
+    rw.run_pass(fake.client(), src, q, queue=[("SOL", D)], clock=clock, sleep=clock.sleep,
+                rng=random.Random(1), degraded=False)
+    assert store.read_points("reddit_web", "SOL") == [(D, 5.0)]  # 2 plus the spammer capped at 3
+    rec = rw.read_completeness(D)["coins"]["SOL"]
+    assert rec["entries"] == 10 and rec["in_window"] == 9 and rec["matched"] == 7 and rec["counted"] == 5
+    assert rec["excluded"] == {"no_match": 2, "author_cap": 2}
+
+
+def test_name_only_coin_value_counts_full_name_or_cashtag_only():
+    body = atom([entry(1, at(20), title="LINK in bio"), entry(2, at(19), title="Chainlink oracle news"),
+                 entry(3, at(18), title="$LINK pumps"), entry(4, at(-1), title="old")])
+    result, reason, tally = count(body, symbol="LINK")
+    assert reason is None and result.value == 2
+    assert tally.matched == 2 and tally.excluded == {"no_match": 1, "author_cap": 0}
+
+
+def test_cashtag_only_coin_value_ignores_bare_ticker():
+    body = atom([entry(1, at(20), title="ASTER moon"), entry(2, at(19), title="an aster flower"),
+                 entry(3, at(18), title="bought $ASTER"), entry(4, at(17), title="ATOM staking"),
+                 entry(5, at(16), title="Cosmos hub upgrade"), entry(6, at(15), title="$atom"),
+                 entry(7, at(14), title="SOL pump"), entry(8, at(-1), title="old")])
+    assert count(body, symbol="ASTER")[0].value == 1  # only the cashtag: the name equals the ticker
+    assert count(body, symbol="ATOM")[0].value == 2  # the full name or the cashtag, never the bare ticker
+    assert count(body, symbol="SOL")[0].value == 1  # a normal coin keeps the bare upper-case ticker
+
+
+def test_short_feed_all_inside_window_is_exact_only_with_canary():
+    body = feed_at([at(20), at(9)])  # 2 entries, fewer than the limit: the search returned all it had
+    result, reason, _ = count(body, searched_from=at(-5 * 24))
+    assert reason is None and result.value == 2 and not result.capped
+    missing, why, _ = count(body, canary_ok=False)
+    assert missing is None and why == "no_canary"
+
+
+def test_short_feed_not_reaching_window_start_is_window_not_reached_or_density():
+    body = feed_at([at(20), at(9)])
+    result, reason, _ = count(body, searched_from=at(10))  # e.g. t=day sent at D+1 10:00
+    assert result is None and reason == "window_not_reached"
+    twelve = feed_at([at(23) - timedelta(minutes=30 * i) for i in range(12)])  # 23:00 .. 17:30
+    capped, why, _ = count(twelve, searched_from=at(17))
+    assert why is None and capped.capped and capped.value == pytest.approx(24 * 12 / 6.5)
+
+
+def test_feed_capped_at_limit_is_density_without_canary():
+    times = [at(23, 59) - timedelta(minutes=6 * i) for i in range(100)]
+    result, reason, _ = count(feed_at(times), canary_ok=False)
+    assert reason is None and result.capped and result.n == 100
+
+
+def test_time_filter_span_sets_the_search_start():
+    assert rw.searched_from(NOW, "day") == NOW - timedelta(days=1)
+    assert rw.searched_from(NOW, "week") == NOW - timedelta(days=7)
+    assert rw.searched_from(NOW, "all") is None
+
+
+def test_valid_empty_feed_zero_needs_canary_and_trailing_median(q, attention_cache):
+    empty = atom([])
+    assert count(empty, canary_ok=False)[1] == "no_canary"
+    assert count(empty, searched_from=at(10))[1] == "window_not_reached"
+    assert count(empty)[0].value == 0
+    clock = Clock(NOW)
+    fake = Fake(ok(empty))
+    src = rw.reddit_source(q.config, degraded=True, clock=clock)
+    for b in range(1, 4):  # ETH has history (median 2); SOL has none
+        web_evidence.commit_day(rw.SOURCE, "ETH", D - timedelta(days=b), density.DayResult(2.0, 2, 24.0, False, False),
+                                canary_ok=True, trailing_median=None, now=NOW, method=rw.METHOD)
+    rw.run_pass(fake.client(), src, q, queue=[("SOL", D), ("ETH", D)], clock=clock, sleep=clock.sleep,
+                rng=random.Random(1), degraded=True)
+    c = rw.read_completeness(D)["coins"]
+    assert c["SOL"]["reason"] == "zero_unconfirmed" and store.read_points("reddit_web", "SOL") == []
+    assert c["ETH"]["reason"] == "fetched" and (D, 0.0) in store.read_points("reddit_web", "ETH")
+
+
+def test_200_with_html_or_empty_body_is_a_block(q):
+    for body, ctype in ((b"", "application/atom+xml"), (b"<html><body>x</body></html>", "application/atom+xml")):
+        out, src = unit(Fake(ok(body, ctype)), q, Clock(NOW))
+        assert out.reason == "reddit_blocked" and src.is_paused()
+
+
+def test_failed_canary_keeps_short_feed_missing_no_canary(q, attention_cache):
+    fake, clock = Fake(ok(EXACT), canary=lambda r: httpx.Response(503)), Clock(NOW)
+    src = rw.reddit_source(q.config, degraded=True, clock=clock)
+    res = rw.run_pass(fake.client(), src, q, queue=[("SOL", D)], clock=clock, sleep=clock.sleep,
+                      rng=random.Random(1), degraded=True)
+    assert res.canary_requests == 1 and res.requests == 1 and src.used == 2
+    c = rw.read_completeness(D)
+    assert c["coins"]["SOL"]["reason"] == "no_canary" and store.read_points("reddit_web", "SOL") == []
+    assert c["canary"]["ok"] is False and c["canary"]["requests"] == 1 and c["canary"]["reason"] == "offline"
+
+
+def test_short_canary_feed_or_yesterdays_canary_does_not_count(q, attention_cache):
+    short = seed_canary(q, Clock(NOW), ok(feed_at([NOW] * (rw.CANARY_MIN_ENTRIES - 1))))
+    assert not short.ok and short.reason == "canary_short" and not rw.canary_ok(NOW)
+    rw.canary_path(NOW.date()).unlink()
+    assert seed_canary(q, Clock(NOW - timedelta(days=1))).ok
+    out, _ = unit(Fake(ok(EXACT)), q, Clock(NOW), canary=False)
+    assert out.reason == "no_canary" and out.result is None
+    assert seed_canary(q, Clock(NOW)).ok and rw.canary_ok(NOW)
+
+
+def test_canary_counted_in_budget_and_evidence_once_a_day(q, attention_cache):
+    fake, clock = Fake(ok(EXACT)), Clock(NOW)
+    src = rw.reddit_source(q.config, degraded=True, clock=clock)
+    rw.run_pass(fake.client(), src, q, queue=[("SOL", D)], clock=clock, sleep=clock.sleep, rng=random.Random(1),
+                degraded=True)
+    assert len(fake.canary) == 1 and src.used == 2 and str(fake.canary[0].url) == rw.canary_url()
+    assert fake.canary[0].headers["user-agent"] == wq.HONEST_USER_AGENT
+    c = rw.read_completeness(D)
+    assert c["canary"] == {**c["canary"], "ok": True, "requests": 1, "entries": 100, "status": 200}
+    assert store.read_points("reddit_web", "SOL") == [(D, 3.0)]
+    clock.sleep(3600)
+    rw.run_pass(fake.client(), src, q, queue=[("ETH", D)], clock=clock, sleep=clock.sleep, rng=random.Random(1),
+                degraded=True)
+    assert len(fake.canary) == 1 and src.used == 3  # one canary per UTC day
+
+
+def test_canary_block_pauses_and_sends_no_search(q, attention_cache):
+    fake, clock = Fake(ok(EXACT), canary=lambda r: httpx.Response(403)), Clock(NOW)
+    src = rw.reddit_source(q.config, degraded=True, clock=clock)
+    res = rw.run_pass(fake.client(), src, q, queue=[("SOL", D), ("ETH", D)], clock=clock, sleep=clock.sleep,
+                      rng=random.Random(1), degraded=True)
+    assert res.stop == "paused" and fake.requests == [] and src.pause_reason() == "reddit_blocked"
+
+
+# --- kept deviations: the budget reset and the httpx log filter ---
+
+def test_reddit_source_resets_a_stale_clamped_budget_on_disk(q, attention_cache):
+    clock = Clock(NOW)
+    rw.reddit_source(q.config, degraded=True, clock=clock).spend(1)
+    src = rw.reddit_source(q.config, degraded=False, clock=clock)
+    assert src.effective_budget() == 250 and src.used == 1  # the reset keeps the day's count
+    plain = pc_pace.PcSource(rw.SOURCE, configured_budget=250, floor=1, adaptive=False, clock=clock)
+    assert plain.effective_budget() == 250  # written through to the state file, not only held in memory
+    assert rw.reddit_source(q.config, degraded=True, clock=clock).effective_budget() == 150
+
+
+def test_planted_secret_url_query_never_reaches_a_log_record(q, caplog):
+    caplog.set_level(logging.DEBUG)
+    rw.fetch_feed(Fake(ok(EXACT)).client(), "https://www.reddit.com/r/x/search.rss?q=PLANTED&" + SECRET)
+    unit(Fake(ok(EXACT)), q, Clock(NOW))
+    httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200))).get("https://example.org/ok")
+    assert any(r.name == "httpx" for r in caplog.records)  # the httpx request lines are live and captured
+    for rec in caplog.records:
+        text = rec.getMessage()
+        assert "PLANTED" not in text and "cookie" not in text and "reddit.com" not in text, rec.name

@@ -39,6 +39,20 @@ def test_name_only_tickers_need_full_name_or_cashtag():
         assert rm.mentions(f"big ${sym.lower()} news", c), sym
 
 
+def test_cashtag_only_coin_needs_cashtag_or_full_name():
+    terms = coins()
+    aster, atom, sol = terms["ASTER"], terms["ATOM"], terms["SOL"]
+    assert aster.cashtag_only and atom.cashtag_only and not sol.cashtag_only
+    # ASTER: the name equals the ticker, so only the cashtag counts
+    for text in ("ASTER is up", "an aster flower", "Aster DEX"):
+        assert not rm.mentions(text, aster), text
+    assert rm.mentions("bought $ASTER", aster) and rm.mentions("$aster", aster)
+    assert not rm.mentions("ATOM staking", atom)
+    assert rm.mentions("Cosmos hub", atom) and rm.mentions("$ATOM", atom)
+    assert rm.mentions("SOL up", sol) and rm.mentions("Solana", sol) and rm.mentions("$SOL", sol)
+    assert rm.matched_coins("ASTER and ATOM pump, SOL too", terms.values()) == ("SOL",)
+
+
 def test_bare_ticker_matches_for_other_coins():
     terms = coins()
     assert rm.mentions("SOL breaks out", terms["SOL"])

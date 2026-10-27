@@ -30,6 +30,15 @@ def test_committed_file_loads_with_locked_defaults():
     assert set(wq.DEFAULTS) == set(q.config.as_dict())
 
 
+def test_reddit_baseline_250_and_separate_degraded_150_budget():
+    assert wq.DEFAULTS["reddit_daily_request_budget"] == 250
+    assert wq.REDDIT_DEFAULTS["reddit_degraded_request_budget"] == wq.REDDIT_DEGRADED_BUDGET == 150
+    c = wq.load().config
+    assert c.reddit_daily_request_budget == 250 and c.reddit_degraded_request_budget == 150
+    absent = {k: v for k, v in c.as_dict().items() if k != "reddit_degraded_request_budget"}
+    assert wq.validate_config(absent).reddit_degraded_request_budget == 150  # the default applies when absent
+
+
 def test_pace_config_rejects_min_above_max_and_nonpositive(doc):
     for key, bad in (("x_query_delay_min_s", 400), ("reddit_request_delay_min_s", 121), ("x_page_gap_min_s", 16)):
         d = copy.deepcopy(doc)
