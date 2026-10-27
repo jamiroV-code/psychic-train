@@ -77,23 +77,30 @@ def _hours(a: datetime, b: datetime) -> float:
     return round((a - b).total_seconds() / 3600.0, 2)
 
 
-def _feed_report(label: str, client, url: str, now: datetime, sample_min: int) -> None:
-    """One request; prints counts, ages in hours and the A.2 result for yesterday, or the error class and status."""
+def _feed_report(label: str, client, url: str, now: datetime, q, symbol: str) -> None:
+    """One request; prints counts, ages in hours and the A.2 result for yesterday, or the error class and status.
+
+    The probe sends no canary: the yesterday value is the one a run with a successful canary would store.
+    """
     try:
-        entries = reddit_web.parse_feed(reddit_web.fetch_feed(client, url))
+        entries = reddit_web.parse_feed(reddit_web.fetch_feed(client, url), reddit_web.ephemeral_hasher())
     except CollectorError as exc:
         report_error(label, exc)
         return
     times = [e.created for e in entries]
     day = density.completed_day(now)
     start, end = density.window(day)
-    result, missing = reddit_web.count_day(day, entries, sample_min=sample_min)
+    c = q.config
+    result, missing, tally = reddit_web.count_day(
+        day, entries, coin=reddit_web.reddit_metrics.coin_term(q, symbol), sample_min=c.reddit_sample_min,
+        author_cap=c.reddit_author_cap, canary_ok=True,
+        searched_from=reddit_web.searched_from(now, c.reddit_search_time_filter))
     print(report_line(
         label, status=200, entries=len(entries),
         newest_age_h=_hours(now, max(times)) if times else None, oldest_age_h=_hours(now, min(times)) if times else None,
         span_h=_hours(max(times), min(times)) if times else None,
         reaches_window_start=bool(times) and min(times) < start,
-        yesterday_entries=sum(1 for t in times if start <= t < end),
+        yesterday_entries=sum(1 for t in times if start <= t < end), matched=tally.matched, counted=tally.counted,
         yesterday_value=round(result.value, 2) if result else None, capped=bool(result and result.capped),
         missing=missing is not None))
 
@@ -116,13 +123,12 @@ def _reddit(args, client, clock, sleep) -> int:
     client = client or reddit_web.make_client()
     try:
         if args.feed_depth:
-            _feed_report("feed", client, reddit_web.search_url(q.subreddits, terms, t), clock(), q.config.reddit_sample_min)
+            _feed_report("feed", client, reddit_web.search_url(q.subreddits, terms, t), clock(), q, args.symbol)
         else:
-            _feed_report("scope_set", client, reddit_web.search_url(q.subreddits, terms, t), clock(),
-                         q.config.reddit_sample_min)
+            _feed_report("scope_set", client, reddit_web.search_url(q.subreddits, terms, t), clock(), q, args.symbol)
             sleep(max(60, q.config.reddit_request_delay_min_s))
-            _feed_report("scope_one", client, reddit_web.search_url(q.subreddits[:1], terms, t), clock(),
-                         q.config.reddit_sample_min)
+            _feed_report("scope_one", client, reddit_web.search_url(q.subreddits[:1], terms, t), clock(), q,
+                         args.symbol)
     finally:
         if own:
             client.close()

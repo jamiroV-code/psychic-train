@@ -57,8 +57,10 @@ X_DEFAULTS = {
     "x_allow_curl_backend": False,
 }
 # Reddit keys added by W8c (SPEC rules 10, 14, 15, AC31): optional in the file, the default applies when absent.
+# SPEC rule 15: baseline budget 250 (`reddit_daily_request_budget`), degraded budget 150 (its own key).
+REDDIT_DEGRADED_BUDGET = 150
 REDDIT_DEFAULTS = {
-    "reddit_degraded_request_budget": 150,
+    "reddit_degraded_request_budget": REDDIT_DEGRADED_BUDGET,
     "reddit_author_cap": 3,
     "reddit_min_mentions": 3,
     "reddit_search_time_filter": "week",

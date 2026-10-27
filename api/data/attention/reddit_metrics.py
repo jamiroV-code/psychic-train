@@ -1,9 +1,12 @@
 """SPEC Annex A.2b point 3 and 4, AC31, AC32, AC35: Reddit mention and engagement metrics. Pure; no network.
 
 - Matching: a text mentions a coin when it holds the cashtag (`$SOL`, any case) or the coin's full name as a word
-  (any case), or, unless the coin is `name_only`, the bare ticker as an upper-case word. The eight word-like
-  tickers ETC, LINK, NEAR, HYPE, PI, PUMP, GT and CC are `name_only` in the query file. Coins on the Reddit
-  ambiguity list are never matched (they are not in `coin_terms`).
+  (any case), or, unless the coin is `name_only` or `cashtag_only`, the bare ticker as an upper-case word. The
+  eight word-like tickers ETC, LINK, NEAR, HYPE, PI, PUMP, GT and CC are `name_only` in the query file.
+  `cashtag_only` is the X flag applied to Reddit (planner decision T211 Q-c): the bare ticker never counts, only
+  the cashtag or the full name, and the cashtag alone when the name is the ticker itself (ASTER "Aster", JST
+  "JUST"), since that name is the same common word. Coins on the Reddit ambiguity list are never matched (they
+  are not in `coin_terms`).
 - Mentions per coin-day: distinct Reddit ids created in the UTC day, at most `reddit_author_cap` per author hash
   (an item without an author hash counts against one shared bucket). Unique authors: distinct hashes among them.
 - Volume honesty: a coin-day below `reddit_min_mentions` is `low_volume`; the change is missing when the recent or
@@ -34,6 +37,7 @@ class CoinTerms:
     symbol: str
     name: str
     name_only: bool
+    cashtag_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -62,10 +66,20 @@ class MentionDay:
     low_volume: bool
 
 
+def _terms(sym: str, e: dict) -> CoinTerms:
+    return CoinTerms(sym, e["name"], bool(e.get("name_only", False)), bool(e.get("cashtag_only", False)))
+
+
 def coin_terms(q: Queries) -> list[CoinTerms]:
     """Matching terms for every coin in the query file except the Reddit ambiguity list."""
-    return [CoinTerms(sym, e["name"], bool(e.get("name_only", False))) for sym, e in sorted(q.coins.items())
-            if sym not in q.ambiguous["reddit_web"]]
+    return [_terms(sym, e) for sym, e in sorted(q.coins.items()) if sym not in q.ambiguous["reddit_web"]]
+
+
+def coin_term(q: Queries, symbol: str) -> CoinTerms | None:
+    """One coin's matching terms; None when it is unknown or on the Reddit ambiguity list."""
+    if symbol not in q.coins or symbol in q.ambiguous["reddit_web"]:
+        return None
+    return _terms(symbol, q.coins[symbol])
 
 
 def _word(text: str) -> str:
@@ -73,9 +87,10 @@ def _word(text: str) -> str:
 
 
 def _patterns(coin: CoinTerms) -> list[re.Pattern]:
-    pats = [re.compile(r"(?<![A-Za-z0-9$])\$" + re.escape(coin.symbol) + r"(?![A-Za-z0-9])", re.IGNORECASE),
-            re.compile(_word(coin.name), re.IGNORECASE)]
-    if not coin.name_only:
+    pats = [re.compile(r"(?<![A-Za-z0-9$])\$" + re.escape(coin.symbol) + r"(?![A-Za-z0-9])", re.IGNORECASE)]
+    if not (coin.cashtag_only and coin.name.upper() == coin.symbol):
+        pats.append(re.compile(_word(coin.name), re.IGNORECASE))
+    if not (coin.name_only or coin.cashtag_only):
         pats.append(re.compile(_word(coin.symbol)))
     return pats
 
