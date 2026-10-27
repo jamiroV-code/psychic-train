@@ -20,9 +20,9 @@
     "note": "owner-accepted 22-10-26, not checker PASS"
   },
   "AKE": {
-    "no-keyword": true,
-    "label": "AKE",
-    "note": "unidentified ticker (UNVERIFIED), owner names it"
+    "term": "akedo crypto",
+    "label": "Akedo",
+    "note": "owner-named 26-10-26, qualified-term, not checker PASS"
   },
   "ALGO": {
     "topic": "/g/11rgg857l7",
@@ -80,9 +80,9 @@
     "note": "checker PASS 21-10-26"
   },
   "BTW": {
-    "no-keyword": true,
-    "label": "BTW",
-    "note": "unidentified ticker (UNVERIFIED), owner names it"
+    "term": "bitway crypto",
+    "label": "Bitway",
+    "note": "owner-named 26-10-26, qualified-term, not checker PASS"
   },
   "CAKE": {
     "topic": "/g/11vb5nyrj6",
@@ -140,9 +140,9 @@
     "note": "owner-accepted 22-10-26, not checker PASS"
   },
   "GRAM": {
-    "no-keyword": true,
-    "label": "GRAM",
-    "note": "unidentified ticker (UNVERIFIED), owner names it"
+    "term": "the open network toncoin",
+    "label": "The Open Network",
+    "note": "owner-named 26-10-26, qualified-term, not checker PASS"
   },
   "GT": {
     "topic": "/g/11n3zc6c3t",
@@ -205,9 +205,9 @@
     "note": "checker PASS 21-10-26"
   },
   "LIT": {
-    "no-keyword": true,
-    "label": "LIT",
-    "note": "unidentified ticker (UNVERIFIED), owner names it"
+    "term": "lighter crypto",
+    "label": "Lighter",
+    "note": "owner-named 26-10-26, qualified-term, not checker PASS"
   },
   "LTC": {
     "topic": "/m/0t544l4",
@@ -247,7 +247,7 @@
   "OKB": {
     "term": "okb token",
     "label": "OKB",
-    "note": "qualified term: name equals ticker, so 'okb token' (rule exception, T160); not checker-verified"
+    "note": "qualified term: name equals ticker, so 'okb token' (rule exception, T160); not checker-verified; reverted 26-10-26: 'okb crypto' returned 99% zero days, 'okb token' median 65"
   },
   "ONDO": {
     "term": "ondo crypto",
@@ -262,7 +262,7 @@
   "PEARL": {
     "term": "pearl crypto",
     "label": "Pearl",
-    "note": "qualified term: '<project name> crypto' (rule, T160); name from CoinGecko id pearl-2; not checker-verified"
+    "note": "qualified term: '<project name> crypto' (rule, T160); name from CoinGecko id pearl-2; not checker-verified; reverted 26-10-26: 'pearl ai crypto' 98% zero days, 'pearl crypto' median 7"
   },
   "PEPE": {
     "term": "Pepe coin",
@@ -280,14 +280,19 @@
     "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "PRL": {
-    "no-keyword": true,
-    "label": "PRL",
-    "note": "unidentified ticker (UNVERIFIED), owner names it"
+    "term": "pearl ai coin",
+    "label": "Pearl",
+    "note": "owner-named 26-10-26, qualified-term, not checker PASS"
   },
   "PUMP": {
     "topic": "/g/11wr7k80z3",
     "label": "pump.fun",
     "note": "owner-accepted 22-10-26, not checker PASS"
+  },
+  "PYTH": {
+    "term": "pyth network crypto",
+    "label": "Pyth Network",
+    "note": "owner-approved 26-10-26 fallback term, untested; name from CoinGecko id"
   },
   "QNT": {
     "term": "quant crypto",
@@ -295,9 +300,9 @@
     "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
   "RAIN": {
-    "no-keyword": true,
-    "label": "RAIN",
-    "note": "unidentified ticker (UNVERIFIED); common word; owner names it"
+    "term": "rain protocol",
+    "label": "Rain",
+    "note": "owner-named 26-10-26, qualified-term, not checker PASS"
   },
   "RENDER": {
     "term": "render crypto",
@@ -320,9 +325,9 @@
     "note": "checker PASS 21-10-26"
   },
   "STABLE": {
-    "no-keyword": true,
-    "label": "STABLE",
-    "note": "unidentified ticker (UNVERIFIED), owner names it"
+    "term": "stable chain",
+    "label": "Stable",
+    "note": "owner-named 26-10-26, qualified-term, not checker PASS"
   },
   "STX": {
     "term": "stacks crypto",

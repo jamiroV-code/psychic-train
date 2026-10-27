@@ -9,6 +9,7 @@ export const REASON_LABEL: Record<DiscoveryExclusionReason, string> = {
   "no-market": "tokenized funds / no market",
   "wrapped-staked": "wrapped or staked copies",
   "not-tradeable-config": "not tradeable (config)",
+  "not-tradeable": "not tradeable (zero trading volume)",
   unassigned: "unassigned",
   "hidden-narrative": "coins in hidden narratives",
   "no-source-data": "no source data",
@@ -20,11 +21,13 @@ function reasonSentence(reason: string, minCategoryCoins: number): string {
     case "stablecoin":
       return "Stablecoins: their price is pegged, so attention says nothing about them.";
     case "no-market":
-      return "Tokenized funds and coins with no market on Binance, Coinbase, Kraken or Hyperliquid.";
+      return "Tokenized funds: no exchange market to trade them on.";
     case "wrapped-staked":
       return "Wrapped, staked or bridged copies of another coin.";
     case "not-tradeable-config":
       return "Marked not tradeable in the config.";
+    case "not-tradeable":
+      return "No trading market: zero 24h trading volume, or not listed on Binance or Hyperliquid.";
     case "unassigned":
       return "Not in any narrative yet: add them to attention_narratives.json.";
     case "hidden-narrative":
@@ -91,7 +94,7 @@ export function DiscoveryExclusions({ coins, counts, minCategoryCoins, tradeabil
           })}
           {tradeabilityUnverified && (
             <p className="discovery-muted" data-testid="discovery-exclusions-tradeability">
-              Tradeability is checked against exchange lists once they are built; until then no coin is excluded for it.
+              Coins whose tradeability is unknown stay in: a missing or out-of-date exchange list never excludes a coin.
             </p>
           )}
         </div>

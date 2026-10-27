@@ -6,6 +6,7 @@ import type {
   DiscoveryReason,
   DiscoveryResponse,
   DiscoverySourcesResponse,
+  DiscoveryVenueList,
   DiscoveryWindow,
 } from "@/lib/types/discovery";
 
@@ -180,6 +181,57 @@ describe("DiscoveryTab", () => {
     expect(line).toHaveTextContent(
       "54 of 100 top coins shown, 46 excluded: 19 no source data, 16 stablecoins, 7 tokenized funds / no market, 4 unassigned",
     );
+  });
+
+  it("counts not-tradeable coins in plain words", async () => {
+    const counts = { stablecoin: 16, "no-market": 8, "not-tradeable": 1, unassigned: 1 };
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ universe_size: 100, shown_size: 74, excluded_counts: counts }))} />);
+    expect(await screen.findByTestId("discovery-coverage")).toHaveTextContent(
+      "74 of 100 top coins shown, 26 excluded: 16 stablecoins, 8 tokenized funds / no market, 1 not tradeable (zero trading volume), 1 unassigned",
+    );
+  });
+
+  it("notes how many shown coins have unknown tradeability and which list is missing", async () => {
+    const venue_lists: DiscoveryVenueList[] = [
+      { venue: "binance", status: "missing", as_of: null },
+      { venue: "hyperliquid", status: "ok", as_of: "2026-10-25" },
+    ];
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ tradeability_unknown: 37, venue_lists }))} />);
+    expect(await screen.findByTestId("discovery-tradeability-unknown")).toHaveTextContent(
+      /^Tradeability unknown: 37 \(Binance list not loaded yet\)$/,
+    );
+  });
+
+  it("names stale and failed lists in the tradeability note", async () => {
+    const venue_lists: DiscoveryVenueList[] = [
+      { venue: "binance", status: "failed", as_of: "2026-10-25" },
+      { venue: "hyperliquid", status: "stale", as_of: "2026-10-20" },
+    ];
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ tradeability_unknown: 2, venue_lists }))} />);
+    expect(await screen.findByTestId("discovery-tradeability-unknown")).toHaveTextContent(
+      /^Tradeability unknown: 2 \(Binance list failed to load, Hyperliquid list out of date\)$/,
+    );
+  });
+
+  it("no tradeability note when nothing is unknown or the API is older", async () => {
+    const { unmount } = render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ tradeability_unknown: 0, venue_lists: [] }))} />);
+    await screen.findByTestId("discovery-coverage");
+    expect(screen.queryByTestId("discovery-tradeability-unknown")).toBeNull();
+    unmount();
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp())} />);
+    await screen.findByTestId("discovery-coverage");
+    expect(screen.queryByTestId("discovery-tradeability-unknown")).toBeNull();
+  });
+
+  it("tags a coin whose tradeability is unknown, never a tradeable one", async () => {
+    const mixed = category("high", { score: 40 });
+    mixed.coins = [{ ...mixed.coins[0], tradeability: "unverified" }, { ...mixed.coins[1], tradeability: "tradeable" }];
+    render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp({ categories: [mixed] }))} />);
+    await screen.findByTestId("discovery-table");
+    fireEvent.click(within(screen.getByTestId("discovery-row-high")).getByRole("button"));
+    const tags = screen.getAllByTestId(/^discovery-tradeability-unknown-/);
+    expect(tags.map((t) => t.getAttribute("data-testid"))).toEqual(["discovery-tradeability-unknown-high-AAA"]);
+    expect(tags[0]).toHaveTextContent("tradeability unknown: no fresh Binance or Hyperliquid list has this coin; kept in");
   });
 
   it("shows only the totals when nothing is excluded", async () => {

@@ -35,3 +35,12 @@ A bad day (many 429s) can use the whole 18 min; the job still fits 40 min. Daily
 
 ## 11. Files opened beyond the envelope
 None beyond `test_refresh_attention_trends.py` (see 6).
+
+## Round 2 (T209)
+
+Review T208: DO-NOT-MERGE UNTIL REBASED. Done: merged origin/main (PR #181) into the branch (merge commit, no rebase). Conflict in `api/scripts/refresh_attention.py` resolved keeping main's deferred retry, run record and retry cap 20, with only `TRENDS_TIME_BUDGET_S = 780` applied (one place; `budget_s` in the run record follows the constant).
+
+- Tests that pinned 540 now pin the relation: run-record `budget_s == TRENDS_TIME_BUDGET_S`; the 92-coin test bounds by the constant. The workflow guard already asserts `timeout >= budget + 120 s`.
+- Fake-clock coverage at 780: `test_twenty_empties_among_92_all_retried_inside_the_real_budget` (20 empties among 92, all coins stored, all 20 retried, finishes within 780 s). The old skip-semantics test now runs at an explicit budget of 540 s.
+- Timeout arithmetic from the merged workflow: 4 + 4 + 18 + 8 = 34, + 5 = 39 <= 40 (job limit untouched).
+- Gates: scripts + attention + guard tests pass; full `pytest api` 2698 passed, 1 skipped, 5 deselected; ruff on touched files 15 findings vs 18 on main (none new); YAML parse, `git diff --check`, secret scan clean.

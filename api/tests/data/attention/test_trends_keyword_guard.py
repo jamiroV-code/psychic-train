@@ -61,14 +61,14 @@ def test_every_pinned_discovery_coin_has_a_trends_keyword():
 def test_live_snapshot_gap_is_reported_never_failed():
     """A new live coin without a keyword only shows in the report line; the live set is never asserted gap-free."""
     line = k.gap_report(k.load(), [*PINNED_ELIGIBLE, "NEWCOIN"])
-    assert line == ("trends keyword: 73 of 79 eligible coins; no keyword: AKE (no-keyword), BTW (no-keyword), "
-                    "GRAM (no-keyword), LIT (no-keyword), RAIN (no-keyword), NEWCOIN (no-entry)")
+    assert line == "trends keyword: 78 of 79 eligible coins; no keyword: NEWCOIN (no-entry)"
     assert k.gap_report(k.load(), discovery.eligible_discovery_symbols()).startswith("trends keyword: ")
     assert k.gap_report(None, ["A"]) == "trends keyword: 0 of 1 eligible coins; no keyword: A (bad-file)"
     assert k.gap_report(k.load(), ["BTC"]) == "trends keyword: 1 of 1 eligible coins"
 
 
-def test_guard_lists_the_exact_missing_symbols():
+def test_guard_lists_the_exact_missing_symbols(monkeypatch):
+    monkeypatch.setattr(k, "UNIDENTIFIED_TICKERS", frozenset({"AKE"}))   # T192: the shipped list is empty
     m = k.KeywordMap(**k.validate(_doc(
         SOL={"topic": "/m/0sol", "label": "Solana"}, LINK={"term": "Chainlink", "label": "Chainlink"},
         ZZZ=NO_KW, AKE=NO_KW)))
@@ -77,20 +77,33 @@ def test_guard_lists_the_exact_missing_symbols():
                     "allowlist-has-keyword": []}
 
 
-def test_guard_fails_when_an_allowlisted_ticker_gains_a_keyword():
+def test_guard_fails_when_an_allowlisted_ticker_gains_a_keyword(monkeypatch):
+    monkeypatch.setattr(k, "UNIDENTIFIED_TICKERS", frozenset({"AKE"}))
     m = k.KeywordMap(**k.validate(_doc(AKE={"term": "ake crypto", "label": "Ake"})))
     assert k.guard_gaps(m, ["AKE"])["allowlist-has-keyword"] == ["AKE"]
     # also when it is not eligible today: the list must shrink once the owner names the coin
     assert k.guard_gaps(m, [])["allowlist-has-keyword"] == ["AKE"]
 
 
+def test_empty_allowlist_makes_a_no_keyword_entry_a_gap():
+    m = k.KeywordMap(**k.validate(_doc(AKE=NO_KW)))
+    assert k.guard_gaps(m, ["AKE"])["no-keyword"] == ["AKE"]
+
+
 def test_allowlist_is_the_named_unidentified_tickers():
-    assert k.UNIDENTIFIED_TICKERS == frozenset({"AKE", "BTW", "GRAM", "LIT", "PRL", "RAIN", "STABLE"})
+    assert k.UNIDENTIFIED_TICKERS == frozenset()   # T192: the owner named all seven
 
 
-def test_allowlisted_ticker_without_entry_is_still_a_gap():
+def test_allowlisted_ticker_without_entry_is_still_a_gap(monkeypatch):
+    monkeypatch.setattr(k, "UNIDENTIFIED_TICKERS", frozenset({"AKE"}))
     m = k.KeywordMap(**k.validate(_doc()))
     assert k.guard_gaps(m, ["AKE"])["no-entry"] == ["AKE"]
+
+
+def test_t195_pyth_is_outside_the_pinned_set_and_only_warns():
+    """PYTH is not narrative-placed or Discovery-eligible: it only shows as a 'not a placed coin' warning."""
+    m, reason = k.safe_load(placed_symbols=PINNED_ELIGIBLE)
+    assert reason == "" and "PYTH" in m.not_placed and "PYTH" not in PINNED_ELIGIBLE
 
 
 def test_bdx_is_eligible_and_has_a_keyword():

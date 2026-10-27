@@ -42,6 +42,7 @@ const COLUMN_HELP = {
 
 // The response does not carry the threshold, so the tag names no number.
 const THIN_HELP = "low 24h volume: label only, not excluded";
+const UNKNOWN_HELP = "no fresh Binance or Hyperliquid list has this coin; kept in";
 
 function formatPercent(value: number | null): string {
   if (value === null) return NO_DATA;
@@ -89,6 +90,11 @@ function CoinRow({ coin, id, selected, onSelect, risingThresholdPct, minCoveredW
         {coin.thin_volume && (
           <span className="discovery-tag" data-testid={`discovery-thin-${id}-${coin.symbol}`} title={THIN_HELP}>
             thin volume<span className="visually-hidden">{`: ${THIN_HELP}`}</span>
+          </span>
+        )}
+        {coin.tradeability === "unverified" && (
+          <span className="discovery-tag" data-testid={`discovery-tradeability-unknown-${id}-${coin.symbol}`} title={UNKNOWN_HELP}>
+            tradeability unknown<span className="visually-hidden">{`: ${UNKNOWN_HELP}`}</span>
           </span>
         )}
       </td>
