@@ -55,14 +55,24 @@ X_DEFAULTS = {
     "x_canary_min_overlap": 0.6,
     "x_parse_drop_threshold": 0.2,
     "x_allow_curl_backend": False,
+    # W8d2: the reader's account files (absolute, outside the repository; empty means X does not start), the
+    # library pin (must equal the code's pin; the version is a label, never a guard), the account labels in
+    # registration order and the pool's upper bound.
+    "x_accounts_db_path": "",
+    "x_pinned_commit": "63f61a518e576ea5c132f1156c03dda0520d76c1",
+    "x_pinned_version": "0.20.1",
+    "x_accounts": (),
+    "x_pool_max": 3,
 }
 _INT_KEYS = tuple(DEFAULTS)
 DEFAULTS = {**DEFAULTS, **X_DEFAULTS}
 X_WINDOW_SYNTAXES = ("since_time", "date")
 LANG_RE = re.compile(r"[a-z]{2,3}")
+X_LABEL_RE = re.compile(r"[a-z0-9_]{1,24}")  # the same opaque labels as `x_pool.LABEL_RE`
+X_POOL_MAX = 10
 CANARY_QUERY_RE = re.compile(r"[A-Za-z0-9$#][A-Za-z0-9 $#._-]{0,59}")
 _X_COUNTS = {"x_min_account_age_days": 0, "x_min_followers": 0, "x_max_cashtags": 1, "x_raw_retention_days": 1,
-             "x_canary_min_results": 1, "x_unit_max_restarts": 0}
+             "x_canary_min_results": 1, "x_unit_max_restarts": 0, "x_pool_max": 1}
 _X_FRACTIONS = ("x_canary_tolerance", "x_canary_min_overlap", "x_parse_drop_threshold")
 _ORDERED = (("x_query_delay_min_s", "x_query_delay_max_s"), ("x_page_gap_min_s", "x_page_gap_max_s"),
             ("reddit_request_delay_min_s", "reddit_request_delay_max_s"), ("x_sample_min", "x_sample_n"))
@@ -101,6 +111,11 @@ class CollectorConfig:
     x_canary_min_overlap: float = X_DEFAULTS["x_canary_min_overlap"]
     x_parse_drop_threshold: float = X_DEFAULTS["x_parse_drop_threshold"]
     x_allow_curl_backend: bool = X_DEFAULTS["x_allow_curl_backend"]
+    x_accounts_db_path: str = X_DEFAULTS["x_accounts_db_path"]
+    x_pinned_commit: str = X_DEFAULTS["x_pinned_commit"]
+    x_pinned_version: str = X_DEFAULTS["x_pinned_version"]
+    x_accounts: tuple[str, ...] = X_DEFAULTS["x_accounts"]
+    x_pool_max: int = X_DEFAULTS["x_pool_max"]
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -128,6 +143,17 @@ def _x_value(key: str, v) -> bool:
         return isinstance(v, str) and bool(CANARY_QUERY_RE.fullmatch(v))
     if key == "x_allow_curl_backend":
         return isinstance(v, bool)
+    if key == "x_accounts_db_path":
+        return isinstance(v, str) and len(v) <= 400 and v == v.strip() and v.isprintable()
+    if key == "x_pinned_commit":
+        return isinstance(v, str) and bool(re.fullmatch(r"[0-9a-f]{40}", v))
+    if key == "x_pinned_version":
+        return isinstance(v, str) and bool(re.fullmatch(r"[0-9]{1,4}(\.[0-9]{1,4}){1,3}", v))
+    if key == "x_accounts":
+        return (isinstance(v, (list, tuple)) and all(isinstance(x, str) and X_LABEL_RE.fullmatch(x) for x in v)
+                and len(set(v)) == len(v))
+    if key == "x_pool_max" and isinstance(v, int) and v > X_POOL_MAX:
+        return False
     if key in _X_FRACTIONS:
         return isinstance(v, (int, float)) and not isinstance(v, bool) and 0 < v <= 1
     return isinstance(v, int) and not isinstance(v, bool) and v >= _X_COUNTS[key]
@@ -150,7 +176,9 @@ def validate_config(block) -> CollectorConfig:
     for lo, hi in _ORDERED:
         if block[lo] > block[hi]:
             raise QueriesError(f"collector: {lo} must be <= {hi}")
-    return CollectorConfig(**{k: block[k] for k in DEFAULTS})
+    if len(block["x_accounts"]) > block["x_pool_max"]:
+        raise QueriesError("collector: x_accounts must hold at most x_pool_max labels")
+    return CollectorConfig(**{k: tuple(block[k]) if k == "x_accounts" else block[k] for k in DEFAULTS})
 
 
 def _symbol(value, what: str) -> str:

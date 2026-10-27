@@ -21,6 +21,27 @@ dependencies = [
 dev = [
     "pytest>=8.3",
 ]
+# W8d2 (SPEC rules 17-20, AC41, AC53): the X reader. Never installed by default or in CI; the owner's 24/7 host
+# installs it with `uv sync --project api --frozen --group xreader`. twscrape is pinned by its full commit (the
+# version string is no guard); its own dependencies are pinned exactly here and every package, curl-cffi's wheels
+# included, is hash-pinned in uv.lock. Packages shared with the main environment keep the main lock's versions.
+xreader = [
+    "twscrape @ git+https://github.com/vladkens/twscrape@63f61a518e576ea5c132f1156c03dda0520d76c1",
+    "aiosqlite==0.22.1",
+    "beautifulsoup4==4.15.0",
+    "soupsieve==3.0.3",
+    "fake-useragent==2.2.0",
+    "loguru==0.7.3",
+    "py-machineid==1.0.0",
+    "pyotp==2.10.0",
+    "curl-cffi==0.16.3",
+]
+
+[tool.uv]
+# curl-cffi's sdist downloads its impersonation binary without a checksum: wheels only (rule 19g).
+no-build-package = ["curl-cffi"]
+# The pinned twscrape commit builds with hatchling from source; its build backend is pinned (rule 20a).
+build-constraint-dependencies = ["hatchling==1.32.4"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

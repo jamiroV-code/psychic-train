@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import ast
 import re
+import tomllib
 from pathlib import Path
 
 from api.data.attention import pc_adapter, web_queries
@@ -253,6 +254,13 @@ def test_x_core_never_resets_library_locks_or_uses_debug():
 def test_x_pin_is_a_full_sha_held_as_data_only():
     text = (API_DIR / "data" / "attention" / "x_reader.py").read_text(encoding="utf-8")
     assert re.search(r'^TWSCRAPE_PINNED_COMMIT = "63f61a518e576ea5c132f1156c03dda0520d76c1"$', text, re.MULTILINE)
-    # The pin is not a dependency in this slice: the project files are W8d2's.
+    # W8d2 made the pin a dependency, in the optional `xreader` group only (never the default environment).
+    data = tomllib.loads((API_DIR / "pyproject.toml").read_text(encoding="utf-8"))
+    groups = data["dependency-groups"]
+    assert [s for s in groups["xreader"] if "twscrape" in s] == [
+        "twscrape @ git+https://github.com/vladkens/twscrape@63f61a518e576ea5c132f1156c03dda0520d76c1"]
+    outside = data["project"]["dependencies"] + [s for g, specs in groups.items() if g != "xreader" for s in specs]
+    assert not [s for s in outside if "twscrape" in s.lower()]
     for dep in dependency_files():
-        assert "twscrape" not in dep.read_text(encoding="utf-8").lower(), dep.name
+        if dep.parent.name == "web":
+            assert "twscrape" not in dep.read_text(encoding="utf-8").lower(), dep.name

@@ -12,7 +12,7 @@ import random
 import stat
 import sys
 import types
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -27,7 +27,7 @@ from api.data.attention import x_reader as xr
 from api.scripts import probe_pc_sources as probe
 
 PIN = xr.TWSCRAPE_PINNED_COMMIT
-T0 = datetime(2026, 10, 27, 10, 0, tzinfo=timezone.utc)
+T0 = datetime(2026, 10, 27, 10, 0, tzinfo=UTC)
 DAY = date(2026, 10, 26)
 SECRET = "auth_token=PLANTEDc00k1e; ct0=PLANTEDcsrf"
 GOOD_ENV = {"TWS_TELEMETRY": "0", "DO_NOT_TRACK": "1", "TWS_LOG_LEVEL": "WARNING", "TWS_RAISE_WHEN_NO_ACCOUNT": "1"}
@@ -78,9 +78,9 @@ def snowflake(ts: datetime, seq: int = 0) -> int:
 
 
 def lib_tweet(tid: int, *, cashtags=("SOL",), views=100, rt=None, reply=None, image="https://img/p.jpg"):
-    user = types.SimpleNamespace(id=tid % 997 + 1, created=datetime(2020, 1, 1, tzinfo=timezone.utc),
+    user = types.SimpleNamespace(id=tid % 997 + 1, created=datetime(2020, 1, 1, tzinfo=UTC),
                                  followersCount=50, statusesCount=500, profileImageUrl=image, protected=False)
-    date_ = datetime.fromtimestamp(((tid >> 22) + 1288834974657) / 1000, tz=timezone.utc)
+    date_ = datetime.fromtimestamp(((tid >> 22) + 1288834974657) / 1000, tz=UTC)
     return types.SimpleNamespace(id=tid, date=date_, rawContent=f"Solana up {tid}", user=user, lang="en",
                                  cashtags=list(cashtags), retweetedTweet=rt, inReplyToTweetId=reply, likeCount=3,
                                  replyCount=1, quoteCount=0, retweetCount=2, viewCount=views)
@@ -178,7 +178,7 @@ def lookup(tw=None, curl=None):
 
 def accounts(tmp_path: Path, labels=("acct1", "acct2")) -> Path:
     d = tmp_path / "xpool"
-    d.mkdir(mode=0o700)
+    d.mkdir(mode=0o700, parents=True)
     os.chmod(d, 0o700)
     for label in labels:
         f = d / f"{label}.db"
@@ -228,6 +228,10 @@ def test_installed_commit_id_must_equal_pinned_sha_and_version_string_is_not_a_g
     with pytest.raises(tr.XStartRefused) as e:
         start(tmp_path, lib, dist_lookup=lookup(tw=dist(commit="1" * 40)))
     assert e.value.reasons == ["commit_mismatch"]
+    # A config edit alone never moves the pin: the configured commit must equal the code's pin.
+    with pytest.raises(tr.XStartRefused) as e:
+        start(tmp_path / "b", lib, config=cfg(accounts(tmp_path / "c"), x_pinned_commit="1" * 40))
+    assert e.value.reasons == ["pin_mismatch"]
     assert lib.apis == []
 
 
@@ -261,7 +265,8 @@ def test_telemetry_env_set_to_zero(tmp_path):
     assert tr.env_guard(env) == []
 
 
-def test_env_guard_refuses_start_for_each_wrong_variable(tmp_path, lib):
+def test_env_guard_refuses_start_for_each_wrong_variable(tmp_path, lib, monkeypatch):
+    monkeypatch.setattr(tr, "_LOADED", {})
     wrong = [("TWS_TELEMETRY", "1"), ("DO_NOT_TRACK", "0"), ("TWS_LOG_LEVEL", "DEBUG"), ("TWS_LOG_LEVEL", "INFO"),
              ("TWS_RAISE_WHEN_NO_ACCOUNT", "0"), ("TWS_PROXY", "socks5://h"), ("HTTP_PROXY", "http://h"),
              ("HTTPS_PROXY", "http://h"), ("https_proxy", "http://h"), ("ALL_PROXY", "http://h"),
@@ -388,7 +393,11 @@ def test_ban_codes_pause_rest_of_day_and_set_persisted_alert(tmp_path, lib):
     for label in ("acct1", "acct2"):
         lib.scripts[str(d / f"{label}.db")] = [NoAccountError("x")]
         lib.rows[label] = row(active=False, error="(88) Rate limit exceeded")
-    out, pool = _unit(s, config)
+    clock = Clock()
+    first, pool = _unit(s, config, clock=clock)
+    assert first.reason == "account_failed" and not pool.is_paused()  # both banned inside one unit's restarts
+    clock.now += timedelta(seconds=config.x_query_delay_max_s + 1)
+    out, pool = _unit(s, config, clock=clock)
     assert out.result is None and pool.is_paused() and pool.pause_reason() == "no_usable_account"
     assert [a["reason"] for a in pool.alerts()] == ["x_account_suspended", "x_account_suspended"]
     assert xp.XPool(["acct1", "acct2"], clock=Clock()).alerts() == pool.alerts()  # persisted
@@ -420,7 +429,10 @@ def test_all_accounts_locked_pauses_day(tmp_path, lib):
     for label in ("acct1", "acct2"):
         lib.scripts[str(d / f"{label}.db")] = [NoAccountError("x")]
         lib.rows[label] = row(active=True, locks={"SearchTimeline": T0 + timedelta(minutes=14)})
-    out, pool = _unit(s, cfg(d))
+    clock, config = Clock(), cfg(d)
+    _unit(s, config, clock=clock)
+    clock.now += timedelta(seconds=config.x_query_delay_max_s + 1)
+    out, pool = _unit(s, config, clock=clock)
     assert pool.pause_reason() == "no_usable_account" and out.result is None
     assert [pool.account_state(x)[0] for x in ("acct1", "acct2")] == ["locked", "locked"]
     s.close()
@@ -442,7 +454,7 @@ def test_start_does_not_call_reset_locks_and_keeps_our_utc_day_locks_across_rest
 
 def test_search_raw_pages_entries_headers_cursor_and_snowflake_times(tmp_path, lib):
     s, d = start(tmp_path, lib)
-    base = datetime(2026, 10, 26, 23, 0, tzinfo=timezone.utc)
+    base = datetime(2026, 10, 26, 23, 0, tzinfo=UTC)
     ids1 = [snowflake(base - timedelta(minutes=i)) for i in range(20)]
     ids2 = [snowflake(base - timedelta(minutes=30 + i)) for i in range(5)]
     lib.scripts[str(d / "acct1.db")] = [
@@ -453,10 +465,12 @@ def test_search_raw_pages_entries_headers_cursor_and_snowflake_times(tmp_path, l
     assert p0.entry_ids == tuple(f"tweet-{i}" for i in ids1)
     assert (p0.rate_limit_remaining, p0.rate_limit_limit, p0.retries) == (49, 50, 0)
     assert p0.entry_times[0] == base and r.cursor == "C1"
+    assert tr.entry_time(f"tweet-{snowflake(base) + (999 << 22)}") == base  # whole seconds, like created_at
+    assert tr.entry_time("tweet-abc") is None
     p1 = r.search_raw(QUERY, {"product": "Latest"}, 1)
     assert p1.retries == 2  # remaining fell by 3 for one page: two hidden requests (retries or empty pages)
     assert r.search_raw(QUERY, {"product": "Latest"}, 2) is None
-    first = [c for c in lib.calls if c[0] == "search_raw"][0]
+    first = next(c for c in lib.calls if c[0] == "search_raw")
     assert first[2] == QUERY and first[3] == 60 and first[4] == {"product": "Latest"}
     assert r.overhead_requests == tr.SETUP_REQUESTS_ESTIMATE
     with pytest.raises(ValueError):
@@ -468,7 +482,7 @@ def test_search_raw_pages_entries_headers_cursor_and_snowflake_times(tmp_path, l
 
 
 def test_epoch_window_query_is_explicit_start_end(tmp_path):
-    start_, end_ = datetime(2026, 10, 26, tzinfo=timezone.utc), datetime(2026, 10, 27, tzinfo=timezone.utc)
+    start_, end_ = datetime(2026, 10, 26, tzinfo=UTC), datetime(2026, 10, 27, tzinfo=UTC)
     q = tr.window_query('("$SOL" OR "Solana")', start=start_, end=end_, lang="en")
     assert q.endswith(f"since_time:{int(start_.timestamp())} until_time:{int(end_.timestamp())}")
     from api.data.attention import x_window
@@ -482,7 +496,7 @@ def test_epoch_window_query_is_explicit_start_end(tmp_path):
 
 def test_read_accounting_uses_search_raw_entries_and_parse_drop_stops(tmp_path, lib):
     s, d = start(tmp_path, lib)
-    base = datetime(2026, 10, 26, 23, 0, tzinfo=timezone.utc)
+    base = datetime(2026, 10, 26, 23, 0, tzinfo=UTC)
     ids = [snowflake(base - timedelta(minutes=i)) for i in range(20)]
     lib.dropped = set(ids[:10])
     lib.scripts[str(d / "acct1.db")] = [FakeResponse(page_body(ids), {"x-rate-limit-remaining": "40"})]
@@ -494,7 +508,7 @@ def test_read_accounting_uses_search_raw_entries_and_parse_drop_stops(tmp_path, 
 
 def test_one_unit_end_to_end_records_label_commit_and_no_cookies(tmp_path, lib):
     s, d = start(tmp_path, lib)
-    base = datetime(2026, 10, 26, 22, 0, tzinfo=timezone.utc)
+    base = datetime(2026, 10, 26, 22, 0, tzinfo=UTC)
     ids = [snowflake(base - timedelta(minutes=i * 70)) for i in range(15)] + [snowflake(base - timedelta(days=1))]
     body = page_body(ids, cursor=None)
     body["auth_token"] = SECRET
@@ -537,13 +551,13 @@ def ok_reply(ids, cursor=None):
 
 
 def test_curl_fallback_runs_in_separate_process_with_backend_env_only_there(tmp_path, lib, monkeypatch):
-    base = datetime(2026, 10, 26, 22, 0, tzinfo=timezone.utc)
+    base = datetime(2026, 10, 26, 22, 0, tzinfo=UTC)
     ids = [snowflake(base - timedelta(minutes=i * 70)) for i in range(15)] + [snowflake(base - timedelta(days=1))]
     child = Child(ok_reply(ids))
     monkeypatch.delenv("TWS_HTTP_BACKEND", raising=False)
     s, d, config = curl_start(tmp_path, lib, child)
     lib.scripts[str(d / "acct1.db")] = [AbortReqError("Blocked by Cloudflare: 403 - r")]
-    out, pool = _unit(s, config, fallback=s.fallback)
+    out, _pool = _unit(s, config, fallback=s.fallback)
     assert out.result is not None and len(child.calls) == 1
     request, env = child.calls[0]
     assert env["TWS_HTTP_BACKEND"] == "curl" and tr.env_guard(env, fallback=True) == []
@@ -554,7 +568,7 @@ def test_curl_fallback_runs_in_separate_process_with_backend_env_only_there(tmp_
 
 
 def test_blocked_by_cloudflare_and_blocked_by_html_both_trigger_fallback_with_flag_on(tmp_path, lib):
-    base = datetime(2026, 10, 26, 22, 0, tzinfo=timezone.utc)
+    base = datetime(2026, 10, 26, 22, 0, tzinfo=UTC)
     ids = [snowflake(base - timedelta(minutes=i * 70)) for i in range(15)] + [snowflake(base - timedelta(days=1))]
     for i, text in enumerate(("Blocked by Cloudflare: 403 - r", "Blocked by HTML: 400 - r")):
         child = Child(ok_reply(ids))
@@ -593,7 +607,7 @@ def test_curl_used_only_after_cloudflare_block_never_for_other_codes(tmp_path, l
 
 
 def test_curl_use_logged_in_evidence_and_health(tmp_path, lib):
-    base = datetime(2026, 10, 26, 22, 0, tzinfo=timezone.utc)
+    base = datetime(2026, 10, 26, 22, 0, tzinfo=UTC)
     ids = [snowflake(base - timedelta(minutes=i * 70)) for i in range(15)] + [snowflake(base - timedelta(days=1))]
     s, d, config = curl_start(tmp_path, lib, Child(ok_reply(ids)))
     lib.scripts[str(d / "acct1.db")] = [AbortReqError("Blocked by HTML: 400 - r")]
@@ -606,7 +620,7 @@ def test_curl_use_logged_in_evidence_and_health(tmp_path, lib):
 
 
 def test_next_unit_tries_default_backend_first(tmp_path, lib):
-    base = datetime(2026, 10, 26, 22, 0, tzinfo=timezone.utc)
+    base = datetime(2026, 10, 26, 22, 0, tzinfo=UTC)
     ids = [snowflake(base - timedelta(minutes=i * 70)) for i in range(15)] + [snowflake(base - timedelta(days=1))]
     child = Child(ok_reply(ids))
     s, d, config = curl_start(tmp_path, lib, child)
@@ -622,18 +636,18 @@ def test_next_unit_tries_default_backend_first(tmp_path, lib):
 
 
 def test_curl_reads_count_against_budget(tmp_path, lib):
-    base = datetime(2026, 10, 26, 22, 0, tzinfo=timezone.utc)
+    base = datetime(2026, 10, 26, 22, 0, tzinfo=UTC)
     ids = [snowflake(base - timedelta(minutes=i * 70)) for i in range(15)] + [snowflake(base - timedelta(days=1))]
     s, d, config = curl_start(tmp_path, lib, Child(ok_reply(ids)))
     lib.scripts[str(d / "acct1.db")] = [AbortReqError("Blocked by HTML: 400 - r")]
     out, _pool = _unit(s, config, fallback=s.fallback)
     assert out.reads == 16
-    assert source(config, Clock()).used() == 16
+    assert source(config, Clock()).used == 16
     s.close()
 
 
 def test_fallback_continues_from_cursor_of_previous_page(tmp_path, lib):
-    base = datetime(2026, 10, 26, 23, 50, tzinfo=timezone.utc)
+    base = datetime(2026, 10, 26, 23, 50, tzinfo=UTC)
     ids1 = [snowflake(base - timedelta(minutes=i)) for i in range(20)]
     child = Child(ok_reply([snowflake(base - timedelta(minutes=30 + i)) for i in range(5)]))
     s, d, config = curl_start(tmp_path, lib, child)
@@ -802,6 +816,9 @@ def test_health_active_over_total_with_label_last_used_state_cookie_age_no_secre
     lines = tr.status_lines(h)
     assert lines[0].startswith("xreader accounts_active=1 accounts_total=2 commit_match=true env_ok=false")
     assert all(SECRET not in ln and str(d) not in ln for ln in lines)
+    planted = {**h, "accounts_path": str(d), "accounts": [{**h["accounts"][0], "reason": SECRET}]}
+    assert "accounts_path=redacted" in tr.status_lines(planted)[0]
+    assert "reason=redacted" in tr.status_lines(planted)[1]
 
 
 def test_reader_status_probe_mode_prints_counts_labels_states_only(tmp_path, lib, monkeypatch, capsys):
@@ -809,6 +826,8 @@ def test_reader_status_probe_mode_prints_counts_labels_states_only(tmp_path, lib
     monkeypatch.setattr(probe, "_reader_status_config", lambda: cfg(d))
     for k, v in GOOD_ENV.items():
         monkeypatch.setenv(k, v)
+    for k in [*xr.PROXY_VARS, "TWS_HTTP_BACKEND"]:
+        monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("X_SECRET_PLANT", SECRET)
     monkeypatch.setattr(tr, "find_dist", lookup())
     assert probe.main(["--source", "xsearch", "--reader-status"]) == 0
@@ -822,7 +841,7 @@ def test_reader_status_probe_mode_prints_counts_labels_states_only(tmp_path, lib
 def test_daily_cross_account_canary_runs_on_two_accounts(tmp_path, lib):
     s, d = start(tmp_path, lib)
     config = cfg(d)
-    start_, end_ = xp.canary_window(T0)
+    start_, _end = xp.canary_window(T0)
     ids = [snowflake(start_ + timedelta(minutes=2 * i + 1)) for i in range(20)]
     for label in ("acct1", "acct2"):
         lib.scripts[str(d / f"{label}.db")] = [FakeResponse(page_body(ids), {"x-rate-limit-remaining": "40"})]

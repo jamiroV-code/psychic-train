@@ -9,7 +9,6 @@ import ast
 import re
 import sys
 import tomllib
-from pathlib import Path
 
 from api.data.attention import twscrape_reader as tr
 from api.data.attention import x_reader as xr
@@ -223,5 +222,10 @@ def test_cookie_upsert_procedure_documented_and_guarded():
     assert "add_account_cookies" in doc and "X_REFRESH_COOKIES" in doc and "--refresh-cookies" in doc
     attrs = [n.attr for n in ast.walk(TREE) if isinstance(n, ast.Attribute)]
     assert attrs.count("add_account_cookies") == 1 and "add_account" not in attrs
-    # Cookies come from an environment variable, never from the command line or a file in the repo.
-    assert '"X_REFRESH_COOKIES"' in SOURCE and "argv" not in re.sub(r"argv: list\[str\] \| None", "", SOURCE)
+    # Cookies come from an environment variable, never from the command line or a file in the repo: the only
+    # command-line value of the refresh is the label.
+    assert '"X_REFRESH_COOKIES"' in SOURCE
+    flags = [n for n in ast.walk(TREE) if isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "add_argument"]
+    cookie_flags = [f for f in flags if "cookie" in f.args[0].value]
+    assert [f.args[0].value for f in cookie_flags] == ["--refresh-cookies"]
+    assert {k.arg: k.value.value for k in cookie_flags[0].keywords}["metavar"] == "LABEL"
