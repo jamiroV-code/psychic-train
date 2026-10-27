@@ -8,6 +8,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
+
 from api.analytics.attention import discovery as disc
 from api.analytics.attention import discovery_history as hist
 from api.analytics.attention import signal_snapshots as snaps
@@ -23,7 +24,7 @@ SERIES = {"exchange": "exchange_volume", "fallback": disc.FALLBACK_SERIES}
 
 
 def v3cfg(**over):
-    return v2cfg(weights_version=3, fallback_coverage_only=True, **over)
+    return v2cfg(**{"weights_version": 3, "fallback_coverage_only": True, **over})
 
 
 def data_for(changes: dict[str, float]):
@@ -77,10 +78,12 @@ def test_trends_rising_with_coingecko_only(cg, old_rising):
 
 
 def test_fallback_cannot_open_the_early_gate():
-    """A slot listed as an early source: the fallback still never counts as that early source rising."""
-    cfg = v3cfg(early_sources=["exchange_activity"])
-    assert score({"wikipedia": 30, "fallback": 30}, cfg)["trigger"] is False
-    assert score({"wikipedia": 30, "fallback": 30}, v2cfg(early_sources=["exchange_activity"]))["trigger"] is True
+    """A slot listed as the early source: the fallback never passes that gate. Reddit 20 + wiki 10 rising of 45
+    covered is 67% even without the fallback, so only the gate decides."""
+    changes = {"reddit": 30, "wikipedia": 30, "fallback": 30}
+    new = score(changes, v3cfg(early_sources=["exchange_activity"]))
+    assert (new["covered"], new["rising"], new["trigger"]) == (45, 30, False)
+    assert score(changes, v2cfg(early_sources=["exchange_activity"]))["trigger"] is True
 
 
 def test_fallback_source_is_labelled_coverage_only():

@@ -1,5 +1,5 @@
 {
-  "weights_version": 2,
+  "weights_version": 3,
   "source_weights": {
     "trends": 25,
     "reddit": 20,
@@ -13,6 +13,7 @@
     "search": ["trends", "wikipedia"]
   },
   "early_sources": ["trends", "reddit", "xsearch"],
+  "fallback_coverage_only": true,
   "weights_history": [
     {
       "weights_version": 1,
@@ -28,6 +29,23 @@
       },
       "source_groups": {},
       "early_sources": []
+    },
+    {
+      "weights_version": 2,
+      "until": "2026-10-26",
+      "source_weights": {
+        "trends": 25,
+        "reddit": 20,
+        "xsearch": 15,
+        "exchange_activity": 15,
+        "wikipedia": 10,
+        "defillama": 5,
+        "github_dev": 0
+      },
+      "source_groups": {
+        "search": ["trends", "wikipedia"]
+      },
+      "early_sources": ["trends", "reddit", "xsearch"]
     }
   ],
   "exchange_sub_weights": {

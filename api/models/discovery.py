@@ -13,6 +13,7 @@ class DiscoverySource(BaseModel):
     change: float          # percent over the window
     as_of: str             # newest stored day the change is anchored to (ISO date)
     members: list["DiscoverySource"] = []   # exchange_activity only: one entry per exchange with data
+    coverage_only: bool = False   # CoinGecko volume fallback under T204: counts toward coverage, never rising
 
 
 class DiscoveryCoin(BaseModel):

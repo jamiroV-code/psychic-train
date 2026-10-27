@@ -9,6 +9,8 @@ export interface DiscoverySource {
   as_of: string;
   /** exchange_activity only: one entry per exchange with data. */
   members?: DiscoverySource[];
+  /** The CoinGecko volume fallback (T204): counts toward coverage, never as a rising vote. */
+  coverage_only?: boolean;
 }
 
 export interface DiscoveryCoin {
