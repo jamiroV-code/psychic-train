@@ -117,6 +117,20 @@ def interest_verdict(values: list[float]) -> str:
     return TOO_LITTLE_INTEREST
 
 
+def series_stats(values: list[float]) -> dict:
+    """median, zero_share_pct and last7_vs_prior28_ratio (mean of the last 7 days over the mean of the 28 days
+    before them; None when that mean is 0 or there are fewer than 35 days). Read-only evidence for the run file."""
+    n = len(values)
+    out = {"median": round(statistics.median(values), 2) if n else None,
+           "zero_share_pct": round(100.0 * sum(1 for v in values if v == 0) / n, 1) if n else None,
+           "last7_vs_prior28_ratio": None}
+    if n >= SURGE_DAYS + 28:
+        prior = statistics.fmean(values[-SURGE_DAYS - 28:-SURGE_DAYS])
+        if prior > 0:
+            out["last7_vs_prior28_ratio"] = round(statistics.fmean(values[-SURGE_DAYS:]) / prior, 2)
+    return out
+
+
 def _partial(value) -> bool:
     return value.strip().lower() == "true" if isinstance(value, str) else bool(value)
 
@@ -147,9 +161,14 @@ def complete_days(frame, term: str) -> tuple[list[tuple[date, float]] | None, st
     return points, ""
 
 
-def fetch_alone(symbol: str, term: str, client, *, today: date, timeframe: str | None = None) -> SourceSeries:
-    """One request with only `term`. Never raises; a reason carries the exception class and HTTP status only."""
+def fetch_alone(symbol: str, term: str, client, *, today: date, timeframe: str | None = None,
+                stats: dict | None = None) -> SourceSeries:
+    """One request with only `term`. Never raises; a reason carries the exception class and HTTP status only.
+    `stats`, when given, is cleared and filled with series_stats of a pull that passed the checks and has at
+    least MIN_COMPLETE_DAYS days (ok, too-little-interest or quiet-then-surge); otherwise it stays empty."""
     sym = symbol.upper()
+    if stats is not None:
+        stats.clear()
     try:
         client.build_payload([term], timeframe=timeframe or explicit_timeframe(today), geo="")
         frame = client.interest_over_time()
@@ -175,6 +194,8 @@ def fetch_alone(symbol: str, term: str, client, *, today: date, timeframe: str |
         return SourceSeries(SOURCE, sym, [], "unavailable", OUT_OF_RANGE)
     if len(points) < MIN_COMPLETE_DAYS:
         return SourceSeries(SOURCE, sym, [], "insufficient-history", f"{len(points)} days")
+    if stats is not None:
+        stats.update(series_stats([v for _, v in points]))
     verdict = interest_verdict([v for _, v in points])
     if verdict != "ok":
         return SourceSeries(SOURCE, sym, [], "unavailable", verdict)  # missing, never 0
