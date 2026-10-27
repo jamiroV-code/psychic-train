@@ -63,7 +63,7 @@ def test_run_file_records_every_outcome(monkeypatch):
     _run(monkeypatch, ["AAVE", "INJ", "ARB", "OP", "TIA", "SOL", "LINK", "USDX", "ZZZ"], script)
     doc = load()
     assert set(doc) == {"run_started_utc", "run_finished_utc", "pytrends_version", "budget_s", "coins", "totals"}
-    assert doc["budget_s"] == 540 and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", doc["run_started_utc"])
+    assert doc["budget_s"] == refresh_attention.TRENDS_TIME_BUDGET_S and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", doc["run_started_utc"])
     assert doc["run_started_utc"] <= doc["run_finished_utc"]
     coins = doc["coins"]
     assert set(coins) == {"AAVE", "INJ", "ARB", "OP", "TIA", "SOL", "LINK", "USDX", "ZZZ"}
@@ -365,27 +365,36 @@ def test_retry_is_checked_against_the_budget_including_its_sleep(monkeypatch):
     assert client.terms() == ["Aave", "Injective"] and load(_day(0, 2))["coins"]["AAVE"]["retried"] is False
 
 
-def test_twenty_empties_among_92_cost_no_healthy_coin(monkeypatch, _env):
+def _twenty_empties(monkeypatch, _env, budget=None):
     syms, terms = _many(_env, 92)
-    t, sleep, _ = _fake_clock(monkeypatch)  # the real 540 s budget
+    t, sleep, _ = _fake_clock(monkeypatch, **({} if budget is None else {"budget": budget}))
     day = _day(0, 92)
     empties = set(syms[::4][:20])
     script = {terms[syms.index(s)]: [EMPTY, _ok(terms[syms.index(s)], day)] for s in empties}
     client = ClockClient(t, 2.0, script, day)
     _install(monkeypatch, client)
-    series = refresh_attention._run_trends(syms, None, day, sleep)
-    out = {s.symbol: s for s in series}
+    out = {s.symbol: s for s in refresh_attention._run_trends(syms, None, day, sleep)}
+    return syms, empties, out, t, load(day)["coins"]
+
+
+def test_twenty_empties_among_92_all_retried_inside_the_real_budget(monkeypatch, _env):
+    syms, empties, out, t, coins = _twenty_empties(monkeypatch, _env)  # the real budget (780 s)
+    assert len(empties) == 20 and all(out[s].state == "ok" for s in syms)  # healthy and retried coins all stored
+    assert t[0] <= refresh_attention.TRENDS_TIME_BUDGET_S  # the whole run, retries included, fits the budget
+    assert all(coins[s]["retried"] and coins[s]["attempts"] == 2 and not coins[s]["retry_skipped"] for s in empties)
+
+
+def test_twenty_empties_among_92_cost_no_healthy_coin_when_budget_is_tight(monkeypatch, _env):
+    syms, empties, out, t, coins = _twenty_empties(monkeypatch, _env, budget=540)
     healthy = [s for s in syms if s not in empties]
-    assert len(empties) == 20 and all(out[s].state == "ok" for s in healthy)  # no healthy coin lost
+    assert all(out[s].state == "ok" for s in healthy)  # no healthy coin lost
     assert t[0] <= 540 + 2.0  # at most the last request that started inside the budget
-    coins = load(day)["coins"]
     retried = [s for s in syms if coins[s]["retried"]]
     skipped = [s for s in syms if coins[s]["retry_skipped"]]
     assert retried and skipped and len(retried) + len(skipped) == 20
     assert {coins[s]["retry_skipped"] for s in skipped} == {"retry-skipped-budget"}
     assert all(coins[s]["outcome"] == "ok" and coins[s]["attempts"] == 2 for s in retried)
     assert all(coins[s]["outcome"] == "failed" and coins[s]["reason"] == "empty response" for s in skipped)
-    assert [s for s in syms if s in retried] == sorted(retried)  # stable order: the main-pass order
     assert max(syms.index(s) for s in retried) < min(syms.index(s) for s in skipped)
 
 

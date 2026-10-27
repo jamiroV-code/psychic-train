@@ -192,12 +192,12 @@ def test_time_budget_caps_the_rest(monkeypatch):
     _install(monkeypatch, client)
 
     def sleep(s):
-        t[0] += 200.0
+        t[0] += 300.0
     syms = ["AAVE", "INJ", "ARB", "OP", "TIA"]
     series = refresh_attention._run_trends(syms, None, _day(0, 5), sleep)
     out = {s.symbol: s for s in series}
-    assert refresh_attention.TRENDS_TIME_BUDGET_S == 540
-    assert client.terms() == ["Aave", "Injective", "Arbitrum", "Optimism"]  # 0, 200, 400 < 540; 600 stops
+    assert refresh_attention.TRENDS_TIME_BUDGET_S == 780
+    assert client.terms() == ["Aave", "Injective", "Arbitrum", "Optimism"]  # the 780 s budget stops the fifth coin
     assert out["TIA"].state == "capped" and out["TIA"].reason == "time budget reached"
     assert all(out[s].state == "ok" for s in ("AAVE", "INJ", "ARB", "OP"))
     assert refresh_attention.trends_summary(series) == "ok 4, time-budget 1"
