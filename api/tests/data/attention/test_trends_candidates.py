@@ -17,19 +17,19 @@ def terms(groups):
 
 def test_baseline_first_then_variant_then_bundle():
     entry = {"term": "akedo crypto", "label": "Akedo"}
-    groups = c.candidate_groups("AKE", entry, query_name="AKE", coingecko_id="akedo")
-    assert [g.kind for g in groups] == ["baseline", "variant", "bundle"]
+    groups = c.candidate_groups("AKE", entry, query_name="AKE", coingecko_id="akedo", max_groups=c.MAX_GROUPS)
+    assert [g.kind for g in groups][:2] == ["baseline", "variant"] and "bundle" in [g.kind for g in groups]
     assert terms(groups)[0] == ["akedo crypto"]
     assert terms(groups)[1] == ["ake crypto"]
     # the bundle keeps the current term first, then the best-fitting variants (label name first), at most 3 terms
-    assert terms(groups)[2] == ["akedo crypto", "ake crypto", "akedo coin"]
+    assert terms([g for g in groups if g.kind == "bundle"]) == [["akedo crypto", "ake crypto", "akedo coin"]]
 
 
 def test_topic_baseline_is_never_bundled_with_terms():
     entry = {"topic": "/g/11w1qyc8h6", "label": "Aave"}
-    groups = c.candidate_groups("AAVE", entry, query_name="Aave", coingecko_id="aave")
+    groups = c.candidate_groups("AAVE", entry, query_name="Aave", coingecko_id="aave", max_groups=c.MAX_GROUPS)
     assert terms(groups)[0] == ["/g/11w1qyc8h6"]
-    assert terms(groups)[2] == ["aave crypto", "aave coin", "aave token"]
+    assert terms([g for g in groups if g.kind == "bundle"]) == [["aave crypto", "aave coin", "aave token"]]
     assert all("/g/" not in t for g in groups[1:] for t in g.terms)
 
 

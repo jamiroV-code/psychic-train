@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 from datetime import date, datetime
 from pathlib import Path
@@ -75,7 +76,7 @@ def load_state(path: Path, *, must_exist: bool) -> tuple[dict, bool]:
     """(state, is_new). A missing file is a new campaign unless must_exist; anything unreadable is refused."""
     if not path.exists():
         if must_exist:
-            raise StateError("state file not found; run --all-eligible first")
+            raise StateError(f"state file not found: {path}; no campaign has been started there (run --all-eligible first)")
         if not path.parent.is_dir():
             raise StateError("state file: the state file's folder does not exist")
         return new_state(), True
@@ -138,22 +139,50 @@ def record(state: dict, symbol: str, cand: tc_.Candidate, loader_flags: dict, ou
     coin["verdict"] = ranked[0][1]["metrics"]["verdict"] if ranked else None
 
 
-def latest_run_outcomes(runs_dir: Path) -> dict[str, str]:
-    """Per-coin outcome of the newest daily-run summary (`trends_runs/*.json`, if another task adds it):
-    {"coins": {SYM: {"outcome": str} | str}}. Missing or unreadable: {} (the caller falls back to stored series)."""
+RUN_FILE_RE = re.compile(r"\d{4}-\d{2}-\d{2}\.json")
+RUN_OUTCOMES = frozenset({"ok", "too-little-interest", "quiet-then-surge", "no-keyword", "skipped-unqualified",
+                          "failed", "capped", "time-budget"})  # the daily run's own outcome strings (T197)
+MAX_RUN_FILE_BYTES = 5_000_000
+
+
+def _latest_run(doc) -> dict | None:
+    """The newest run of one file: a single run is the document itself, a second run on the same UTC day turns the
+    file into {"runs": [...]} (oldest first). None for any other shape."""
+    if isinstance(doc, dict) and isinstance(doc.get("runs"), list):
+        doc = doc["runs"][-1] if doc["runs"] else None
+    return doc if isinstance(doc, dict) and isinstance(doc.get("coins"), dict) else None
+
+
+def read_runs(runs_dir: Path) -> tuple[dict[str, str], str | None]:
+    """(per-coin outcome of the latest run of the latest `trends_runs/<date>.json`, note). Both file shapes are
+    accepted; an outcome string not in RUN_OUTCOMES is "unknown". A missing folder is ({}, None); an unreadable,
+    oversized or unknown-shape latest file is ({}, note): the caller falls back to the stored series and prints the
+    note. Never raises; the note names the file only, never its content."""
     try:
-        files = sorted(Path(runs_dir).glob("*.json"))
-        if not files:
-            return {}
-        coins = json.loads(files[-1].read_text(encoding="utf-8"))["coins"]
-        out = {}
-        for sym, v in coins.items():
-            outcome = v.get("outcome") if isinstance(v, dict) else v
-            if isinstance(sym, str) and isinstance(outcome, str):
-                out[sym] = outcome
-        return out
-    except (OSError, ValueError, KeyError, TypeError, AttributeError):
-        return {}
+        files = sorted(f for f in Path(runs_dir).iterdir() if RUN_FILE_RE.fullmatch(f.name))
+    except OSError:
+        return {}, None
+    if not files:
+        return {}, None
+    latest = files[-1]
+    try:
+        if latest.stat().st_size > MAX_RUN_FILE_BYTES:
+            raise ValueError("too large")
+        run = _latest_run(json.loads(latest.read_text(encoding="utf-8")))
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+        run = None
+    if run is None:
+        return {}, f"trends_runs: {latest.name} ignored (unreadable or unknown shape); using the stored series"
+    out = {}
+    for sym, v in run["coins"].items():
+        outcome = v.get("outcome") if isinstance(v, dict) else v
+        if isinstance(sym, str) and isinstance(outcome, str):
+            out[sym] = outcome if outcome in RUN_OUTCOMES else "unknown"
+    return out, None
+
+
+def latest_run_outcomes(runs_dir: Path) -> dict[str, str]:
+    return read_runs(runs_dir)[0]
 
 
 def keyword_health(km: tk.KeywordMap | None, symbols, run_outcomes: dict[str, str], stored_values) -> dict[str, str]:
@@ -201,7 +230,10 @@ def _recommend(coin: dict, baseline_key: str | None) -> tuple[str, str]:
     if not ranked:
         return "needs owner (no group answered with a usable frame)", "-"
     m = ranked[0][1]["metrics"]
-    best_txt = f"best: {_terms(ranked[0][1]['terms'])} {m['verdict']}, median {m['median']:g} (own scale only)"
+    best_txt = (f"best: {_terms(ranked[0][1]['terms'])} {tg.verdict_label(m['verdict'])}, "
+                f"median {m['median']:g} (own scale only)")
+    if m["verdict"] == trends.QUIET_THEN_SURGE:
+        return "keep watching: waking up", best_txt
     if m["verdict"] != OK:
         return "needs owner (no usable group)", best_txt
     base = coin["groups"].get(baseline_key) if baseline_key else None
@@ -232,7 +264,7 @@ def report_lines(state: dict, eligible: list[str], km: tk.KeywordMap | None, hea
         tested += 1
         base = coin["groups"].get(kw) if kw else None
         if base and base.get("metrics"):
-            cur = base["metrics"]["verdict"]
+            cur = tg.verdict_label(base["metrics"]["verdict"])
         elif base:
             cur = base["outcome"]
         else:
@@ -246,6 +278,10 @@ def report_lines(state: dict, eligible: list[str], km: tk.KeywordMap | None, hea
         lines.append(f"{s} | current: {kw or 'none'} ({cur}) | {best_txt} | clean rising {clean} | identity {ident} | "
                      f"recommend: {rec}")
     lines.append(f"\ntested {tested} of {len(eligible)} eligible coins")
+    best = [c["verdict"] for s in eligible if (c := state["coins"].get(s)) and c.get("best_group")]
+    waking = sum(v == trends.QUIET_THEN_SURGE for v in best)
+    lines.append(f"best group per tested coin: usable {sum(v == OK for v in best)}, waking up {waking} (shown, "
+                 f"never counted as passed), too little interest or none {tested - sum(v == OK for v in best) - waking}")
     if untested:
         lines.append("untested (not tested yet, never counted as passed): " + ", ".join(untested))
     gone = [s for s in state["coins"] if s not in eligible]

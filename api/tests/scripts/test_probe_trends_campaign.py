@@ -66,7 +66,7 @@ def run(argv, client=None, eligible=("AKE", "BTW", "GRAM"), health=None, sleeps=
                   version=lambda: "4.9.2", out=out, err=err, jitter=lambda: 0.5,
                   volume_reader=lambda sym, day: (None, "n/a: no stored volume"),
                   eligible_reader=lambda: (list(eligible), ROWS), names_reader=dict,
-                  health_reader=lambda km, syms: {s: (health or {}).get(s, "ok") for s in syms}, now=lambda: now)
+                  health_reader=lambda km, syms: {s: (health or {}).get(s, "weak") for s in syms}, now=lambda: now)
     return code, out.getvalue() + err.getvalue(), client
 
 
@@ -103,7 +103,8 @@ def test_default_depth_weak_coin_four_groups_usable_coin_two(tmp_path):
     code, _, client = run(["--all-eligible", "--state", str(tmp_path / "c.json")], eligible=("AKE",),
                           health={"AKE": "weak"})
     assert code == 0 and sent(client) == [AKE[0], AKE[1], "akedo", "AKE"]
-    code, _, client = run(["--all-eligible", "--state", str(tmp_path / "d.json")], eligible=("AKE",))
+    code, _, client = run(["--all-eligible", "--state", str(tmp_path / "d.json")], eligible=("AKE",),
+                          health={"AKE": "ok"})
     assert code == 0 and sent(client) == [AKE[0], AKE[2]]
 
 
@@ -111,7 +112,7 @@ def test_priority_weak_missing_empty_first_then_universe_order(tmp_path):
     health = {"AKE": "ok", "BTW": "weak", "GRAM": "missing"}
     _, _, client = run(["--all-eligible", "--state", str(tmp_path / "c.json"), "--max-groups-per-coin", "1"],
                        health=health)
-    assert sent(client) == ["bitway crypto", "the open network toncoin", "akedo crypto"]
+    assert sent(client) == ["bitway crypto", "the open network toncoin", "akedo crypto", AKE[2]]
     assert tc.priority_order(["A", "B", "C", "D"], {"A": "ok", "B": "empty", "C": "ok", "D": "weak"}) == \
         ["B", "D", "A", "C"]
 
@@ -133,7 +134,7 @@ def test_latest_run_outcomes_read_the_newest_file(tmp_path):
     d.mkdir()
     (d / "2026-10-19.json").write_text(json.dumps({"coins": {"AKE": {"outcome": "too-little-interest"}}}))
     (d / "2026-10-20.json").write_text(json.dumps({"coins": {"AKE": {"outcome": "ok"}, "BTW": "rate-limited"}}))
-    assert tc.latest_run_outcomes(d) == {"AKE": "ok", "BTW": "rate-limited"}
+    assert tc.latest_run_outcomes(d) == {"AKE": "ok", "BTW": "unknown"}
     (d / "2026-10-21.json").write_text("{not json")
     assert tc.latest_run_outcomes(d) == {}   # unreadable newest file: fall back to the stored series stats
 
@@ -142,14 +143,14 @@ def test_latest_run_outcomes_read_the_newest_file(tmp_path):
 
 def test_max_requests_cap_and_resume(tmp_path):
     st = tmp_path / "c.json"
-    code, text, c1 = run(["--all-eligible", "--state", str(st), "--max-requests", "4"])
+    code, text, c1 = run(["--all-eligible", "--state", str(st), "--max-requests", "4", "--max-groups-per-coin", "3"])
     assert code == 0 and len(c1.payloads) == 4
     assert "5 candidate group(s) left" in text and "run the same command again" in text
-    code, text, c2 = run(["--all-eligible", "--state", str(st), "--max-requests", "40"])
+    code, text, c2 = run(["--all-eligible", "--state", str(st), "--max-requests", "40", "--max-groups-per-coin", "3"])
     assert code == 0 and len(c2.payloads) == 5
     assert not set(sent(c1)) & set(sent(c2))
     assert "every candidate group of every eligible coin is tested" in text
-    code, text, _ = run(["--all-eligible", "--state", str(st)], factory=no_client)
+    code, text, _ = run(["--all-eligible", "--state", str(st), "--max-groups-per-coin", "3"], factory=no_client)
     assert code == 0 and "nothing to test" in text
 
 
@@ -177,14 +178,14 @@ def test_default_max_requests_is_40_with_spacing_and_pause(tmp_path):
 
 def test_429_stops_exit_4_and_rerun_continues_where_it_stopped(tmp_path):
     st = tmp_path / "c.json"
-    code, text, c1 = run(["--all-eligible", "--state", str(st)], client=AutoTrendReq([None, None, too_many()]),
+    code, text, c1 = run(["--all-eligible", "--state", str(st), "--max-groups-per-coin", "3"], client=AutoTrendReq([None, None, too_many()]),
                          eligible=("AKE", "BTW"))
     assert code == p.STOPPED_EXIT == 4 and len(c1.payloads) == 3
     assert "stopped after HTTP 429" in text and SECRET not in text
-    rec = state_of(st)["coins"]["AKE"]["groups"][AKE[2]]
+    rec = state_of(st)["coins"]["AKE"]["groups"]["akedo"]
     assert rec["outcome"].startswith("request-failed: TooManyRequestsError (HTTP 429)") and rec["metrics"] is None
-    code, _, c2 = run(["--all-eligible", "--state", str(st)], eligible=("AKE", "BTW"))
-    assert code == 0 and sent(c2) == [AKE[2], "bitway crypto", "btw crypto", "bitway crypto|btw crypto|bitway coin"]
+    code, _, c2 = run(["--all-eligible", "--state", str(st), "--max-groups-per-coin", "3"], eligible=("AKE", "BTW"))
+    assert code == 0 and sent(c2) == ["akedo", "bitway crypto", "btw crypto", "bitway"]
 
 
 def test_three_failures_in_a_row_stop(tmp_path):

@@ -319,7 +319,7 @@ def _print_metrics(m: tg.GroupMetrics, out) -> None:
               f"{_pct0(share) if share is not None else 'missing: group total 0'}", file=out)
     gs = m.group
     print(f"  group | days {gs.days} | min {gs.min:g} | median {gs.median:g} (own scale only) | max {gs.max:g} | "
-          f"zero {round(gs.zero_pct, 1):g}% | distinct {gs.distinct} | verdict: {m.verdict}", file=out)
+          f"zero {round(gs.zero_pct, 1):g}% | distinct {gs.distinct} | verdict: {tg.verdict_label(m.verdict)}", file=out)
     r = m.rising
     ratio = f"last7/prior28 {r.ratio:.3g} | days above baseline {r.days_above}/{tg.RECENT_DAYS}" if (
         r.ratio is not None) else f"last7/prior28 {r.reason}"
@@ -448,9 +448,12 @@ def _query_names() -> dict[str, str]:
         return {}
 
 
+def _runs() -> tuple[dict[str, str], str | None]:
+    return camp.read_runs(cache.CACHE_ROOT / "attention" / "trends_runs")
+
+
 def _health(km, symbols) -> dict[str, str]:
-    runs = camp.latest_run_outcomes(cache.CACHE_ROOT / "attention" / "trends_runs")
-    return camp.keyword_health(km, symbols, runs, _stored_trend_values)
+    return camp.keyword_health(km, symbols, _runs()[0], _stored_trend_values)
 
 
 def _int_arg(value, flag: str, lo: int, hi: int, default: int) -> int:
@@ -472,7 +475,7 @@ def _state_path(args) -> Path:
 
 
 def _run_campaign(args, km, start, today: date, now, sleep, jitter, clock, volume_reader, eligible_reader,
-                  names_reader, health_reader, version, out, err) -> int:
+                  names_reader, health_reader, runs_reader, version, out, err) -> int:
     """--all-eligible: test pending candidate groups of every eligible coin, saving the state after each group."""
     try:
         path = camp.check_state_path(_state_path(args))
@@ -487,9 +490,13 @@ def _run_campaign(args, km, start, today: date, now, sleep, jitter, clock, volum
     ids = {r.get("symbol"): r.get("id") for r in rows if isinstance(r, dict)}
     names = names_reader()
     health = health_reader(km, eligible)
+    note = runs_reader()[1]
+    if note:
+        print(note, file=out)
     order = camp.priority_order(eligible, health)
     cands = {s: tcand.candidate_groups(s, km.entries.get(s), query_name=names.get(s), coingecko_id=ids.get(s),
-                                       max_groups=args.max_groups) for s in order}
+                                       max_groups=args.max_groups, usable=health.get(s) == camp.OK,
+                                       max_usable=args.max_usable) for s in order}
     pending = camp.plan(order, cands, state, today, args.max_age)
     print("probe_trends campaign: reads Google Trends, writes only the state file (terms, outcomes, metrics)",
           file=out)
@@ -556,7 +563,7 @@ def _run_campaign(args, km, start, today: date, now, sleep, jitter, clock, volum
     return code
 
 
-def _run_report(args, km, eligible_reader, health_reader, out, err) -> int:
+def _run_report(args, km, eligible_reader, health_reader, runs_reader, out, err) -> int:
     """--report: the campaign table from the state file; never starts a Trends client."""
     try:
         path = camp.check_state_path(_state_path(args))
@@ -565,6 +572,9 @@ def _run_report(args, km, eligible_reader, health_reader, out, err) -> int:
         print(str(exc), file=err)
         return 2
     eligible, _ = eligible_reader()
+    note = runs_reader()[1]
+    if note:
+        print(note, file=out)
     for line in camp.report_lines(state, list(eligible), km, health_reader(km, eligible)):
         print(line, file=out)
     return 0
@@ -586,7 +596,10 @@ def _parse(argv, km: tk.KeywordMap):
                     "~/trends_campaign.json)")
     ap.add_argument("--max-requests", default=None, help=f"default {CAMPAIGN_DEFAULT_REQUESTS}, at most "
                     f"{CAMPAIGN_MAX_REQUESTS}")
-    ap.add_argument("--max-groups-per-coin", default=None, help=f"default {tcand.DEFAULT_MAX_GROUPS}")
+    ap.add_argument("--max-groups-per-coin", default=None, help=f"default {tcand.DEFAULT_MAX_GROUPS}: the ceiling for a coin "
+                    "whose current keyword is weak, missing or unknown")
+    ap.add_argument("--max-groups-usable", default=None, help=f"default {tcand.DEFAULT_MAX_USABLE}, at most "
+                    f"{tcand.MAX_USABLE}: groups for a coin whose current keyword is already usable")
     ap.add_argument("--max-age-days", default=None, help=f"default {DEFAULT_MAX_AGE_DAYS}")
     ap.add_argument("--report", default=None, help="state FILE, or '-' for --state: print the campaign table")
     try:
@@ -605,7 +618,8 @@ def _parse(argv, km: tk.KeywordMap):
         if not alone or not all(tk.SYMBOL_RE.fullmatch(s) for s in alone):
             raise ArgError(f"--alone must be comma-separated symbols matching {tk.SYMBOL_RE.pattern}")
         args.alone = list(dict.fromkeys(alone))
-    campaign_only = (args.state, args.max_requests, args.max_groups_per_coin, args.max_age_days)
+    campaign_only = (args.state, args.max_requests, args.max_groups_per_coin, args.max_age_days,
+                     args.max_groups_usable)
     if args.all_eligible or args.report is not None:
         if args.all_eligible and args.report is not None:
             raise ArgError("--all-eligible and --report are separate runs")
@@ -619,10 +633,13 @@ def _parse(argv, km: tk.KeywordMap):
                                      CAMPAIGN_DEFAULT_REQUESTS)
         args.max_groups = _int_arg(args.max_groups_per_coin, "--max-groups-per-coin", 1, tcand.MAX_GROUPS,
                                    tcand.DEFAULT_MAX_GROUPS)
+        args.max_usable = _int_arg(args.max_groups_usable, "--max-groups-usable", 1, tcand.MAX_USABLE,
+                                   tcand.DEFAULT_MAX_USABLE)
         args.max_age = _int_arg(args.max_age_days, "--max-age-days", 0, MAX_AGE_LIMIT, DEFAULT_MAX_AGE_DAYS)
         return args, coins, a, b
     if any(v is not None for v in campaign_only):
-        raise ArgError("--state, --max-requests, --max-groups-per-coin and --max-age-days go with --all-eligible")
+        raise ArgError("--state, --max-requests, --max-groups-per-coin, --max-groups-usable and --max-age-days go with "
+                       "--all-eligible")
     if args.groups is not None:
         if args.alone is not None or args.timeframe is not None:
             raise ArgError("--try cannot be combined with --alone or --timeframe")
@@ -640,7 +657,7 @@ def _parse(argv, km: tk.KeywordMap):
 def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep=time.sleep, clock=time.monotonic,
          today=None, version=pytrends_version, out=None, err=None,
          jitter=lambda: random.uniform(0, TRY_JITTER_SECONDS), volume_reader=_stored_volume,
-         eligible_reader=_eligible, names_reader=_query_names, health_reader=_health,
+         eligible_reader=_eligible, names_reader=_query_names, health_reader=_health, runs_reader=_runs,
          now=lambda: datetime.now(timezone.utc)) -> int:
     out, err = out or sys.stdout, err or sys.stderr
     today = today or (lambda: datetime.now(timezone.utc).date())
@@ -656,11 +673,11 @@ def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep
     except SystemExit:  # --help
         return 0
     if args.report is not None:
-        return _run_report(args, km, eligible_reader, health_reader, out, err)
+        return _run_report(args, km, eligible_reader, health_reader, runs_reader, out, err)
     if args.all_eligible:
         return _run_campaign(args, km, lambda: start_client(trendreq_factory, "probe_trends", err), today(), now,
                              sleep, jitter, clock, volume_reader, eligible_reader, names_reader, health_reader,
-                             version, out, err)
+                             runs_reader, version, out, err)
     client, code = start_client(trendreq_factory, "probe_trends", err)
     if client is None:
         return code

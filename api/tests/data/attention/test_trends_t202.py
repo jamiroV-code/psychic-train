@@ -4,7 +4,6 @@ from __future__ import annotations
 import string
 from datetime import date, timedelta
 
-import pytest
 
 from api.data.attention import trends
 from api.data.attention import trends_candidates as c
@@ -100,7 +99,7 @@ def test_weak_ceiling_is_the_argument_and_missing_baseline_is_weak():
 
 
 def test_request_total_for_78_coins_stays_under_the_bound():
-    names = ["".join(p) for p in zip(*[iter(string.ascii_lowercase * 4)] * 3)][:78]
+    names = [a + b + "zz" for a in string.ascii_lowercase for b in string.ascii_lowercase][:78]
     risky = sorted(trends.NAME_RISK_SYMBOLS)
     weak = usable = total = 0
     for i, n in enumerate(names):

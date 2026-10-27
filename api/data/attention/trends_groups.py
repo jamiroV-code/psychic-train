@@ -213,10 +213,26 @@ def analyze(series: dict[str, list[float]], dates: list[date], volume=None) -> G
         best_term=best, correlations=corr, moves_alone=alone, identity=ident, clean=not reasons, reasons=reasons)
 
 
+WAKING_UP = "waking up"
+
+
+def verdict_label(verdict: str) -> str:
+    """Quiet-then-surge is not usable (never scored, never passed) but is not plain too-little-interest either."""
+    return f"{verdict} ({WAKING_UP})" if verdict == trends.QUIET_THEN_SURGE else verdict
+
+
+def verdict_class(verdict: str, clean: bool) -> int:
+    """0 usable and clean rising, 1 usable, 2 quiet-then-surge (waking up), 3 too-little-interest, 4 anything else."""
+    if verdict == "ok":
+        return 0 if clean else 1
+    return {trends.QUIET_THEN_SURGE: 2, trends.TOO_LITTLE_INTEREST: 3}.get(verdict, 4)
+
+
 def rank_values(verdict: str, clean: bool, zero_pct: float, distinct: int, identity_corr: float | None) -> tuple:
-    """Best first (T201): usable, then clean rising, then fewer zero days, then more distinct values, then the higher
-    volume correlation (missing last). Never the median: every group is its own request on its own 0-100 scale."""
-    return (verdict != "ok", not clean, zero_pct, -distinct,
+    """Best first (T201, T202): usable clean rising, usable, quiet-then-surge, too-little-interest, other; inside a
+    class fewer zero days, then more distinct values, then the higher volume correlation (missing last). Never the
+    median: every group is its own request on its own 0-100 scale."""
+    return (verdict_class(verdict, clean), zero_pct, -distinct,
             -identity_corr if identity_corr is not None else math.inf)
 
 

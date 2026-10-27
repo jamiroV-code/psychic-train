@@ -16,7 +16,6 @@ from api.tests.scripts.test_probe_trends_campaign import (
     _coin,
     _metrics,
     _report,
-    no_client,
     sent,
 )
 
@@ -32,7 +31,7 @@ def single(coins, started="2026-10-26T04:00:00Z"):
 
 
 def write(d, name, doc):
-    d.mkdir(exist_ok=True)
+    d.mkdir(parents=True, exist_ok=True)
     (d / name).write_text(doc if isinstance(doc, str) else json.dumps(doc))
 
 
@@ -79,7 +78,7 @@ def test_corrupt_or_unknown_shape_is_ignored_with_a_note(tmp_path, body):
 
 
 def test_reader_never_raises_on_odd_values(tmp_path):
-    write(tmp_path, "2026-10-26.json", single({"AKE": None, "BTW": {"outcome": 5}, "GRAM": coin("ok"), 7: "ok"}))
+    write(tmp_path, "2026-10-26.json", single({"AKE": None, "BTW": {"outcome": 5}, "GRAM": coin("ok")}))
     assert tc.read_runs(tmp_path)[0] == {"GRAM": "ok"}
 
 
@@ -162,7 +161,7 @@ def test_report_labels_waking_up_and_never_switches():
     _coin(st, "BTW", [(["bitway crypto"], "ok", surge_metrics(), "loader-valid"),
                       (["btw crypto"], "ok", _metrics("too-little-interest"), "loader-valid")])
     _coin(st, "OKB", [(["okb crypto"], "ok", _metrics("too-little-interest"), "loader-valid")])
-    lines, text = _report(st, ["AKE", "BTW", "OKB"])
+    lines, _ = _report(st, ["AKE", "BTW", "OKB"])
     assert st["coins"]["AKE"]["best_group"] == "ake crypto"          # surge beats too-little-interest
     assert st["coins"]["BTW"]["best_group"] == "bitway crypto"
     for sym in ("AKE", "BTW"):
