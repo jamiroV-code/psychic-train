@@ -127,8 +127,9 @@ How to read each group:
   zero % is mostly empty days.
 - `group | days | min | median | max | zero % | verdict`: the summed series under the daily rule (median >= 3 and
   zero share < 40%). `too-little-interest` or `quiet-then-surge` means the daily run would store nothing.
-- `rising | last7/prior28 R | days above baseline D/7 | one-term spike`: R >= 1.10 and D >= 4 mean a sustained rise,
-  not a one-day spike; "spike: yes" means one term carries over 80% of the rise (suspect noise or a namesake).
+- `rising | ratio (mean, as the daily run) M | ratio (median, used for clean-rising) R | days above baseline D/7 |
+  one-term spike`: the daily run uses the mean; clean-rising uses the median. R >= 1.10 and D >= 4 mean a sustained
+  rise, not a one-day spike; "spike: yes" means one term carries over 80% of the rise (suspect noise or a namesake).
 - `correlation (7-day smoothed) vs best term`: terms that rise and fall together describe the same crowd; `moves
   alone` (< 0.2) suggests a term catches other searches (a namesake, a product, news).
 - `identity`: correlation with the coin's own stored trading volume (log). A hint, not proof; `n/a` without at
@@ -279,3 +280,45 @@ Three planner decisions on PR #182. Red commit a70b49c, green commit 7a2f2cd (pl
 
 - Q3 above is closed (shape taken from #181); Q2 above is closed (default 4 includes the bare candidates).
 - Q4 (quiet-then-surge as usable) stays no: it is "waking up", watched, not passed.
+
+## Round 4 (T207)
+
+Review T205 (MERGE-AFTER-FIXES, no blocker). Main merged in first; red commit `39e48e2` before the green commit.
+
+### Changes
+
+1. **Two ratios, kept apart (MEDIUM).** The daily run's / PR #181 `last7_vs_prior28_ratio` is a MEAN ratio
+   (`trends.series_stats`); the tester's old `last7/prior28` was a MEDIAN ratio under a similar name. Now:
+   - Output header: `ratios: the daily run uses the mean; clean-rising uses the median (robust against a single-day
+     spike); both are shown`. The group line prints `ratio (mean, as the daily run) M | ratio (median, used for
+     clean-rising) R`.
+   - The mean comes from `trends.series_stats` itself (same number, same 2-decimal rounding, missing when the
+     prior-28 mean is 0 or under 35 days). It stays visible when the median baseline is 0.
+   - Renamed: `Rising.ratio` -> `Rising.median_ratio` (+ new `Rising.mean_ratio`); `MIN_RISE_RATIO` ->
+     `MIN_MEDIAN_RISE_RATIO` (still 1.10); campaign-state record key `rise_ratio` -> `last7_median_vs_prior28_median`
+     plus `last7_mean_vs_prior28_mean`. No field named `last7_vs_prior28_ratio` exists in the tester. The not-clean
+     reason now reads `last7 median / prior28 median R < 1.1`. Clean-rising is unchanged: median ratio >= 1.10.
+   - Tests: spiky series (flat 10, last day 100: mean 2.29, median 1.0) and a ramp 1..100 (both 1.22), also through
+     `--try` output and `metrics_record`.
+2. **One-term-spike boundary (LOW).** Tests at exactly baseline share + 0.2 (60%/40% base, 80% of the rise: flagged),
+   just below (61% base: not flagged), above (59%), exactly 0.8 with a low baseline (flagged), 79.6% (not flagged),
+   and a float-noise case (6/7 vs 23/35 + 1/5, equal in exact math, not in floats) that pins `SHARE_EPS`.
+3. **Own-diff re-read.** Renames above applied everywhere (code, output, tests, report line for the `rising` row);
+   no unused code left; ruff clean on the touched files (no UP017). No behaviour changed beyond the above.
+
+### Gates (UTC 2026-10-27)
+
+- Red first: 13 failed, 73 passed on the red commit (the boundary tests pass on old code; they pin it for mutation).
+- `pytest api/tests/scripts api/tests/data/attention`: 1277 passed. Full `pytest api`: 2697 passed, 1 skipped,
+  5 deselected. ruff on the 4 touched Python files: clean. `git diff --check`: clean. No secret or network import
+  added (`trends_groups` still has none; a test asserts it).
+- Mutation check on the changed logic, 22 mutants: 20 killed, 2 survived, both equivalent: `>=` -> `>` on the share
+  checks while `SHARE_EPS` slack is kept (`x > y - 1e-9` and `x >= y - 1e-9` differ only inside 1e-9). Together with
+  `SHARE_EPS = 0` the combined mutant is killed. First run also had `SHARE_EPS`-removed and record mean/median swap
+  surviving; both now killed by the new tests.
+
+### Owner commands
+
+Unchanged and still correct: `--try 'SYM=term1|term2'` groups; `--all-eligible --state C:\vet\trends_campaign.json
+--max-requests 40`; `--report`. The campaign state written by earlier runs may hold the old `rise_ratio` key; it is
+not read back by the campaign, so nothing needs migrating.

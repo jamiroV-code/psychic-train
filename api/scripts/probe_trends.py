@@ -321,8 +321,10 @@ def _print_metrics(m: tg.GroupMetrics, out) -> None:
     print(f"  group | days {gs.days} | min {gs.min:g} | median {gs.median:g} (own scale only) | max {gs.max:g} | "
           f"zero {round(gs.zero_pct, 1):g}% | distinct {gs.distinct} | verdict: {tg.verdict_label(m.verdict)}", file=out)
     r = m.rising
-    ratio = f"last7/prior28 {r.ratio:.3g} | days above baseline {r.days_above}/{tg.RECENT_DAYS}" if (
-        r.ratio is not None) else f"last7/prior28 {r.reason}"
+    mean = f"{r.mean_ratio:.3g}" if r.mean_ratio is not None else "missing: prior 28 days average 0 or too few days"
+    ratio = (f"ratio (mean, as the daily run) {mean} | ratio (median, used for clean-rising) {r.median_ratio:.3g} | "
+             f"days above baseline {r.days_above}/{tg.RECENT_DAYS}" if r.median_ratio is not None else
+             f"ratio (mean, as the daily run) {mean} | ratio (median, used for clean-rising) {r.reason}")
     spike = (f"{'yes' if m.spike else 'no'} (largest share of the rise {_pct0(m.spike_share)}, its baseline share "
              f"{_pct0(m.spike_base_share)})" if m.spike_share is not None else m.spike_reason)
     print(f"  rising | {ratio} | one-term spike: {spike}", file=out)
@@ -349,10 +351,12 @@ def _run_try(client, groups, day: date, sleep, clock, jitter, volume_reader, out
           f"plus up to {TRY_JITTER_SECONDS:g} s jitter; stops at the first HTTP 429 or after "
           f"{MAX_CONSECUTIVE_FAILURES} failed requests in a row", file=out)
     print(f"usable: median >= {trends.TRENDS_MIN_MEDIAN} and zero share < {trends.TRENDS_MAX_ZERO_DAY_PCT}% "
-          f"(the daily rule); clean rising: usable, last7/prior28 >= {tg.MIN_RISE_RATIO:g}, >= {tg.MIN_DAYS_ABOVE} "
+          f"(the daily rule); clean rising: usable, last7 median / prior28 median >= {tg.MIN_MEDIAN_RISE_RATIO:g}, >= {tg.MIN_DAYS_ABOVE} "
           f"of the last {tg.RECENT_DAYS} days above the prior-{tg.BASELINE_DAYS}-day median, no one-term spike "
           f"(one term >= {tg.SPIKE_SHARE:.0%} of the rise and >= its baseline share + {tg.SPIKE_TAKEOVER:.0%}), "
           f"volume correlation >= {tg.IDENTITY_MIN_CORR:g} when available", file=out)
+    print("ratios: the daily run uses the mean; clean-rising uses the median (robust against a single-day spike); "
+          "both are shown", file=out)
     print("every group is its own request on its own 0-100 scale: medians are own scale only, never compared "
           "across groups", file=out)
     results: list[tuple[str, list[str], tg.GroupMetrics | None, str]] = []

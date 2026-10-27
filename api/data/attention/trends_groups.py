@@ -20,7 +20,9 @@ MAX_TERMS = 5  # pytrends compares at most 5 terms in one request
 SMOOTH_DAYS = 7  # trailing mean used before any correlation (weekday swings would dominate raw days)
 RECENT_DAYS = 7  # "last week" of the rising measure
 BASELINE_DAYS = 28  # the 4 weeks before it: the baseline
-MIN_RISE_RATIO = 1.10  # median of the last 7 days over the prior-28-day median
+# Two ratios, kept apart (T207): the daily run's last7_vs_prior28_ratio is a MEAN ratio (trends.series_stats); the
+# clean-rising rule uses the MEDIAN ratio (robust against a single-day spike). The tester shows both.
+MIN_MEDIAN_RISE_RATIO = 1.10  # median of the last 7 days over the prior-28-day median
 MIN_DAYS_ABOVE = 4  # of the last 7 days, at least this many above the prior-28-day median (not a one-day spike)
 # One-term spike (T201): one term carries at least SPIKE_SHARE of the group's last-7-day increase AND that share is
 # at least its baseline share of the group plus SPIKE_TAKEOVER (a dominant but steady term is not a spike).
@@ -46,7 +48,8 @@ class TermStats:
 
 @dataclass
 class Rising:
-    ratio: float | None
+    mean_ratio: float | None  # last 7 days mean over prior-28-day mean: exactly the daily run's number
+    median_ratio: float | None  # last 7 days median over prior-28-day median: the clean-rising measure
     days_above: int | None
     reason: str = ""
 
@@ -106,12 +109,13 @@ def shares(grp: Group) -> dict[str, float | None]:
 def rising(values: list[float]) -> Rising:
     need = RECENT_DAYS + BASELINE_DAYS
     if len(values) < need:
-        return Rising(None, None, f"missing: {len(values)} days, need {need}")
+        return Rising(None, None, None, f"missing: {len(values)} days, need {need}")
     base = statistics.median(values[-need:-RECENT_DAYS])
     recent = values[-RECENT_DAYS:]
+    mean_ratio = trends.series_stats(values)["last7_vs_prior28_ratio"]
     if base == 0:
-        return Rising(None, None, "missing: baseline median 0")
-    return Rising(statistics.median(recent) / base, sum(1 for v in recent if v > base))
+        return Rising(mean_ratio, None, None, "missing: baseline median 0")
+    return Rising(mean_ratio, statistics.median(recent) / base, sum(1 for v in recent if v > base))
 
 
 def _increase(values: list[float]) -> float:
@@ -193,11 +197,11 @@ def analyze(series: dict[str, list[float]], dates: list[date], volume=None) -> G
     reasons = []
     if verdict != "ok":
         reasons.append(f"not usable: {verdict}")
-    if rise.ratio is None:
+    if rise.median_ratio is None:
         reasons.append(f"rising {rise.reason}")
     else:
-        if rise.ratio < MIN_RISE_RATIO:
-            reasons.append(f"last7/prior28 {rise.ratio:.3g} < {MIN_RISE_RATIO:g}")
+        if rise.median_ratio < MIN_MEDIAN_RISE_RATIO:
+            reasons.append(f"last7 median / prior28 median {rise.median_ratio:.3g} < {MIN_MEDIAN_RISE_RATIO:g}")
         if rise.days_above < MIN_DAYS_ABOVE:
             reasons.append(f"{rise.days_above}/{RECENT_DAYS} days above baseline < {MIN_DAYS_ABOVE}")
     if spike:
@@ -250,7 +254,8 @@ def metrics_record(m: GroupMetrics) -> dict:
     return {
         "verdict": m.verdict, "clean": m.clean, "reasons": list(m.reasons),
         "days": gs.days, "min": gs.min, "median": gs.median, "max": gs.max, "zero_pct": _r(gs.zero_pct),
-        "distinct": gs.distinct, "rise_ratio": _r(m.rising.ratio), "days_above": m.rising.days_above,
+        "distinct": gs.distinct, "last7_mean_vs_prior28_mean": m.rising.mean_ratio,
+        "last7_median_vs_prior28_median": _r(m.rising.median_ratio), "days_above": m.rising.days_above,
         "spike": m.spike, "spike_share": _r(m.spike_share), "spike_base_share": _r(m.spike_base_share),
         "best_term": m.best_term, "moves_alone": list(m.moves_alone),
         "identity_corr": _r(m.identity.corr), "identity_reason": m.identity.reason,

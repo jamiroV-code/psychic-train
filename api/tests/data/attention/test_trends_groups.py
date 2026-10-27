@@ -88,15 +88,15 @@ def test_mean_and_median_ratio_differ_on_a_spiky_series():
     spiky[-1] = 100.0
     r = g.rising(spiky)
     assert r.median_ratio == 1.0 and r.days_above == 1
-    assert r.mean_ratio == pytest.approx(160 / 70)   # (6 * 10 + 100) / 7 over 10
+    assert r.mean_ratio == 2.29   # (6 * 10 + 100) / 7 over 10, rounded to 2 places like the daily run
     assert r.mean_ratio == trends.series_stats(spiky)["last7_vs_prior28_ratio"]   # the daily run's own number
 
 
 def test_mean_and_median_ratio_on_a_ramp():
     ramp = [float(i + 1) for i in range(N)]
     r = g.rising(ramp)
-    assert r.median_ratio == pytest.approx(97 / 80.5)    # last 7 days 94..100, prior 28 days 67..94
-    assert r.mean_ratio == pytest.approx(97 / 80.5)
+    assert r.median_ratio == pytest.approx(97 / 79.5)    # last 7 days 94..100, prior 28 days 66..93
+    assert r.mean_ratio == 1.22   # the daily run's rounding to 2 places
     assert r.mean_ratio == trends.series_stats(ramp)["last7_vs_prior28_ratio"]
     assert g.rising(ramp).days_above == 7
 
@@ -165,6 +165,9 @@ def test_spike_takeover_boundary_exactly_plus_point_two():
     below = g.analyze({"a": rise(61, 65), "b": rise(39, 40)}, DATES)    # 80% of the rise, baseline 61%: needs 81%
     assert below.spike_share == pytest.approx(0.8) and below.spike_base_share == pytest.approx(0.61)
     assert below.spike is False
+    noisy = g.analyze({"a": rise(23, 29), "b": rise(12, 13)}, DATES)    # 6/7 vs 23/35 + 1/5: equal, floats are not
+    assert noisy.spike_share == pytest.approx(6 / 7) and noisy.spike_base_share == pytest.approx(23 / 35)
+    assert noisy.spike is True
     over = g.analyze({"a": rise(59, 63), "b": rise(41, 42)}, DATES)     # baseline 59%: 80% clears 79%
     assert over.spike is True
 
@@ -365,7 +368,11 @@ def test_metrics_record_is_small_and_json_ready():
     assert not any(isinstance(v, list) and len(v) > 10 for v in rec.values())   # no series stored
     # T207: two distinct, honestly named ratios; no field named like the daily run's mean ratio holds a median
     assert "rise_ratio" not in rec and "last7_vs_prior28_ratio" not in rec
-    assert rec["last7_mean_vs_prior28_mean"] == 1.2 and rec["last7_median_vs_prior28_median"] == 1.2
+    assert rec["last7_mean_vs_prior28_mean"] == 1.25 and rec["last7_median_vs_prior28_median"] == 1.25
+    spiky = flat(10)
+    spiky[-1] = 100.0
+    rec = g.metrics_record(g.analyze({"a": spiky}, DATES))
+    assert rec["last7_mean_vs_prior28_mean"] == 2.29 and rec["last7_median_vs_prior28_median"] == 1.0
 
 
 # --- purity ---
