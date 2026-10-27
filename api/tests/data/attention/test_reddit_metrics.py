@@ -120,7 +120,7 @@ def test_comment_num_comments_not_added():
 
 
 def test_controversy_boundaries_ratio_0_30_and_votes_9_10():
-    p = lambda ratio, ups: item(1, score=1, num_comments=0, upvote_ratio=ratio, ups=ups)  # noqa: E731
+    p = lambda ratio, ups: item(1, score=1, num_comments=0, upvote_ratio=ratio, ups=ups)
     assert rm.is_controversial(p(0.29, 3))  # 3 / 0.29 = 10.3 votes
     assert not rm.is_controversial(p(0.30, 3))  # ratio boundary: 0.30 is not below 0.3
     assert rm.is_controversial(p(0.2, 2))  # exactly 10 votes

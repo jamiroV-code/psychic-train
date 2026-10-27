@@ -9,6 +9,7 @@ import logging
 import random
 import re
 from datetime import date, datetime, timedelta, timezone
+from itertools import pairwise
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -16,7 +17,8 @@ import httpx
 import pytest
 
 from api.data import cache
-from api.data.attention import pc_pace, reddit_items, reddit_web as rw, store, web_evidence
+from api.data.attention import pc_pace, reddit_items, store, web_evidence
+from api.data.attention import reddit_web as rw
 from api.data.attention import web_queries as wq
 
 D = date(2026, 10, 26)
@@ -65,13 +67,15 @@ EXACT = feed_at([at(20), at(15), at(3), at(-2)])  # three in D, one before D: th
 
 
 class Fake:
-    """Records every request; `respond(request)` returns the response."""
+    """Records every request (and, given a clock, when it was sent); `respond(request)` returns the response."""
 
-    def __init__(self, respond):
-        self.respond, self.requests = respond, []
+    def __init__(self, respond, clock: Clock | None = None):
+        self.respond, self.clock, self.requests, self.sent_at = respond, clock, [], []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
+        if self.clock is not None:
+            self.sent_at.append(self.clock())
         return self.respond(request)
 
     def client(self) -> httpx.Client:
@@ -87,11 +91,14 @@ def cfg(**kw) -> wq.CollectorConfig:
 
 
 @pytest.fixture
-def q():
+def q(attention_cache):
+    """The committed query file; every test that uses it also runs on a throwaway cache root."""
     return wq.load()
 
 
 def unit(fake: Fake, q, clock: Clock, *, symbol="SOL", day=D, degraded=False, ledger=None):
+    """One unit on a fresh Reddit state (no pause or spacing carried over from an earlier call)."""
+    pc_pace.state_path(rw.SOURCE).unlink(missing_ok=True)
     src = rw.reddit_source(q.config, degraded=degraded, clock=clock)
     return rw.run_search_unit(fake.client(), src, q, symbol=symbol, day=day, ledger=ledger), src
 
@@ -418,27 +425,25 @@ def test_search_requests_spread_over_day_baseline(q, attention_cache):
     start = datetime(2026, 10, 27, 13, 17, tzinfo=timezone.utc)
     times = pc_pace.plan_run(rw.search_trickle(c, 75, degraded=False, rng=random.Random(4)), start=start,
                              stop=start + timedelta(hours=24))
-    gaps = [(b - a).total_seconds() for a, b in zip(times, times[1:])]
+    gaps = [(b - a).total_seconds() for a, b in pairwise(times)]
     assert min(gaps) >= 86400 / 75 and len(times) >= 74 and (times[-1] - times[0]) >= timedelta(hours=23)
     few = pc_pace.plan_run(rw.search_trickle(c, 3, degraded=False, rng=random.Random(4)), start=start,
                            stop=start + timedelta(hours=24))
-    assert min((b - a).total_seconds() for a, b in zip(few, few[1:])) >= 28800
+    assert min((b - a).total_seconds() for a, b in pairwise(few)) >= 28800
     fast = pc_pace.plan_run(rw.search_trickle(c, 75, degraded=True, rng=random.Random(4)), start=start,
                             stop=start + timedelta(hours=1))
-    assert all(60 <= (b - a).total_seconds() <= 120 for a, b in zip(fast, fast[1:])) and len(fast) >= 29
+    assert all(60 <= (b - a).total_seconds() <= 120 for a, b in pairwise(fast)) and len(fast) >= 29
     # many coins: the configured 60-120 s stays the floor
     crowd = pc_pace.plan_run(rw.search_trickle(c, 5000, degraded=False, rng=random.Random(4)), start=start,
                              stop=start + timedelta(hours=1))
-    assert min((b - a).total_seconds() for a, b in zip(crowd, crowd[1:])) >= 60
+    assert min((b - a).total_seconds() for a, b in pairwise(crowd)) >= 60
     # the pass itself keeps the spread: three coins, a sent request every 8 h or more
-    fake, clock = Fake(ok(EXACT)), Clock(start)
+    clock = Clock(start)
+    fake = Fake(ok(EXACT), clock)
     src = rw.reddit_source(c, degraded=False, clock=clock)
-    sent = []
-    orig = fake.respond
-    fake.respond = lambda req: (sent.append(clock()), orig(req))[1]
     rw.run_pass(fake.client(), src, q, queue=[("SOL", D), ("ETH", D), ("ADA", D)], clock=clock, sleep=clock.sleep,
                 rng=random.Random(5), degraded=False)
-    assert len(sent) == 3 and all((b - a).total_seconds() >= 28800 for a, b in zip(sent, sent[1:]))
+    assert len(fake.sent_at) == 3 and all((b - a).total_seconds() >= 28800 for a, b in pairwise(fake.sent_at))
 
 
 def test_search_completeness_written_attempted_fetched_missing_reasons(q, attention_cache):
@@ -497,9 +502,8 @@ def test_no_fixed_utc_hour_assumption_start_times_0030_0900_1700_2300(q, tmp_pat
         monkeypatch.setattr(cache, "CACHE_ROOT", tmp_path / f"run{hh:02d}{mm:02d}")
         start = datetime(2026, 10, 27, tzinfo=timezone.utc) + timedelta(hours=hh, minutes=mm)
         clock = Clock(start)
-        fake = Fake(respond)
-        sent = []
-        fake.respond = (lambda f: lambda req: (sent.append(clock()), f(req))[1])(respond)
+        fake = Fake(respond, clock)
+        sent = fake.sent_at
         src = rw.reddit_source(q.config, degraded=True, clock=clock)
         res = rw.run_pass(fake.client(), src, q, queue=[("SOL", D), ("ETH", D)], clock=clock, sleep=clock.sleep,
                           rng=random.Random(hh), degraded=True, stop_at=start + timedelta(hours=1))

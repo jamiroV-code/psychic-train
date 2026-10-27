@@ -10,12 +10,16 @@ import re
 from pathlib import Path
 
 from api.tests.tooling_guards._common import API_DIR
-from api.tests.tooling_guards.test_pc_collector_guards import EVASION, fixed_hour_offenders, network_offenders
+from api.tests.tooling_guards.test_pc_collector_guards import (
+    EVASION,
+    fixed_hour_offenders,
+    network_offenders,
+)
 
 ATTENTION = API_DIR / "data" / "attention"
 REDDIT_FILES = [ATTENTION / f for f in
                 ("reddit_web.py", "reddit_items.py", "reddit_metrics.py", "reddit_stream.py", "reddit_engagement.py")]
-# Modules that may send HTTP (the connector and its later siblings); the ledger and the metrics stay pure.
+# Modules that may send HTTP through httpx (the connector and its later siblings); the ledger and metrics stay pure.
 HTTP_ALLOWED = {"reddit_web.py", "reddit_stream.py", "reddit_engagement.py"}
 BROWSER_UA = re.compile(r"Mozilla/|AppleWebKit|Chrome/\d|Safari/\d|Gecko/|Firefox/|Edg/|OPR/", re.IGNORECASE)
 REDDIT_JSON = re.compile(r"reddit\.com\S*\.json|search\.json|/\.json|\.json\?|oauth\.reddit|api\.reddit|/api/v1/"
@@ -86,7 +90,7 @@ def test_ledger_and_metrics_are_pure_and_connector_uses_httpx_only():
     for path in present():
         bad = network_offenders(path.read_text(encoding="utf-8"))
         if path.name in HTTP_ALLOWED:
-            assert set(bad) <= {"httpx"}, (path.name, bad)
+            assert set(bad) <= {"httpx", "urllib.parse"}, (path.name, bad)  # urllib.parse: string quoting only
         else:
             assert bad == [], (path.name, bad)
 

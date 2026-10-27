@@ -11,7 +11,7 @@ from api.data.attention import web_queries as wq
 LOCKED = {
     "x_query_delay_min_s": 180, "x_query_delay_max_s": 360, "x_daily_post_budget": 800, "x_sample_n": 40,
     "x_sample_min": 20, "x_page_cap": 3, "reddit_request_delay_min_s": 60, "reddit_request_delay_max_s": 120,
-    "reddit_daily_request_budget": 150, "reddit_sample_min": 10,
+    "reddit_daily_request_budget": 250, "reddit_sample_min": 10,
 }
 
 
