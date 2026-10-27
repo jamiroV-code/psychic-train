@@ -4,7 +4,6 @@ from __future__ import annotations
 import string
 from datetime import date, timedelta
 
-
 from api.data.attention import trends
 from api.data.attention import trends_candidates as c
 from api.data.attention import trends_groups as g

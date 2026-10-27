@@ -193,6 +193,7 @@ def test_report_on_a_missing_state_says_so_and_exits_2(tmp_path):
     st = tmp_path / "missing.json"
     code, text, _ = run2(["--report", str(st)], eligible=("AKE",))
     assert code == 2 and "state file not found" in text and str(st) in text and "campaign report" not in text
+    assert "no campaign has been started" in text
     assert "|" not in text and not st.exists()
     code, text, _ = run2(["--report", "-", "--state", str(st)], eligible=("AKE",))
     assert code == 2 and "state file not found" in text and str(st) in text

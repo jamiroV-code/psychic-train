@@ -243,3 +243,39 @@ The hand-typed first batch from round 1 still works as is (`--try`, 8 requests).
 2. Bare-name / bare-ticker candidates rank after the bundle, so with the default 3 groups they are only tested when
    a coin has few variants; raise `--max-groups-per-coin` to include them.
 3. `trends_runs/*.json` is read with an assumed shape (`{"coins": {SYM: {"outcome"}}}`); align once that PR lands.
+
+## Round 3 (T202)
+
+Three planner decisions on PR #182. Red commit a70b49c, green commit 7a2f2cd (plus a small test/lint follow-up).
+
+1. **Quiet-then-surge ("waking up").** Ranking classes, best first: usable clean rising, usable, quiet-then-surge,
+   too-little-interest, anything else (`trends_groups.verdict_class`; failed or rejected groups never rank). It is
+   still not usable and never counted as passed. The report and `--try` show `quiet-then-surge (waking up)`; a coin
+   whose best group is a surge is recommended `keep watching: waking up`, never `switch`. The report adds a line:
+   usable N, waking up M (shown, never counted as passed), too little interest or none K.
+2. **Adaptive depth.** A coin whose current keyword is usable (health `ok`: latest trends_runs outcome, else the
+   stored series, else unknown = weak) gets at most `--max-groups-usable` (default 2, range 1-2): baseline plus the
+   bundle (the best single variant when no bundle exists). Every other coin gets up to `--max-groups-per-coin`
+   (default 4, now the weak ceiling). Weak order: baseline, best variant, bare name, bare ticker, bundle, more
+   variants; name-risk coins never get a bare candidate. Bound asserted on a 78-coin fixture: total <= 4 x weak +
+   2 x usable.
+3. **trends_runs reader** (`trends_campaign.read_runs`), written against the real writer in PR #181
+   (`trends_runs.append_run`): a single run is the file itself, a second run the same UTC day gives
+   `{"runs": [...]}`; the latest run of the latest `YYYY-MM-DD.json` is used. Outcome strings outside the daily run's
+   set become `unknown` (treated as weak). A corrupt, oversized or unknown-shape latest file is ignored with a note
+   (file name only, never content) printed by the campaign and the report; the run is never blocked.
+   `--report` on a missing state exits 2 and says `state file not found: <path>; no campaign has been started there`
+   (the missing-state refusal already existed; the message now names the path).
+
+### Deviations (round 3)
+
+- Default depth changed, so the old tests that assumed 3 groups per coin were updated (weak health by default in
+  the test helper; explicit `--max-groups-per-coin 3` where counts matter). One old expectation changed:
+  `rate-limited` in a run record now reads as `unknown`.
+- Candidate order for weak coins changed (bare name and ticker before the bundle) so that both fit in 4.
+- `health_reader` keeps its signature; a new `runs_reader` kwarg supplies the note.
+
+### Open questions (round 3)
+
+- Q3 above is closed (shape taken from #181); Q2 above is closed (default 4 includes the bare candidates).
+- Q4 (quiet-then-surge as usable) stays no: it is "waking up", watched, not passed.
