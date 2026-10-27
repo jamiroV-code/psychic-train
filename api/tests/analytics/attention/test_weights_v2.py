@@ -193,10 +193,10 @@ def test_invalid_v2_config_is_rejected(tmp_path, over):
 
 # ---- weights versions by day ------------------------------------------------------------------
 
-def test_shipped_config_is_v2_with_v1_history():
+def test_shipped_config_is_v3_with_v1_v2_history():
     c = disc.load_config()
     assert c["source_weights"] == V2 and c["source_groups"] == GROUPS and c["early_sources"] == EARLY
-    assert c["weights_version"] == 2
+    assert c["weights_version"] == 3   # T204: v3 = v2 weights + fallback_coverage_only
     assert (c["rising_threshold_pct"], c["trigger_pct"], c["min_covered_weight"], c["min_history_days"]) == (
         10, 60, 30, 30)
     old = disc.weights_for_day(c, date(2026, 10, 21))
@@ -204,6 +204,7 @@ def test_shipped_config_is_v2_with_v1_history():
     assert (old["weights_version"], old["source_weights"]) == (1, WEIGHTS)
     assert old["source_groups"] == {} and old["early_sources"] == []
     assert (new["weights_version"], new["source_weights"]) == (2, V2)
+    assert disc.weights_for_day(c, date(2026, 10, 27))["weights_version"] == 3
 
 
 def frozen_mismatches(cfg: dict, records: list[dict]) -> list[str]:
@@ -236,6 +237,8 @@ def _frozen(day: str, config: dict, version: int | None, covered=(35.0,), source
     return rec if version is None else {**rec, "weights_version": version}
 
 
+HIST2 = {"weights_version": 2, "until": "2026-10-26", "source_weights": V2, "source_groups": GROUPS,
+         "early_sources": EARLY}   # T204: v2 is history; v3 adds only fallback_coverage_only
 SHIPPED_LIKE = {"weights_version": 2, "source_weights": V2, "source_groups": GROUPS, "early_sources": EARLY,
                 "weights_history": [HIST1]}
 OLD_CODE_CFG = {"source_weights": dict(WEIGHTS)}   # a record frozen by pre-T130 code: v1 weights, no history
@@ -252,7 +255,7 @@ OLD_CODE_CFG = {"source_weights": dict(WEIGHTS)}   # a record frozen by pre-T130
 def test_frozen_mismatch_check(rec, bad):
     """T150: the guard must read the weights a record was SCORED with (its own config's version for its day),
     not the stored top-level `source_weights`, which since T130 is the current version."""
-    assert bool(frozen_mismatches(disc.load_config() | {"weights_history": [HIST1]}, [rec])) is bad
+    assert bool(frozen_mismatches(disc.load_config() | {"weights_history": [HIST1, HIST2]}, [rec])) is bad
 
 
 def test_committed_frozen_snapshots_match_their_days_weights():

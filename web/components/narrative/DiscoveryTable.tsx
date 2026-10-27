@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { formatSigned, NO_DATA } from "@/lib/attention-lines";
-import type { DiscoveryCategory, DiscoveryCoin, DiscoveryHiddenNarrative, DiscoverySelection } from "@/lib/types/discovery";
+import type {
+  DiscoveryCategory,
+  DiscoveryCoin,
+  DiscoveryHiddenNarrative,
+  DiscoverySelection,
+  DiscoverySource,
+} from "@/lib/types/discovery";
 
 export interface DiscoveryTableProps {
   categories: readonly DiscoveryCategory[];
@@ -39,6 +45,15 @@ const COLUMN_HELP = {
   sources: "Each source that has data for this coin, with its own change over the window.",
   coverage: "Weight of the sources that have data for this coin, out of 100.",
 };
+
+// The CoinGecko volume fallback (T204): it fills the exchange slot's coverage but never counts as rising.
+const COVERAGE_ONLY = "coverage only";
+const COVERAGE_ONLY_HELP = "counts toward coverage only, never as a rising vote";
+
+function sourceName(src: DiscoverySource): string {
+  const short = SOURCE_SHORT[src.source] ?? src.source;
+  return src.coverage_only ? `${short} (${COVERAGE_ONLY})` : short;
+}
 
 // The response does not carry the threshold, so the tag names no number.
 const THIN_HELP = "low 24h volume: label only, not excluded";
@@ -104,9 +119,9 @@ function CoinRow({ coin, id, selected, onSelect, risingThresholdPct, minCoveredW
             <span
               key={src.source}
               className={`discovery-chip discovery-chip--${chipTone(src.change, risingThresholdPct)}`}
-              title={`${SOURCE_SHORT[src.source] ?? src.source}: ${formatPercent(src.change)} over the window, data to ${src.as_of.slice(0, 10)}`}
+              title={`${sourceName(src)}: ${formatPercent(src.change)} over the window, data to ${src.as_of.slice(0, 10)}${src.coverage_only ? `; ${COVERAGE_ONLY_HELP}` : ""}`}
             >
-              {`${SOURCE_SHORT[src.source] ?? src.source} ${formatPercent(src.change)}`}
+              {`${sourceName(src)} ${formatPercent(src.change)}`}
             </span>
           ))}
         </span>

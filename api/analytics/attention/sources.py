@@ -12,7 +12,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from api.analytics.attention.discovery import (EXCHANGE_SERIES, FALLBACK_SERIES, SLOT, eligibility, load_config)
+from api.analytics.attention.discovery import (EXCHANGE_SERIES, FALLBACK_SERIES, SLOT, eligibility, load_config,
+                                               weights_for_day)
 from api.analytics.attention import narratives
 from api.analytics.attention.universe import load_universe_rows
 from api.data.attention import registry, store, trends_keywords, universe_store
@@ -27,6 +28,7 @@ LABELS = {
     "hyperliquid": "Hyperliquid volume", FALLBACK_SERIES: "CoinGecko (volume fallback)",
     "universe": "Top-100 universe", "narratives": "Narratives file",
 }
+COVERAGE_ONLY_LABEL = "CoinGecko volume (coverage only)"   # T204: the fallback no longer votes
 
 _file_cache: dict[str, tuple[int, int, int, date | None]] = {}   # path -> (mtime_ns, size, days, newest)
 
@@ -124,6 +126,7 @@ def build_sources(today: date, *, probe_path: Path | None = None, universe_path:
     probed = registry.load_probe_records(probe_path)
     x_live = os.environ.get("X_LIVE") == "1"
     n = len(eligible)
+    coverage_only = weights_for_day(cfg, end)["fallback_coverage_only"]
 
     def series(sid: str, name: str) -> tuple[_Series, str, str]:
         s = _Series(name, eligible, end, max_lag)
@@ -154,11 +157,13 @@ def build_sources(today: date, *, probe_path: Path | None = None, universe_path:
         agg.stale = False
         via_fallback = fallback[0].usable - set().union(*(e.usable for e in every))
         note = (f"{len(via_fallback)} of {len(agg.usable)} coins use the CoinGecko volume fallback"
+                + (" (coverage only, never a rising vote)" if coverage_only else "")
                 if via_fallback else "" if agg.usable else "no exchange or CoinGecko volume data")
         out.append(row(SLOT, "weighted", w, agg, "ok" if agg.usable else "unavailable", note))
     for m in EXCHANGE_SERIES:
         out.append(row(m, "exchange-member", cfg["exchange_sub_weights"].get(m), *members[m]))
-    out.append(row(FALLBACK_SERIES, "fallback", None, *fallback))
+    fb = row(FALLBACK_SERIES, "fallback", None, *fallback)
+    out.append(fb.model_copy(update={"label": COVERAGE_ONLY_LABEL}) if coverage_only else fb)
     out.append(_helper("universe", universe_store.read_latest(), "coins", "top-100 snapshot"))
     out.append(_narratives_row())
 
