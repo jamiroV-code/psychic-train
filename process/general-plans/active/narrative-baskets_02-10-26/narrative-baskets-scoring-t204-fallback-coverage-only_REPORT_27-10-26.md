@@ -54,8 +54,8 @@ DONE. Rule implemented, versioned, tested red then green, all gates green (count
 ## 6 Tests run
 
 - New file: 52 passed (scoring rule, real exchange votes, Trends + CG, early gate, labels, additive payload, bool check, version flag, shipped config, boundary guard x4, 27 sha256 pins, chart recompute per version, snapshot records rule at boundary day/next day, frozen record not rewritten, live payload, Sources label before/after).
-- Gate set `pytest api/tests/analytics/attention api/tests/data/attention api/tests/routers api/tests/scripts api/tests/tooling_guards`: see full-suite counts below (it is a subset; the first run overlapped my mutation run and showed only the 3 expected failures, since fixed).
-- Full `pytest api`: FULL_COUNTS.
+- Gate set `pytest api/tests/analytics/attention api/tests/data/attention api/tests/routers api/tests/scripts api/tests/tooling_guards`: all green inside the full run below (an earlier standalone run overlapped my mutation run and showed only the 3 expected old-test failures, since updated).
+- Full `pytest api`: branch 2305 passed, 1 skipped, 5 deselected; main (worktree at `27d0a2d`) 2253 passed, 1 skipped, 5 deselected. Difference +52 = the new file; 0 failures on either.
 - vitest: 574 passed (63 files); `tsc --noEmit`: clean.
 - ruff on touched API files: main 6 findings in the 3 source files, branch 7: the one new one is TRY004 on my `ValueError` for a non-bool flag, kept on purpose to match the 3 neighbouring checks (validate_config raises ValueError). Test files clean.
 - `git diff --check` clean; secret scan (grep for key/token/secret patterns in the diff): none; file set: only the files in 4, no `.github/`, no pyproject/uv.lock.
