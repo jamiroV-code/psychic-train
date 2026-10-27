@@ -760,3 +760,48 @@ def test_planted_secret_url_query_never_reaches_a_log_record(q, caplog):
     for rec in caplog.records:
         text = rec.getMessage()
         assert "PLANTED" not in text and "cookie" not in text and "reddit.com" not in text, rec.name
+
+
+# --- boundary tests from the T211 mutation check ---
+
+def test_canary_success_stays_for_the_day_after_a_later_failure(q, attention_cache):
+    assert seed_canary(q, Clock(NOW)).ok
+    later = seed_canary(q, Clock(NOW + timedelta(hours=1)), lambda r: httpx.Response(503))
+    assert not later.ok and rw.canary_ok(NOW + timedelta(hours=1))
+    assert rw.read_canary(NOW.date())["requests"] == 2
+
+
+def test_failed_canary_is_tried_once_per_pass_and_day(q, attention_cache):
+    fake, clock = Fake(ok(EXACT), canary=lambda r: httpx.Response(503)), Clock(NOW)
+    src = rw.reddit_source(q.config, degraded=True, clock=clock)
+    res = rw.run_pass(fake.client(), src, q, queue=[("SOL", D), ("ETH", D), ("ADA", D)], clock=clock,
+                      sleep=clock.sleep, rng=random.Random(1), degraded=True)
+    assert res.canary_requests == len(fake.canary) == 1 and res.requests == 3
+
+
+def test_full_feed_zero_without_canary_is_not_stored(q, attention_cache):
+    times = [at(20)] + [at(-1) - timedelta(minutes=i) for i in range(99)]  # full, reaches back, none in D match
+    body = atom([entry(i + 1, t, title="nothing relevant") for i, t in enumerate(times)])
+    for b in range(1, 4):
+        web_evidence.commit_day(rw.SOURCE, "SOL", D - timedelta(days=b), density.DayResult(2.0, 2, 24.0, False, False),
+                                canary_ok=True, trailing_median=None, now=NOW, method=rw.METHOD)
+    fake, clock = Fake(ok(body), canary=lambda r: httpx.Response(503)), Clock(NOW)
+    src = rw.reddit_source(q.config, degraded=True, clock=clock)
+    rw.run_pass(fake.client(), src, q, queue=[("SOL", D)], clock=clock, sleep=clock.sleep, rng=random.Random(1),
+                degraded=True)
+    assert rw.read_completeness(D)["coins"]["SOL"]["reason"] == "zero_unconfirmed"
+    assert (D, 0.0) not in store.read_points("reddit_web", "SOL")
+
+
+def test_time_filter_starting_exactly_at_window_start_covers_the_day():
+    result, reason, _ = count(feed_at([at(20), at(9)]), searched_from=at(0))
+    assert reason is None and result.value == 2 and not result.capped
+
+
+def test_density_span_comes_from_raw_entries_not_matched_ones():
+    times = [at(23, 59) - timedelta(minutes=6 * i) for i in range(100)]  # oldest raw entry D 14:05
+    body = atom([entry(i + 1, t, title=TITLE if i < 50 else "unrelated") for i, t in enumerate(times)])
+    result, reason, tally = count(body)
+    span = (at(24) - at(14, 5)).total_seconds() / 3600
+    assert reason is None and result.capped and tally.counted == 50
+    assert result.span_hours == pytest.approx(span) and result.value == pytest.approx(24 * 50 / span)
