@@ -42,10 +42,12 @@ _clock = time.monotonic
 # up to 75 coins do not fit SOURCE_TIME_BUDGET_S.
 TRENDS_INTERVAL_S = 3.0
 TRENDS_BACKOFF_S = (30, 60, 120)
-# At the production constants the breaker cannot fire: three coins of full backoff need 3 x 210 s > the 540 s
-# budget, which stops the source first. It still bounds the loss if the budget or the waits change.
+# The breaker still bounds the loss if the budget or the waits change (T203: with the 780 s budget three coins of
+# full backoff, 3 x 210 s = 630 s, can now trip it before the budget does).
 TRENDS_BREAKER_AFTER = 3
-TRENDS_TIME_BUDGET_S = 540
+# T203: 540 -> 780 s so about 92 keyworded coins at about 4 s per request are not cut (quality over speed). The workflow
+# step limit is 18 min: 780 s + install ~60 s + one in-flight request ~60 s + store/archive/run-record ~60 s = ~960 s.
+TRENDS_TIME_BUDGET_S = 780
 TRENDS_OUTCOMES = ("ok", "too-little-interest", "quiet-then-surge", "skipped-unqualified", "no-keyword", "non-daily",
                    "rate-limited", "insufficient-history", "time-budget")
 _TRENDS_REASON_OUTCOME = {trends.TOO_LITTLE_INTEREST: "too-little-interest",

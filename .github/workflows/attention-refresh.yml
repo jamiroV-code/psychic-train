@@ -206,7 +206,7 @@ jobs:
       # line comes from the same classifier the verify step uses (attention_extra.classify).
       - name: Refresh Google Trends (HTTP 429 from cloud IPs is common)
         continue-on-error: true
-        timeout-minutes: 14
+        timeout-minutes: 18
         run: |
           rc=0
           set -o pipefail

@@ -203,11 +203,13 @@ def test_trends_step_pins_pytrends_exactly_without_touching_pyproject() -> None:
     assert "pytrends" not in (REPO_ROOT / "api" / "pyproject.toml").read_text(encoding="utf-8")
 
 
-def test_trends_step_timeout_fits_the_540s_budget_and_the_job_covers_all_steps() -> None:
+def test_trends_step_timeout_fits_the_time_budget_and_the_job_covers_all_steps() -> None:
     from api.scripts.refresh_attention import TRENDS_TIME_BUDGET_S
     step = _trends_step()
+    assert TRENDS_TIME_BUDGET_S == 780  # T203: healthy coins are not cut for a runner time budget
     # budget + install + one in-flight request after the budget check + store write
     assert step["timeout-minutes"] * 60 >= TRENDS_TIME_BUDGET_S + 120
+    assert step["timeout-minutes"] == 18
     job = _doc()["jobs"]["refresh-extra"]
     total = sum(s.get("timeout-minutes", 0) for s in job["steps"])
     assert total + 5 <= job["timeout-minutes"], total  # leaves room for install, verify, probe and commit
