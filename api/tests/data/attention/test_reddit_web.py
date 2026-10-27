@@ -538,3 +538,21 @@ def test_min_spacing_kept_across_a_restart(q, attention_cache):
     again = rw.reddit_source(q.config, degraded=True, clock=clock)
     assert rw.run_search_unit(fake.client(), again, q, symbol="ETH", day=D).reason == "too_early"
     assert len(fake.requests) == 1
+
+
+def test_entry_exactly_at_window_start_does_not_prove_coverage():
+    result, reason = rw.count_day(D, rw.parse_feed(feed_at([at(12), at(0)])), sample_min=10)
+    assert result is None and reason == "below_sample_min"  # the feed must reach strictly before D 00:00
+
+
+def test_created_time_is_published_not_a_later_edit():
+    edited = entry(1, at(-1)).replace(f"<updated>{at(-1).isoformat()}</updated>", f"<updated>{at(5).isoformat()}</updated>")
+    (e,) = rw.parse_feed(atom([edited]))
+    assert e.created == at(-1) and e.updated == at(5)
+
+
+def test_stream_stops_reading_above_the_size_cap(monkeypatch):
+    monkeypatch.setattr(rw, "MAX_BODY_BYTES", 2000)
+    big = feed_at([at(1)] * 40)
+    with pytest.raises(rw.FeedRejected):
+        rw.fetch_feed(Fake(ok(big)).client(), "https://www.reddit.com/r/x/search.rss")
