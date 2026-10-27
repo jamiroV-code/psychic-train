@@ -14,6 +14,10 @@ whole weight to the rising weight (covered weight and score are unchanged). A co
 `early_sources` is itself rising. The weights in force for a day come from `weights_for_day`: an older version in
 `weights_history` covers the days up to its `until`, so a past day is never rescored with newer weights.
 
+Fallback coverage only (T204, weights v3): in a version with `fallback_coverage_only`, the CoinGecko volume fallback
+filling the exchange slot still counts toward covered weight and the score, but never as a rising vote: its weight is
+left out of the rising weight and it cannot pass the early-source gate. A real exchange in the slot votes as before.
+
 Categories are the narratives of `attention_narratives.json` (U1): membership comes from that file, never from
 CoinGecko categories. Eligibility (U2) is `universe_classes`: class exclusion, then tradeability, then IN; the only
 volume rule is that exactly zero 24h volume means no trading market (T189), and every top-N coin that is not shown
@@ -44,8 +48,9 @@ FALLBACK_SERIES = "coingecko"
 WEIGHT_SUM_TOLERANCE = 0.01
 GROUP_RISING_SHARE = 0.5
 # Per-version keys: top-level for the current version, and in each `weights_history` entry for older ones.
-VERSION_KEYS = ("source_weights", "source_groups", "early_sources")
-CONFIG_KEYS = {"source_weights", "source_groups", "early_sources", "weights_version", "weights_history",
+VERSION_KEYS = ("source_weights", "source_groups", "early_sources", "fallback_coverage_only")
+CONFIG_KEYS = {"source_weights", "source_groups", "early_sources", "fallback_coverage_only", "weights_version",
+               "weights_history",
                "exchange_sub_weights", "rising_threshold_pct", "trigger_pct", "min_covered_weight",
                "min_history_days", "winsor_percentile", "recent_days", "max_source_lag_days", "universe_rules"}
 # Moved or removed by U1: a stale local config fails loudly instead of being half-read.
@@ -69,7 +74,7 @@ def _check_weights(name: str, weights, known, sum_100: bool = True) -> None:
 
 
 def _check_version(name: str, v: dict) -> None:
-    """source_weights, source_groups and early_sources of one weights version."""
+    """source_weights, source_groups, early_sources and fallback_coverage_only of one weights version."""
     _check_weights(f"{name}source_weights", v.get("source_weights"), WEIGHTED_SOURCES, sum_100=False)
     groups, seen = v.get("source_groups", {}), set()
     if not isinstance(groups, dict):
@@ -83,6 +88,8 @@ def _check_version(name: str, v: dict) -> None:
     early = v.get("early_sources", [])
     if not isinstance(early, list) or any(e not in WEIGHTED_SOURCES for e in early):
         raise ValueError(f"discovery config: {name}early_sources must list known source ids")
+    if not isinstance(v.get("fallback_coverage_only", False), bool):
+        raise ValueError(f"discovery config: {name}fallback_coverage_only must be true or false")
 
 
 def _check_history(cfg: dict) -> None:
@@ -120,7 +127,8 @@ def weights_for_day(cfg: dict, day: date) -> dict:
     else:
         v = {**cfg, "weights_version": cfg.get("weights_version", 1)}
     return {"weights_version": v["weights_version"], "source_weights": v["source_weights"],
-            "source_groups": v.get("source_groups", {}), "early_sources": v.get("early_sources", [])}
+            "source_groups": v.get("source_groups", {}), "early_sources": v.get("early_sources", []),
+            "fallback_coverage_only": v.get("fallback_coverage_only", False)}
 
 
 def validate_config(cfg: dict) -> dict:
@@ -243,6 +251,8 @@ def _coin(symbol, cfg, data, end, recent, window, max_lag, frozen=None
             s = _exchange_slot(symbol, cfg["exchange_sub_weights"], data, end, recent, window, max_lag)
             if s is None:
                 s = _series_source(FALLBACK_SERIES, data, FALLBACK_SERIES, symbol, end, recent, window, max_lag)
+                if s is not None and wv["fallback_coverage_only"]:
+                    s.coverage_only = True
         elif frozen and src in frozen:
             s = frozen[src]
         else:
@@ -253,9 +263,10 @@ def _coin(symbol, cfg, data, end, recent, window, max_lag, frozen=None
         return None
     covered = sum(w for _, w, _ in found)
     thr = float(cfg["rising_threshold_pct"])
-    rising = _rising_weight(found, wv["source_groups"], thr)
+    voters = [f for f in found if not f[2].coverage_only]
+    rising = _rising_weight(voters, wv["source_groups"], thr)
     early = wv["early_sources"]
-    early_ok = not early or any(src in early and _is_rising(s.change, thr) for src, _, s in found)
+    early_ok = not early or any(src in early and _is_rising(s.change, thr) for src, _, s in voters)
     trigger = (early_ok and rising * 100.0 >= float(cfg["trigger_pct"]) * covered
                and covered >= float(cfg["min_covered_weight"]))
     return (sum(w * s.change for _, w, s in found) / covered, covered, rising, trigger, [s for _, _, s in found],
