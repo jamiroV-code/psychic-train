@@ -73,3 +73,66 @@ None. Open questions:
 
 ## 11 Context cost
 Loaded: CLAUDE.md, the envelope, PLAN W8c section and slice table, SPEC rules 10/13-16, A.1, A.2, A.2b, AC22-AC37, W8b modules (density, pc_pace, web_evidence, web_queries, pc_adapter, probe), the W8b guard, test_web_queries / test_probe_pc_sources headers, and parts of x_filters/x_density as a style reference. On demand: master-planner.md sections 6 and 9, all-tests.md (pytest command). Roughly 110k tokens. Tools: Bash, Read/Write/Edit, git; no subagents, no network to Reddit.
+
+## Round 2 (T211)
+
+### 1 Task ID
+T211 = the planner's decisions on Q-a..Q-e for W8c, same branch and PR (#185). Merged `origin/main` `200fdc5` first (merge commit `215f4bc`, no conflicts).
+
+### 2 Outcome
+done (live Reddit still unproven: owner probes in heading 8 above; the canary feed `r/CryptoCurrency/new.rss?limit=100` is the P-R6 URL)
+
+### 3 Summary
+- **Q-a:** the test is renamed to `test_search_rss_url_form_sort_new_t_week_and_subreddit_set` and checks the default `t=week`. The config default stays `week`.
+- **Q-b:** the stored value counts only the entries created in D that match the coin under `reddit_metrics`, then applies the author cap (3 per coin-day, via `reddit_metrics.counted`). It is never the raw number of search results. Without a ledger the parser hashes authors with a throwaway in-memory salt (`ephemeral_hasher`), so the cap still sees distinct authors and no username is kept. Each completeness record now holds `entries` (raw), `in_window`, `matched`, `counted`, `excluded {no_match, author_cap}` and `canary_ok`. `name_only` coins are still searched by full name only and matched on the full name or the cashtag.
+- **Q-c:** `cashtag_only` now applies to Reddit matching, so a bare ticker word never counts for those coins. When the name is the ticker itself (ASTER "Aster", JST "JUST"), the name is the same common word, so only `$TICKER` counts. Otherwise the full name counts (ATOM: "Cosmos" or `$ATOM`, never "ATOM").
+- **Q-d:** `count_day` decides coverage from the raw entries.
+  - A feed filled to the limit is exact when its oldest entry is older than D 00:00. Otherwise it is a capped density, or missing (`day_not_reached`, `below_sample_min`).
+  - A short feed is a valid Atom feed with fewer entries than the limit. It is exact, small counts and an empty feed's 0 included, only when today's canary succeeded (`no_canary` otherwise), AND either an entry is older than D 00:00 or the time filter's span (`TIME_FILTER_SPAN`: week = 7 d, month counted as 28 d, all = no limit) starts at or before D 00:00.
+  - A short feed whose span does not reach D 00:00 is `window_not_reached`. The exception is at least `reddit_sample_min` raw entries in D: that gives the W8b capped density through `density.day_value`. Its span comes from the raw entries and its count from the matched ones.
+  - The canary is one request a UTC day, sent before the day's first search: `r/CryptoCurrency/new.rss?limit=100`, which must hold `CANARY_MIN_ENTRIES` = 25 or more entries (else `canary_short`).
+    - It is paced, budgeted (1 of the 250 or 150) and block-checked like a search: a 403, 429 or HTML pauses the day.
+    - It is written to `_meta/_canary/<day>.json`, and a copy goes into each completeness file. A success holds for the rest of the UTC day.
+    - A failed canary is tried once per pass and day.
+    - The next search follows the canary at the configured 60-120 s, not the baseline spread, so both land on the same UTC day.
+  - A 200 with an empty or HTML body is rejected as `reddit_blocked`. The commit's `canary_ok` is now the canary itself, where it used to be "the feed had entries".
+- **Q-e:** kept. A zero is stored only after a successful canary and with a trailing median below 5 (`density.finalize`, the W8b rule; the envelope says "exists", the existing rule is stricter). In plain terms: a coin with no stored history never gets a 0. It stays missing (`zero_unconfirmed`) until a non-zero day has been stored.
+- **Kept deviations:**
+  - `web_queries.REDDIT_DEGRADED_BUDGET = 150` is its own constant, tested together with the baseline 250 and the default that applies when the key is absent.
+  - The private `PcSource` effective-budget reset now has a full comment (why, and removal in W8e) and its own test: degraded, then baseline on the same day, then re-read from disk.
+  - The httpx log filter has a test: a planted secret in a URL query never reaches any log record, while a non-Reddit httpx line is still captured, which proves the test sees httpx records.
+- **Probe:** `probe_pc_sources --source reddit` uses the new `count_day` and also prints `matched` and `counted`. It sends no canary, so its yesterday value is the one a run with a successful canary would store.
+
+### 4 Files changed (round 2)
+`api/data/attention/reddit_web.py`, `reddit_metrics.py`, `web_queries.py`, `api/scripts/probe_pc_sources.py`, `api/tests/data/attention/test_reddit_web.py` (+19 tests, helpers: canary-aware fake, one author per entry by default, a default title naming every queried coin), `test_reddit_metrics.py` (+1), `test_web_queries.py` (+1), this report. No `.github/`, `pyproject.toml`, `uv.lock` or cache files.
+
+### 5 Commits
+`215f4bc` merge of main; `1dd9003` test (red); `923b3f5` feat (green); `1a5beb9` test (boundary tests from the mutation check); then this report commit.
+
+### 6 Tests run (27-10-26, this sandbox)
+- Red at `1dd9003`: 38 failed, 42 passed in the three touched test modules (missing `run_canary`, `ephemeral_hasher`, `searched_from`, `canary_requests`, `REDDIT_DEGRADED_BUDGET`, cashtag_only matching).
+- `pytest api/tests/data/attention api/tests/scripts api/tests/tooling_guards`: 1470 passed (main `200fdc5`: 1377).
+- `pytest api`: 2842 passed, 1 skipped, 5 deselected (main `200fdc5`: 2749 passed, 1 skipped, 5 deselected). Delta +93 = the W8c tests from round 1 plus round 2's.
+- ruff on every touched `.py`: all checks passed (main: the existing touched files are clean too).
+- `git diff --check origin/main...HEAD`: clean. Secret scan: only `import secrets`, `secrets.token_bytes` and the planted test strings. Banned-name grep: 0. Guards (browser UA, JSON endpoint, archive-search path): pass. File set: the W8c list only.
+- Mutation check: 31 hand-made mutants (scratch script, not committed) on matching (10), canary gating (10) and completeness (11). First round: 26 killed, 5 survived:
+  - canary success not sticky
+  - canary retried per item
+  - commit zero ignoring the canary
+  - `searched_from <= start` changed to `<`
+  - density span taken from matched entries instead of raw
+  All 5 were real test gaps and got tests in `1a5beb9`. Final: 31 killed, 0 survived.
+
+### 7 Tests NOT run
+Live Reddit (no network; fake clients only). Unverified: whether `t=week` really returns everything in 7 days on a short feed, that `new.rss?limit=100` reliably holds 25 or more entries, and the real month and year spans.
+
+### 8 Deviations
+- Q-d condition (2) reads as always true for a non-empty feed ("all entries inside/after the window start OR oldest older than it"). I read "does not reach the window start" as the time filter's span starting after D 00:00. With `t=week` that holds only for days 7 or more back (backfill) or with `t=day`/`hour`.
+- Strict reading: every short feed needs the canary, including one with an entry older than D 00:00. A feed filled to the limit needs none, because it carries its own proof of depth.
+- Edge: a baseline pass whose next search falls just after UTC midnight sends it before that day's canary. That coin-day stays `no_canary` (missing, retried later), and the next item triggers the new day's canary.
+
+### 9 Blockers
+None. Registry: T211 done, waiting on review and the owner probes.
+
+### 11 Context cost
+Loaded the envelope set plus SPEC A.1/A.2, `density.py`, `x_density.py`, `pc_pace.PcSource`, `web_evidence.commit_day` and the PLAN gates table (banned-name command). No subagents.
