@@ -214,3 +214,81 @@ No blockers. Items for the planner:
 ### 11 Context cost
 
 Files loaded (partly): `reddit_stream.py`, `test_reddit_stream.py`, `density.py`, `web_evidence.py`, `pc_pace.py` (pause and budget API), `store.py` (part), `probe_pc_sources.py` (part), `test_probe_pc_sources.py` (part), SPEC AC3 (line 96) by grep, PLAN line 184 by grep, the review text, and this report. About 40,000 tokens of files. Tools: read, grep, edit, bash (git, uv, pytest).
+
+## 13 Fix round 2 (29-10-26, after the independent review of head `73185eeb`)
+
+### 1 Task ID
+
+W8c2 fix round 2 on branch `claude/w8c2-reddit-stream` (draft PR #191). Worker: riper-opus, RT2. Inputs: the blocking review finding (an aged-out paging floor lets a reachable undercount settle and freeze), invariants I1-I4, test list (a)-(e), and the small fix (poll files without `truncated`).
+
+### 2 Outcome
+
+done
+
+### 3 Summary
+
+- I1: `_paging_floor(kind, now)` is the newest entry of the last complete poll (not truncated, entries > 0) of the kind, searched in every stored poll file (`stored_polls`; poll files are never pruned, so the lookup reaches as far back as the files do). With no complete poll it uses the existing fallback, the start of the newest completed UTC day. Each poll now stores the floor it ran against (`Poll.floor`).
+- I2: a complete poll wholly after D (`_moved_past`) settles D only when `_holes` finds no skipped hole in D. For each pair of consecutive complete polls of a kind whose hole reaches into D: the later poll either reached back to the earlier poll's newest entry (continuity), or it stopped at the feed's end before that floor (short page, no progress or empty page; posts never page). The hole is skipped, and D stays unsettled, when the later poll's floor lay past the hole or is unknown (a poll file of an earlier head). Before the first complete poll of a kind, the floor is only the fallback: if earlier truncated polls reached into D and the first complete poll starts after D's start, D stays unsettled.
+- I3: an unreachable hole stays uncovered, so the existing coverage rule decides (stored and flagged `partial` at 0.80 or more per kind, missing as `below_coverage` below). The completeness file now has `gap_unreachable` per kind: `{"hours": <hours in D>, "spans": [[from, to], ...]}`. A kind with no unreachable hole has `{"hours": 0.0, "spans": []}`, a measured zero, not a missing value.
+- I4: nothing loops beyond the existing paging loop inside one poll, which still stops at the floor, the feed's end, a cut, or `can_spend(1)` failing. Worst-case spend per UTC day is unchanged as a bound: the shared Reddit budget (`reddit_daily_request_budget` 250, degraded 150). One comments poll can spend at most what is left of that budget, and at most `reddit_stream_polls_per_day_cap` (12) polls per kind run per day. What changed: a floor can now lie days back, so after a long host stop one poll may page more than before. The feed's own depth ends it earlier (UNVERIFIED: Reddit's listing depth is not measured here; the owner probe can show it).
+- Small fix: `Poll.from_json` reads a missing `truncated` as True (never settles a day) and a missing `floor` as None.
+- Owner decisions D1 (combined feeds, coverage per kind), D2 (no stream canary, no AC3 zeros) and D3 (default order `reddit_web`, `reddit_stream`) are unchanged.
+
+### 4 Files changed
+
+- `api/data/attention/reddit_stream.py`: `Poll.floor` and `from_json` defaults, `stored_polls`, `_paging_floor` (I1), `_holes` and the settle predicate in `day_status` (I2), `DayStatus.gap_unreachable` and the completeness field (I3), `commit_day` and `stream_status` read all stored polls, and the module docstring.
+- `api/tests/data/attention/test_reddit_stream.py`: `live_stream` gains a `depth` parameter (the feed's depth; default 10,000, as before); the `P` helper gains `floor`, default far back (a synthetic complete poll that stopped at the feed's end, which is what the existing synthetic tests model). No existing assertion was changed or removed. Ten new test cases (see heading 6).
+
+### 5 Commits
+
+- `ec2c52e55e81ab2cdfe9930bbc192b203eb21468`: fix round 2 code and tests (parent `73185eeb`).
+- The commit that adds this section (its SHA is in the PR).
+
+### 6 Tests run
+
+All runs: `UV_FROZEN=1 uv run --project api pytest <target> -q -p no:cacheprovider`.
+
+- Baseline, `api/tests/data/attention/test_reddit_stream.py`, 2026-10-29T23:33:15Z, head `73185eeb`: 55 passed.
+- New tests: (a) `test_two_budget_cut_polls_then_complete_poll_reaches_aged_out_floor_no_undercount`; (b) `test_host_off_for_a_day_then_complete_poll_reaches_aged_out_floor_no_undercount`; (c) `test_paging_floor_uses_complete_poll_older_than_due_window`; (d) `test_paging_floor_without_complete_poll_falls_back_then_first_complete_poll_anchors`; (e) `test_truncated_poll_then_complete_poll_past_due_window_settles_previous_day` (the existing `test_poll_after_truncated_poll_pages_back_to_last_complete_poll` is kept); I2 `test_day_with_only_truncated_polls_never_settles_through_fallback_floor` and `test_complete_poll_with_unknown_floor_never_closes_a_hole`; I3 `test_gap_beyond_feed_depth_is_unreachable_reported_and_never_stored_as_full[20-fetched]` and `[12-below_coverage]`; small fix `test_poll_file_of_earlier_head_reads_as_truncated_with_unknown_floor`. (a), (b) and (e) check the stored value: D settles with comments coverage 1.0, every comment of D 20:00-24:00 is among the seen ids, and the stored count equals the seen count.
+- Red, step 1, 2026-10-29T23:34:36Z, tests written, code unchanged: 44 failed, 21 passed. Most failed with `TypeError: Poll.__init__() takes 8 positional arguments but 9 were given` (the new `floor` field). The earlier-head poll file test failed with `KeyError: 'truncated'`.
+- Red, step 2, 2026-10-29T23:35:17Z, only `Poll.floor` stored (old floor and settle logic): 10 failed, 55 passed. (a) failed on floor `2026-10-28 00:00` instead of D 20:00; (b), (e) and both I3 cases on floor `2026-10-27 00:00` instead of the D anchor; (c), (d) and the earlier-head test on the `_paging_floor` signature; the truncated-only test and the unknown-floor test on `assert (True is False)` (D was settled).
+- Green, 2026-10-29T23:36:49Z: 65 passed.
+- Mutation checks (temporary edits, restored afterwards; the restored file matched the green snapshot):
+  - I1 and I2 both reverted (floor from the one-day window, settle without `_holes`), 2026-10-29T23:37:31Z: 8 failed, 57 passed, including (a) and (b). A throwaway probe test (deleted, never committed) ran the (a) and (b) sequences to `commit_day`: (a) stored SOL = 4 at comments coverage 0.833 (`partial`, D 20:00-24:00 never paged; 4 seen ids), (b) stored 70 at 0.916. With the fix the same sequences store 237 and 170 at coverage 1.0.
+  - I1 reverted only: 6 failed, 61 passed. (a), (b), (e), (c) and both I3 cases fail; the probe shows D not settled (missing), never stored.
+  - I2 reverted only: 2 failed, 65 passed (the truncated-only test and the unknown-floor test).
+- Gates on the green code, 2026-10-29T23:39:52Z to 23:45:48Z:
+  - `api/tests/data/attention`: 843 passed, 1 skipped, 0 failed.
+  - `api/tests/tooling_guards`: 128 passed, 0 failed. The known Windows failure in `test_cli_guard.py` did not occur.
+  - `api/tests/scripts`: 648 passed, 0 failed, 2 warnings.
+- File set: `git diff --name-only origin/main...ec2c52e5` lists the 7 owned code and test files and this report.
+- `git diff --check 73185eeb ec2c52e5`: no output.
+- Hygiene: the added lines (`+` lines of `git diff` against `73185eeb`) were grepped for `bullish|bearish|signal strength|confidence|triggered|confirmed|trust weight|TODO|FIXME`, the repo owner and slug, user paths and URLs. There were no hits. New lines are at most 120 characters.
+
+### 7 Tests NOT run
+
+- The owner probe `--source reddit --stream-status` was not run on a live machine. There is no provider access here, and no live Reddit call was made.
+- No linter: `ruff` and `pyflakes` are not in the project environment.
+
+### 8 Deviations
+
+1. A test helper changed: `P` (synthetic stored polls) now passes a `floor`, default far back. `Poll` needed the new field, and a far-back floor states what the existing synthetic tests model: a complete poll that ran out of feed. A synthetic complete poll with `floor=None` would read as an earlier-head poll and keep its day open. No existing assertion changed.
+2. `live_stream` now serves only its newest `depth` entries; paging past them, or with an `after` id that has fallen out of that depth, gets an empty page. The default depth (10,000) keeps the old behaviour.
+3. The I2 rule for the case with no complete poll before (not spelled out in the envelope): a day that earlier truncated polls reached into, whose hole lies before the first complete poll, stays unsettled (missing). A day no earlier poll reached settles on its coverage, because before the stream's first complete poll nothing could page there.
+4. `commit_day` and `stream_status` read every stored poll file, so they find the complete poll before D. `_recent_polls` still serves the interval and daily-cap checks only.
+
+### 9 Blockers
+
+No blockers. Items for the planner:
+
+- A day left unsettled by I2 stays missing (`not_settled`) for good and keeps appearing in `open_days`; nothing later can close it. This is the safe end (missing, never wrong), but W8e will re-run `commit_day` on such days every pass.
+- I4 risk: after a long host stop one comments poll can spend much of the shared daily Reddit budget on paging before the per-coin searches run. The bound is the budget itself; the Reddit listing depth is UNVERIFIED. If the planner wants a per-poll page cap, that is a new config key, so an owner decision.
+- Registry request: none.
+
+### 10 Follow-up
+
+- Owner: the `--stream-status` probe after a host stop, to see how deep comments paging goes and how often `gap_unreachable` is non-zero.
+
+### 11 Context cost
+
+Files loaded (partly): `reddit_stream.py`, `test_reddit_stream.py`, the attention `conftest.py` fixture name, `reddit_web.py` (budget lines), `density.py` (window lines), `attention_queries.json` (Reddit keys) and this report. About 30,000 tokens of files. Tools: read, grep, edit, bash (git, uv, pytest).
