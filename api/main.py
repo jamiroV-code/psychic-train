@@ -26,6 +26,10 @@ T35 / S8: the `lifespan` starts the in-process OHLCV refresh worker
 T50 / S9E: the equities market-hours worker (`api/data/equities_refresh.py`)
 starts after the crypto one and stops after it; it stays off with
 `SCREENER_REFRESH_WORKER=0` or without `LSE_API_KEY`.
+
+W8e: the PC-side attention worker (`api/data/attention_pc_refresh.py`, X and
+Reddit collectors) starts after the equities one and stops last; it stays off
+unless `SCREENER_ATTENTION_PC_WORKER=1`, which no test or workflow sets.
 """
 from __future__ import annotations
 
@@ -38,7 +42,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 # NOTE (RFC-002/RFC-003 scope): routers/regime.py (item 42) and
 # routers/narrative.py (item 56) are now both wired in.
-from api.data import equities_refresh, refresh_worker
+from api.data import attention_pc_refresh, equities_refresh, refresh_worker
 from api.routers import attention as attention_router
 from api.routers import discovery as discovery_router
 from api.routers import equities
@@ -49,13 +53,17 @@ from api.routers import baskets, layout, narrative, onchain_activity, pairs, ref
 async def lifespan(_app: FastAPI):
     refresh_worker.start_from_env()
     equities_refresh.start_from_env()
+    attention_pc_refresh.start_from_env()
     try:
         yield
     finally:
         try:
             refresh_worker.stop_worker()
         finally:
-            equities_refresh.stop_worker()
+            try:
+                equities_refresh.stop_worker()
+            finally:
+                attention_pc_refresh.stop_worker()
 
 
 app = FastAPI(title="Momentum Screener API", lifespan=lifespan)
