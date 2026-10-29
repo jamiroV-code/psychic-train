@@ -7,7 +7,7 @@ date: 03-10-26
 
 # Operating Instructions
 
-**Run the API with `uv run --project api`, the web app with `pnpm --filter web`; pick tests by risk tier (RT0-RT4); workers use their own branch, everyone else commits on `main` only when asked.** Full test detail: `process/context/tests/all-tests.md`. Worker and merge protocol: master-planner.md.
+**Run the API with `uv run --project api`, the web app with `pnpm --filter web`; pick tests by risk tier (RT0-RT4); workers use their own branch, everyone else commits on a branch and opens a PR only when asked; nobody pushes to `main`.** Full test detail: `process/context/tests/all-tests.md`. Worker and merge protocol: master-planner.md.
 
 ## Commands
 
@@ -52,7 +52,7 @@ Live-provider checks are user-PC steps (container egress is blocked). CI (`ci.ym
 
 ## Branch, worktree and merge rules
 
-- **Default:** the Master Planner session and direct user work commit on `main`, and only when the user asks.
+- **Default:** the Master Planner session and direct user work commit on a branch (`claude/<task-id>-<slug>` or a short descriptive branch) and open a PR, only when the user asks. Nobody pushes to `main`; the owner merges every PR (D-28). The daily data workflows push to `main` as github-actions[bot] and are the only exception.
 - **Workers:** branch `claude/<task-id>-<slug>`, one branch per registry task, open a PR. A worker may self-merge only when every condition in master-planner.md holds (CI green on head, tier tests independently confirmed, diff inside ownership, no conflicts, report committed, registry updated by the Master Planner). Unsure means stop at `review`. Subagents only in a large RT3/RT4 slice whose envelope allows them (at most 3, 15 USD per slice, one level deep, all listed in the report; master-planner.md section 6). Any diff touching CLAUDE.md or AGENTS.md stops at `review` for the user's diff check.
 - **Worktrees:** git worktrees exist only on the user's PC and are user-driven. Cloud sessions are isolated by container plus branch. No session removes a worktree.
 - **Branch deletion:** only merged worker task branches, under the 02-10-26 standing consent, with an Approvals Log row in `process/archive/index.md` first. Every other branch needs per-branch user approval. Measured 03-10-26: a cloud session cannot delete branches (git push --delete fails, REST DELETE returns 403 from the proxy, no MCP tool); the user deletes them.

@@ -40,7 +40,7 @@ This block is byte-identical in CLAUDE.md and AGENTS.md. It decides what a sessi
 
 - Phase locking: stay inside your phase or task scope; no file edits in RESEARCH or INNOVATE; no scope expansion.
 - Approval gates: no implementation without approval. For a PLANNER that is the user's explicit ENTER EXECUTE MODE; for a WORKER it is its envelope. Irreversible or outward-facing actions (push, merge, deploy, deletion, spend) need the approval the envelope names or the user's.
-- Commit policy: a PLANNER session and direct user work commit only when the user asks, directly on `main`. A WORKER commits on its own branch `claude/<task-id>-<slug>` and opens a PR.
+- Commit policy: nobody pushes to `main`. A PLANNER session and direct user work commit only when the user asks, on a branch (`claude/<task-id>-<slug>` or a short descriptive branch) and open a PR; the owner merges. A WORKER commits on its own branch `claude/<task-id>-<slug>` and opens a PR.
 - No secrets in files, commits, prompts or logs.
 - When unsure, stop and report instead of guessing.
 <!-- ENTRY-SET:END -->
@@ -128,7 +128,7 @@ Outer order: `RESEARCH -> SPEC -> INNOVATE -> PLAN -> VALIDATE -> EXECUTE -> UPD
 
 ## Commit Branch Policy
 
-`main` is this repo's working local branch. When the user asks for a commit in a planner or direct user session, commit **directly on `main`**; do not create a feature branch unless the user asks for one or a PR. Exception: a WORKER commits on its own task branch `claude/<task-id>-<slug>` and opens a PR (master-planner.md section 6). Full rule: implementation-standards.md §Commit Hygiene.
+Nobody pushes to `main` (decisions.md D-28). When the user asks for a commit in a planner or direct user session, commit on a branch (`claude/<task-id>-<slug>` or a short descriptive branch) and open a PR; the owner merges every PR. A WORKER commits on its own task branch `claude/<task-id>-<slug>` and opens a PR (master-planner.md section 6). The daily data workflows that push to `main` as github-actions[bot] are the only exception. Full rule: implementation-standards.md §Commit Hygiene.
 
 ## Key Principles
 
