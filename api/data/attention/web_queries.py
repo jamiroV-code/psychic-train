@@ -83,7 +83,7 @@ REDDIT_STREAM_DEFAULTS = {
     "reddit_stream_polls_per_day_cap": 12,
     "reddit_stream_min_coverage": 0.8,
     "reddit_comments_paging": True,
-    "reddit_impl_order": ["reddit_stream", "reddit_web"],
+    "reddit_impl_order": ["reddit_web", "reddit_stream"],  # SPEC AC14 default order
 }
 REDDIT_METHODS = ("reddit_stream", "reddit_web")
 _INT_KEYS = tuple(DEFAULTS)

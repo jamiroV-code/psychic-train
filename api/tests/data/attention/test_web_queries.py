@@ -136,7 +136,7 @@ def test_stream_keys_committed_with_owner_defaults():
     assert c.reddit_comments_poll_interval_s == 7200 and c.reddit_posts_poll_interval_s == 21600
     assert c.reddit_stream_polls_per_day_cap == 12 and c.reddit_stream_min_coverage == 0.8
     assert c.reddit_comments_paging is True
-    assert c.reddit_impl_order == ("reddit_stream", "reddit_web")
+    assert c.reddit_impl_order == ("reddit_web", "reddit_stream")  # SPEC AC14 default (owner decision D3)
 
 
 def test_stream_keys_default_when_absent(doc):

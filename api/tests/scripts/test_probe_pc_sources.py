@@ -143,7 +143,7 @@ def test_reddit_stream_status_reads_local_state_only(capsys, isolated_cache):
 
     d = date(2026, 10, 26)
     rs.append_poll(rs.Poll("comments", NOW - timedelta(hours=1), NOW - timedelta(hours=1, minutes=1),
-                           NOW - timedelta(hours=16), 100, 1))
+                           NOW - timedelta(hours=16), 100, 1, False))
     seen = []
     client = _client(lambda req: httpx.Response(200, content=_feed([1])), seen)
     code = probe.main(["--source", "reddit", "--stream-status"], client=client, clock=lambda: NOW,
@@ -153,3 +153,19 @@ def test_reddit_stream_status_reads_local_state_only(capsys, isolated_cache):
     assert "stream_today polls_comments=1 polls_new=0" in out
     assert f"stream_day day={d.strftime('%Y%m%d')}" in out and "coverage_comments=" in out
     assert "PLANTED" not in out
+
+
+def test_reddit_stream_status_coverage_none_for_days_without_polls(capsys, isolated_cache):
+    """A day no poll reached has unknown coverage: printed `none`, never 0; coverage is per feed kind only."""
+    from api.data.attention import reddit_stream as rs
+
+    rs.append_poll(rs.Poll("comments", NOW - timedelta(hours=1), NOW - timedelta(hours=1, minutes=1),
+                           NOW - timedelta(hours=16), 100, 1, False))
+    assert probe.main(["--source", "reddit", "--stream-status"], clock=lambda: NOW, sleep=lambda s: None) == 0
+    lines = [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("stream_day ")]
+    assert len(lines) == 3
+    by_day = {ln.split()[1]: ln for ln in lines}
+    assert "coverage_comments=none" not in by_day["day=20261026"] and "coverage_new=none" in by_day["day=20261026"]
+    for day in ("day=20261025", "day=20261024"):
+        assert "coverage_comments=none coverage_new=none" in by_day[day]
+    assert all("coverage_comments=0 " not in ln and "subreddit" not in ln for ln in lines)

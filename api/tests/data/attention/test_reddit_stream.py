@@ -20,6 +20,7 @@ from api.data.attention import pc_pace, reddit_items, store, web_evidence
 from api.data.attention import reddit_stream as rs
 from api.data.attention import reddit_web as rw
 from api.data.attention import web_queries as wq
+from api.data.attention.types import SourceSeries
 from api.tests.tooling_guards.test_pc_collector_guards import fixed_hour_offenders
 
 D = date(2026, 10, 26)
@@ -130,8 +131,9 @@ def poll(q, clock, respond, *, kind="comments", led=None, s=None, degraded=False
     return out, fake
 
 
-def P(kind: str, oldest: datetime, newest: datetime, collected: datetime | None = None, entries: int = 100) -> rs.Poll:
-    return rs.Poll(kind, collected or newest + timedelta(minutes=1), newest, oldest, entries, 1)
+def P(kind: str, oldest: datetime, newest: datetime, collected: datetime | None = None, entries: int = 100,
+      truncated: bool = False) -> rs.Poll:
+    return rs.Poll(kind, collected or newest + timedelta(minutes=1), newest, oldest, entries, 1, truncated)
 
 
 def record(*polls: rs.Poll) -> None:
@@ -343,17 +345,21 @@ def test_stream_method_id_separate_store_from_reddit_web(q):
 def test_methods_never_mixed_in_one_window_config_order(q):
     days = [D - timedelta(days=i) for i in range(5)]
     series = {"reddit_stream": [(d, 1.0) for d in days[:4]], "reddit_web": [(d, 9.0) for d in days]}
+    assert q.config.reddit_impl_order == ("reddit_web", "reddit_stream")  # SPEC AC14 default (owner D3)
     method, pts = rs.pick_impl(q.config.reddit_impl_order, series, days[-1], D, min_points=3)
-    assert method == "reddit_stream" and pts == sorted(series["reddit_stream"]) and all(v == 1.0 for _, v in pts)
-    method, pts = rs.pick_impl(("reddit_web", "reddit_stream"), series, days[-1], D, min_points=3)
     assert method == "reddit_web" and all(v == 9.0 for _, v in pts)
+    method, pts = rs.pick_impl(("reddit_stream", "reddit_web"), series, days[-1], D, min_points=3)
+    assert method == "reddit_stream" and pts == sorted(series["reddit_stream"]) and all(v == 1.0 for _, v in pts)
 
 
 def test_fallback_to_posts_only_series_when_comments_missing(q):
     days = [D - timedelta(days=i) for i in range(5)]
     series = {"reddit_stream": [(D, 1.0)], "reddit_web": [(d, 9.0) for d in days]}
-    method, pts = rs.pick_impl(q.config.reddit_impl_order, series, days[-1], D, min_points=3)
+    stream_first = ("reddit_stream", "reddit_web")
+    method, pts = rs.pick_impl(stream_first, series, days[-1], D, min_points=3)
     assert method == "reddit_web" and len(pts) == 5
+    assert rs.pick_impl(stream_first, {"reddit_stream": [], "reddit_web": []}, days[-1], D,
+                        min_points=1) == (None, [])
     assert rs.pick_impl(q.config.reddit_impl_order, {"reddit_stream": [], "reddit_web": []}, days[-1], D,
                         min_points=1) == (None, [])
 
@@ -536,3 +542,168 @@ def test_stream_status_numbers_only(q):
     assert day["coverage_comments"] == 1.0 and day["coverage_new"] == 1.0 and day["partial"] is False
     assert day["fetched"] >= 2 and isinstance(day["missing"], int)
     assert set(st["today"]) == {"polls_comments", "polls_new", "entries_seen"}
+
+
+# --- fix round 1: truncated comments paging never settles a day (review finding 1) ---
+
+def _d_covered_to_20h(q, led) -> None:
+    """Four SOL posts in D, posts that cover and settle D, one complete comments poll over [D-3 h, D 20:00]."""
+    poll(q, Clock(at(12)), ok(atom([entry(f"t3_h{i}", at(1 + i)) for i in range(4)])), kind="new", led=led)
+    record(*full_posts(), P("comments", at(-3), at(20), collected=at(20)))
+
+
+def _not_settled(q, led, now: datetime) -> None:
+    doc = rs.commit_day(D, q, led, now=now)
+    assert doc["settled"] is False and doc["coins"]["SOL"]["reason"] == "not_settled"
+    assert store.read_points(rs.SOURCE, "SOL") == [] and D in rs.open_days(now)
+
+
+def test_budget_cut_paging_after_midnight_does_not_settle_previous_day(q):
+    led = ledger()
+    _d_covered_to_20h(q, led)
+    clock = Clock(at(26))
+    s = src(q, clock)
+    s.spend(s.remaining() - 1)  # room for one page only; the page lies wholly after D
+    out, fake = poll(q, clock, live_stream(clock, comments_span_h=1), led=led, s=s)
+    assert len(fake.requests) == 1 and out.poll.entries == 100 and out.poll.oldest >= at(24)
+    stored = [p for p in rs.read_polls(D, D + timedelta(days=1)) if p.kind == "comments" and p.collected_at == at(26)]
+    assert out.poll.truncated is True and stored == [out.poll]
+    # its real span still counts toward coverage (of D+1 here)
+    assert rs.coverage(D + timedelta(days=1), rs.read_polls(D, D + timedelta(days=1)), "comments") > 0
+    _not_settled(q, led, at(27))
+
+
+@pytest.mark.parametrize("stop", ["paused_between_pages", "error_on_page_2"])
+def test_pause_mid_paging_after_midnight_does_not_settle_previous_day(q, stop):
+    led = ledger()
+    _d_covered_to_20h(q, led)
+    clock = Clock(at(26))
+    s = src(q, clock)
+    live = live_stream(clock, comments_span_h=1)
+
+    def respond(req):
+        if "after" not in parse_qs(urlsplit(str(req.url)).query):
+            if stop == "paused_between_pages":
+                s.warn("rate_limited")  # another unit paused Reddit while this page was in flight
+            return live(req)
+        return httpx.Response(429, content=b"slow")
+    out, fake = poll(q, clock, respond, led=led, s=s)
+    assert len(fake.requests) == (1 if stop == "paused_between_pages" else 2) and s.is_paused()
+    assert out.poll is not None and out.poll.oldest >= at(24) and out.poll.truncated is True
+    _not_settled(q, led, at(27))
+
+
+def test_non_t1_last_id_after_midnight_does_not_settle_previous_day(q):
+    led = ledger()
+    _d_covered_to_20h(q, led)
+    times = stream_times(at(26), span_h=1)
+    body = atom([entry(rid("t1", w), w) for w in times[:-1]] + [entry("t3_odd1", times[-1])])
+    out, fake = poll(q, Clock(at(26)), ok(body), led=led)
+    assert len(fake.requests) == 1 and out.poll.entries == 100 and out.poll.oldest >= at(24)
+    assert out.poll.truncated is True
+    _not_settled(q, led, at(27))
+
+
+def test_complete_paging_after_midnight_settles_previous_day(q):
+    led = ledger()
+    poll(q, Clock(at(12)), ok(atom([entry(f"t3_h{i}", at(1 + i)) for i in range(4)])), kind="new", led=led)
+    record(*full_posts(), P("comments", at(4), at(24.2), collected=at(24.2)))
+    clock = Clock(at(28))
+    out, fake = poll(q, clock, live_stream(clock, comments_span_h=1), led=led)
+    assert out.reason is None and len(fake.requests) == 4 and out.poll.truncated is False
+    assert at(24) <= out.poll.oldest <= at(24.2)  # paging reached the floor; the poll lies wholly after D
+    doc = rs.commit_day(D, q, led, now=at(29))
+    assert doc["settled"] is True and doc["partial"] is True and doc["coins"]["SOL"]["reason"] == "fetched"
+    assert dict(store.read_points(rs.SOURCE, "SOL"))[D] == 4.0
+
+
+def test_poll_after_truncated_poll_pages_back_to_last_complete_poll(q):
+    led = ledger()
+    _d_covered_to_20h(q, led)
+    record(P("comments", at(25), at(26), collected=at(26), truncated=True))
+    clock = Clock(at(28.5))
+    out, fake = poll(q, clock, live_stream(clock, comments_span_h=1), led=led)
+    assert out.reason is None and out.poll.truncated is False and out.poll.oldest <= at(20)
+    doc = rs.commit_day(D, q, led, now=at(30))
+    assert doc["coverage"]["comments"] == 1.0 and doc["settled"] is True and doc["partial"] is False
+    assert doc["coins"]["SOL"]["reason"] == "fetched"
+
+
+def test_posts_never_send_after(q):
+    record(P("new", at(0), at(1), collected=at(1)))
+    clock = Clock(at(20))
+    out, fake = poll(q, clock, live_stream(clock, posts_span_h=3), kind="new")
+    assert out.reason is None and len(fake.requests) == 1 and out.poll.entries == 100
+    assert out.poll.oldest > at(1) and out.poll.pages == 1 and out.poll.truncated is False
+    assert all("after" not in parse_qs(urlsplit(str(r.url)).query) for r in fake.requests)
+
+
+# --- fix round 1: a well-formed empty feed is a recorded poll (S2) ---
+
+def test_empty_feed_recorded_as_poll_and_not_retried_before_interval(q):
+    clock = Clock(at(12))
+    s = src(q, clock)
+    out, fake = poll(q, clock, ok(atom([])), s=s)
+    assert out.reason == "empty_feed" and len(fake.requests) == 1
+    assert out.poll is not None and out.poll.entries == 0 and out.poll.newest is None and out.poll.oldest is None
+    assert rs.read_polls(D, D) == [out.poll]
+    clock.t = at(12) + timedelta(seconds=120)
+    again, fake2 = poll(q, clock, ok(atom([])), s=s)
+    assert again.reason == "not_due" and fake2.requests == [] and s.used == 1
+    assert rs.coverage(D, rs.read_polls(D, D), "comments") == 0.0
+    assert rs.due_kinds(q, at(12) + timedelta(seconds=q.config.reddit_comments_poll_interval_s)) == ["comments", "new"]
+
+
+def test_empty_poll_never_settles_a_day():
+    polls = [*full_posts(), P("comments", at(-3), at(20)), rs.Poll("comments", at(30), None, None, 0, 1, False)]
+    st = rs.day_status(D, polls, now=at(48), min_coverage=0.8)
+    assert st.settled is False and st.reason == "not_settled" and st.polls["comments"] == 1
+
+
+# --- fix round 1: AC3 zero rule without a stream canary (owner D2) ---
+
+def _commit_zero_sol(q):
+    """D covered and settled for both kinds; four posts mention ETH only, so SOL's count is a real zero."""
+    led = ledger()
+    poll(q, Clock(at(12)), ok(atom([entry(f"t3_z{i}", at(1 + i), title="ETH news") for i in range(4)])),
+         kind="new", led=led)
+    record(*full_posts(), P("comments", at(-3), at(24.5)), P("comments", at(30), at(40)))
+    return rs.commit_day(D, q, led, now=at(48))
+
+
+def test_covered_settled_real_zero_missing_without_stream_canary(q):
+    store.write_series(SourceSeries(rs.SOURCE, "SOL", [(D - timedelta(days=i), 1.0) for i in range(1, 4)]), today=D)
+    assert rs.trailing_median("SOL", D) == 1.0  # history exists and its median is below 5
+    doc = _commit_zero_sol(q)
+    assert doc["settled"] is True and doc["coverage"] == {"comments": 1.0, "new": 1.0}
+    assert doc["canary_ok"] is False  # the stream sends no canary query; none is assumed
+    assert doc["coins"]["SOL"] == {"reason": "zero_no_canary", "value": None, "trailing_median": 1.0}
+    assert D not in dict(store.read_points(rs.SOURCE, "SOL")) and D not in web_evidence.read_rows(rs.SOURCE, "SOL")
+    assert doc["coins"]["ETH"]["reason"] == "fetched" and dict(store.read_points(rs.SOURCE, "ETH"))[D] == 4.0
+
+
+def test_zero_without_history_stays_missing(q):
+    assert rs.trailing_median("SOL", D) is None
+    doc = _commit_zero_sol(q)
+    assert doc["coins"]["SOL"] == {"reason": "zero_no_canary", "value": None, "trailing_median": None}
+    assert store.read_points(rs.SOURCE, "SOL") == [] and doc["missing"]["zero_no_canary"] >= 1
+
+
+# --- fix round 1: coverage is per feed kind, never per subreddit (owner D1), unknown without polls (S1) ---
+
+def test_coverage_is_per_feed_kind_never_per_subreddit(q):
+    doc = _commit_with_comments(q, -3, 24.5)
+    assert doc["coverage_scope"] == "feed_kind" and set(doc["coverage"]) == set(rs.KINDS)
+    assert not any("subreddit" in k for k in doc)
+    st = rs.stream_status(at(48))
+    assert not any("subreddit" in k for day in st["days"].values() for k in day)
+
+
+def test_stream_status_coverage_unknown_without_polls(q):
+    record(P("comments", at(1), at(23)))
+    st = rs.stream_status(at(48), days=3)
+    day = st["days"][D.isoformat()]
+    assert day["coverage_comments"] == pytest.approx(22 / 24, abs=1e-4) and day["coverage_new"] is None
+    for other in (D - timedelta(days=1), D + timedelta(days=1)):
+        assert st["days"][other.isoformat()]["coverage_comments"] is None
+        assert st["days"][other.isoformat()]["coverage_new"] is None

@@ -8,9 +8,10 @@ Run from the repo root:
 W8c ships the Reddit modes (P-R2 `--feed-depth`: one `search.rss` request over the subreddit set; P-R5
 `--compare-scope`: the set, then one minute later the first subreddit alone). W8c2 adds `--stream-status`: local
 state only (no request): today's stream polls per feed kind and entries seen, then per recent completed day the
-comments and posts coverage, settled and partial flags, fetched and missing coin counts. The other X modes arrive in
-W8d; those print "not built yet" and exit 2 without sending anything. The probe keeps no budget or pause state and
-stores nothing.
+comments and posts coverage (per feed kind of the combined feed, never per subreddit; `none` when no poll of that
+kind reached the day, since that coverage is unknown, not 0), settled and partial flags, fetched and missing coin
+counts. The other X modes arrive in W8d; those print "not built yet" and exit 2 without sending anything. The probe
+keeps no budget or pause state and stores nothing.
 `--source xsearch --reader-status` (W8d2) reads only local state (no request to X): active over total accounts,
 per label the state, last use and cookie age in days, the pinned-against-installed commit match, the environment
 guard result and the curl fallback status.

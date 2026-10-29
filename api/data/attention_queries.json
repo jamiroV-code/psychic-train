@@ -25,7 +25,7 @@
   "reddit_stream_polls_per_day_cap": 12,
   "reddit_stream_min_coverage": 0.8,
   "reddit_comments_paging": true,
-  "reddit_impl_order": ["reddit_stream", "reddit_web"],
+  "reddit_impl_order": ["reddit_web", "reddit_stream"],
   "x_lang": "en",
   "x_window_syntax": "since_time",
   "x_min_account_age_days": 30,
