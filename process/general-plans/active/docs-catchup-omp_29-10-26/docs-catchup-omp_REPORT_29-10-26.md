@@ -1,65 +1,67 @@
 ---
 name: docs-catchup-omp-report
-description: "Completion report of the T221 PLAN session (docs catch-up plan), updated after the independent review of PR #188; 11 headings."
+description: "Completion report of the T221 PLAN session (docs catch-up plan), updated after the second independent review (PR #189, plan fixes round 2); 11 headings."
 date: 29-10-26
 ---
 
 ## 1 Task ID
 
-T221 (ID confirmed free: highest seen is T220). Phase PLAN only (plan fixes after the independent review of PR #188). Branch `claude/t221-docs-catchup-plan`.
+T221 (ID confirmed free: highest seen is T220). Phase PLAN only (plan fixes round 2 after the independent review of draft PR #189). Branch `claude/t221-docs-catchup-plan`. Plan PRs: #188 (merged), #189 (draft).
 
 ## 2 Outcome
 
-done: the review findings are fixed in the PLAN, re-validated, committed and pushed to the existing PR #188 branch (the push result is in the handover message; a report cannot contain its own commit SHA).
+done: the review findings are fixed in the PLAN, re-validated, committed and pushed to the existing PR #189 branch (the push result is in the handover message; a report cannot contain its own commit SHA). Nothing of the plan was executed.
 
 ## 3 Summary
 
-- Owner decisions locked in and removed as open questions: Q1 (EXECUTE agent `riper-sonnet`, no fallback), Q3 (owner merges every PR, D-28), Q6 (`vc-publish` left and flagged only), Q7 (no CLAUDE.md or AGENTS.md change). Open: Q2, Q4, Q5, Q8.
-- New Section A2 with exact replacement wording for the worker self-merge text in `operating-instructions.md` (~56), `master-planner.md` section 5 and section 10, plus the MASTER-PLAN status sentence (~20); 02-10-26 quote kept as history marked superseded by D-28; new gates G15 and G16.
-- Validate contract is now ONE fenced bash script (G1-G16), each gate exits non-zero on failure; baselines for G3 and G5 are stored under the git dir; G10 checks PRs #145-#187 (42, all MERGED) and no open PR; repo slug derived at run time, no account name in repo files.
-- Envelope: names `riper-sonnet`, adds the no-origin remote step (add public URL, fetch, push only `claude/t221-docs-catchup-exec`, draft PR with `-R`, stop on any failure), owner-merges rule; 4,540 B (LF), 4,567 B CRLF.
-- Also fixed: T221 row planned for the board (G8), TL;DR wider-regex claim (active plans and the deployability SPEC also hit), overview about the `faf416b` stamp, section 7 table lines (89 header, rows 91-92 measured), vc-publish lines (:291, :294, :303).
+- Owner answers locked in and removed as open questions (TL;DR, Scope, sections, risks, envelope, handoff): Q2 no decision record (omp policy in `omp-setup.md` only, `decisions.md` never edited); Q4 spend after 21-10-26 stays UNVERIFIED, no search; Q5 cap unchanged, overflow goes to a new board file `process/MASTER-PLAN-board-2_<dd-mm-yy>.md` (owned, in the G13 allow-list, read by G8, G9, G14); Q8 `task.isolation.apply = true` OBSERVED (auto-apply into the parent; the worker publishes its own branch and says so). The Windows isolation backend stays UNVERIFIED. No open questions remain.
+- Review fix 1: the envelope no longer has angle-bracket placeholders in executable commands (VALUES block with FILL_IN, plain variables); extraction is `tr -d '\r' < "$PLAN" | sed ... > "$GF"` (the `tr` is needed: the CRLF checkout made the old `sed` match nothing). Result is byte-identical to the fenced block (`cmp`).
+- Fix 2: G15 now scans the actual self-merge phrases (not `merge and archive`), with a self-test that the A2 line `**Merge and archive (D-28):**` does not match; the A2 wording was applied to a temp copy (discarded) and G6, G15, G16 passed.
+- Fix 3: baselines live in `<gitdir>/t221-baseline`, kept until an explicit `CLEANUP=1` call; `before` never overwrites them. Fix 4: G8 fails on empty, G5 captures the pytest exit code, G9 scoped to #145-#187 plus #188 and #189, G10 reads open PRs at run time (must be listed in `current-state.md`, `ALLOW_OPEN` for the EXECUTE PR), G13 allows the board-2 file, G14 rejects blank and `-` cost cells, gate notes match the script.
+- Fix 5: master-planner section 5 keeps the RT4 note (new item 6); owner flag for `decisions.md` D-6 added (worker lists it in its report heading 9, never edits). Fix 6: T221 row names #188 (merged) and #189 (draft), only what was read, no cost figure.
 
 ## 4 Files changed
 
-- `process/general-plans/active/docs-catchup-omp_29-10-26/docs-catchup-omp_PLAN_29-10-26.md` (rewritten)
+- `process/general-plans/active/docs-catchup-omp_29-10-26/docs-catchup-omp_PLAN_29-10-26.md` (edited)
 - `process/general-plans/active/docs-catchup-omp_29-10-26/docs-catchup-omp_REPORT_29-10-26.md` (this file)
 
 Nothing else was touched.
 
 ## 5 Commits
 
-Branch `claude/t221-docs-catchup-plan`, one new commit on top of `6c9d1714` (SHA and push result in the handover message).
+Branch `claude/t221-docs-catchup-plan`, one new commit on top of `origin/claude/t221-docs-catchup-plan` (SHA and push result in the handover message).
 
 ## 6 Tests run
 
-All read-only, 2026-10-29, worktree at `6c9d1714` (main `b573309f`), on the unedited docs:
+All read-only, 2026-10-29, Git Bash on the CRLF checkout, unedited docs:
 
-- PLANNER-BUDGET block (through the plan's G1 gate): `planner_fixed=47235 cap=56000 headroom=8765`, `rc=0`, PASS.
-- `node .claude/skills/vc-generate-plan/scripts/validate-plan-artifact.mjs <PLAN>` on the edited plan: 0 failures, 0 warnings (462 lines).
-- The gates script itself was dry-run on the unedited tree (`bash -n`, `before`, `after`): G1, G2 (WARN: MASTER-PLAN over the 17,500 target), G3 (54 baseline failures, 0 new), G4, G5 (1 pre-existing failing guard test on this PC, 0 new), G6, G10 (42 PRs merged, 0 open), G12, G13 PASS; G7, G8, G9, G11, G14, G15, G16 FAIL as expected before EXECUTE (proof they can fail). The extraction command from the envelope gives a byte-identical script.
-- Envelope size: `wc -c` on the fenced body 4,540 B (cap 8,000 B), first line `ROLE: WORKER`.
+- PLANNER-BUDGET block (gate G1 of the script): `planner_fixed=47235 cap=56000 headroom=8765`, `rc=0`, PASS.
+- `node .claude/skills/vc-generate-plan/scripts/validate-plan-artifact.mjs` on the plan: 0 failures, 0 warnings (512 lines).
+- Full gates script dry run (`before`, then `after` with `BASE=HEAD`): PASS G1, G2 (WARN MASTER-PLAN over 17,500 B target), G3 (54 baseline, 0 new), G4, G5 (1 pre-existing failing guard test, 0 new), G6, G12, G13. FAIL as expected before EXECUTE: G7, G8 (78 IDs in git subjects, missing ones listed), G9, G11, G14, G15, G16. G10 also FAILS by design: 42 PRs #145-#187 MERGED, but open PR #189 is not listed in `current-state.md`. Without `BASE=HEAD`, G12 flags the gate patterns the plan itself adds; on the EXECUTE branch the plan is already in `origin/main`. A second `before` kept the baselines.
+- Temp-copy test of the A2 wording (master-planner section 5 and 10, operating-instructions, MASTER-PLAN status sentence): G6, G15, G16 PASS; copy discarded.
+- Extraction: byte-identical (`cmp`), script LF, `bash -n` ok. Envelope: `wc -c` 6,014 B LF (40 lines, 6,054 B CRLF), cap 8,000 B, first line `ROLE: WORKER`.
 
 ## 7 Tests NOT run
 
-pytest beyond the G5 dry run, vitest, tsc, Playwright (PLAN phase). The EXECUTE worker runs G1-G16. CI state of main was not read (UNVERIFIED).
+vitest, tsc, Playwright (PLAN phase); pytest beyond the G5 dry run. The EXECUTE worker runs G1-G16. CI state of main was not read (UNVERIFIED).
 
 ## 8 Deviations
 
-- The review text said the section 7 table is lines 89-91; measured: header 89, separator 90, rows 91-92. The plan uses the measured lines.
-- `current-state.md` of the isolated PLAN worker had no remote; this worktree has `origin`, so push uses it directly.
-- The G5 gate is baseline-compared (one guard test already fails on this PC, backslash paths); this is a design choice in the gate, not a relaxed pass.
+- The first `gh` call in the tool shell failed (`gh` not on PATH there); gates were run through Git Bash with the GitHub CLI folder added to `PATH`. `awk` (used by G14) exists in Git Bash only, not in the default tool shell.
+- The temp-copy test harness first built the A2 item 1 line empty (a harness slip, not a wording problem); it does not affect G6, G15 or G16.
+- G5 stays baseline-compared (one guard test already fails on this PC, backslash paths): a design choice, not a relaxed pass.
 
 ## 9 Blockers
 
-- None for the PLAN. Open owner questions: Q2, Q4, Q5, Q8 (Q1, Q3, Q6, Q7 are decided).
-- Registry update request: T221 row when the planner approves (plan only; EXECUTE will add its own board row).
+- None. No open owner questions (Q1-Q8 decided).
+- Owner flag (not edited here): `decisions.md` D-6 (~lines 84-88) still says workers may self-merge; D-28 supersedes it in effect. The EXECUTE worker must not edit it and lists it in its report heading 9.
+- Registry update request: T221 row when the planner approves (plan only; EXECUTE adds its own board row).
 
 ## 10 Follow-up
 
-- T221-EXEC on `riper-sonnet`; the owner merges its PR.
-- Separate tasks only if the owner decides: Q5 (cap or board split), Q8 (isolation probe), Q2 (D-29).
+- T221-EXEC on `riper-sonnet`; the owner merges its PR. Its worker changes are also auto-applied to the parent checkout (`task.isolation.apply = true`): do not publish them again.
+- Optional owner task: a status note on D-6 in `decisions.md` (separate, not part of T221).
 
 ## 11 Context cost
 
-Loaded: the PLAN and REPORT in full, `master-planner.md` lines 54-93 and 141-160, `operating-instructions.md` lines 54-58, `MASTER-PLAN.md` line 20, `vc-publish/SKILL.md` lines 291-306, the PLANNER-BUDGET block. About 25,000 tokens. Tools: read, bash, edit, write, glob, grep, eval; no subagents.
+Loaded: the PLAN and REPORT in full, `master-planner.md` lines 62-80 and 149-155, `operating-instructions.md` lines 54-58, `decisions.md` D-6, the frontmatter of `MASTER-PLAN.md` and an archive file. About 60,000 tokens. Tools: read, bash, edit, write, grep; no subagents.
