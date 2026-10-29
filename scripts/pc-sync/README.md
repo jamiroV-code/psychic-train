@@ -8,9 +8,20 @@ UNVERIFIED IN CI: these scripts were written in a container with no PowerShell. 
 | Script | What it does |
 |---|---|
 | `sync-main.ps1` | `git fetch`, then `git pull --ff-only` on `main` only when `main` is checked out and the tree is clean and fast-forwardable. Otherwise it changes nothing and logs one line to `%LOCALAPPDATA%\my_site\logs\sync-main.log`. Never merges, rebases, resets or forces. |
-| `push-task-branch.ps1` | Refuses on `main`. Pushes only the checked-out `claude/*` branch (or a named one passed with `-Branch`) using `git push -u origin`, then opens a draft PR with `gh` if installed, else prints the URL. Never uses force. |
+| `push-task-branch.ps1` | Refuses on `main`. Pushes only the checked-out `claude/*` branch (`-Branch` may confirm the name but never bypasses the `claude/*` rule; `main`, detached HEAD and any other branch are refused) using `git push -u origin`, then opens a draft PR with `gh` if installed, else prints the URL. Never uses force. |
 
 Both take `-WhatIf` (print what they would do, change nothing).
+
+## Exit codes
+
+| Script | Code | Meaning |
+|---|---|---|
+| both | 0 | success, dry run, or (sync-main only) skipped on purpose: not on `main`, dirty tree, or diverged |
+| `sync-main.ps1` | 1 | real failure: not a git repo, `git fetch` failed, or the fast-forward was refused |
+| `push-task-branch.ps1` | 1 | refused (not a `claude/*` branch, `main`, detached HEAD) or the push failed |
+| `push-task-branch.ps1` | 2 | pushed, but no draft PR was opened (`gh` missing, not logged in, or PR already exists); the message gives the URL |
+
+Task Scheduler shows a non-zero code as a failed run, so a real failure is visible there.
 
 ## Task Scheduler (sync-main every 15 minutes)
 

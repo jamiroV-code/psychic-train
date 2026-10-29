@@ -295,6 +295,8 @@ Only on explicit 'push': proceed to Step 10 (`git push origin main && git push -
 
 ### Step 10: Push
 
+This `git push origin main` applies only to the separate kit repo, never to a project repo that forbids pushing to `main` (for example this one).
+
 16. Push to remote (only after Step 9b approval):
 
 ```bash

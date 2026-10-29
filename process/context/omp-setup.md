@@ -7,7 +7,7 @@ date: 29-10-26
 
 # omp setup note (T217)
 
-**UNVERIFIED.** Everything under "Mapping" is an expectation from omp's documented ideas, not something this repo has run. The owner tests it on the PC; live provider behaviour is proven only by owner probes.
+**UNVERIFIED.** Everything under "Mapping" is an assumption about omp's design, not something this repo has run. The owner tests it on the PC; live provider behaviour is proven only by owner probes.
 
 ## Git flow (decided, D-28)
 
@@ -15,7 +15,7 @@ date: 29-10-26
 - The PC may push task branches and open DRAFT PRs automatically. It never pushes to `main`.
 - Planner and direct-user sessions commit on a branch plus PR. The owner merges every PR.
 - `main` on the PC is kept current by `scripts/pc-sync/sync-main.ps1` (fast-forward only); task branches go up through `scripts/pc-sync/push-task-branch.ps1`. See `scripts/pc-sync/README.md`.
-- Branch protection will be a GitHub ruleset with github-actions[bot] as bypass actor, set by the owner in GitHub settings, tested in audit mode through one daily refresh first. Until then it is procedure only. The daily data workflows push to `main` as github-actions[bot] and must stay unaffected.
+- Branch protection will be a GitHub ruleset with github-actions[bot] as bypass actor, set by the owner in GitHub settings, tested in audit mode through one daily refresh first (whether ruleset Evaluate mode is available on a public free repo is unverified; the owner checks in GitHub settings). Until then it is procedure only. The daily data workflows push to `main` as github-actions[bot] and must stay unaffected.
 - Secrets and cookie files stay outside the repo.
 
 ## Mapping (UNVERIFIED)
