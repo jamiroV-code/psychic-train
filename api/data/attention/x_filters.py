@@ -35,8 +35,8 @@ EXCLUSION_REASONS = ("not_in_window", "retweet", "reply", "lang", "placeholder",
 class XUser:
     id: int
     created: datetime
-    followers: int
-    statuses: int
+    followers: int | None  # None when the library omits the count; never read as 0
+    statuses: int | None
     profile_image_url: str
     protected: bool = False
 
@@ -51,10 +51,10 @@ class Tweet:
     cashtags: tuple[str, ...] = ()
     retweeted_id: int | None = None
     reply_to_id: int | None = None
-    like: int = 0
-    reply: int = 0
-    quote: int = 0
-    retweet: int = 0
+    like: int | None = 0  # engagement counts are None when missing; never read as 0
+    reply: int | None = 0
+    quote: int | None = 0
+    retweet: int | None = 0
     views: int | None = None  # missing on some tweets; never read as 0
 
 
@@ -109,8 +109,9 @@ def coin_matches(tweet: Tweet, coin: Coin) -> bool:
 
 
 def is_placeholder(user: XUser) -> bool:
-    """The library's stand-in for a missing user: empty profile image and zero counts."""
-    return not user.profile_image_url and user.followers == 0 and user.statuses == 0
+    """The library's stand-in for a missing user: empty profile image and zero counts. An unknown count cannot
+    rule it out, so it counts as possibly zero here."""
+    return not user.profile_image_url and user.followers in (0, None) and user.statuses in (0, None)
 
 
 def _text_key(text: str) -> str:
@@ -133,7 +134,7 @@ def _reason(t: Tweet, coin: Coin, day: date, policy: FilterPolicy) -> str | None
         return "protected"
     if t.date - t.user.created < timedelta(days=policy.min_account_age_days):
         return "young_account"
-    if t.user.followers < policy.min_followers:
+    if t.user.followers is None or t.user.followers < policy.min_followers:  # unknown never clears the bar
         return "low_followers"
     if len(t.cashtags) > policy.max_cashtags:
         return "cashtag_spam"
@@ -167,9 +168,9 @@ def filter_tweets(tweets, coin: Coin, day: date, policy: FilterPolicy) -> Filter
 
 
 def engagement_sum(tweets) -> float:
-    """log1p(likes) + log1p(replies) + log1p(quotes) + log1p(retweets) over counted tweets; views are not in it."""
-    return float(sum(math.log1p(t.like) + math.log1p(t.reply) + math.log1p(t.quote) + math.log1p(t.retweet)
-                     for t in tweets))
+    """log1p(likes) + log1p(replies) + log1p(quotes) + log1p(retweets) over counted tweets; views are not in it.
+    A missing (None) count adds no term."""
+    return float(sum(math.log1p(n) for t in tweets for n in (t.like, t.reply, t.quote, t.retweet) if n is not None))
 
 
 def median_views(tweets) -> float | None:

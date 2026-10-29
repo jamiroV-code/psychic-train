@@ -149,3 +149,17 @@ def test_read_age_hours_recorded():
     tweets = [tw("a", when=NOON), tw("b", when=NOON + timedelta(hours=6))]
     assert xf.read_age_hours(tweets, now) == pytest.approx(27.0)
     assert xf.read_age_hours([], now) is None
+
+
+def test_missing_counts_are_unknown_never_pass_a_threshold_and_never_crash():
+    # Unknown followers cannot clear min_followers; the tweet is excluded, not counted.
+    r = run([tw("unknown", user=user(2, followers=None)), tw("ok", uid=3)])
+    assert [t.text for t in r.counted] == ["ok"] and r.exclusions["low_followers"] == 1
+    # An empty profile with unknown counts cannot be ruled out as the library placeholder.
+    assert xf.is_placeholder(user(4, profile_image_url="", followers=None, statuses=None))
+    assert xf.is_placeholder(user(4, profile_image_url="", followers=0, statuses=None))
+    assert not xf.is_placeholder(user(4, profile_image_url="", followers=None, statuses=7))
+    assert not xf.is_placeholder(user(4, followers=None, statuses=None))
+    # Unknown engagement counts add nothing (they are not read as a value) and do not crash.
+    tweets = [tw("a", like=None, reply=2, quote=None, retweet=None), tw("b", like=4, uid=2)]
+    assert xf.engagement_sum(tweets) == pytest.approx(math.log1p(2) + math.log1p(4))

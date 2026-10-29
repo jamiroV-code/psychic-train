@@ -31,7 +31,12 @@
   "x_canary_tolerance": 0.25,
   "x_canary_min_overlap": 0.6,
   "x_parse_drop_threshold": 0.2,
-  "x_allow_curl_backend": false
+  "x_allow_curl_backend": false,
+  "x_accounts_db_path": "",
+  "x_pinned_commit": "63f61a518e576ea5c132f1156c03dda0520d76c1",
+  "x_pinned_version": "0.20.1",
+  "x_accounts": [],
+  "x_pool_max": 3
  },
  "subreddits": [
   "CryptoCurrency",
