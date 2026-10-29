@@ -97,6 +97,9 @@ class DiscoveryResponse(BaseModel):
 
 
 SourceState = Literal["ok", "insufficient-history", "unavailable", "not-probed", "off"]
+# Why a Sources row is not `ok` (W8f), a closed list beside the free-text note; "" when ok.
+SourceReason = Literal["", "parked", "x_live_off", "not_probed", "stale", "insufficient_history",
+                       "no_stored_data", "invalid_file"]
 
 
 class DiscoverySourceRow(BaseModel):
@@ -111,6 +114,8 @@ class DiscoverySourceRow(BaseModel):
     coins_with_data: int   # eligible coins whose series is usable (>= the history gate)
     eligible_size: int
     note: str = ""
+    reason: SourceReason = ""
+    impl: str | None = None   # weighted sources: the store (method) the row reports, from `source_impl`
 
 
 class DiscoveryKeywordGap(BaseModel):

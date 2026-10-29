@@ -169,7 +169,8 @@ def test_backfilled_flag_excludable(isolated_cache, tmp_path, monkeypatch):
     put_change("reddit_web", "A", 2.0, 1.0)
     pts = store.read_points("reddit_web", "A")
     recent = {d for d, _ in pts[-7:]}
-    _evidence("reddit_web", "A", [_row(d, v, backfilled=d == max(recent)) for d, v in pts])
+    gap = sorted(recent)[3]   # a backfilled day inside the recent window (not the newest, which would re-anchor)
+    _evidence("reddit_web", "A", [_row(d, v, backfilled=d == gap) for d, v in pts])
     assert by_source(run())["reddit"].change == pytest.approx(100.0)      # default: backfilled values count
     assert "reddit" not in by_source(run(known_at_time=True))             # excluded: the recent window is short
     # registry level: the flag and a late collection (not known at D+1) both drop the point, nothing else does
@@ -186,7 +187,7 @@ def test_backfilled_flag_excludable(isolated_cache, tmp_path, monkeypatch):
 def live(isolated_cache, tmp_path, monkeypatch):
     monkeypatch.delenv("X_LIVE", raising=False)
     world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7}, cats={"ai": ["A", "B"]},
-          source_weights={**disc.weights_for_day(disc.validate_config(shipped()), END)["source_weights"]},
+          source_weights=shipped()["source_weights"],
           source_impl={"reddit": "reddit_web", "xsearch": "xsearch_web"}, x_discovery_mode="rotation",
           x_rotation_points=3, x_rotation_max_lag_days=7)
     src_mod.clear_cache()
