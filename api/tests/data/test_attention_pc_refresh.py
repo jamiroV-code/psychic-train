@@ -44,8 +44,13 @@ X, R = apr.X_SOURCE, apr.REDDIT_SOURCE
 
 @pytest.fixture(autouse=True)
 def _isolated(isolated_cache, monkeypatch):
-    """Throwaway cache root, no socket connect, no worker left behind."""
-    def refuse(*_a, **_k):
+    """Throwaway cache root, no socket connect off the loopback, no worker left behind. The loopback stays open
+    only for the event loop's own socket pair (Windows asyncio builds it with a loopback connect)."""
+    real_connect = socket.socket.connect
+
+    def refuse(self, address, *a, **k):
+        if isinstance(address, tuple) and address[0] in ("127.0.0.1", "::1"):
+            return real_connect(self, address, *a, **k)
         raise OSError("network blocked in tests")
 
     monkeypatch.setattr(socket.socket, "connect", refuse)
@@ -641,7 +646,13 @@ def _ninety_days(clock, w, days=90, probe=None):
             probe(i)
 
 
-def test_state_files_bounded_after_ninety_simulated_days():
+@pytest.fixture
+def no_fsync(monkeypatch):
+    """Ninety days of atomic writes: the disk flush is the slow part and proves nothing here."""
+    monkeypatch.setattr(cache.os, "fsync", lambda _fd: None)
+
+
+def test_state_files_bounded_after_ninety_simulated_days(no_fsync):
     clock = Clock(datetime(2026, 10, 27, 0, 30, tzinfo=timezone.utc))
     q = queries(x_backfill_days=0, x_raw_retention_days=10)
     w, _, _ = make(clock, q=q, coins=["SOL", "ETH"], ledger_retention_days=20,
@@ -662,11 +673,13 @@ def test_state_files_bounded_after_ninety_simulated_days():
     assert 0 < len(ledger_days) <= 20 + 9  # retention plus the feed's reach (8 days) and today
     assert 0 < len(raw_days) <= 10 + 1
     assert 0 < len(canary_days) <= 20 + 1
+    completeness_days = list(rw.completeness_path(T0.date()).parent.glob("*.json"))
+    assert 0 < len(completeness_days) <= 20 + 1
     stored = dict(store.read_points(X, "SOL"))
     assert len(stored) >= 85  # it kept collecting the whole time
 
 
-def test_memory_structures_do_not_grow_with_days():
+def test_memory_structures_do_not_grow_with_days(no_fsync):
     clock = Clock(datetime(2026, 10, 27, 0, 30, tzinfo=timezone.utc))
     w, _, _ = make(clock, q=queries(x_backfill_days=0), coins=["SOL", "ETH"])
     seen = {}
@@ -680,6 +693,7 @@ def test_memory_structures_do_not_grow_with_days():
 
 
 def test_log_rotation_size_and_count_from_config(tmp_path):
+    tmp_path = tmp_path / "logs"  # the cache root is tmp_path itself
     assert apr.log_settings({}) == (apr.LOG_MAX_BYTES_DEFAULT, apr.LOG_FILES_DEFAULT)
     assert apr.log_settings({apr.LOG_MAX_BYTES_ENV: "300", apr.LOG_FILES_ENV: "2"}) == (300, 2)
     assert apr.log_settings({apr.LOG_MAX_BYTES_ENV: "-1", apr.LOG_FILES_ENV: "x"}) == (
@@ -701,7 +715,7 @@ def test_log_rotation_size_and_count_from_config(tmp_path):
 
 def test_no_network_in_tests():
     with pytest.raises(OSError):
-        socket.create_connection(("127.0.0.1", 9), timeout=0.1)
+        socket.create_connection(("192.0.2.1", 443), timeout=0.1)  # TEST-NET-1: refused before any packet
     tree = ast.parse(Path(apr.__file__).read_text(encoding="utf-8"))
     top = {a.name for n in tree.body if isinstance(n, ast.Import) for a in n.names}
     top |= {f"{n.module}.{a.name}" for n in tree.body if isinstance(n, ast.ImportFrom) for a in n.names}
@@ -709,5 +723,6 @@ def test_no_network_in_tests():
     clock = Clock()
     w, reader, reddit = make(clock)
     w.streams[X].run_pass(stop_at=T0 + timedelta(minutes=10))
+    clock.t = T0  # the Reddit stream runs over the same ten minutes on its own lock
     w.streams[R].run_pass(stop_at=T0 + timedelta(minutes=10))
     assert reader.coin_units() and reddit.searches
