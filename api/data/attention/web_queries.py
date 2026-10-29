@@ -22,7 +22,7 @@ SYMBOL_RE = re.compile(r"[A-Z0-9_]{1,24}")
 NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9 .'&-]{0,38}[A-Za-z0-9.]|[A-Za-z0-9]")
 SUBREDDIT_RE = re.compile(r"[A-Za-z0-9_]{2,21}")
 TOP_KEYS = {"version", "note", "collector", "subreddits", "ambiguous", "coins"}
-COIN_KEYS = {"name", "cashtag_only", "note", "x_lang"}
+COIN_KEYS = {"name", "cashtag_only", "name_only", "note", "x_lang"}
 X_FILTERS = "lang:en -filter:replies -filter:retweets"
 
 DEFAULTS = {
@@ -37,7 +37,7 @@ DEFAULTS = {
     "x_backfill_days": 14,
     "reddit_request_delay_min_s": 60,
     "reddit_request_delay_max_s": 120,
-    "reddit_daily_request_budget": 150,
+    "reddit_daily_request_budget": 250,
     "reddit_sample_min": 10,
 }
 # X reader keys (SPEC rules 17-20, Annex A.1b; W8d1). Typed: validated one by one in `_x_value`.
@@ -64,8 +64,18 @@ X_DEFAULTS = {
     "x_accounts": (),
     "x_pool_max": 3,
 }
+# Reddit keys added by W8c (SPEC rules 10, 14, 15, AC31): optional in the file, the default applies when absent.
+# SPEC rule 15: baseline budget 250 (`reddit_daily_request_budget`), degraded budget 150 (its own key).
+REDDIT_DEGRADED_BUDGET = 150
+REDDIT_DEFAULTS = {
+    "reddit_degraded_request_budget": REDDIT_DEGRADED_BUDGET,
+    "reddit_author_cap": 3,
+    "reddit_min_mentions": 3,
+    "reddit_search_time_filter": "week",
+}
+REDDIT_TIME_FILTERS = ("hour", "day", "week", "month", "year", "all")
 _INT_KEYS = tuple(DEFAULTS)
-DEFAULTS = {**DEFAULTS, **X_DEFAULTS}
+DEFAULTS = {**DEFAULTS, **X_DEFAULTS, **REDDIT_DEFAULTS}
 X_WINDOW_SYNTAXES = ("since_time", "date")
 LANG_RE = re.compile(r"[a-z]{2,3}")
 X_LABEL_RE = re.compile(r"[a-z0-9_]{1,24}")  # the same opaque labels as `x_pool.LABEL_RE`
@@ -75,7 +85,8 @@ _X_COUNTS = {"x_min_account_age_days": 0, "x_min_followers": 0, "x_max_cashtags"
              "x_canary_min_results": 1, "x_unit_max_restarts": 0, "x_pool_max": 1}
 _X_FRACTIONS = ("x_canary_tolerance", "x_canary_min_overlap", "x_parse_drop_threshold")
 _ORDERED = (("x_query_delay_min_s", "x_query_delay_max_s"), ("x_page_gap_min_s", "x_page_gap_max_s"),
-            ("reddit_request_delay_min_s", "reddit_request_delay_max_s"), ("x_sample_min", "x_sample_n"))
+            ("reddit_request_delay_min_s", "reddit_request_delay_max_s"), ("x_sample_min", "x_sample_n"),
+            ("reddit_degraded_request_budget", "reddit_daily_request_budget"))
 _MAY_BE_ZERO = {"x_backfill_days"}
 
 
@@ -116,6 +127,10 @@ class CollectorConfig:
     x_pinned_version: str = X_DEFAULTS["x_pinned_version"]
     x_accounts: tuple[str, ...] = X_DEFAULTS["x_accounts"]
     x_pool_max: int = X_DEFAULTS["x_pool_max"]
+    reddit_degraded_request_budget: int = REDDIT_DEFAULTS["reddit_degraded_request_budget"]
+    reddit_author_cap: int = REDDIT_DEFAULTS["reddit_author_cap"]
+    reddit_min_mentions: int = REDDIT_DEFAULTS["reddit_min_mentions"]
+    reddit_search_time_filter: str = REDDIT_DEFAULTS["reddit_search_time_filter"]
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -168,7 +183,10 @@ def validate_config(block) -> CollectorConfig:
     for key in X_DEFAULTS:
         if key not in block or not _x_value(key, block[key]):
             raise QueriesError(f"collector: {key} is missing or not a valid value")
-    for key in _INT_KEYS:
+    block = {**REDDIT_DEFAULTS, **block}
+    if block["reddit_search_time_filter"] not in REDDIT_TIME_FILTERS:
+        raise QueriesError(f"collector: reddit_search_time_filter must be one of {', '.join(REDDIT_TIME_FILTERS)}")
+    for key in _INT_KEYS + ("reddit_degraded_request_budget", "reddit_author_cap", "reddit_min_mentions"):
         v = block.get(key)
         floor = 0 if key in _MAY_BE_ZERO else 1
         if not isinstance(v, int) or isinstance(v, bool) or v < floor:
@@ -220,8 +238,9 @@ def validate(doc, placed_symbols=None) -> Queries:
         name = entry.get("name")
         if not isinstance(name, str) or not NAME_RE.fullmatch(name):
             raise QueriesError(f"coins: {sym} name must be 1-40 safe characters (letters, digits, space . ' & -)")
-        if not isinstance(entry.get("cashtag_only", False), bool):
-            raise QueriesError(f"coins: {sym} cashtag_only must be true or false")
+        for flag in ("cashtag_only", "name_only"):
+            if not isinstance(entry.get(flag, False), bool):
+                raise QueriesError(f"coins: {sym} {flag} must be true or false")
         if "x_lang" in entry and not valid_lang(entry["x_lang"]):
             raise QueriesError(f"coins: {sym} x_lang must be a 2-3 letter language code or empty")
         out[sym] = dict(entry)

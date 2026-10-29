@@ -11,7 +11,7 @@ from api.data.attention import web_queries as wq
 LOCKED = {
     "x_query_delay_min_s": 180, "x_query_delay_max_s": 360, "x_daily_post_budget": 800, "x_sample_n": 40,
     "x_sample_min": 20, "x_page_cap": 3, "reddit_request_delay_min_s": 60, "reddit_request_delay_max_s": 120,
-    "reddit_daily_request_budget": 150, "reddit_sample_min": 10,
+    "reddit_daily_request_budget": 250, "reddit_sample_min": 10,
 }
 
 
@@ -28,6 +28,15 @@ def test_committed_file_loads_with_locked_defaults():
     assert q.config.x_backfill_days == 14
     assert {k: wq.DEFAULTS[k] for k in LOCKED} == LOCKED
     assert set(wq.DEFAULTS) == set(q.config.as_dict())
+
+
+def test_reddit_baseline_250_and_separate_degraded_150_budget():
+    assert wq.DEFAULTS["reddit_daily_request_budget"] == 250
+    assert wq.REDDIT_DEFAULTS["reddit_degraded_request_budget"] == wq.REDDIT_DEGRADED_BUDGET == 150
+    c = wq.load().config
+    assert c.reddit_daily_request_budget == 250 and c.reddit_degraded_request_budget == 150
+    absent = {k: v for k, v in c.as_dict().items() if k != "reddit_degraded_request_budget"}
+    assert wq.validate_config(absent).reddit_degraded_request_budget == 150  # the default applies when absent
 
 
 def test_pace_config_rejects_min_above_max_and_nonpositive(doc):

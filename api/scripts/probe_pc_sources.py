@@ -1,15 +1,18 @@
-"""Owner probe for the PC-side X and Reddit collectors (PLAN R-1): argument parser and reporting helpers.
+"""Owner probe for the PC-side X and Reddit collectors (PLAN R-1): argument parser, reporting helpers, Reddit modes.
 
 Run from the repo root:
   uv run --project api python -m api.scripts.probe_pc_sources --source reddit --symbol SOL --feed-depth
+  uv run --project api python -m api.scripts.probe_pc_sources --source reddit --symbol SOL --compare-scope
   uv run --project api python -m api.scripts.probe_pc_sources --source xsearch --reader-status
-W8b ships the parser and the print helpers only; the Reddit modes arrive in W8c and W8c2, the X modes in W8d.
+W8c ships the Reddit modes (P-R2 `--feed-depth`: one `search.rss` request over the subreddit set; P-R5
+`--compare-scope`: the set, then one minute later the first subreddit alone). `--stream-status` arrives in W8c2,
+the other X modes in W8d; those print "not built yet" and exit 2 without sending anything. The probe keeps no budget
+or pause state and stores nothing.
 `--source xsearch --reader-status` (W8d2) reads only local state (no request to X): active over total accounts,
 per label the state, last use and cookie age in days, the pinned-against-installed commit match, the environment
-guard result and the curl fallback status. Every other mode prints "not built yet" and exits 2 without sending
-anything. Output is numbers, statuses
-and exception class names only, never a URL, header, cookie, query or body.
-Exit codes: 0 a report was printed, 2 bad arguments or a mode not built yet.
+guard result and the curl fallback status.
+Output is numbers, statuses and exception class names only, never a URL, header, cookie, query, username or body.
+Exit codes: 0 a report was printed, 2 bad arguments, a coin that is not collected, or a mode not built yet.
 """
 from __future__ import annotations
 
@@ -18,9 +21,11 @@ import math
 import os
 import re
 import sys
+import time
 from datetime import UTC, datetime
 
-from api.data.attention.pc_adapter import describe_error
+from api.data.attention import density, reddit_web, web_queries
+from api.data.attention.pc_adapter import CollectorError, describe_error
 
 SOURCES = ("reddit", "x", "xsearch")
 SYMBOL_RE = re.compile(r"[A-Z0-9_]{1,24}")
@@ -91,15 +96,79 @@ def reader_status() -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def _hours(a: datetime, b: datetime) -> float:
+    return round((a - b).total_seconds() / 3600.0, 2)
+
+
+def _feed_report(label: str, client, url: str, now: datetime, q, symbol: str) -> None:
+    """One request; prints counts, ages in hours and the A.2 result for yesterday, or the error class and status.
+
+    The probe sends no canary: the yesterday value is the one a run with a successful canary would store.
+    """
+    try:
+        entries = reddit_web.parse_feed(reddit_web.fetch_feed(client, url), reddit_web.ephemeral_hasher())
+    except CollectorError as exc:
+        report_error(label, exc)
+        return
+    times = [e.created for e in entries]
+    day = density.completed_day(now)
+    start, end = density.window(day)
+    c = q.config
+    result, missing, tally = reddit_web.count_day(
+        day, entries, coin=reddit_web.reddit_metrics.coin_term(q, symbol), sample_min=c.reddit_sample_min,
+        author_cap=c.reddit_author_cap, canary_ok=True,
+        searched_from=reddit_web.searched_from(now, c.reddit_search_time_filter))
+    print(report_line(
+        label, status=200, entries=len(entries),
+        newest_age_h=_hours(now, max(times)) if times else None, oldest_age_h=_hours(now, min(times)) if times else None,
+        span_h=_hours(max(times), min(times)) if times else None,
+        reaches_window_start=bool(times) and min(times) < start,
+        yesterday_entries=sum(1 for t in times if start <= t < end), matched=tally.matched, counted=tally.counted,
+        yesterday_value=round(result.value, 2) if result else None, capped=bool(result and result.capped),
+        missing=missing is not None))
+
+
+def _reddit(args, client, clock, sleep) -> int:
+    if args.stream_status or not (args.feed_depth or args.compare_scope):
+        mode = "stream_status" if args.stream_status else "default"
+        print(report_line("probe", built=False) + f" source=reddit mode={mode}: not built yet (W8c2)")
+        return 2
+    if args.symbol is None:
+        print(report_line("probe", built=True) + " source=reddit: --symbol is required")
+        return 2
+    q = web_queries.load()
+    terms = reddit_web.search_terms(q, args.symbol)
+    if terms is None:
+        print(report_line("probe", built=True) + " source=reddit: coin skipped (ambiguous or not in the query file)")
+        return 2
+    t = q.config.reddit_search_time_filter
+    own = client is None
+    client = client or reddit_web.make_client()
+    try:
+        if args.feed_depth:
+            _feed_report("feed", client, reddit_web.search_url(q.subreddits, terms, t), clock(), q, args.symbol)
+        else:
+            _feed_report("scope_set", client, reddit_web.search_url(q.subreddits, terms, t), clock(), q, args.symbol)
+            sleep(max(60, q.config.reddit_request_delay_min_s))
+            _feed_report("scope_one", client, reddit_web.search_url(q.subreddits[:1], terms, t), clock(), q,
+                         args.symbol)
+    finally:
+        if own:
+            client.close()
+    return 0
+
+
+def main(argv: list[str] | None = None, *, client=None, clock=None, sleep=None) -> int:
     try:
         args = build_parser().parse_args(argv)
     except SystemExit as exc:
         return 2 if exc.code else 0
     if args.source == "xsearch" and args.reader_status:
         return reader_status()
+    if args.source == "reddit":
+        return _reddit(args, client, clock or (lambda: datetime.now(UTC)), sleep or time.sleep)
     mode = next((m for m in MODES if getattr(args, m)), "default")
-    print(report_line("probe", built=False) + f" source={args.source} mode={mode}: not built yet (W8b core only)")
+    print(report_line("probe", built=False) + f" source={args.source} mode={mode}: not built yet (W8d)")
     return 2
 
 
