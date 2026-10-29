@@ -88,6 +88,7 @@ context-changelog.md (history).
 | testing or verification | `all-context.md`, operating-instructions.md | `tests/all-tests.md` |
 | fresh checkout to populated cache / manual refresh runbook | `all-context.md` | `api/scripts/BOOTSTRAP.md` |
 | deploying to the home PC | `all-context.md`, operating-instructions.md | `deploy/README.md` |
+| omp (PC planner agent) setup, git flow on the PC, PC sync scripts | `all-context.md` | omp-setup.md, then `scripts/pc-sync/README.md` |
 | Master Planner posture, worker envelope, report template | `all-context.md` | `process/development-protocols/master-planner.md` |
 | history of a change or a past finding | `all-context.md` | context-changelog.md |
 | context maintenance | `all-context.md` | run `vc-audit-context` after edits |

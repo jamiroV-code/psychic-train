@@ -48,7 +48,7 @@ This block is byte-identical in CLAUDE.md and AGENTS.md. It decides what a sessi
 
 - Phase locking: stay inside your phase or task scope; no file edits in RESEARCH or INNOVATE; no scope expansion.
 - Approval gates: no implementation without approval. For a PLANNER that is the user's explicit ENTER EXECUTE MODE; for a WORKER it is its envelope. Irreversible or outward-facing actions (push, merge, deploy, deletion, spend) need the approval the envelope names or the user's.
-- Commit policy: a PLANNER session and direct user work commit only when the user asks, directly on `main`. A WORKER commits on its own branch `claude/<task-id>-<slug>` and opens a PR.
+- Commit policy: nobody pushes to `main`. A PLANNER session and direct user work commit only when the user asks, on a branch (`claude/<task-id>-<slug>` or a short descriptive branch) and open a PR; the owner merges. A WORKER commits on its own branch `claude/<task-id>-<slug>` and opens a PR.
 - No secrets in files, commits, prompts or logs.
 - When unsure, stop and report instead of guessing.
 <!-- ENTRY-SET:END -->
