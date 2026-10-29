@@ -60,7 +60,7 @@ def test_pc_scripts_exist_and_have_whatif():
 
 def test_pc_scripts_never_rewrite_history():
     banned = re.compile(
-        r"--force|--force-with-lease|git\s+push\b.*\s-f\b|git\s+(merge(?!-base)|rebase|reset|push\s+origin\s+main)\b",
+        r"--force|--force-with-lease|git\s+push\b.*\s-f\b|git\s+push\b.*\s\+\S|git\s+(merge(?!-base)|rebase|reset|push\s+origin\s+main)\b",
         re.IGNORECASE,
     )
     for p in SCRIPTS.glob("*.ps1"):
@@ -68,6 +68,14 @@ def test_pc_scripts_never_rewrite_history():
             if line.lstrip().startswith("#"):
                 continue
             assert not banned.search(line), f"{p.name}:{n}: {line.strip()}"
+
+
+def test_pc_scripts_keep_safe_flags():
+    assert "--ff-only" in (SCRIPTS / "sync-main.ps1").read_text(encoding="utf-8")
+    push = (SCRIPTS / "push-task-branch.ps1").read_text(encoding="utf-8")
+    assert "--draft" in push
+    # -Branch must never bypass the claude/* check
+    assert "-and -not $Branch" not in push
 
 
 def test_pc_scripts_hold_no_secrets():
