@@ -81,6 +81,9 @@ def test_default_env_does_not_install_or_import_twscrape(monkeypatch):
     # Importing the reader module imports neither the library nor its HTTP backend.
     for name in ("twscrape", "twscrape.models", "curl_cffi"):
         monkeypatch.delitem(sys.modules, name, raising=False)
+    # Re-import a fresh copy; monkeypatch puts back both the sys.modules entry and the package attribute.
+    package, _, attr = tr.__name__.rpartition(".")
+    monkeypatch.setattr(sys.modules[package], attr, tr)
     monkeypatch.delitem(sys.modules, tr.__name__)
     __import__(tr.__name__)
     assert not {"twscrape", "curl_cffi"} & set(sys.modules)
