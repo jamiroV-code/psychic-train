@@ -113,3 +113,104 @@ No blockers. Risks and open points:
 ## 11 Context cost
 
 Files loaded (partly): the PLAN (lines 1-203), the SPEC (targeted lines), `reddit_web.py`, `reddit_items.py`, `reddit_metrics.py`, `pc_pace.py`, `web_evidence.py`, `web_queries.py`, `store.py` (part), `probe_pc_sources.py`, `test_reddit_web.py` (head), `test_web_queries.py`, `test_probe_pc_sources.py` and the guard greps. About 55,000 tokens of files.
+
+## 12 Fix round 1 (29-10-26, owner-approved after the independent review of draft PR #191)
+
+### 1 Task ID
+
+W8c2 fix round 1 on branch `claude/w8c2-reddit-stream` (draft PR #191). Worker: riper-opus, RT2. Inputs: review finding 1 (blocking), owner decisions D1-D3, small fixes S1 and S2.
+
+### 2 Outcome
+
+done
+
+### 3 Summary
+
+- Finding 1: a poll now records `truncated`. Comments paging cut before its floor (budget spent, pause, a failed page, or a last id that is not `t1_`) is stored with `truncated: true`. Its real span still counts toward coverage, but it never settles a day (`_moved_past`). The next poll's paging floor is the newest entry of the last COMPLETE poll, so the gap a truncated poll left is paged again. Natural ends (floor reached, short page, no-progress or empty page, paging off, posts) are not truncated.
+- D1: coverage stays per feed kind over the combined feeds. The module docstring states the owner waiver. The completeness file has `coverage_scope: "feed_kind"`. The probe docstring says per feed kind, never per subreddit. No name, field or probe line claims per-subreddit coverage.
+- D2: the `canary_ok=True` shortcut is gone. `commit_day` passes `CANARY_OK = False` because the stream sends no canary query. The completeness file records `canary_ok: false`. A covered, settled real zero is therefore held back by `density.finalize` (AC3 as written) and stays missing with reason `zero_no_canary` and the coin's `trailing_median` (None without history). Non-zero counts are unaffected.
+- D3: the default `reddit_impl_order` is now `["reddit_web", "reddit_stream"]` (SPEC AC14), in `web_queries.py` and `attention_queries.json`.
+- S1: `stream_status` returns None for a kind that no poll with entries reached on a day. The probe prints `none` there (the probe's existing numbers-only form for an unknown value), never 0.
+- S2: a well-formed empty Atom feed is a recorded poll (`entries` 0, `newest`/`oldest` None, `pages` 0, reason `empty_feed`). It covers and settles nothing, and the kind waits for its interval, so it no longer spends the budget at the 60-120 s spacing.
+
+### 4 Files changed
+
+- `api/data/attention/reddit_stream.py`: `Poll.truncated` (required; `newest`/`oldest` may be None), `_moved_past`, the settle predicate in `day_status`, `_paging_floor`, truncation tracking and the empty-feed poll in `run_poll`, `CANARY_OK` and `COVERAGE_SCOPE`, `commit_day` (`zero_no_canary`, `canary_ok`, `coverage_scope`), `stream_status` (None for unknown coverage), and the module docstring.
+- `api/data/attention/web_queries.py`: `REDDIT_STREAM_DEFAULTS["reddit_impl_order"]` is now `["reddit_web", "reddit_stream"]`.
+- `api/data/attention_queries.json`: the same value for `reddit_impl_order`.
+- `api/scripts/probe_pc_sources.py`: docstring only (per feed kind; `none` = unknown coverage).
+- `api/tests/data/attention/test_reddit_stream.py`: the `P` helper takes `truncated`. 12 new test functions (13 cases):
+  - finding 1: `test_budget_cut_paging_after_midnight_does_not_settle_previous_day`, `test_pause_mid_paging_after_midnight_does_not_settle_previous_day[paused_between_pages|error_on_page_2]`, `test_non_t1_last_id_after_midnight_does_not_settle_previous_day`, `test_complete_paging_after_midnight_settles_previous_day`, `test_poll_after_truncated_poll_pages_back_to_last_complete_poll`, `test_posts_never_send_after`;
+  - S2: `test_empty_feed_recorded_as_poll_and_not_retried_before_interval`, `test_empty_poll_never_settles_a_day`;
+  - D2: `test_covered_settled_real_zero_missing_without_stream_canary`, `test_zero_without_history_stays_missing`;
+  - D1 and S1: `test_coverage_is_per_feed_kind_never_per_subreddit`, `test_stream_status_coverage_unknown_without_polls`.
+
+  Two tests were updated for D3, and no assertion was removed:
+  - `test_methods_never_mixed_in_one_window_config_order` now pins the AC14 config order and still checks a stream-first order explicitly.
+  - `test_fallback_to_posts_only_series_when_comments_missing` uses an explicit stream-first order to keep its meaning, plus the config-order empty case.
+- `api/tests/data/attention/test_web_queries.py`: the pinned default order (D3).
+- `api/tests/scripts/test_probe_pc_sources.py`:
+  - The `Poll(...)` call passes `truncated`.
+  - New test: `test_reddit_stream_status_coverage_none_for_days_without_polls`.
+- This report (this section).
+
+### 5 Commits
+
+- `f844d455589f8ef2b4c1c3a2fc0eb9dcb67e325c`: fix round 1 code and tests (parent `6fb6977e`).
+- The commit that adds this section (its SHA is in the PR).
+
+### 6 Tests run
+
+- Baseline of the owned test files before any change, `UV_FROZEN=1 uv run --project api pytest api/tests/data/attention/test_reddit_stream.py api/tests/data/attention/test_web_queries.py api/tests/scripts/test_probe_pc_sources.py -q -p no:cacheprovider`, 2026-10-29T22:57:17Z, head `6fb6977e`: 84 passed.
+- Red, step 1, same command, 2026-10-29T23:00:58Z, after the tests were written: 39 failed, 59 passed. Most failures were `TypeError: Poll.__init__() takes 7 positional arguments but 8 were given` (the new `truncated` field). The two default-order tests failed on `('reddit_stream', 'reddit_web') == ('reddit_web', 'reddit_stream')`. The empty-feed test failed on `assert (None is not None)` (no poll recorded).
+- Red, step 2, same command, 2026-10-29T23:01:28Z. Only the `truncated` field existed at this point, always False, with the old logic. Result: 14 failed, 84 passed.
+  - The budget, pause/error and non-`t1_` tests failed on `truncated is True` (False).
+  - The floor test failed: the next poll stopped at about 01:30 of D+1 instead of reaching 20:00 of D.
+  - `test_empty_poll_never_settles_a_day` failed with `TypeError: '>=' not supported between NoneType and datetime`.
+  - The AC3 tests failed with `KeyError: 'canary_ok'`, and with `zero_not_stored` and no `trailing_median`.
+  - `coverage_scope` was missing (`KeyError`).
+  - The probe printed `coverage_comments=0` for days without polls.
+  - The two default-order tests failed as in step 1.
+- Red, settle bug reproduced on the old predicate: a throwaway test ran the budget-cut sequence and then `commit_day`. It failed with `assert (True is False)`: the day was settled. The file was deleted after the run and was never committed.
+- Guard, not red-first: `test_posts_never_send_after` checks behaviour that was already correct. It failed in step 1 only through the `Poll` field.
+- Green, same three files, 2026-10-29T23:04:26Z: 98 passed. This is the code committed as `f844d455`. The worktree differs from that commit only in line endings, which `core.autocrlf` converts.
+- Gates, each with `UV_FROZEN=1 uv run --project api pytest <dir> -q -p no:cacheprovider`, on the same code:
+  - `api/tests/data/attention`, 2026-10-29T23:04:48Z to 23:06:15Z: 833 passed, 1 skipped, 0 failed.
+  - `api/tests/tooling_guards`, 23:06:15Z to 23:06:30Z: 128 passed, 0 failed. The known Windows-path failure in `test_cli_guard.py` did not occur in this run.
+  - `api/tests/scripts`, 23:06:30Z to 23:09:13Z: 648 passed, 0 failed, 2 warnings.
+- File set: `git diff --name-only origin/main...f844d455` lists the 7 owned code and test files. This report is the eighth file, added in the next commit.
+- `git diff --check 6fb6977e f844d455`: no output.
+- Hygiene: the added lines (`git diff` against `6fb6977e`, `+` lines) were grepped for these patterns: `bullish|bearish|signal strength|confidence|triggered|confirmed|trust weight|TODO|FIXME`, the repo owner and slug, user paths, `cookie=`, `api key` and `token`. There were no hits.
+
+### 7 Tests NOT run
+
+- The owner probe `--source reddit --stream-status` was not run on a live machine. There is no provider access here, and no live Reddit call was made.
+- No linter ran: `ruff` and `pyflakes` are not in the project environment. New lines are at most 120 characters. The 4 longer lines in these files are older lines.
+
+### 8 Deviations
+
+1. `_paging_floor` changed: it now uses the last complete poll with entries, not simply the last poll. This is part of finding 1. Changing only the settle predicate would not be enough: the next poll's floor would be the truncated poll's newest entry, after D, so it would never page back into the gap. The first complete poll after midnight would then settle D with the gap frozen in. Test: `test_poll_after_truncated_poll_pages_back_to_last_complete_poll`.
+2. A page that fails after earlier pages counts as truncated. This is the same as a pause, because paging stopped before its floor. Test: `test_pause_mid_paging_after_midnight_does_not_settle_previous_day[error_on_page_2]`.
+3. S1 prints `none`, not `n/a`. `report_line` accepts only numbers, booleans and None (printed `none`) and refuses strings, so `none` keeps the output numbers-only.
+4. The empty-feed poll stores `pages` 0, meaning pages with entries, which matches how `pages` already counted. One request was still spent and is counted in `PollOutcome.requests`.
+5. The missing reason `zero_not_stored` became `zero_no_canary`, and the coin entry now carries `trailing_median`.
+
+### 9 Blockers
+
+No blockers. Items for the planner:
+
+- D1 waiver, owner-approved. Coverage is per feed kind over one combined feed per kind, and each kind must reach 0.80. This waives per-subreddit coverage (SPEC AC26 and A.2 M2: per-subreddit feeds, then the mean). The SPEC was not changed. The per-entry subreddit label read from a combined feed stays UNVERIFIED until the owner's probe; counts do not use it.
+- D2 consequence: the stream has no canary query, so under AC3 as written it never stores a zero. Every covered, settled real zero is missing (`zero_no_canary`), whatever the trailing median, so quiet coins will have sparse stream series. A stream zero would need an owner or SPEC decision on what counts as a stream canary. Nothing was guessed here.
+- D2 interpretation: "enough history" was read as "a trailing median exists", meaning at least one stored stream point in the 28 days before D. This is the same rule as `reddit_web` (Q-e). No minimum day count was added. Under the current rule this has no effect, because no zero passes without a canary.
+- D3: PLAN `narrative-baskets-xreddit-collector_PLAN_21-10-26.md` line 184 still says "default `reddit_stream`, `reddit_web`, so a day without comment coverage falls back to the posts-only series", the reverse of SPEC AC14 and of the new default. The planner should update that line. Deviation 5 in heading 8 above is superseded by D3.
+- Heading 9 of the first round said "An empty feed records no poll". That is superseded by S2.
+- Registry request: none.
+
+### 10 Follow-up
+
+- Owner: the `--stream-status` probe after a day of baseline polling, now including how often polls are truncated.
+- Planner and owner, if wanted: a SPEC decision on a stream canary for AC3 zeros.
+
+### 11 Context cost
+
+Files loaded (partly): `reddit_stream.py`, `test_reddit_stream.py`, `density.py`, `web_evidence.py`, `pc_pace.py` (pause and budget API), `store.py` (part), `probe_pc_sources.py` (part), `test_probe_pc_sources.py` (part), SPEC AC3 (line 96) by grep, PLAN line 184 by grep, the review text, and this report. About 40,000 tokens of files. Tools: read, grep, edit, bash (git, uv, pytest).
