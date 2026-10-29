@@ -883,4 +883,3 @@ def test_to_tweet_keeps_missing_counts_as_none_never_zero():
     z = lib_tweet(1849000000000000000)
     z.user.followersCount, z.likeCount = 0, 0
     assert (tr.to_tweet(z).user.followers, tr.to_tweet(z).like) == (0, 0)
-
