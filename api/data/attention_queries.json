@@ -1,6 +1,6 @@
 {
  "version": 1,
- "note": "Owner-editable (SPEC T126 Annex A, Locked pacing rules). collector: pace and budget defaults; ambiguous: coins never collected for that source (missing, never 0); coins: one display name per placed narrative coin, cashtag_only keeps X to the cashtag when the name is a common word. Names and lists are a starting proposal, UNVERIFIED until the owner reviews them. No secrets.",
+ "note": "Owner-editable (SPEC T126 Annex A, Locked pacing rules). collector: pace and budget defaults; ambiguous: coins never collected for that source (missing, never 0); coins: one display name per placed narrative coin, cashtag_only keeps X to the cashtag when the name is a common word; name_only (Reddit mention matching, SPEC A.2b) means the bare ticker word never matches, only the full name or the cashtag. Names and lists are a starting proposal, UNVERIFIED until the owner reviews them. No secrets.",
  "collector": {
   "x_query_delay_min_s": 180,
   "x_query_delay_max_s": 360,
@@ -13,8 +13,12 @@
   "x_backfill_days": 14,
   "reddit_request_delay_min_s": 60,
   "reddit_request_delay_max_s": 120,
-  "reddit_daily_request_budget": 150,
+  "reddit_daily_request_budget": 250,
+  "reddit_degraded_request_budget": 150,
   "reddit_sample_min": 10,
+  "reddit_author_cap": 3,
+  "reddit_min_mentions": 3,
+  "reddit_search_time_filter": "week",
   "x_lang": "en",
   "x_window_syntax": "since_time",
   "x_min_account_age_days": 30,
@@ -114,7 +118,8 @@
    "name": "PancakeSwap"
   },
   "CC": {
-   "name": "Canton Coin"
+   "name": "Canton Coin",
+   "name_only": true
   },
   "CRO": {
    "name": "Cronos",
@@ -130,7 +135,8 @@
    "name": "Ethena"
   },
   "ETC": {
-   "name": "Ethereum Classic"
+   "name": "Ethereum Classic",
+   "name_only": true
   },
   "ETH": {
    "name": "Ethereum"
@@ -142,7 +148,8 @@
    "name": "GRAM"
   },
   "GT": {
-   "name": "GateToken"
+   "name": "GateToken",
+   "name_only": true
   },
   "HBAR": {
    "name": "Hedera"
@@ -151,7 +158,8 @@
    "name": "HTX"
   },
   "HYPE": {
-   "name": "Hyperliquid"
+   "name": "Hyperliquid",
+   "name_only": true
   },
   "ICP": {
    "name": "Internet Computer"
@@ -177,7 +185,8 @@
    "name": "UNUS SED LEO"
   },
   "LINK": {
-   "name": "Chainlink"
+   "name": "Chainlink",
+   "name_only": true
   },
   "LIT": {
    "name": "LIT"
@@ -193,7 +202,8 @@
    "name": "Morpho"
   },
   "NEAR": {
-   "name": "NEAR Protocol"
+   "name": "NEAR Protocol",
+   "name_only": true
   },
   "NEXO": {
    "name": "Nexo"
@@ -215,7 +225,8 @@
    "name": "Pepe"
   },
   "PI": {
-   "name": "Pi Network"
+   "name": "Pi Network",
+   "name_only": true
   },
   "POL": {
    "name": "Polygon",
@@ -225,7 +236,8 @@
    "name": "PRL"
   },
   "PUMP": {
-   "name": "Pump.fun"
+   "name": "Pump.fun",
+   "name_only": true
   },
   "QNT": {
    "name": "Quant",

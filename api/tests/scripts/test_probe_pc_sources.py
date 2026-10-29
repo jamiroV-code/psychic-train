@@ -1,9 +1,11 @@
-"""W8b: owner probe tool skeleton (parser and reporting helpers only; no network, no source modes yet)."""
+"""W8b/W8c: owner probe tool (parser, reporting helpers, Reddit modes on fake clients; no network)."""
 from __future__ import annotations
 
 import ast
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import httpx
 import pytest
 
 from api.data.attention import pc_adapter as pa
@@ -32,7 +34,7 @@ def test_parser_rejects_unknown_source_and_bad_symbol():
 
 
 def test_modes_not_built_in_w8b_exit_2_without_network(capsys):
-    assert probe.main(["--source", "reddit", "--symbol", "SOL", "--feed-depth"]) == 2
+    assert probe.main(["--source", "reddit", "--stream-status"]) == 2
     assert probe.main(["--source", "x", "--symbol", "SOL"]) == 2
     out = capsys.readouterr().out
     assert "not built yet" in out
@@ -65,3 +67,68 @@ def test_probe_script_imports_no_network_module():
             mods.add(node.module)
     banned = ("requests", "httpx", "socket", "urllib", "playwright", "http.client")
     assert not [m for m in mods if any(m == b or m.startswith(b + ".") for b in banned)]
+
+
+# --- W8c Reddit modes (P-R2 feed depth, P-R5 compare scope); fake clients only ---
+
+NOW = datetime(2026, 10, 27, 10, 0, tzinfo=timezone.utc)
+
+
+def _feed(hours_back: list[float]) -> bytes:
+    entries = "".join(
+        f'<entry><author><name>/u/PlantedUser</name></author><category term="CryptoCurrency"/>'
+        f'<id>t3_{i + 1:x}</id><title>Solana</title><updated>{(NOW - timedelta(hours=h)).isoformat()}</updated></entry>'
+        for i, h in enumerate(hours_back))
+    return f'<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">{entries}</feed>'.encode()
+
+
+def _client(respond, seen):
+    def handler(req):
+        seen.append(req)
+        return respond(req)
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def test_reddit_feed_depth_prints_counts_and_statuses_only(capsys):
+    seen = []
+    body = _feed([1, 5, 12, 20, 30, 40])  # yesterday (26 Oct) holds the entries 12, 20 and 30 h back
+    client = _client(lambda req: httpx.Response(200, content=body, headers={"content-type": "application/atom+xml"}),
+                     seen)
+    code = probe.main(["--source", "reddit", "--symbol", "SOL", "--feed-depth"], client=client, clock=lambda: NOW,
+                      sleep=lambda s: None)
+    out = capsys.readouterr().out
+    assert code == 0 and len(seen) == 1
+    assert "feed status=200 entries=6 newest_age_h=1 oldest_age_h=40 span_h=39 reaches_window_start=true" in out
+    assert "yesterday_entries=3" in out
+    for leak in ("reddit.com", "Solana", "PlantedUser", "search.rss", "attention-probe"):
+        assert leak not in out
+
+
+def test_reddit_compare_scope_two_requests_a_minute_apart(capsys):
+    seen, waits = [], []
+    client = _client(lambda req: httpx.Response(200, content=_feed([1, 2, 30])), seen)
+    code = probe.main(["--source", "reddit", "--symbol", "SOL", "--compare-scope"], client=client, clock=lambda: NOW,
+                      sleep=waits.append)
+    out = capsys.readouterr().out
+    assert code == 0 and len(seen) == 2 and waits and min(waits) >= 60
+    assert "/r/CryptoCurrency/search.rss" == seen[1].url.path and "+" in seen[0].url.path
+    assert "scope_set status=200 entries=3" in out and "scope_one status=200 entries=3" in out
+    assert "reddit.com" not in out
+
+
+def test_reddit_probe_block_prints_class_and_status(capsys):
+    seen = []
+    client = _client(lambda req: httpx.Response(403, content=SECRET.encode()), seen)
+    code = probe.main(["--source", "reddit", "--symbol", "SOL", "--feed-depth"], client=client, clock=lambda: NOW,
+                      sleep=lambda s: None)
+    out = capsys.readouterr().out
+    assert code == 0 and "feed error=RedditBlocked status=403" in out and "PLANTED" not in out
+
+
+def test_reddit_probe_needs_a_collectable_symbol(capsys):
+    seen = []
+    client = _client(lambda req: httpx.Response(200, content=_feed([1])), seen)
+    assert probe.main(["--source", "reddit", "--feed-depth"], client=client) == 2
+    assert probe.main(["--source", "reddit", "--symbol", "SKY", "--feed-depth"], client=client) == 2
+    assert seen == []
+    assert "ambiguous" in capsys.readouterr().out
