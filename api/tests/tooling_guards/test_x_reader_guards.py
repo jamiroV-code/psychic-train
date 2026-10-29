@@ -93,6 +93,12 @@ def test_default_env_does_not_install_or_import_twscrape(monkeypatch):
     assert lazy == {"load_library"}
 
 
+def test_reimport_check_leaves_the_original_module_in_place():
+    # Runs after the re-import above (file order): later tests patch `tr` and must reach it by either route.
+    import api.data.attention as pkg
+    assert sys.modules[tr.__name__] is tr and pkg.twscrape_reader is tr
+
+
 def test_no_network_import_at_module_level_and_subprocess_only_in_the_child_runner():
     top = _module_level_imports(TREE)
     assert not _roots(top, NETWORK_ROOTS + LIBRARY_ROOTS), sorted(top)
