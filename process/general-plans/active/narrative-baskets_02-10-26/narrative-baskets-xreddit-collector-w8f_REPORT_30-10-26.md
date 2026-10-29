@@ -25,6 +25,7 @@ review (done with the deviations in heading 8; CI result in heading 6)
 - `api/models/discovery.py` (2 additive fields on `DiscoverySourceRow`)
 - `api/data/discovery.json`
 - `api/tests/analytics/attention/test_discovery_wiring.py` (new)
+- `api/tests/routers/test_discovery.py` (one line: the exact Sources row key set now includes `reason` and `impl`; outside the envelope's file list, see heading 8 item 8)
 - this report
 
 `api/data/attention_pc_refresh.py` was NOT edited: its default `FETCH_SIDE` already equals the validated config, and its raw read of `fetch_side` gives `[xsearch_web, reddit_web]` on the shipped file (both asserted in `test_fetch_side_rejects_unknown_value`).
@@ -42,7 +43,7 @@ review (done with the deviations in heading 8; CI result in heading 6)
 - After: `pytest api/tests/analytics/attention -q` (full run before the last fixture fix): 2 failed, 392 passed (394 = baseline 379 + 15 new); the 2 failures were the same Windows-only test and `test_sources_row_shows_reason_code` (fixture bug, heading 8 item 6). After that fix `test_discovery_wiring.py` alone: 15 passed, so the suite is 393 passed + the 1 Windows-only failure. No existing discovery or sources test was changed or deleted.
 - `api/tests/routers -k "discovery or narrative or sources"`: on main 32 failed, 25 passed; on this branch every failure shown was "handler must not reach the network" (Windows host issue, not chased per envelope; the branch's summary line was cut off, so the branch count is not recorded).
 - Red test names from the PLAN, all present: `test_fetch_side_rejects_unknown_value`, `test_source_impl_reads_web_store`, `test_two_methods_never_spliced`, `test_pc_off_gap_rescales_not_zero`, `test_t96_lag_drops_source`, `test_point_in_time_truncate_recompute_identical`, `test_backfilled_flag_excludable`, `test_sources_row_shows_reason_code`, `test_rotation_three_points_scores`, `test_rotation_fewer_than_three_points_is_missing`, `test_rotation_lag_uses_x_rotation_max_lag_days`, `test_other_sources_keep_seven_day_window`, `test_window_mode_reproduces_current_x_behaviour`, `test_rotation_point_in_time_truncate_identical`; plus `test_shipped_config_selects_web_methods_and_rotation`.
-- CI (PR #193): see the PR checks; result recorded in the worker's final message (this file is committed before CI finishes).
+- CI (PR #193), first run on the report commit: `web` pass; `api — pytest` FAILED with 1 failed, 2948 passed: `api/tests/routers/test_discovery.py::test_sources_route_shape_and_no_network` asserts the exact Sources row key set, and the 2 new model fields broke it. Fixed in a follow-up commit (heading 8 item 8); the CI result of that commit is in the worker's final message.
 
 ## 7 Tests NOT run
 
@@ -58,6 +59,7 @@ review (done with the deviations in heading 8; CI result in heading 6)
 5. `source_impl` with a list implements AC14's `reddit_impl_order` as part of `source_impl` (no separate `reddit_impl_order` key); the "first method with enough points" is the first store that yields a change for that coin and window.
 6. Two red tests were corrected after the red commit (test bugs, not behaviour changes): `test_backfilled_flag_excludable` marked the newest recent day, which correctly re-anchors the window, so it now marks an inner recent day; the `test_sources_row_shows_reason_code` fixture took weights v1 (END is before the v3 cut-over) and now takes the shipped current weights.
 7. The `x_*` keys live in `discovery.json` (where discovery validation is), not in `attention_queries.json` (open PR #191 untouched).
+8. `api/tests/routers/test_discovery.py` is outside the envelope's file list: its exact-key contract for a Sources row had to gain `reason` and `impl`, the 2 fields the PLAN's "reason codes on the Sources row" needs. One line; nothing else in that file changed.
 
 ## 9 Blockers
 
