@@ -869,3 +869,18 @@ def test_logs_class_and_status_only_planted_secrets(tmp_path, lib, capsys):
     out = capsys.readouterr()
     assert SECRET not in out.out + out.err
     s.close()
+
+
+def test_to_tweet_keeps_missing_counts_as_none_never_zero():
+    t = lib_tweet(1849000000000000000)
+    for obj, name in ((t.user, "followersCount"), (t.user, "statusesCount"), (t, "likeCount"), (t, "replyCount"),
+                      (t, "quoteCount"), (t, "retweetCount"), (t, "viewCount")):
+        setattr(obj, name, None)
+    out = tr.to_tweet(t)
+    assert (out.user.followers, out.user.statuses) == (None, None)
+    assert (out.like, out.reply, out.quote, out.retweet, out.views) == (None, None, None, None, None)
+    # A present zero stays zero.
+    z = lib_tweet(1849000000000000000)
+    z.user.followersCount, z.likeCount = 0, 0
+    assert (tr.to_tweet(z).user.followers, tr.to_tweet(z).like) == (0, 0)
+
