@@ -500,14 +500,19 @@ def _aware(ts):
     return ts
 
 
+def _count(value) -> int | None:
+    """A library count as int; a missing count stays None (never read as 0)."""
+    return None if value is None else int(value)
+
+
 def to_tweet(t) -> x_filters.Tweet:
     u = t.user
-    user = x_filters.XUser(int(u.id), _aware(u.created), int(u.followersCount or 0), int(u.statusesCount or 0),
+    user = x_filters.XUser(int(u.id), _aware(u.created), _count(u.followersCount), _count(u.statusesCount),
                            u.profileImageUrl or "", bool(u.protected))
     rt = getattr(t, "retweetedTweet", None)
     return x_filters.Tweet(int(t.id), _aware(t.date), t.rawContent or "", user, t.lang or "", tuple(t.cashtags or ()),
-                           int(rt.id) if rt is not None else None, t.inReplyToTweetId, int(t.likeCount or 0),
-                           int(t.replyCount or 0), int(t.quoteCount or 0), int(t.retweetCount or 0), t.viewCount)
+                           int(rt.id) if rt is not None else None, t.inReplyToTweetId, _count(t.likeCount),
+                           _count(t.replyCount), _count(t.quoteCount), _count(t.retweetCount), t.viewCount)
 
 
 def window_query(terms: str, *, start: datetime, end: datetime, lang: str) -> str:
@@ -887,7 +892,9 @@ def main(argv: list[str] | None = None) -> int:
         refresh_cookies(args.refresh_cookies, cookies, config=web_queries.load().config,
                         now=datetime.now(UTC))
     except (XStartRefused, RefreshFailed, ValueError) as e:
-        print(f"refresh status={_word(type(e).__name__)} detail={_word(getattr(e, 'reasons', None) and ','.join(e.reasons))}")
+        reasons = getattr(e, "reasons", None)
+        detail = ",".join(reasons) if reasons else reasons
+        print(f"refresh status={_word(type(e).__name__)} detail={_word(detail)}")
         return 2
     print(f"refresh status=ok label={_word(args.refresh_cookies)}")
     return 0
