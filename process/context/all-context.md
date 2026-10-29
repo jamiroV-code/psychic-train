@@ -123,7 +123,7 @@ When durable project knowledge changes:
 
 Top level: `web/` (Next.js app, Svelte chart islands, Playwright e2e), `api/` (FastAPI: routers,
 analytics, data adapters plus Parquet cache, models, scripts, tests), `deploy/` (home-PC PowerShell
-launchers), `.github/workflows/` (`ci.yml` plus five nightly snapshot/refresh jobs), `process/`
+launchers), `.github/workflows/` (`ci.yml` plus six nightly snapshot/refresh jobs), `process/`
 (agent harness: context, protocols, plans, `MASTER-PLAN.md`, archive index), `.claude/`, `.codex/`,
 `.agents/` (agent and skill surfaces).
 

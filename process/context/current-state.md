@@ -2,52 +2,61 @@
 name: context:current-state
 description: "Observed, timestamped state of the repo: commit, workflows, tests, validator results, scheduled-job evidence, and what is unverified. Re-verify when stale."
 keywords: current state, status, branch, commit, working tree, validators, baseline, ground truth, stale, verified, unverified, snapshot, cron
-date: 21-10-26
+date: 29-10-26
 ---
 
 # Current State
 
-**Stamp: commit `faf416b` (`origin/main`, PR #144 merge, last code merge), observed 2026-10-21 (UTC) from branch `claude/t118-process-catch-up` (`origin/main` plus process docs).** Nightly data-snapshot bot commits sit below it. The previous full state (stamp `bfb7793`, 13-10-26: screener batches, PC run-book, old validator table, next actions) is verbatim in `process/archive/current-state-archived_21-10-26.md`.
+**Stamp: commit `4b3f70a` (`origin/main`, PR #189 merge, a docs-only PLAN fix; last code merge is PR #186 at `b573309`), observed 2026-10-29 (UTC) from branch `claude/t221-docs-catchup-exec` (`origin/main` plus the T221 docs).** Nightly data-snapshot bot commits sit below it. The previous state (stamp `faf416b`, 21-10-26) is verbatim in `process/archive/current-state-archived_29-10-26.md`; the one before in `process/archive/current-state-archived_21-10-26.md`.
 
-Staleness rule (master-planner.md): stale when the stamp is not an ancestor of HEAD or when more than 10 non-cache commits landed since it (`git log faf416b..HEAD --oneline -- . ':(exclude)api/data/cache' | wc -l`). Nightly bot commits do not make it stale.
+Staleness rule (master-planner.md): stale when the stamp is not an ancestor of HEAD or when more than 10 non-cache commits landed since it (`git log 4b3f70a..HEAD --oneline -- . ':(exclude)api/data/cache' | wc -l`). Nightly bot commits do not make it stale.
 
-## Observed
+## Observed (29-10-26)
 
 | Fact | Value | Command |
 |---|---|---|
-| Last code merges | PR #145 (T113, U1) and PR #144 (T114, U4), 2026-10-21 | `git log --merges` |
-| Open PR | #146 (T115, U2), draft | GitHub API |
+| Last code merges | #185 (T210, W8c) 2026-10-29 18:52Z; #187 (T217, docs and PC scripts) 19:22Z; #186 (T212, W8d2) 19:23Z | `gh pr list --state merged --json number,mergedAt` |
+| Open PRs | none when read (before the T221 EXECUTE draft PR was opened; that PR waits for the owner's merge, D-28) | `gh pr list --state open`, 2026-10-29 |
 | Workflows | 7: `ci.yml`, `attention-refresh.yml`, `chain-growth-snapshot.yml`, `liqtide-snapshot.yml`, `liquidity-backfill-snapshot.yml`, `narrative-snapshot.yml`, `pairs-refresh-snapshot.yml` | `ls .github/workflows` |
-| Scheduled attention refresh | commits `attention refresh` landed on 18, 19 and 20 Oct 2026 (also `attention extra refresh`, narrative, chain-growth and liqtide snapshots); runs start late | `git log origin/main --format='%ad %s'` |
-| Frozen signal snapshots | 9 tracked files under `api/data/cache/attention/signals/` (3 windows x 17, 18, 19 Oct); the count grows daily | `git ls-files api/data/cache/attention/signals \| wc -l` |
-| Owner probe P-CG (U4, T114) | passed 2026-10-21 on the owner's PC, local cache (planner-reported, not verified here): `coingecko: 90/92 ok, 3605 rows written [ok 90, insufficient-history 2]`; was 56 of 103 ok before U4; runtime about 9 min, not yet reported | owner run |
-| `.agents/skills` | not a symlink to `.claude/skills` (baseline validator failure) | `validate-context-discovery` |
+| `ci.yml` on main | success on `b573309` (#186) and `c06d91d` (#188); the run on `4b3f70a` was still in progress when read | `gh run list --workflow ci.yml --branch main --limit 5` |
+| Scheduled attention refresh | `chore: attention refresh` commits on 26, 27, 28 and 29 Oct 2026 | `git log origin/main --grep='attention refresh' --format=%ad --date=short` |
+| Frozen signal snapshots | 36 tracked files under `api/data/cache/attention/signals/`; the count grows daily | `git ls-files api/data/cache/attention/signals \| wc -l` |
+| `.agents/skills` | not a symlink to `.claude/skills` (validator failure) | `validate-context-discovery` |
 
-## Tests and CI (worker report, not re-run here)
+## Tests (worker reports in merged PR bodies, not re-run here)
 
-From the T115 PR body on `faf416b`: full API 1684 passed, 1 skipped, 5 deselected; web vitest 558 in 62 files; tsc exit 0. Playwright e2e is not in CI. The CI state of the merged PRs was not re-read for this stamp (UNVERIFIED).
+- #185: full `pytest api` 2842 passed, 1 skipped, 5 deselected. #186: full `api` suite 2803 passed, 1 skipped, 5 deselected. #187: 2755 passed on its first run; the tooling_guards folder (106 tests) was re-run green after a fix, the full suite was not re-run.
+- Web vitest and tsc for these PRs: UNVERIFIED (not read). Playwright e2e is not in CI.
 
-## Validator results (run 2026-10-21 on this branch)
+## Validator results (run 2026-10-29 on the owner PC, CRLF checkout)
 
 | Validator | Result |
 |---|---|
-| validate-context-discovery | 1 failure: `.agents/skills does not resolve to .claude/skills` (baseline, same on `main`) |
-| other validators | see the T118 report; baseline failures as before (`validate-backlog-notes` 45 older notes; plan-inventory and agent-parity warnings) |
+| validate-context-discovery | 54 failures, 11 warnings, mostly "missing name/description frontmatter" and backslash-path "not indexed" lines [INFERENCE: CRLF and Windows path separators]; the cloud baseline of 1 failure (`.agents/skills`) is history |
+| validate-all-context | `failures: []` |
 
 ## What runs
 
-Screener, equities, Baskets (P5), data integration tooling (P9) and the weighted Discovery signal (P10: W1 scoring, W2 history endpoint, W3 chart, W9 daily frozen snapshots) are merged. Universe and narratives: U1 and U4 merged, U2 in review, U3 U5 U6 queued. Registry: `process/MASTER-PLAN.md`; decisions D-22..D-26 in decisions.md.
+- Screener and equities; Baskets (P5); data integration tooling (P9).
+- Discovery and weighted signal (P10): W1-W3, W9; weights v2 (PR #156); CoinGecko volume fallback counts for coverage only (PR #183).
+- Universe and narratives: U1 #145, U2 #146, U3 #151, U4 #144, U6 #160 merged; `U5 UNVERIFIED`. D-27: exchange tokens are IN as a narrative, supersedes D-20 (PR #160).
+- Trends: T100a (#152 and follow-ups), T100b (#162), T100c daily workflow (#170), point-in-time reads (#172), further fixes and probes (#149-#184, see `process/MASTER-PLAN-board-2_29-10-26.md`).
+- W8 collector slices merged: W8a vetting (#158, #169), W8b core (#161), W8c Reddit (#185), W8d1 X core (#173), W8d2 X reader (#186). SPEC and PLAN docs: #153, #167.
+- Docs and process: #147, #168, #187 (git flow D-28; `scripts/pc-sync/` merged, never run: UNVERIFIED); omp setup: `process/context/omp-setup.md`. Registry: `process/MASTER-PLAN.md` and the board-2 file; decisions D-22..D-28 in decisions.md.
+
+## Planner and worker spend
+
+About 188 of the 200 USD ceiling (planner figures, 21-10-26). Spend after 21-10-26 is UNVERIFIED.
 
 ## Not run or unverified
 
-- Live provider reachability from the cloud (providers unreachable); the owner's PC (deployed app, Task Scheduler, Tailscale).
-- Open owner probes from the 13-10-26 state (P-S1-1, P-S2-1, P-S8-1, P-S4-1, P-S5a-1, P-S5b-1, P-S6-1, P-S7-1, P-S9-2, P-S9-3, P-S11-2 the 25 Oct 2026 DST change; BTC deep backfill).
-- Reddit API access: requested by the owner on 18-10-26, awaiting approval; X stays off.
-- Calibration of the weighted signal: scheduled checks on 2027-01-18 and 2027-04-18 (MASTER-PLAN P10).
-- Independent review: T96-T107 and part of T113 and T114 were merged before it (D-26).
+- Live provider reachability from the cloud; the owner's PC (deployed app, Task Scheduler, Tailscale). Open owner probes from 13-10-26 (P-S1-1, P-S2-1, P-S8-1, P-S4-1, P-S5a-1, P-S5b-1, P-S6-1, P-S7-1, P-S9-2, P-S9-3, P-S11-2, BTC deep backfill): each UNVERIFIED (no newer evidence read).
+- Reddit API request of 18-10-26 and X: W8c and W8d2 code merged; access or enablement status UNVERIFIED.
+- Weighted-signal calibration checks on 2027-01-18 and 2027-04-18 (still future).
+- Independent review: T96-T107 and part of T113 and T114 were merged before it (D-26); T117 (review of T115): no report found, UNVERIFIED. Every merged row since #145 is `review`.
 
 ## Next actions
 
-1. Finish T115 review (T117), then slices U3, U5, U6 in full RIPER-5 (D-26).
-2. Owner: probes above; Reddit access; weights are the owner's call (D-24).
-3. Archive of finished plan folders and worker sessions only on the owner's go.
+1. The owner reviews and merges the T221 EXECUTE PR (D-28) and reads the report-heading-9 owner flags.
+2. Re-verify this state at the next planner session.
+3. Owner probes above.

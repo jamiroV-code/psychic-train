@@ -913,3 +913,5 @@ may be redistributed. See Licensing in `data-sources/all-data-sources.md`.
 - 22-10-26 (T146, docs only): decisions.md D-27 added (exchange tokens are IN as a narrative, supersedes D-20; D-20 status and index row set to superseded by D-27); D-25 consequences line refreshed.
 
 - 29-10-26 (T217, docs and tooling): D-28 added (nobody pushes to main; branch plus PR; owner merges); commit rule reworded in CLAUDE.md, AGENTS.md, implementation-standards.md, master-planner.md, operating-instructions.md; `scripts/pc-sync/` and `process/context/omp-setup.md` added; guard `api/tests/tooling_guards/test_git_flow_guard.py`.
+
+- 29-10-26 (T221, docs only): omp-setup.md rewritten from the owner probe of 2026-10-29 (OBSERVED, DOCUMENTED, UNVERIFIED tags; phase-to-agent table); current-state.md and MASTER-PLAN.md caught up to #187 (rows T119-T221 rebuilt from `gh` and git only; old text verbatim in `process/archive/`); the worker self-merge text in master-planner.md and operating-instructions.md replaced by the D-28 owner-merges rule (the 02-10-26 quote kept as history, superseded by D-28); all-context.md workflow count fixed to six nightly jobs.
