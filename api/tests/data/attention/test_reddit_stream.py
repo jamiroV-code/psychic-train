@@ -91,17 +91,18 @@ class Fake:
         return httpx.Client(transport=httpx.MockTransport(self))
 
 
-def live_stream(clock: Clock, *, comments_span_h: float = 15.0, posts_span_h: float = 72.0):
-    """A responder whose feeds follow the injected clock: the newest 100 entries before `now`, or before `after`."""
+def live_stream(clock: Clock, *, comments_span_h: float = 15.0, posts_span_h: float = 72.0, depth: int = 10_000):
+    """A responder whose feeds follow the injected clock: the newest 100 entries before `now`, or before `after`.
+    The feed holds its newest `depth` entries only (Reddit's listing depth): paging past them returns an empty page."""
     def respond(req: httpx.Request) -> httpx.Response:
         now = clock()
         after = parse_qs(urlsplit(str(req.url)).query).get("after")
         kind, span = ("t1", comments_span_h) if "/comments/" in req.url.path else ("t3", posts_span_h)
-        times = stream_times(now, span_h=span)
+        deep = stream_times(now, span_h=span, count=depth)
+        times = deep[:100]
         if after:
-            deep = stream_times(now, span_h=span, count=10_000)
-            last = next(w for w in deep if rid(kind, w) == after[0])
-            times = [w for w in deep if w < last][:100]
+            last = next((w for w in deep if rid(kind, w) == after[0]), None)
+            times = [w for w in deep if w < last][:100] if last is not None else []
         return httpx.Response(200, content=atom([entry(rid(kind, w), w) for w in times]),
                               headers={"content-type": "application/atom+xml"})
     return respond
@@ -131,9 +132,14 @@ def poll(q, clock, respond, *, kind="comments", led=None, s=None, degraded=False
     return out, fake
 
 
+FAR_BACK = at(-24 * 30)
+
+
 def P(kind: str, oldest: datetime, newest: datetime, collected: datetime | None = None, entries: int = 100,
-      truncated: bool = False) -> rs.Poll:
-    return rs.Poll(kind, collected or newest + timedelta(minutes=1), newest, oldest, entries, 1, truncated)
+      truncated: bool = False, floor: datetime | None = FAR_BACK) -> rs.Poll:
+    """A stored poll. Its default floor lies far back: a complete poll stopped at the feed's end, not at its floor,
+    so a hole before it is unreachable (fix round 2); pass `floor` to model a poll that reached a nearer floor."""
+    return rs.Poll(kind, collected or newest + timedelta(minutes=1), newest, oldest, entries, 1, truncated, floor)
 
 
 def record(*polls: rs.Poll) -> None:
@@ -707,3 +713,154 @@ def test_stream_status_coverage_unknown_without_polls(q):
     for other in (D - timedelta(days=1), D + timedelta(days=1)):
         assert st["days"][other.isoformat()]["coverage_comments"] is None
         assert st["days"][other.isoformat()]["coverage_new"] is None
+
+
+# --- fix round 2: the floor reaches back to the last complete poll, however old; a day settles only through
+# --- continuity or the feed's end (review finding: aged-out floor undercount)
+
+def _cut_poll(q, led, when: datetime) -> rs.PollOutcome:
+    """A comments poll at `when` that the day's budget cuts after its first page (stored as truncated)."""
+    clock = Clock(when)
+    s = src(q, clock)
+    s.spend(s.remaining() - 1)
+    out, fake = poll(q, clock, live_stream(clock, comments_span_h=1), led=led, s=s)
+    assert len(fake.requests) == 1 and out.poll.truncated is True
+    return out
+
+
+def _full_poll(q, led, when: datetime, **feed) -> rs.PollOutcome:
+    clock = Clock(when)
+    out, _ = poll(q, clock, live_stream(clock, **feed), led=led)
+    assert out.reason is None and out.poll.truncated is False
+    return out
+
+
+def _comments_of_d_from(h: float, span_h: float) -> set[str]:
+    """The ids of every comment the fake feed holds created in [D h:00, D's end)."""
+    return {rid("t1", w) for w in stream_times(at(24), span_h=span_h, count=2000) if at(h) <= w < at(24)}
+
+
+def _settled_full(q, led, now: datetime, span_h: float) -> None:
+    """D settles with full comments coverage and the count of every comment of D 20:00-24:00 (no undercount)."""
+    doc = rs.commit_day(D, q, led, now=now)
+    assert doc["settled"] is True and doc["coverage"] == {"comments": 1.0, "new": 1.0} and doc["partial"] is False
+    seen = rs.read_seen(D)
+    assert _comments_of_d_from(20, span_h) <= seen
+    assert doc["coins"]["SOL"]["reason"] == "fetched" and dict(store.read_points(rs.SOURCE, "SOL"))[D] == len(seen)
+    assert doc["gap_unreachable"]["comments"] == {"hours": 0.0, "spans": []}
+
+
+def test_two_budget_cut_polls_then_complete_poll_reaches_aged_out_floor_no_undercount(q):
+    """(a) Complete at D 20:00, cut on D+1 and on D+2, complete on D+3: the D 20:00 poll is older than the due
+    window, yet the complete poll pages back to its newest entry, so D is never settled on 20 h of comments."""
+    led = ledger()
+    _d_covered_to_20h(q, led)
+    _cut_poll(q, led, at(26))
+    _cut_poll(q, led, at(50))
+    out = _full_poll(q, led, at(74), comments_span_h=3)
+    assert out.poll.floor == at(20) and out.poll.oldest <= at(20)
+    _full_poll(q, led, at(76), comments_span_h=3)  # a poll wholly after D
+    _settled_full(q, led, at(77), 3)
+
+
+def test_host_off_for_a_day_then_complete_poll_reaches_aged_out_floor_no_undercount(q):
+    """(b) Complete at D 20:00, the host off all of D+1, complete on D+2."""
+    led = ledger()
+    _d_covered_to_20h(q, led)
+    out = _full_poll(q, led, at(58), comments_span_h=3)
+    assert out.poll.floor == at(20) and out.poll.oldest <= at(20)
+    _full_poll(q, led, at(60), comments_span_h=3)
+    _settled_full(q, led, at(61), 3)
+
+
+def test_truncated_poll_then_complete_poll_past_due_window_settles_previous_day(q):
+    """(e) Continuity with an aged-out complete poll: cut on D+1, complete on D+2 pages back to D 20:00."""
+    led = ledger()
+    _d_covered_to_20h(q, led)
+    _cut_poll(q, led, at(26))
+    out = _full_poll(q, led, at(58), comments_span_h=3)
+    assert out.poll.floor == at(20) and out.poll.oldest <= at(20)
+    _full_poll(q, led, at(60), comments_span_h=3)
+    _settled_full(q, led, at(61), 3)
+
+
+def test_paging_floor_uses_complete_poll_older_than_due_window(q):
+    """(c) The newest entry of the last complete poll, looked up across every stored poll file."""
+    record(P("comments", at(-3), at(20), collected=at(20)),
+           P("comments", at(25), at(26), collected=at(26), truncated=True),
+           P("comments", at(49), at(50), collected=at(50), truncated=True),
+           P("new", at(-30), at(51), collected=at(51)))
+    assert not [p for p in rs._recent_polls(q, at(58)) if p.kind == "comments" and not p.truncated]
+    assert rs._paging_floor("comments", at(58)) == at(20)
+    assert rs._paging_floor("comments", at(24 * 6)) == at(20)
+    assert rs._paging_floor("new", at(58)) == at(51)
+
+
+def test_paging_floor_without_complete_poll_falls_back_then_first_complete_poll_anchors(q):
+    """(d) No complete poll: the start of the newest completed day; the first complete poll reaches it, stores it
+    as its floor, and the next floor is that poll's newest entry."""
+    assert rs._paging_floor("comments", at(30)) == at(0)
+    record(P("comments", at(25), at(26), collected=at(26), truncated=True))
+    assert rs._paging_floor("comments", at(30)) == at(0)
+    out = _full_poll(q, ledger(), at(30), comments_span_h=3)
+    assert out.poll.floor == at(0) and out.poll.oldest <= at(0)
+    assert rs._paging_floor("comments", at(32)) == out.poll.newest
+    assert rs.read_polls(D + timedelta(days=1), D + timedelta(days=1))[-1].floor == at(0)
+
+
+def test_day_with_only_truncated_polls_never_settles_through_fallback_floor(q):
+    """A truncated poll left 20:00-24:00 of D unpaged; the first complete poll (D+2) pages back to the fallback floor
+    (D+1 00:00) only, so nothing reached D's hole: D stays missing (`not_settled`), never stored at 0.83."""
+    led = ledger()
+    poll(q, Clock(at(12)), ok(atom([entry(f"t3_h{i}", at(1 + i)) for i in range(4)])), kind="new", led=led)
+    record(*full_posts(), P("comments", at(0), at(20), collected=at(20), truncated=True))
+    out = _full_poll(q, led, at(58), comments_span_h=3)
+    assert out.poll.floor == at(24)
+    _full_poll(q, led, at(60), comments_span_h=3)
+    _not_settled(q, led, at(61))
+
+
+@pytest.mark.parametrize("anchor_h,reason", [(20, "fetched"), (12, "below_coverage")])
+def test_gap_beyond_feed_depth_is_unreachable_reported_and_never_stored_as_full(q, anchor_h, reason):
+    """(I3) The host was off; the feed holds 36 h only, so the complete poll ends at the feed's end before its floor.
+    D settles on what was covered: partial at or above 0.80, missing below; the hole is reported in hours."""
+    led = ledger()
+    poll(q, Clock(at(12)), ok(atom([entry(f"t3_h{i}", at(1 + i)) for i in range(4)])), kind="new", led=led)
+    record(*full_posts(), P("comments", at(-3), at(anchor_h), collected=at(anchor_h)))
+    out = _full_poll(q, led, at(58), comments_span_h=3, depth=1200)
+    assert out.poll.floor == at(anchor_h) and at(22) <= out.poll.oldest < at(24)  # stopped at the feed's end
+    _full_poll(q, led, at(60), comments_span_h=3)
+    doc = rs.commit_day(D, q, led, now=at(61))
+    hole_h = (out.poll.oldest - at(anchor_h)).total_seconds() / 3600
+    assert doc["settled"] is True and doc["coverage"]["comments"] == pytest.approx(1 - hole_h / 24, abs=1e-6)
+    assert doc["gap_unreachable"]["comments"] == {"hours": pytest.approx(hole_h, abs=1e-6),
+                                                  "spans": [[at(anchor_h).isoformat(), out.poll.oldest.isoformat()]]}
+    assert doc["gap_unreachable"]["new"] == {"hours": 0.0, "spans": []}
+    assert doc["coins"]["SOL"]["reason"] == reason
+    if reason == "fetched":
+        assert doc["partial"] is True and dict(store.read_points(rs.SOURCE, "SOL"))[D] == len(rs.read_seen(D))
+    else:
+        assert doc["coins"]["SOL"]["value"] is None and store.read_points(rs.SOURCE, "SOL") == []
+
+
+def test_complete_poll_with_unknown_floor_never_closes_a_hole():
+    """A hole before a complete poll is unreachable only when that poll's floor reached back to the previous complete
+    poll (it stopped at the feed's end); an unknown floor (a poll file of an earlier head) keeps the day open."""
+    unknown = [*full_posts(), P("comments", at(-3), at(20)), P("comments", at(30), at(40), floor=None)]
+    st = rs.day_status(D, unknown, now=at(48), min_coverage=0.8)
+    assert st.settled is False and st.reason == "not_settled"
+    skipped = [*full_posts(), P("comments", at(-3), at(20)), P("comments", at(30), at(40), floor=at(24))]
+    assert rs.day_status(D, skipped, now=at(48), min_coverage=0.8).settled is False
+    feed_end = [*full_posts(), P("comments", at(-3), at(20)), P("comments", at(30), at(40), floor=at(20))]
+    st = rs.day_status(D, feed_end, now=at(48), min_coverage=0.8)
+    assert st.settled is True and st.reason is None and st.partial is True
+    assert st.gap_unreachable == {"comments": [(at(20), at(24))], "new": []}
+
+
+def test_poll_file_of_earlier_head_reads_as_truncated_with_unknown_floor(q):
+    """A poll file written before `truncated` (and `floor`) existed: read as truncated, so it never settles a day."""
+    rs._write({"polls": [{"kind": "comments", "collected_at": at(20).isoformat(), "newest": at(19.9).isoformat(),
+                          "oldest": at(5).isoformat(), "entries": 100, "pages": 1}]}, rs.polls_path(D))
+    [p] = rs.read_polls(D, D)
+    assert p.truncated is True and p.floor is None
+    assert rs._paging_floor("comments", at(21)) == at(-24)  # not a complete poll: the fallback floor
