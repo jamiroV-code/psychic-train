@@ -3,11 +3,14 @@
 Run from the repo root:
   uv run --project api python -m api.scripts.probe_pc_sources --source reddit --symbol SOL --feed-depth
   uv run --project api python -m api.scripts.probe_pc_sources --source reddit --symbol SOL --compare-scope
+  uv run --project api python -m api.scripts.probe_pc_sources --source reddit --stream-status
   uv run --project api python -m api.scripts.probe_pc_sources --source xsearch --reader-status
 W8c ships the Reddit modes (P-R2 `--feed-depth`: one `search.rss` request over the subreddit set; P-R5
-`--compare-scope`: the set, then one minute later the first subreddit alone). `--stream-status` arrives in W8c2,
-the other X modes in W8d; those print "not built yet" and exit 2 without sending anything. The probe keeps no budget
-or pause state and stores nothing.
+`--compare-scope`: the set, then one minute later the first subreddit alone). W8c2 adds `--stream-status`: local
+state only (no request): today's stream polls per feed kind and entries seen, then per recent completed day the
+comments and posts coverage, settled and partial flags, fetched and missing coin counts. The other X modes arrive in
+W8d; those print "not built yet" and exit 2 without sending anything. The probe keeps no budget or pause state and
+stores nothing.
 `--source xsearch --reader-status` (W8d2) reads only local state (no request to X): active over total accounts,
 per label the state, last use and cookie age in days, the pinned-against-installed commit match, the environment
 guard result and the curl fallback status.
@@ -128,10 +131,22 @@ def _feed_report(label: str, client, url: str, now: datetime, q, symbol: str) ->
         missing=missing is not None))
 
 
+def stream_status(clock) -> int:
+    """W8c2: the stream's polls and coverage from local files only; no request is sent."""
+    from api.data.attention import reddit_stream
+
+    st = reddit_stream.stream_status(clock())
+    print(report_line("stream_today", **st["today"]))
+    for day, numbers in st["days"].items():
+        print(report_line("stream_day", day=int(day.replace("-", "")), **numbers))
+    return 0
+
+
 def _reddit(args, client, clock, sleep) -> int:
-    if args.stream_status or not (args.feed_depth or args.compare_scope):
-        mode = "stream_status" if args.stream_status else "default"
-        print(report_line("probe", built=False) + f" source=reddit mode={mode}: not built yet (W8c2)")
+    if args.stream_status:
+        return stream_status(clock)
+    if not (args.feed_depth or args.compare_scope):
+        print(report_line("probe", built=True) + " source=reddit: choose --feed-depth, --compare-scope or --stream-status")
         return 2
     if args.symbol is None:
         print(report_line("probe", built=True) + " source=reddit: --symbol is required")

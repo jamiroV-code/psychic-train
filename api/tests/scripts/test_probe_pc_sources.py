@@ -34,7 +34,7 @@ def test_parser_rejects_unknown_source_and_bad_symbol():
 
 
 def test_modes_not_built_in_w8b_exit_2_without_network(capsys):
-    assert probe.main(["--source", "reddit", "--stream-status"]) == 2
+    assert probe.main(["--source", "reddit"]) == 2
     assert probe.main(["--source", "x", "--symbol", "SOL"]) == 2
     out = capsys.readouterr().out
     assert "not built yet" in out
@@ -132,3 +132,24 @@ def test_reddit_probe_needs_a_collectable_symbol(capsys):
     assert probe.main(["--source", "reddit", "--symbol", "SKY", "--feed-depth"], client=client) == 2
     assert seen == []
     assert "ambiguous" in capsys.readouterr().out
+
+
+# --- W8c2 `--stream-status` (local state only, numbers only) ---
+
+def test_reddit_stream_status_reads_local_state_only(capsys, isolated_cache):
+    from datetime import date
+
+    from api.data.attention import reddit_stream as rs
+
+    d = date(2026, 10, 26)
+    rs.append_poll(rs.Poll("comments", NOW - timedelta(hours=1), NOW - timedelta(hours=1, minutes=1),
+                           NOW - timedelta(hours=16), 100, 1))
+    seen = []
+    client = _client(lambda req: httpx.Response(200, content=_feed([1])), seen)
+    code = probe.main(["--source", "reddit", "--stream-status"], client=client, clock=lambda: NOW,
+                      sleep=lambda s: None)
+    out = capsys.readouterr().out
+    assert code == 0 and seen == []
+    assert "stream_today polls_comments=1 polls_new=0" in out
+    assert f"stream_day day={d.strftime('%Y%m%d')}" in out and "coverage_comments=" in out
+    assert "PLANTED" not in out

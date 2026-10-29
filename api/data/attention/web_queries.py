@@ -74,8 +74,20 @@ REDDIT_DEFAULTS = {
     "reddit_search_time_filter": "week",
 }
 REDDIT_TIME_FILTERS = ("hour", "day", "week", "month", "year", "all")
+# Reddit stream keys added by W8c2 (SPEC A.2 M2, A.2b, AC14, AC26, AC30; owner deltas 29-10-26): optional in the
+# file. `reddit_stream_subreddits` None means the top-level `subreddits` list (the names are never duplicated).
+REDDIT_STREAM_DEFAULTS = {
+    "reddit_stream_subreddits": None,
+    "reddit_comments_poll_interval_s": 7200,
+    "reddit_posts_poll_interval_s": 21600,
+    "reddit_stream_polls_per_day_cap": 12,
+    "reddit_stream_min_coverage": 0.8,
+    "reddit_comments_paging": True,
+    "reddit_impl_order": ["reddit_stream", "reddit_web"],
+}
+REDDIT_METHODS = ("reddit_stream", "reddit_web")
 _INT_KEYS = tuple(DEFAULTS)
-DEFAULTS = {**DEFAULTS, **X_DEFAULTS, **REDDIT_DEFAULTS}
+DEFAULTS = {**DEFAULTS, **X_DEFAULTS, **REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS}
 X_WINDOW_SYNTAXES = ("since_time", "date")
 LANG_RE = re.compile(r"[a-z]{2,3}")
 X_LABEL_RE = re.compile(r"[a-z0-9_]{1,24}")  # the same opaque labels as `x_pool.LABEL_RE`
@@ -131,6 +143,13 @@ class CollectorConfig:
     reddit_author_cap: int = REDDIT_DEFAULTS["reddit_author_cap"]
     reddit_min_mentions: int = REDDIT_DEFAULTS["reddit_min_mentions"]
     reddit_search_time_filter: str = REDDIT_DEFAULTS["reddit_search_time_filter"]
+    reddit_stream_subreddits: tuple[str, ...] | None = None
+    reddit_comments_poll_interval_s: int = REDDIT_STREAM_DEFAULTS["reddit_comments_poll_interval_s"]
+    reddit_posts_poll_interval_s: int = REDDIT_STREAM_DEFAULTS["reddit_posts_poll_interval_s"]
+    reddit_stream_polls_per_day_cap: int = REDDIT_STREAM_DEFAULTS["reddit_stream_polls_per_day_cap"]
+    reddit_stream_min_coverage: float = REDDIT_STREAM_DEFAULTS["reddit_stream_min_coverage"]
+    reddit_comments_paging: bool = REDDIT_STREAM_DEFAULTS["reddit_comments_paging"]
+    reddit_impl_order: tuple[str, ...] = tuple(REDDIT_STREAM_DEFAULTS["reddit_impl_order"])
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -174,6 +193,21 @@ def _x_value(key: str, v) -> bool:
     return isinstance(v, int) and not isinstance(v, bool) and v >= _X_COUNTS[key]
 
 
+def _stream_value(key: str, v) -> bool:
+    if key == "reddit_stream_subreddits":
+        return v is None or (isinstance(v, (list, tuple)) and bool(v)
+                             and all(isinstance(s, str) and SUBREDDIT_RE.fullmatch(s) for s in v)
+                             and len({s.lower() for s in v}) == len(v))
+    if key == "reddit_stream_min_coverage":
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and 0 < v <= 1
+    if key == "reddit_comments_paging":
+        return isinstance(v, bool)
+    if key == "reddit_impl_order":
+        return (isinstance(v, (list, tuple)) and bool(v) and all(m in REDDIT_METHODS for m in v)
+                and len(set(v)) == len(v))
+    return isinstance(v, int) and not isinstance(v, bool) and v >= 1
+
+
 def validate_config(block) -> CollectorConfig:
     if not isinstance(block, dict):
         raise QueriesError("collector: must be an object")
@@ -183,7 +217,10 @@ def validate_config(block) -> CollectorConfig:
     for key in X_DEFAULTS:
         if key not in block or not _x_value(key, block[key]):
             raise QueriesError(f"collector: {key} is missing or not a valid value")
-    block = {**REDDIT_DEFAULTS, **block}
+    block = {**REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **block}
+    for key in REDDIT_STREAM_DEFAULTS:
+        if not _stream_value(key, block[key]):
+            raise QueriesError(f"collector: {key} is not a valid value")
     if block["reddit_search_time_filter"] not in REDDIT_TIME_FILTERS:
         raise QueriesError(f"collector: reddit_search_time_filter must be one of {', '.join(REDDIT_TIME_FILTERS)}")
     for key in _INT_KEYS + ("reddit_degraded_request_budget", "reddit_author_cap", "reddit_min_mentions"):
@@ -196,7 +233,11 @@ def validate_config(block) -> CollectorConfig:
             raise QueriesError(f"collector: {lo} must be <= {hi}")
     if len(block["x_accounts"]) > block["x_pool_max"]:
         raise QueriesError("collector: x_accounts must hold at most x_pool_max labels")
-    return CollectorConfig(**{k: tuple(block[k]) if k == "x_accounts" else block[k] for k in DEFAULTS})
+    tupled = ("x_accounts", "reddit_impl_order")
+    out = {k: tuple(block[k]) if k in tupled else block[k] for k in DEFAULTS}
+    if out["reddit_stream_subreddits"] is not None:
+        out["reddit_stream_subreddits"] = tuple(out["reddit_stream_subreddits"])
+    return CollectorConfig(**out)
 
 
 def _symbol(value, what: str) -> str:
@@ -296,3 +337,8 @@ def reddit_terms(q: Queries, symbol: str) -> list[str] | None:
         return None
     name = entry["name"]
     return [symbol] if name.upper() == symbol else [symbol, name]
+
+
+def stream_subreddits(q: Queries) -> tuple[str, ...]:
+    """The stream's subreddit set (W8c2): `reddit_stream_subreddits`, or the top-level `subreddits` list when None."""
+    return q.config.reddit_stream_subreddits or q.subreddits

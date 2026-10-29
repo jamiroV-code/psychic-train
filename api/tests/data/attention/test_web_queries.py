@@ -126,3 +126,44 @@ def test_subreddit_set_matches_spec_proposal():
 
 def test_honest_user_agent_is_plain():
     assert wq.HONEST_USER_AGENT == "attention-probe/0.1"
+
+
+# --- W8c2 stream keys (owner deltas 29-10-26: 12-name set by reference, comments 7200 s, posts 21600 s, paging on) ---
+
+def test_stream_keys_committed_with_owner_defaults():
+    c = wq.load().config
+    assert c.reddit_stream_subreddits is None  # None: the stream uses the top-level `subreddits` list
+    assert c.reddit_comments_poll_interval_s == 7200 and c.reddit_posts_poll_interval_s == 21600
+    assert c.reddit_stream_polls_per_day_cap == 12 and c.reddit_stream_min_coverage == 0.8
+    assert c.reddit_comments_paging is True
+    assert c.reddit_impl_order == ("reddit_stream", "reddit_web")
+
+
+def test_stream_keys_default_when_absent(doc):
+    for key in wq.REDDIT_STREAM_DEFAULTS:
+        doc["collector"].pop(key, None)
+    c = wq.validate(doc).config
+    for key, value in wq.REDDIT_STREAM_DEFAULTS.items():
+        assert getattr(c, key) == (tuple(value) if isinstance(value, list) else value), key
+
+
+def test_stream_subreddit_set_resolves_to_top_level_list(doc):
+    q = wq.validate(doc)
+    assert wq.stream_subreddits(q) == q.subreddits and len(q.subreddits) == 12
+    doc["collector"]["reddit_stream_subreddits"] = ["CryptoCurrency", "altcoin"]
+    assert wq.stream_subreddits(wq.validate(doc)) == ("CryptoCurrency", "altcoin")
+
+
+@pytest.mark.parametrize("key,bad", [
+    ("reddit_stream_subreddits", []), ("reddit_stream_subreddits", ["bad name!"]),
+    ("reddit_stream_subreddits", ["altcoin", "Altcoin"]), ("reddit_stream_subreddits", "subreddits"),
+    ("reddit_comments_poll_interval_s", 0), ("reddit_comments_poll_interval_s", True),
+    ("reddit_posts_poll_interval_s", -1), ("reddit_stream_polls_per_day_cap", 0),
+    ("reddit_stream_min_coverage", 0), ("reddit_stream_min_coverage", 1.5), ("reddit_stream_min_coverage", True),
+    ("reddit_comments_paging", 1), ("reddit_impl_order", []), ("reddit_impl_order", ["reddit_web", "reddit_web"]),
+    ("reddit_impl_order", ["reddit_api"]), ("reddit_impl_order", "reddit_stream"),
+])
+def test_stream_keys_rejected_when_invalid(doc, key, bad):
+    doc["collector"][key] = bad
+    with pytest.raises(wq.QueriesError, match=key):
+        wq.validate(doc)
