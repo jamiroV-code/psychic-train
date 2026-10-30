@@ -1,8 +1,8 @@
 # Narrative Baskets: 24/7 server host guide (W8e2, 30-10-26)
 
-Slice W8e2 of `narrative-baskets-xreddit-collector_PLAN_21-10-26.md`; turns SPEC Annex J items 1-11 into owner steps for the spare laptop that runs the X and Reddit collector worker.
+Slice W8e2 of `narrative-baskets-xreddit-collector_PLAN_21-10-26.md`; turns SPEC Annex J items 1-11 into owner steps for the spare laptop that runs the X and Reddit collector worker. Windows comes first (the owner's existing OS and the repo's existing `deploy/` scripts); Linux is an optional alternative (section 5).
 
-**Status of every command in this guide: UNRUN.** Nothing here was executed on any host by the author. Each command is an example to adapt. Words in angle brackets (`<repo-root>`, `<service-user>`, `<accounts-dir>`) are placeholders you replace. No secret, cookie value or real path belongs in this file, in a commit, in a prompt or in a log.
+**Status of every command in this guide: UNRUN.** Nothing here was executed on the host by the author. Each command is an example to adapt. Words in angle brackets (`<repo-root>`, `<service-user>`, `<accounts-dir>`) are placeholders you replace. No secret, cookie value or real path belongs in this file, in a commit, in a prompt or in a log.
 
 ## 0. What runs on the host
 
@@ -20,38 +20,32 @@ The cache location comes from `SCREENER_CACHE_ROOT` (set by `deploy/start-api.ps
 
 ## 1. Decision for the owner: which operating system
 
-The plan (T179, Q29) leaves the final choice to the owner. Both are supported: the installer picks the `curl_cffi==0.16.3` wheel by platform, and the reader's startup guard refuses an unknown platform (it then runs with the curl fallback off and says so in the health line).
+There is no requirement to migrate. Windows is the owner's existing OS, `deploy/start-api.ps1`, `deploy/register-tasks.ps1` and `deploy/README.md` already exist for it, and the plan (T179, Q29) supports both: the installer picks the `curl_cffi==0.16.3` wheel by platform, and the reader's startup guard refuses an unknown platform (the fallback then stays off and the health line says so). The final choice is the owner's.
 
-| | Windows | Linux (systemd) |
+| | Windows (default path) | Linux (optional, systemd) |
 |---|---|---|
-| Existing repo support | `deploy/start-api.ps1`, `deploy/register-tasks.ps1`, `deploy/README.md` already start the API at log-on, bound to the Tailscale address | No launcher in the repo; the unit file below is new and unrun |
-| Unattended start without a person | A task at log-on needs a logged-in user, so you need auto-logon (a physical-access trade-off, step W3) or a task that runs whether the user is logged on or not (needs the user's password stored by Windows, and the DPAPI key helper used by `start-api.ps1` is untested in that mode) | A service starts at boot with no login at all |
-| Crash restart | Task Scheduler restart settings (3 tries, 1 minute apart in `register-tasks.ps1`), then it stops | `Restart=always`, never gives up |
-| Private temporary files | Library parse-error dumps use a literal `/tmp` path (`twscrape_reader.py`, `LIBRARY_DUMP_ROOT`); Windows has no equivalent, so the dump-cleaning step has no target there | `PrivateTmp=true` keeps the dumps private and a cleaner clears them |
-| Account file permissions | The reader does NOT check the ACL on Windows (it reports `windows_acl_not_checked` in health); you set it with `icacls` | The reader enforces mode 600 files and owner uid |
-| Updates and restarts | Windows Update may reboot at idle hours; you must set active hours | You choose when to reboot |
-| Laptop quirks | Sleep, hibernate and lid action via `powercfg` | Masked sleep targets and `HandleLidSwitch=ignore` |
-| Effort for a non-admin owner | Lowest (known tools, existing scripts) | Higher the first time |
+| Repo support | Launcher, task registration and Tailscale binding exist | No launcher; the unit in section 5 is new and unrun |
+| Start without a person at the keyboard | See W3: a log-on task needs a log-on; a boot-time task needs the user's password stored by Windows | A service starts at boot, no login |
+| Crash restart | Task settings in `register-tasks.ps1`: 3 tries, 1 minute apart, then it stops | `Restart=always` |
+| Library parse-error dumps | Written under a literal `/tmp` path (`LIBRARY_DUMP_ROOT` in `twscrape_reader.py`); on Windows that resolves to a `\tmp` folder at the root of the current drive, so a cleaner is still needed (W4b) | `PrivateTmp=true` keeps them private; cleaner in the unit |
+| Account file permissions | The reader does not check the ACL on Windows (`windows_acl_not_checked` in health); you set it with `icacls` | Reader enforces mode 600 and owner uid |
+| Updates | Set active hours so restarts avoid long idle gaps | You choose when to reboot |
+| Effort | Lowest: known tools, existing scripts | Higher the first time |
 
-**Recommendation (a judgement, not a measurement):** Linux for a machine that is meant to be forgotten for weeks, because it starts at boot without any login, restarts forever on crash, keeps the library dumps private and enforces the account-file permissions in code. Choose Windows if you want to reuse the existing `deploy/` scripts and Tailscale set-up unchanged and accept auto-logon on a dedicated local user. Whichever you choose, write the decision here once made: `OS chosen: ______ date: ______` (kept out of the repo until you decide).
-
-Common to both: use a dedicated, non-admin local user (`<service-user>`), full-disk encryption, and never the owner's main accounts or password on this machine.
+**Recommendation (judgement, not measurement):** stay on Windows. It reuses the existing launcher, Tailscale binding and DPAPI key helper, and nothing forces a move. Choose Linux only if you want boot-time start with no stored Windows password, unlimited restarts and enforced file permissions on a machine you will rarely touch. Whichever you pick: a dedicated non-admin local user (`<service-user>`), full-disk encryption, and never your main accounts or password on this machine.
 
 ## 2. Install the X reader (both OS)
 
-Run from `<repo-root>` on the host. The group is `xreader` in `api/pyproject.toml`; the command below is the one in `twscrape_reader.py` and the W8d2 report.
+Run from `<repo-root>` on the host. The optional group is `xreader` in `api/pyproject.toml`.
 
 ```powershell
 uv sync --project api --frozen --group xreader
+uv run --project api --frozen --group xreader python -m api.data.attention.twscrape_reader --write-curl-record
 ```
 
-Then write the install record for the curl wheel of this platform (`--write-curl-record` exists in `twscrape_reader.py`; it prints a status and refuses unless `uv.lock` holds the table hash for this platform):
+The second command writes the install record for the curl wheel of this platform (flag exists in `twscrape_reader.py`; it refuses unless `uv.lock` holds the table hash). `x_allow_curl_backend` stays `false` unless you decide otherwise (SPEC rule 19, AC53).
 
-```powershell
-uv run --project api --frozen python -m api.data.attention.twscrape_reader --write-curl-record
-```
-
-The flag `x_allow_curl_backend` stays `false` unless you decide otherwise (SPEC rule 19, AC53).
+**Keep the group installed.** Always pass `--group xreader` to every `uv sync` and `uv run` that touches X. A throwaway-project test of uv 0.12.21 (not this repo, nothing contacted) showed: `uv sync --group xreader` installs the group; a later `uv run --frozen` without the group RETAINED it; `uv run --frozen --exact` REMOVED it; `uv run --frozen --group xreader` reinstalled it. So the existing launcher (`uv run --project api python -m uvicorn ...`, no `--exact`) does not strip the group on that uv version and needs no product fix, but any exact sync without `--group xreader` (including a plain exact `uv sync`) would remove it and X would then refuse to start. Do not set `UV_NO_SYNC` as a workaround.
 
 ## 3. Accounts and cookies stay only on this host
 
@@ -59,33 +53,39 @@ Do not copy cookies, account files or the pool directory anywhere else, and do n
 
 - Account files live in a directory outside the repository on an encrypted disk, readable by the service user only. Config keys `x_accounts_db_path` (the directory) and `x_accounts` (labels only, registration order) are in `api/data/attention_queries.json`, collector block. With an empty path X does not start.
 - Throwaway accounts only, never the main or a Premium account.
-- Registering and refreshing cookies: use `python -m api.data.attention.twscrape_reader --refresh-cookies <label>`. The cookie string goes in the environment variable `X_REFRESH_COOKIES` (never on the command line), you remove the variable afterwards, and the command records the refresh time used for the cookie age in the health line. The exact PowerShell sequence (encrypted disk check, `icacls`, per-account upsert, local health check) is the "Owner steps on the 24/7 host" block under heading 10 of `narrative-baskets-xreddit-collector-t212-w8d2_REPORT_27-10-26.md`; follow it there rather than copying it here. On Linux the same report says: LUKS volume, `chmod 700` on the directory, `export` and `unset` instead of `$env:`.
-- Local reader health with no request to X: `uv run --project api --frozen python -m api.scripts.probe_pc_sources --source xsearch --reader-status` (flag verified in `probe_pc_sources.py`; prints accounts active over total, cookie age in days, commit match, environment guard result, curl fallback status).
+- Cookies: `python -m api.data.attention.twscrape_reader --refresh-cookies <label>` with the cookie string in the environment variable `X_REFRESH_COOKIES` (never on the command line), then remove the variable. It records the refresh time used for the cookie age in the health line. The exact PowerShell sequence (encrypted disk check, `icacls`, per-account upsert, local health check) is the "Owner steps on the 24/7 host" block under heading 10 of `narrative-baskets-xreddit-collector-t212-w8d2_REPORT_27-10-26.md`; follow it there rather than copying it here (add `--group xreader` to its `uv run` lines).
+- Local reader health, no request to X: `uv run --project api --frozen --group xreader python -m api.scripts.probe_pc_sources --source xsearch --reader-status` (flag verified in `probe_pc_sources.py`).
 
-Environment the X reader requires (`REQUIRED_ENV` in `twscrape_reader.py`; the reader refuses to start without them): `TWS_TELEMETRY=0`, `DO_NOT_TRACK=1`, `TWS_LOG_LEVEL=WARNING`, `TWS_RAISE_WHEN_NO_ACCOUNT=1`. No proxy variables (`TWS_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`) and no `TWS_HTTP_BACKEND` may be set in the service environment (only the curl fallback child gets `TWS_HTTP_BACKEND=curl`, set by the code).
+Environment the X reader requires (`REQUIRED_ENV` in `twscrape_reader.py`; it refuses to start without them): `TWS_TELEMETRY=0`, `DO_NOT_TRACK=1`, `TWS_LOG_LEVEL=WARNING`, `TWS_RAISE_WHEN_NO_ACCOUNT=1`. No `TWS_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and no `TWS_HTTP_BACKEND` may be set in the service environment (only the curl fallback child gets `TWS_HTTP_BACKEND=curl`, set by the code).
 
 ## 4. Windows steps (W1-W9)
 
-All examples are PowerShell, run as described, UNRUN. Elevation is needed only for `powercfg` machine settings and `w32tm /resync`.
+PowerShell, UNRUN. Elevation is needed only for `powercfg` and `w32tm /resync`.
 
-**W1. Dedicated user and disk.** Create a local standard user for the collector. Turn on BitLocker for the system and data disks (`manage-bde -status C:` should show protection on).
+**W1. User and disk.** Create a local standard user for the collector. Turn on BitLocker (`manage-bde -status C:` should show protection on).
 
-**W2. Deploy config.** Copy `deploy/config.example.psd1` to the real config and fill `CacheRoot` if the cache should live on the encrypted data disk; `deploy/README.md` explains the Tailscale binding. The API stays bound to the Tailscale address, not a public port.
+**W2. Deploy config.** Copy `deploy/config.example.psd1` to the real config; set `CacheRoot` if the cache should live on the encrypted disk. The API stays bound to the Tailscale address (`start-api.ps1`), never a public port.
 
-**W3. Auto-start and the log-on question (Annex J items 1 and 3).** `deploy/register-tasks.ps1` registers tasks `mysite-api` and `mysite-web` that start at log-on of the current user, limited rights, restart 3 times 1 minute apart, no time limit:
+**W3. Auto-start (Annex J item 1) and the log-on question (item 3).** `deploy/register-tasks.ps1` registers `mysite-api` and `mysite-web`, started at log-on of the current user with limited rights, 3 restarts 1 minute apart, no time limit:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File deploy\register-tasks.ps1
 Get-ScheduledTask -TaskName mysite-api
 ```
 
-Register it while logged in as the collector user, so the task runs as that user. Annex J also gives a single-task form (`schtasks /Create /TN "AttentionApi" /SC ONLOGON /RL LIMITED /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File <repo-root>\deploy\start-api.ps1"`); use one form or the other, not both, or two API processes fight for the port.
+Register it while logged in as the collector user. The Annex J single-task form (`schtasks /Create /TN "AttentionApi" /SC ONLOGON /RL LIMITED /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File <repo-root>\deploy\start-api.ps1"`) is an alternative; use one form, not both, or two API processes fight for the port.
 
-A log-on task only runs after someone logs on, so after a power cut the laptop needs auto-logon. Trade-off: anyone with physical access gets that user's session and files. Mitigations: dedicated non-admin local user, full-disk encryption, nothing of yours on the box, laptop in a locked room. Setting up auto-logon is your choice and method (Sysinternals Autologon stores the password as an LSA secret rather than plain text; the plain registry method stores it readable). Do not use your main Windows password. The alternative, a task set to run whether the user is logged on or not, avoids auto-logon but is untested with the DPAPI key helper and the Tailscale wait in `start-api.ps1`; try it only if you accept that.
+The cookie-based X reader does NOT require an interactive or browser session, so nothing in the collector forces auto-logon. What decides it is how the task starts:
 
-Note (T179): twscrape logs in with cookies, so no browser session needs to exist; the user-session requirement comes from the log-on task trigger, not from X.
+| Option | After a power cut | Trade-off |
+|---|---|---|
+| Log-on trigger (existing script) without auto-logon | Nothing runs until someone logs on | The worker is down until you log in |
+| Log-on trigger plus auto-logon | Runs again by itself | Anyone with physical access gets that user's session; use a dedicated non-admin user, full-disk encryption, nothing of yours on the box (Sysinternals Autologon stores the password as an LSA secret; the plain registry method leaves it readable). Never your main Windows password |
+| Task at start-up set to run whether the user is logged on or not | Runs by itself, no session | Windows stores the user's password for the task; the task runs in a non-interactive session; `start-api.ps1` waits for Tailscale and reads a DPAPI-protected key, and neither is tested in that mode here; the existing script registers only the log-on form, so you would register this task yourself |
 
-**W4. Enable the worker.** Set the variables for the collector user so the task inherits them (they are read when the process starts; re-log-on or reboot after `setx`):
+Pick one; all three are the owner's choice.
+
+**W4. Enable the worker.** Set the variables for the collector user so the task inherits them (read at process start; log on again or reboot after `setx`):
 
 ```powershell
 setx SCREENER_ATTENTION_PC_WORKER 1
@@ -98,42 +98,50 @@ setx SCREENER_ATTENTION_PC_LOG_MAX_BYTES 5000000
 setx SCREENER_ATTENTION_PC_LOG_FILES 5
 ```
 
-Check what `start-api.ps1` would run without starting anything: `powershell -NoProfile -ExecutionPolicy Bypass -File deploy\start-api.ps1 -DryRun`. Note: the dry run prints host, port, CORS, cache and watchlist; it does not print the worker variables, so confirm them with `Get-ChildItem Env:SCREENER_ATTENTION_PC_WORKER` in a new session.
+`powershell -NoProfile -ExecutionPolicy Bypass -File deploy\start-api.ps1 -DryRun` prints host, port, CORS, cache and watchlist but not the worker variables; confirm those with `Get-ChildItem Env:SCREENER_ATTENTION_PC_WORKER` in a new session.
 
-**W5. No sleep, no hibernate, lid (Annex J item 2).**
+**W4b. Library dump cleanup.** The library writes parse-error dumps (raw tweet JSON) under a literal `/tmp` and never removes them. On Windows that path is drive-rooted, so dumps appear in `\tmp` at the root of the drive the API process runs on [INFERENCE from `pathlib`: `PureWindowsPath('/tmp')` has root `\` and no drive; the dump itself is not observed]. Check for it and clear only `twscrape*` entries inside that folder, for example weekly:
+
+```powershell
+Get-ChildItem "<drive>:\tmp" -Filter 'twscrape*' -ErrorAction SilentlyContinue
+Get-ChildItem "<drive>:\tmp" -Filter 'twscrape*' -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+```
+
+Review the listing before running the second line. The accounts directory must never be under `<drive>:\tmp`.
+
+**W5. No sleep, no hibernate, lid (item 2).**
 
 ```powershell
 powercfg /change standby-timeout-ac 0
 powercfg /change hibernate-timeout-ac 0
 powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0
 powercfg /setactive SCHEME_CURRENT
-powercfg /query SCHEME_CURRENT SUB_SLEEP
 ```
 
-Keep the laptop on AC power. Set Windows Update active hours so restarts avoid long idle gaps (Settings, Windows Update, Advanced options, Active hours). If the laptop runs on battery during a blip, the settings above apply to AC only; the equivalent `-dc` switches are your choice.
+Keep the laptop on AC; the `-dc` equivalents are your choice. Set Windows Update active hours so restarts avoid long idle gaps.
 
-**W6. Clock (item 5).** Windows day windows are UTC; a large clock error breaks them.
+**W6. Clock (item 5).** Day windows are UTC; a large clock error breaks them. The health line does NOT report clock sync (its `clock_sync_age_seconds` is always null), so check yourself:
 
 ```powershell
 w32tm /query /status
 w32tm /resync
 ```
 
-**W7. Log and disk rotation (item 4).** The worker log rotates by itself (step W4 variables). The cache is git-ignored and pruned by retention config (`x_raw_retention_days`, ledger 400 days by default). The free-space check is part of the health line once the code half of W8e2 lands; until then check free space monthly with `Get-PSDrive`.
+**W7. Log and disk rotation (item 4).** The worker log rotates by itself (W4 variables). The cache is git-ignored and pruned by retention config (`x_raw_retention_days`, ledger 400 days by default). Free space is in the health line (`free_disk_bytes`, section 6).
 
-**W8. Restart catch-up (item 6).** Nothing to do: after a restart or a power cut the worker resumes through `_behind` at the configured pace, missing is never 0, and a unit cut by a power loss is retried.
+**W8. Restart catch-up (item 6).** Automatic: after a restart or power cut the worker resumes through `_behind` at the configured pace, missing is never 0, a unit cut by a power loss is retried.
 
-**W9. Remote viewing (item 7) and UPS (item 8).** Keep the API bound to the Tailscale address as `start-api.ps1` does; view it over Tailscale or a remote desktop tool of your choice; open no public port and no router forward. A small UPS is recommended, not required.
+**W9. Remote viewing (item 7) and UPS (item 8).** Keep the Tailscale binding of `start-api.ps1`; view over Tailscale or a remote-desktop tool; no public port, no router forward. A small UPS is recommended, not required.
 
-## 5. Linux steps (L1-L9)
+## 5. Linux steps (optional, L1-L8)
 
-All commands are UNRUN examples for a systemd distribution; run as root where `sudo` is shown. There is no Linux launcher in the repo, so the unit below is new.
+UNRUN examples for a systemd distribution; `sudo` where shown. No Linux launcher exists in the repo, so the unit is new.
 
-**L1. Dedicated user and encrypted disk.** Create `<service-user>` without a login shell for the service. Put the repository, the cache and the accounts directory on a LUKS volume. The accounts directory: `chmod 700`; files mode 600 (the reader enforces mode 600, owner uid, and refuses otherwise).
+**L1. User and disk.** Dedicated `<service-user>`; repository, cache and accounts directory on a LUKS volume; accounts directory `chmod 700` (the reader enforces file mode 600 and owner uid and refuses otherwise).
 
-**L2. Install** the reader (section 2) as `<service-user>` from `<repo-root>`.
+**L2. Install** as `<service-user>` from `<repo-root>` (section 2).
 
-**L3. Service unit** `/etc/systemd/system/attention-api.service` (adapt the paths; the bind address stays loopback, a VPN or SSH tunnel does remote viewing):
+**L3. Service unit** `/etc/systemd/system/attention-api.service` (adapt paths; bind stays loopback):
 
 ```ini
 [Unit]
@@ -155,14 +163,14 @@ Environment=TWS_LOG_LEVEL=WARNING
 Environment=TWS_RAISE_WHEN_NO_ACCOUNT=1
 Environment=SCREENER_ATTENTION_PC_LOG_MAX_BYTES=5000000
 Environment=SCREENER_ATTENTION_PC_LOG_FILES=5
-ExecStartPre=/usr/bin/find /tmp -maxdepth 1 -name 'twscrape*' -delete
-ExecStart=<uv-path> run --project api --frozen python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+ExecStartPre=/usr/bin/find /tmp -mindepth 1 -maxdepth 1 -name 'twscrape*' -exec rm -rf -- {} +
+ExecStart=<uv-path> run --project api --frozen --group xreader python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-Notes: with `PrivateTmp=true` the `/tmp` the cleaner sees is the service's private one, which is where the library's dumps go. The two log variables are optional (defaults shown). Other app variables the Windows script sets (`SCREENER_CORS_ORIGINS`, `SCREENER_WATCHLIST_PATH`, the LSE key) are owner decisions on this OS; `SCREENER_CORS_ORIGINS` and `LSE_API_KEY` are read from the environment by the API, supply them with additional `Environment=` lines or an `EnvironmentFile=` readable only by `<service-user>`, and never write a key into this file.
+Notes: the cleaner uses `rm -rf` because `find -delete` fails with "Directory not empty" on a nonempty `twscrape*` directory (observed in a throwaway tree under Git Bash; not on Linux/systemd). It is bounded to direct children of `/tmp` named `twscrape*`; with `PrivateTmp=true` that `/tmp` is the service's private one. `SCREENER_CORS_ORIGINS`, `SCREENER_WATCHLIST_PATH` and `LSE_API_KEY` are the other app variables `start-api.ps1` supplies on Windows; supply them on Linux with `Environment=` lines or an `EnvironmentFile=` readable only by `<service-user>`; never write a key into this file.
 
 ```bash
 sudo systemctl daemon-reload
@@ -171,60 +179,55 @@ systemctl status attention-api.service
 journalctl -u attention-api.service -n 50 --no-pager
 ```
 
-**L4. No sleep, lid ignored (item 2 on Linux).**
+**L4. No sleep, lid ignored.**
 
 ```bash
 sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
-# in /etc/systemd/logind.conf set:  HandleLidSwitch=ignore   (and HandleLidSwitchExternalPower=ignore)
-sudo systemctl restart systemd-logind
+# in /etc/systemd/logind.conf set:  HandleLidSwitch=ignore  (and HandleLidSwitchExternalPower=ignore)
 ```
 
-Restarting `systemd-logind` may end graphical sessions; do it from a console or SSH, or simply reboot.
+Then reboot (restarting `systemd-logind` can end sessions).
 
-**L5. Clock (item 5).**
+**L5. Clock.** `timedatectl status` (expect "System clock synchronized: yes"); `sudo timedatectl set-ntp true`.
 
-```bash
-timedatectl status          # expect: System clock synchronized: yes, NTP service: active
-sudo timedatectl set-ntp true
-```
+**L6. Logs and disk.** Worker log rotates itself (L3 variables); cap the journal with `SystemMaxUse=` in `/etc/systemd/journald.conf` or use logrotate. Free space is in the health line.
 
-**L6. Log and disk rotation (item 4).** Worker log rotates by itself (L3 variables). For journald set `SystemMaxUse=` in `/etc/systemd/journald.conf` (or use logrotate) so the journal cannot fill the disk. Check free space monthly with `df -h`; the health line carries it once the code half lands.
+**L7. Restart catch-up, auto-login.** Automatic; no auto-login needed (cookies, no browser session).
 
-**L7. Restart catch-up (item 6).** As W8: automatic.
+**L8. Remote viewing and UPS.** Bind stays `127.0.0.1`; use a VPN or `ssh -L <local-port>:127.0.0.1:8000 <host>`; no public port. UPS as in W9.
 
-**L8. Auto-login.** Not needed on Linux (no browser session; twscrape uses cookies).
+## 6. Owner probe P-W1 and reading the health line
 
-**L9. Remote viewing and UPS (items 7, 8).** Keep the bind on `127.0.0.1`; reach it with a VPN or an SSH port forward (`ssh -L <local-port>:127.0.0.1:8000 <host>`); no public port. UPS as in W9.
+Health reads files only: no provider is called (`get_sources` in `api/routers/discovery.py`). P-W1, replacing the plan's nonexistent `probe_pc_sources ... --status` (that script has no `--status` flag; Reddit `--stream-status` prints "not built yet (W8c2)"):
 
-## 6. Owner probe P-W1 (after the code half and the worker are merged)
-
-From PLAN W8e: with only Reddit built, start the API with the flag on for one hour. On Windows the plan's literal form is:
+1. Start the API with the worker flag for one hour (on Windows via the task above, or manually in a PowerShell session: `$env:SCREENER_ATTENTION_PC_WORKER="1"; uv run --project api --frozen --group xreader python -m uvicorn api.main:app --host <tailscale-or-loopback-ip> --port <api-port>`).
+2. Read the health line from the route `GET /api/narrative/sources` (health fields below exist once the W8e2 code half, PR #195, is merged):
 
 ```powershell
-$env:SCREENER_ATTENTION_PC_WORKER="1"; python -m uvicorn api.main:app --port 8000
+$r = Invoke-RestMethod "http://<api-host>:<api-port>/api/narrative/sources"
+$r.sources | Where-Object { $_.health } | ForEach-Object { $_.id; $_.health | ConvertTo-Json -Depth 5 }
 ```
 
-(Use `uv run --project api python -m uvicorn ...` if plain `python` is not the project environment; the repo's own launcher uses that form.) The plan then names `python -m api.scripts.probe_pc_sources --source reddit --status` to print stored days, last unit time, pause state and today's request counts.
+3. Read the end of the worker log: `Get-Content "<cache>\attention\_logs\attention_pc.log" -Tail 50`.
 
-**Gap found while writing this guide:** `probe_pc_sources.py` has no `--status` flag. Its flags are `--source`, `--symbol`, `--feed-depth`, `--compare-scope`, `--stream-status` (still prints "not built yet (W8c2)" and exits 2 for Reddit) and `--reader-status` (X only). The P-W1 status command as written in the plan therefore cannot run today. Until a status mode exists, read the worker's log (`<cache>/attention/_logs/attention_pc.log`) and, once the health line lands, the Sources data. Pass criterion stays as in the plan: counts within the caps and spaced as locked.
+Pass: the request counts and the spacing of unit times stay within the caps and pace locked in the SPEC. A summary alone does not prove that: compare the unit times in the log with the configured spacing and the counts with the budgets.
 
-## 7. Reading the health line (once the W8e2 code half lands)
+`sources[].health` (present only for worker sources with state; absent otherwise; an unknown value is `null`, never 0; X days recorded before this change show unknown):
 
-NOT built yet at the time of writing (the code half of W8e2 is a separate task; check its PR). The contract it implements is SPEC AC39 and rules 15-16, AC38, AC47 and AC52. Per source, read from persisted worker state and evidence files only (no network):
-
-| Field | What it tells you | Act when |
+| Field | Meaning | Act when |
 |---|---|---|
-| last unit time | the UTC time of the last finished unit | far older than the expected gap |
-| `stale` flag | no unit for more than 2 x the expected gap | shown stale: check that the service runs, the clock is right, the host is awake |
-| pause reason code and its end | why the source is paused and until when | a warning pause: read the reason; a canary or all-accounts-locked pause needs a cookie refresh or waiting |
-| attempted and fetched counts | today's work against what arrived | fetched far below attempted |
-| effective budget | today's read budget after halving or doubling (X) | persistently halved |
-| completeness text | attempted, fetched, missing with reasons (capped), newest age (AC38) | missing counts grow; a missing day is never 0 |
-| accounts active over total, cookie age per account (AC47, AC52) | pool state and cookie freshness | cookie age high or an account `paused`: do the cookie refresh in section 3 |
-| curl fallback status | off, ok or unsupported platform | unsupported platform: the fallback stays off by design |
+| `last_unit_at` | UTC time of the last unit | far older than `expected_gap_s` |
+| `paused`, `pause_reason`, `pause_until` | pause and cause; `pause_until` null while paused means owner action needed or state unreadable | read the reason; owner-action pauses need a cookie refresh or a clear |
+| `collection_day`, `attempted`, `fetched` | distinct coin-days attempted and stored on the collection day; canaries excluded | fetched far below attempted |
+| `completeness_day`, `completeness_attempted`, `completeness_fetched`, `missing`, `missing_reasons`, `capped`, `newest_age_hours` | completeness for the target day and the age of the newest collection | growing `missing`; a missing day is never 0 |
+| `completeness` | the same as one text line | |
+| `mode` | `baseline` or `degraded` | degraded on a 24/7 host: the host was not up all day |
+| `expected_gap_s`, `stale` | the worker's persisted gap; stale when no unit for more than 2 x that gap | stale: check service, clock, power |
+| `budget_used`, `effective_budget`, `budget_spent` | today's use (X posts loaded, Reddit requests; includes canaries) against the effective budget | persistently halved budget |
+| `accounts_active`, `accounts_total`, `accounts[]` (`label`, `state`, `reason`, `last_used`, `cookie_age_days`) | X pool; state active, locked, inactive or suspect | high cookie age or inactive: refresh cookies (section 3) |
+| `free_disk_bytes` | free space on the cache disk | low |
+| `clock_sync_age_seconds` | always null: this worker persists no clock-sync evidence | use `w32tm /query /status` or `timedatectl status` |
 
-The exact field names and wording are defined by that code and may differ from this table; after it merges, correct this table against `api/analytics/attention/sources.py` and `api/models/discovery.py`.
+## 7. Item map (Annex J to this guide)
 
-## 8. Item map (Annex J to this guide)
-
-1 auto-start: W3, L3. 2 no sleep and lid: W5, L4. 3 auto-login: W3 (needed on Windows, not on Linux, L8). 4 disk and log rotation: W7, L6 and section 0. 5 clock: W6, L5. 6 restart catch-up: W8, L7. 7 remote access and health line: W9, L9, section 7. 8 UPS: W9, L9. 9 accounts and secrets: section 3. 10 interim: until the laptop exists the owner's PC runs in degraded mode; nothing else changes. 11 Linux: section 5.
+1 auto-start: W3, L3. 2 no sleep and lid: W5, L4. 3 auto-login: W3 (optional; not required by the cookie reader). 4 disk and log rotation: W7, L6, section 0. 5 clock: W6, L5. 6 restart catch-up: W8, L7. 7 remote access and health line: W9, L8, section 6. 8 UPS: W9, L8. 9 accounts and secrets: section 3. 10 interim: until the laptop exists the owner's PC runs in degraded mode; nothing else changes. 11 Linux: section 5.
