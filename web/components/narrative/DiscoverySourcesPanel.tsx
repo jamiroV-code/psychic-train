@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { fetchDiscoverySources as fetchDefault } from "@/lib/api/discovery";
 import { formatNarrativeReason } from "@/lib/format-unavailable-reason";
+import { sourceHealthLines } from "@/lib/source-health";
 import type { DiscoverySourceRow, DiscoverySourcesResponse } from "@/lib/types/discovery";
 
 export interface DiscoverySourcesPanelProps {
@@ -81,19 +82,36 @@ export function DiscoverySourcesPanel({ fetchSources = fetchDefault }: Discovery
             </tr>
           </thead>
           <tbody>
-            {data.sources.map((r) => (
-              <tr key={r.id} data-testid={`sources-row-${r.id}`} className={r.kind === "exchange-member" ? "discovery-sources__sub" : undefined}>
-                <td>{r.label}</td>
-                <td className="basket-table__num">{r.weight === null ? "—" : r.weight}</td>
-                <td>
-                  <span className={`discovery-state discovery-state--${r.state}`}>{STATE_TEXT[r.state]}</span>
-                </td>
-                <td className="basket-table__num">{r.kind === "helper" ? r.coins_with_data : `${r.coins_with_data} / ${r.eligible_size}`}</td>
-                <td className="basket-table__num">{r.kind === "helper" ? "—" : r.history_days}</td>
-                <td>{r.newest ?? "—"}</td>
-                <td className="discovery-muted">{note(r, data)}</td>
-              </tr>
-            ))}
+            {data.sources.map((r) => {
+              const health = sourceHealthLines(r);
+              return (
+                <Fragment key={r.id}>
+                  <tr data-testid={`sources-row-${r.id}`} className={r.kind === "exchange-member" ? "discovery-sources__sub" : undefined}>
+                    <td>{r.label}</td>
+                    <td className="basket-table__num">{r.weight === null ? "—" : r.weight}</td>
+                    <td>
+                      <span className={`discovery-state discovery-state--${r.state}`}>{STATE_TEXT[r.state]}</span>
+                    </td>
+                    <td className="basket-table__num">{r.kind === "helper" ? r.coins_with_data : `${r.coins_with_data} / ${r.eligible_size}`}</td>
+                    <td className="basket-table__num">{r.kind === "helper" ? "—" : r.history_days}</td>
+                    <td>{r.newest ?? "—"}</td>
+                    <td className="discovery-muted">{note(r, data)}</td>
+                  </tr>
+                  {health && (
+                    <tr data-testid={`sources-health-${r.id}`}>
+                      {/* One cell over all columns: the lines wrap instead of widening the table on phones. */}
+                      <td colSpan={7} className="discovery-muted" style={{ whiteSpace: "normal", overflowWrap: "anywhere" }}>
+                        <ul style={{ margin: 0, paddingLeft: "1.25em", maxWidth: "min(100%, 80ch)" }}>
+                          {health.map((l) => (
+                            <li key={l.key} data-testid={`sources-health-${r.id}-${l.key}`}>{l.text}</li>
+                          ))}
+                        </ul>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
