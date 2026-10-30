@@ -1,11 +1,11 @@
 ---
 name: master-plan-board-2
-description: "Second board file of the MASTER-PLAN: compact rows T119-T221 (Trends, W8 X and Reddit collector, universe U3 and U6, weights v2, docs and process) rebuilt 29-10-26 from gh and git only. Same columns and rules as MASTER-PLAN.md."
+description: "Second board file of the MASTER-PLAN: compact rows T119-T221 and the W8c2-W8g rows of 30-10-26 (Trends, W8 X and Reddit collector, universe U3 and U6, weights v2, docs and process) rebuilt 29-10-26 from gh and git only. Same columns and rules as MASTER-PLAN.md."
 date: 29-10-26
 metadata:
   node_type: root
   type: master-plan
-  read_when: "looking up a task or PR from #148 to #189; before creating a plan artifact or spawning a worker for the attention, Trends or W8 programs"
+  read_when: "looking up a task or PR from #148 to #197; before creating a plan artifact or spawning a worker for the attention, Trends or W8 programs"
 ---
 
 # my_site - Master Plan board 2 (T119-T221)
@@ -58,4 +58,11 @@ Columns: ID · What · Status · PR / evidence · Cost. Built 29-10-26 from `gh 
 | T217 | D-28 nobody pushes to main, PC sync scripts, omp note; T220 commits are inside (ancestor of the #187 merge) | review | #187 | unmeasured |
 | T127 | Wikipedia title for INJ (data) | review | #154 | unmeasured |
 | T124, T131, T133, T135, T136, T138, T139, T142, T147, T152, T157, T158, T159, T166, T167, T168, T170, T179, T181, T186, T187, T190, T191, T200, T202, T207, T209, T211, T214, T219, T220 | IDs only in inner commit subjects of merged branches (reviews, SPEC and PLAN rounds, fixes); how each landed UNVERIFIED | review | git subject only | unmeasured |
-| T221 | docs catch-up PLAN and EXECUTE (this task) | in_progress | PLAN merged: plan PR #188 and plan-fix PR #189; EXECUTE in its own draft PR, the owner merges (D-28) | unmeasured |
+| T221 | docs catch-up PLAN and EXECUTE | review | PLAN merged: #188, #189; EXECUTE merged: #190 (2026-10-30 11:20Z, merge `d390dc9`) | unmeasured |
+| W8c2 | Reddit stream-and-count: comments and posts feeds, method `reddit_stream` | review | #191, merge `ff8e4a8`; fix round 3 (false feed end, retention, page cap and continuation, gap report) in open draft PR #198, not merged | unmeasured |
+| W8e | PC worker wiring (`attention_pc_refresh`, lifespan start/stop) | review | #192, merge `8f1b502` | unmeasured |
+| W8f | Discovery wiring: fetch_side, source_impl, reason codes, X rotation mode | review | #193, merge `0d669f4` | unmeasured |
+| W8e2 | server host guide (Windows and Linux) and read-only health line on X/Reddit Sources rows | review | #194 (guide, `ab34e77`), #195 (health line, `aa1f8d6`) | unmeasured |
+| W8g | Sources panel health and completeness text for PC worker rows | review | #197, merge `3f45921` | unmeasured |
+| - | SPEC rule 18(a) and AC47 use `x_accounts` and `x_pool_max` wording (owner decision) | review | #196, merge `3cd39e2` | unmeasured |
+| - | docs catch-up 2: state and registry to `3cd39e2`, W8c2 PLAN/SPEC owner decisions (D1-D3, Q17, E1-E4) recorded | in_progress | this EXECUTE, one draft PR; the owner merges (D-28) | unmeasured |
