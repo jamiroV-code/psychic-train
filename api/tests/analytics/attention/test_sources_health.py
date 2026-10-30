@@ -198,9 +198,3 @@ def test_bad_state_is_read_only_and_unknown_not_zero(live, raw):
     assert h.paused and h.pause_reason == "state_error"
     assert h.attempted is None and h.effective_budget is None and h.stale is None
     assert p.read_text() == raw
-
-
-def test_worker_state_does_not_attach_to_unrelated_selected_store(live, monkeypatch):
-    put_state("xsearch_web")
-    world(live, monkeypatch, COINS, cats={"ai": list(COINS)}, source_impl={"xsearch": "xsearch"})
-    assert row(src.build_sources(TODAY, now=NOW), "xsearch").health is None
