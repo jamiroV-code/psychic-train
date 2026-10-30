@@ -1,24 +1,22 @@
-# W8c2w report: Reddit stream wiring PLAN (PLAN-REV 3, plan fixes round 2)
+# W8c2w report: Reddit stream wiring PLAN (PLAN-REV 4, plan fixes round 3)
 
 ## 1 Task ID
 
-T222 (ID free: T221 is the highest in `git log --all` subjects and PR titles; no T222 anywhere; W8c2 PRs have no T id), slice W8c2w. Phase PLAN only (RIPER-5), agent riper-sonnet, direct lane. Branch `claude/w8c2w-stream-wiring-plan` (PR #200, draft). Plan: `w8c2w-stream-wiring_PLAN_30-10-26.md` in this folder. This report covers the original plan, round 1 (owner decisions Q1-Q9) and round 2 (second independent review of PR #200 and the owner decision of the share default).
+T222 (ID free: T221 is the highest in `git log --all` subjects and PR titles; no T222 anywhere; W8c2 PRs have no T id), slice W8c2w. Phase PLAN only (RIPER-5), agent riper-sonnet, direct lane. Branch `claude/w8c2w-stream-wiring-plan` (PR #200, draft). Plan: `w8c2w-stream-wiring_PLAN_30-10-26.md` in this folder. This report covers the original plan, round 1 (owner decisions Q1-Q9), round 2 (second review, share default 0.45) and round 3 (third independent review of PR #200; #198 and #199 now merged).
 
 ## 2 Outcome
 
-done (plan revised to PLAN-REV 3 and re-validated; nothing implemented; all owner questions Q1-Q9 decided, none open)
+done (plan revised to PLAN-REV 4 and re-validated; nothing implemented; all owner questions Q1-Q9 decided, none open; one display point flagged in section 8)
 
 ## 3 Summary
 
-Round 2 changes:
+Round 3 changes (PLAN-REV 4):
 
-- Fix 1 (blocking, W11): ONE authoritative request-count path. Every stream request passes through `share_src.spend(n)` (`run_poll` calls `src.spend(1)` immediately before each request it sends). The wrapper writes the stream's day count (`reddit_stream/_meta/_budget/<day>.json`) BEFORE it delegates to the shared `src.spend`, restores it if the delegate raises, and is the only writer. The sum of `PollOutcome.requests` is no longer a counter (it would double count with `spend`); tests use it only as a cross-check. The shared `reddit_web` counter stays the authority. Why not the preferred "derive from poll records": checked on the #198 head (`403bc676`, `reddit_stream.py`, `run_poll` and `Poll`): NOT every sent request is recorded. `Poll` has no `requests` field; `Poll.pages` counts only pages that made progress; a poll whose requests all fail stores no `Poll`; an empty feed stores `pages=0` for one request; a poll whose second page fails stores `pages=1` for two requests; an unexpected exception leaves `run_poll` after `spend(1)` with no `PollOutcome`. `PollOutcome.requests` is complete on every normal return (a failed request included, no retry), but misses the exception path. A failed request therefore counts exactly once, through `spend`.
-- Fix 1 tests (red-first, section 4 row "One counting path"): `test_stream_counter_equals_requests_sent_no_double_count`, `test_stream_counter_counts_failed_empty_and_dead_cursor_requests_that_poll_records_miss`, `test_stream_counter_after_restart_continues_from_file_no_double_count`, `test_failed_request_counts_once`, `test_unexpected_exception_in_poll_still_counts_its_request_once`, `test_spend_refused_by_shared_budget_does_not_increment_stream_counter`. P-S3 now also reads the `_budget` count.
-- Fix 2 (owner decision): default `reddit_stream_budget_share` = 0.45 everywhere (W4, W11, section 2 arithmetic, owned-file table, tests, risks, probes, W-AC6, W-AC9, Public Contracts, Q1, envelope DECIDED paragraph, G8 grep). BASELINE cap 112 of 250 (searches keep 138), DEGRADED cap 67 of 150 (searches keep 83, covering the 76 needed with 7 to spare). Tradeoff stated as an expected consequence: in BASELINE a day near the stream bound (124-132) hits the cap at 112; polls after it are truncated and continue at the first poll after 00:00 UTC, nothing dropped; the stream series may lag or show that day missing or partial under the E1 rule, never 0 (whether the continuation can still cover the tail is UNVERIFIED until P-S3). New tests: `test_stream_cap_is_112_baseline_and_67_degraded_at_default_share`, `test_baseline_cap_reached_mid_day_truncates_remaining_polls_next_utc_day_continues_nothing_dropped`, `test_cap_truncated_day_is_missing_or_partial_never_zero`; renamed `test_budget_share_default_is_0_45` and `test_degraded_stream_requests_never_exceed_67_at_default_share`.
-- Fix 3 (reporting gap, new W12 and W9 text): the same day file records `share_exhausted` with `cap`, `budget`, `requests` and `exhausted_at`, set only when the share (not the shared budget) refused a request. The Sources text says `share_exhausted (cap C, requests counted N)` for that day, distinct from `no entry observed, unknown`; an absent completeness file is never evidence of exhaustion; missing is never 0. Tests: `test_share_exhausted_recorded_with_cap_and_count_distinct_from_no_entry`, `test_share_exhausted_not_set_when_shared_budget_is_the_reason`, `test_sources_text_share_exhausted_names_cap_and_count_not_unknown`, `test_sources_text_no_entry_and_no_exhaustion_says_no_entry_observed_unknown`, `test_share_exhausted_day_without_completeness_file_is_missing_never_zero`.
-- Fix 4 (G8): the gate now runs the named switch tests (`pytest -k` of four names: exact-1 semantics, unset means off, off by default, env off sends zero requests and writes no files), requires exit 0 and at least 4 passed (a missing or renamed name makes the selection short and fails), in addition to the greps (variable present, absent from conftest and workflows) and the share key `0.45` grep. The four names are also in the G4 required list.
-- Fix 5: stated as VERIFIED 30-10-26 in the plan: `git ls-tree -r origin/claude/w8c2-reddit-stream` shows 0 matches for `api/data/attention_pc_refresh.py` (the file arrives with `main`).
-- Fix 6: envelope 5,689 B (`wc -c`, cap 8,000), first line `ROLE: WORKER`; marker `PLAN-REV: 3` (plain text outside the fence) with the envelope check and the handoff text updated; 84 named red-first tests (was 69); strict validator 0 failures, 0 warnings.
+- Fix 1 (blocking, Q3): W9 is now "Sources: NO CHANGE". `reddit_stream` is NOT added to `sources.PC_STORES`; `sources.py` and `test_sources_health.py` are removed from the owned files, tests, the G1 regex, the collision text, RFC-7 and the envelope, and added to the not-owned list and to the G2 forbidden regex; a new G8 check fails if either file changes. The four wiring problems (not in `PC_STORES`; `state_path('reddit_stream')` raises `ValueError`; `<store>_health.json`; per-coin completeness format) matter only if the store were added, so none is addressed. All Sources text requirements were removed (W5, W9, W12, section 2, risks, P-S2, W-AC5, W-AC7, Q5). `share_exhausted` and the counts stay in the worker's day record `reddit_stream/_meta/_budget/<day>.json`. Guard tests: `test_sources_route_unchanged_with_stream_enabled`, `test_sources_pc_stores_still_excludes_reddit_stream` (in the stream test file).
+- Fix 2 (blocking, new W11b): the cap follows the CURRENT mode, but the mode follows uptime. Rule: the persisted day count is never refunded or rescaled; before every request the wrapper requires `count < cap_of_current_mode`; a request is never started when `count >= current cap`. BASELINE to DEGRADED above the new cap (100 against 67): nothing more that UTC day; DEGRADED to BASELINE: the remaining BASELINE cap. The shared `reddit_web` budget stays the hard limit in both modes. Acceptance sentences (W-AC9, envelope, Public Contracts, one test name) reworded to "never starts a request once the count has reached the current mode's cap; the count is not retroactive". Red-first tests: `test_budget_baseline_to_degraded_same_utc_day_count_not_refunded_stream_sends_nothing_more`, `test_budget_degraded_to_baseline_same_utc_day_remaining_baseline_cap_applies`, `test_stream_never_starts_a_request_when_count_at_or_above_current_mode_cap`, `test_shared_reddit_web_budget_stays_hard_limit_in_both_modes`; the first two and both guard tests are in G4 and checked by identity in G8.
+- Fix 3 (G8): new function `idcheck` runs the pytest `-k` selection with `-v` and requires each named test to appear with PASSED (exit 0, no FAILED/ERROR/SKIPPED/XFAIL/XPASS among the selected ids). Used for the four switch tests and, as `g8b`, for the two mode-change tests and the two Sources guard tests.
+- Fix 4: collision text rewritten in the present tense: re-run `gh pr list --state open` on 30-10-26 shows ONE open PR, #200 (this plan); #198 and #199 are MERGED. The dated historical note on #198 is kept; G10 unchanged; G0 comment updated. Also verified on `origin/main` (`reddit_stream.py` lines 47-48): `_seen` and `_completeness` are NOT pruned by the library, so the worker prunes them (W6, RFC-6; the old UNVERIFIED wording is gone).
+- Fix 5: envelope 5,972 B (`wc -c`, cap 8,000), first line `ROLE: WORKER`, marker `PLAN-REV: 4` (plain text outside the fence) with the envelope check and the handoff text updated.
 
 ## 4 Files changed
 
@@ -27,42 +25,42 @@ Round 2 changes:
 
 ## 5 Commits
 
-One new commit on `claude/w8c2w-stream-wiring-plan` on top of `f50e3c24`, plain push (no force) to the existing branch, updating PR #200; hash in the worker's final message.
+One new commit on `claude/w8c2w-stream-wiring-plan` on top of `c1228955`, plain push (no force) to the existing branch, updating PR #200; hash in the worker's final message.
 
 ## 6 Tests run
 
 No product tests (plan only). Run, 30-10-26:
 
 - Strict plan validator `node .claude/skills/vc-generate-plan/scripts/validate-plan-artifact.mjs --strict <plan>`: 0 failures, 0 warnings.
-- `bash -n` of the extracted Validate Contract (extraction with `tr -d '\r'`, as the envelope does): OK, 78 lines.
-- Envelope measured with `wc -c` on the text between the four-backtick fences: 5,689 B (cap 8,000).
-- Dry run of the contract on `origin/main` (`BASE=origin/main`, temporary worktree, `REPO` exported from the remote on the command line only): exit 1. FAIL: G0 (#198 not merged), G1 (empty change set), G4 (test file and all required names missing, 0 of 50 tests), G5 (no EXEC-REPORT), G6 (pytest exit 4: test file missing), G7 (no BASEFAIL file; the pytest part itself ran and collected on `main`), G8 (switch, env-switch tests exit 4 and 0 passed, share key and `PC_STORES` missing), G10 (#198 touches three owned files). PASS: G2, G3, G9. This is the expected pre-EXECUTE pattern (G0, G1, G4-G8, G10 fail, G2, G3, G9 pass; G5 and G6 also fail because the EXEC-REPORT and the test file do not exist yet).
-- Temporary worktree: `git worktree remove` failed with Invalid argument on Windows; handled with `rm -rf` and `git worktree prune`.
-- Read-only inspection of the #198 head (`git show`, `git ls-tree`) for fix 1 and fix 5.
+- `bash -n` of the extracted Validate Contract (extraction with `tr -d '\r'`, as the envelope does): OK, 84 lines.
+- Envelope measured with `wc -c` on the text between the four-backtick fences: 5,972 B (cap 8,000).
+- `gh pr list --state open` (read-only): one open PR, #200.
+- Dry run of the Validate Contract in a temporary detached worktree of `origin/main` (`224caf56`, #198 and #199 merged; `REPO` exported from the remote on the command line only), exit 1. PASS (no FAIL line): G0 (the #198 page cap key is on `origin/main`), G2, G3, G9, G10 (no open PR other than #200; #200 touches no owned file). FAIL as expected before EXECUTE: G1 (empty change set), G4 (test file and all required names missing, 0 of 50 tests), G5 (no EXEC-REPORT), G6 (pytest exit 4, test file missing), G7 (no BASEFAIL file; the pytest part itself ran), G8 (switch missing; `g8` and `g8b` pytest exit 4 and each of the 8 named tests missing; share key missing in the JSON, `web_queries.py` and the worker). The new G8 sources-unchanged check passed (no change). Pattern: G0, G2, G3, G9, G10 pass; G1, G4 to G8 fail, as intended.
+- Temporary worktrees: `git worktree remove` failed with Invalid argument on Windows; handled with `rm -rf` and `git worktree prune`; `git worktree list` shows only the isolated checkout.
 
 ## 7 Tests NOT run
 
 - Every test of the plan's section 4 (they do not exist yet).
-- Validate Contract passing paths of G4-G10 (need the EXECUTE tree), including the new G8 test selection.
+- The passing paths of G4 to G8 (need the EXECUTE tree), including the new `idcheck` identity selection.
 - All owner probes P-S1 to P-S5 (live behaviour, owner's machine).
 
 ## 8 Deviations
 
-1. The review's preferred path for fix 1 (derive the count from persisted poll records) is NOT adopted, because the #198 code does not record every sent request (facts in section 3). The minimal counter that is complete is the wrapper's `spend` write-through, specified in W11.
-2. The gate G8 now runs pytest (small named selection) rather than only grepping; it adds a few seconds and needs the stream test file.
-3. The share counter and the `share_exhausted` record are one small day file under `reddit_stream/_meta/_budget/` written by the worker (the shared `PcSource` has no per-caller counter); it is a cap and a report, not a second budget state.
-4. The shared worktree held copied parent changes at the start; they were stashed in a named stash (`parent-copy-t222b`) in the isolated checkout and not touched. `origin` was added in that checkout for publication, never written to a file.
+1. The review's preferred path for fix 1 of round 2 (derive the count from poll records) stays rejected: #198's code does not record every sent request (round 2 facts).
+2. G8 runs pytest (named selections with `-v`); it needs the stream test file.
+3. The share counter and the `share_exhausted` record are one small day file under `reddit_stream/_meta/_budget/` written by the worker. DISPLAY POINT for Main and the owner (UNVERIFIED, not claimed by the plan): the round-3 instruction says the record is "shown by `--stream-status`". On `origin/main`, `reddit_stream.stream_status` reads only polls, seen ids and completeness files, and `probe_pc_sources.py` prints that result; both files are outside the owned set and the completeness file is written and frozen by the library. So the plan writes the record in the worker's day file (local, read by hand in P-S3) and says explicitly (W9) that this slice does not make `--stream-status` print it. Making the probe print it needs a one-line probe or library change (a separate owner-approved slice).
+4. The shared worktree held copied parent changes at the start of earlier rounds; in this round the isolated checkout had none to stash; `origin` was added there for publication and never written to a file.
 
 ## 9 Blockers
 
-None for this plan. EXECUTE is blocked on: #198 merged, this plan PR merged, Main filling the three envelope values.
+None for this plan. EXECUTE is blocked only on: this plan PR merged and Main filling the three envelope values (#198 is already merged).
 
 ## 10 Follow-up
 
 - After EXECUTE the owner runs P-S1 to P-S5; P-S3 reports the real stream spend (`used`, `_budget` count, poll pages), which decides whether 0.45 stays.
 - Proposed owner-decision line for a later docs task (Q4): "SPEC AC14 waiver: one method per coin series and window is accepted; Discovery takes the first store of `source_impl.reddit` that yields a change for the coin and window; `reddit_impl_order` and `source_impl.reddit` stay two copies guarded by a consistency test." Not part of the EXECUTE slice.
-- Not in this slice: a second health line for the stream on the Sources row (Q3), window-level method choice, engagement enrichment (W8c3).
+- Not in this slice: any Sources row or text for the stream (Q3), showing the share record in `--stream-status` (section 8, point 3), window-level method choice, engagement enrichment (W8c3).
 
 ## 11 Context and cost
 
-Read: the plan, the report, `reddit_stream.py` of the #198 head (`Poll`, `PollOutcome`, `run_poll`, `run_due`), `pc_pace.py` on `main` (`PcSource.spend`, `_save`), `git ls-tree` of the #198 branch. The gate dry run took about 140 s. No model spend figure is measured here (UNVERIFIED).
+Read: the plan and the report, `reddit_stream.py` and `probe_pc_sources.py` on `origin/main` (`stream_status`, prune facts), the open-PR list. The gate dry run took about 170 s. No model spend figure is measured here (UNVERIFIED).
