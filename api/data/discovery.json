@@ -61,6 +61,22 @@
   "winsor_percentile": 95,
   "recent_days": 7,
   "max_source_lag_days": 3,
+  "fetch_side": {
+    "xsearch": "pc_side",
+    "reddit": "pc_side",
+    "trends": "github",
+    "wikipedia": "github",
+    "exchange_activity": "github",
+    "defillama": "github",
+    "github_dev": "github"
+  },
+  "source_impl": {
+    "xsearch": "xsearch_web",
+    "reddit": ["reddit_web", "reddit_stream"]
+  },
+  "x_discovery_mode": "rotation",
+  "x_rotation_points": 3,
+  "x_rotation_max_lag_days": 7,
   "universe_rules": {
     "min_narrative_coins": 3,
     "thin_volume_label_below_usd": 20000000,

@@ -52,7 +52,17 @@ VERSION_KEYS = ("source_weights", "source_groups", "early_sources", "fallback_co
 CONFIG_KEYS = {"source_weights", "source_groups", "early_sources", "fallback_coverage_only", "weights_version",
                "weights_history",
                "exchange_sub_weights", "rising_threshold_pct", "trigger_pct", "min_covered_weight",
-               "min_history_days", "winsor_percentile", "recent_days", "max_source_lag_days", "universe_rules"}
+               "min_history_days", "winsor_percentile", "recent_days", "max_source_lag_days", "universe_rules",
+               "fetch_side", "source_impl", "x_discovery_mode", "x_rotation_points", "x_rotation_max_lag_days"}
+# Fetch side (SPEC AC7): each weighted source is fetched by exactly one side. A `fetch_side` object, when present,
+# lists every weighted source; absent, this default holds (the W8e worker's `FETCH_SIDE` mirrors it).
+PC_SIDE, GITHUB_SIDE = "pc_side", "github"
+DEFAULT_FETCH_SIDE = {s: PC_SIDE if s in ("xsearch", "reddit") else GITHUB_SIDE for s in WEIGHTED_SOURCES}
+# X rotation mode (Locked pacing rule 9, AC23). Absent keys keep today's window rule (configs that predate W8f);
+# the shipped discovery.json selects rotation.
+X_SOURCE = "xsearch"
+X_MODES = ("rotation", "window")
+X_DEFAULTS = {"x_discovery_mode": "window", "x_rotation_points": 3, "x_rotation_max_lag_days": 7}
 # Moved or removed by U1: a stale local config fails loudly instead of being half-read.
 REMOVED_KEYS = {"categories": "categories come from attention_narratives.json",
                 "min_category_coins": "moved to universe_rules.min_narrative_coins"}
@@ -131,6 +141,62 @@ def weights_for_day(cfg: dict, day: date) -> dict:
             "fallback_coverage_only": v.get("fallback_coverage_only", False)}
 
 
+def fetch_sides(cfg: dict) -> dict[str, str]:
+    """Weighted source -> `github` or `pc_side`: the config's `fetch_side`, else the default."""
+    return dict(cfg.get("fetch_side") or DEFAULT_FETCH_SIDE)
+
+
+def source_impls(cfg: dict) -> dict[str, tuple[str, ...]]:
+    """Weighted source -> the stores it reads, in order (AC14). A source not in `source_impl` reads its own store."""
+    raw = cfg.get("source_impl") or {}
+    out = {}
+    for s in WEIGHTED_SOURCES:
+        v = raw.get(s, s)
+        out[s] = (v,) if isinstance(v, str) else tuple(v)
+    return out
+
+
+def x_setting(cfg: dict, key: str):
+    return cfg.get(key, X_DEFAULTS[key])
+
+
+def _check_wiring(cfg: dict) -> None:
+    """`fetch_side`, `source_impl` and the X rotation keys (W8f); every value strict, never half-read."""
+    if "fetch_side" in cfg:
+        fs = cfg["fetch_side"]
+        if not isinstance(fs, dict) or set(fs) != set(WEIGHTED_SOURCES):
+            raise ValueError("discovery config: fetch_side must name every weighted source exactly once: "
+                             + ", ".join(WEIGHTED_SOURCES))
+        bad = sorted(k for k, v in fs.items() if v not in (PC_SIDE, GITHUB_SIDE))
+        if bad:
+            raise ValueError(f"discovery config: fetch_side of {', '.join(bad)} must be github or pc_side")
+    sides = fetch_sides(cfg)
+    impl = cfg.get("source_impl", {})
+    if not isinstance(impl, dict):
+        raise ValueError("discovery config: source_impl must be an object")
+    for s, v in impl.items():
+        known = registry.SOURCE_IMPLS.get(s)
+        if known is None:
+            raise ValueError(f"discovery config: source_impl has unknown source {s!r}; known: "
+                             + ", ".join(registry.SOURCE_IMPLS))
+        order = [v] if isinstance(v, str) else v
+        if not isinstance(order, list) or not order or len(set(order)) != len(order) or any(
+                not isinstance(m, str) or m not in known for m in order):
+            raise ValueError(f"discovery config: source_impl[{s!r}] must be one of {', '.join(known)} or a list of "
+                             "distinct ones")
+        want = PC_SIDE if sides[s] == PC_SIDE else GITHUB_SIDE
+        if any((PC_SIDE if m in registry.PC_STORES else GITHUB_SIDE) != want for m in order):
+            raise ValueError(f"discovery config: source_impl[{s!r}] reads a store of the other fetch side "
+                             f"(fetch_side is {sides[s]})")
+    if x_setting(cfg, "x_discovery_mode") not in X_MODES:
+        raise ValueError("discovery config: x_discovery_mode must be rotation or window")
+    for key, lo in (("x_rotation_points", 2), ("x_rotation_max_lag_days", 0)):
+        v = x_setting(cfg, key)
+        if isinstance(v, bool) or not isinstance(v, int) or v < lo:
+            raise ValueError(f"discovery config: {key} must be an integer >= {lo}")
+
+
+
 def validate_config(cfg: dict) -> dict:
     for key, why in REMOVED_KEYS.items():
         if key in cfg:
@@ -148,6 +214,7 @@ def validate_config(cfg: dict) -> dict:
     v = rules.get("min_narrative_coins") if isinstance(rules, dict) else None
     if isinstance(v, bool) or not isinstance(v, int) or v < 1:
         raise ValueError("discovery config: universe_rules.min_narrative_coins is missing or not an integer >= 1")
+    _check_wiring(cfg)
     universe_classes.validate_rules(cfg)   # names the keys it retired before the generic check below
     unknown = sorted(set(cfg) - CONFIG_KEYS)
     if unknown:
@@ -192,6 +259,19 @@ def _source_change(points: list[tuple[date, float]], end: date, recent: int, win
     return (mean(now) / base_mean - 1.0) * 100.0
 
 
+def _rotation_change(points: list[tuple[date, float]], end: date, n: int, max_lag: int) -> float | None:
+    """X rotation mode (rule 9, Q13): the newest of the latest `n` stored points dated <= `end` against the mean of
+    the `n - 1` before it. None with fewer than `n` points, a newest point more than `max_lag` days before `end`,
+    or a base mean <= 0. The `n` points are the history gate (no `min_history_days`)."""
+    pts = sorted(p for p in points if p[0] <= end)[-n:]
+    if len(pts) < n or (end - pts[-1][0]).days > max_lag:
+        return None
+    base_mean = mean(v for _, v in pts[:-1])
+    if base_mean <= 0:
+        return None
+    return (pts[-1][1] / base_mean - 1.0) * 100.0
+
+
 def _is_rising(change: float, threshold_pct: float) -> bool:
     return change >= threshold_pct
 
@@ -206,6 +286,28 @@ def _series_source(label, data, series, symbol, end, recent, window, max_lag) ->
         return None
     c = _source_change(sr.points, end, recent, window, max_lag)
     return None if c is None else DiscoverySource(source=label, change=c, as_of=_as_of(sr.points, end))
+
+
+def _weighted_source(src, cfg, data, symbol, end, recent, window, max_lag) -> DiscoverySource | None:
+    """One weighted source from the first of its `source_impl` stores that yields a change: that one store feeds
+    the whole window, points of two methods are never mixed (AC14). X in rotation mode uses `_rotation_change`
+    with `x_rotation_max_lag_days`; every other source keeps the window and `max_source_lag_days`."""
+    rotation = src == X_SOURCE and x_setting(cfg, "x_discovery_mode") == "rotation"
+    for impl in source_impls(cfg)[src]:
+        sr = data.get((impl, symbol))
+        if sr is None:
+            continue
+        if not rotation:
+            s = _series_source(src, data, impl, symbol, end, recent, window, max_lag)
+        elif sr.state in ("ok", "insufficient-history"):   # the 3 points replace the history gate for X
+            c = _rotation_change(sr.points, end, int(x_setting(cfg, "x_rotation_points")),
+                                 int(x_setting(cfg, "x_rotation_max_lag_days")))
+            s = None if c is None else DiscoverySource(source=src, change=c, as_of=_as_of(sr.points, end))
+        else:
+            s = None
+        if s is not None:
+            return s
+    return None
 
 
 def _exchange_slot(symbol, sub_weights, data, end, recent, window, max_lag) -> DiscoverySource | None:
@@ -256,7 +358,7 @@ def _coin(symbol, cfg, data, end, recent, window, max_lag, frozen=None
         elif frozen and src in frozen:
             s = frozen[src]
         else:
-            s = _series_source(src, data, src, symbol, end, recent, window, max_lag)
+            s = _weighted_source(src, cfg, data, symbol, end, recent, window, max_lag)
         if s is not None:
             found.append((src, w, s))
     if not found:
@@ -279,10 +381,12 @@ def _empty(window, as_of, cats_asof, status, reason, usize=0, esize=0, cats=None
 
 
 def series_names(cfg: dict) -> set[str]:
-    """Series read for scoring: every source weighted > 0 in the current or any older weights version."""
+    """Stores read for scoring: the `source_impl` stores of every source weighted > 0 in the current or any older
+    weights version, plus the exchange members and the fallback."""
     versions = [cfg, *cfg.get("weights_history", [])]
     weighted = {s for v in versions for s, w in v["source_weights"].items() if w > 0 and s != SLOT}
-    return weighted | set(EXCHANGE_SERIES.values()) | {FALLBACK_SERIES}
+    impls = source_impls(cfg)
+    return {m for s in weighted for m in impls[s]} | set(EXCHANGE_SERIES.values()) | {FALLBACK_SERIES}
 
 
 def eligibility(cfg: dict, rows: list[dict], venues=None, today: date | None = None) -> universe_classes.Universe:
@@ -326,7 +430,8 @@ def _excluded(u: universe_classes.Universe, nm: narratives.Memberships, shown: s
 
 def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
                     weights_path: Path | None = None, universe_path: Path | None = None,
-                    config_path: Path | None = None) -> DiscoveryResponse:
+                    config_path: Path | None = None, known_at_time: bool = False) -> DiscoveryResponse:
+    """`known_at_time` (AC5 backtests): score only points known the day after them, backfilled values excluded."""
     cfg = load_config(config_path)
     doc = narratives.load_narratives()
     end = today - timedelta(days=1)
@@ -348,7 +453,8 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
              "tradeability_data_suspect": u.data_suspect}
 
     series = series_names(cfg)
-    data = {(src, sym): registry.read_series(src, sym, today, probe_path) for src in series for sym in eligible}
+    data = {(src, sym): registry.read_series(src, sym, today, probe_path, known_at_time=known_at_time)
+            for src in series for sym in eligible}
     recent, max_lag = int(cfg["recent_days"]), int(cfg["max_source_lag_days"])
     coins = {s: _coin(s, cfg, data, end, recent, window, max_lag) for s in eligible}
     if not any(coins.values()):
