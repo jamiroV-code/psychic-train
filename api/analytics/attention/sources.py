@@ -8,11 +8,20 @@ W8f: a weighted source reports the store `source_impl` selects (the first with u
 data, else the first); X in rotation mode is gated by `x_rotation_points` stored points and
 `x_rotation_max_lag_days`. Each row carries a closed `reason` code beside its note; a failed or stale series is
 `unavailable`, a short one `insufficient-history`.
+
+W8e2: optional worker health is read from atomic state/completeness snapshots only. Collection-day counts
+are distinct coin-days, excluding canaries, pages and account retries. The text separately labels the target
+UTC day. Older files without attempt or scheduling evidence report unknown, never inferred zero.
 """
 from __future__ import annotations
 
+import json
+import math
 import os
-from datetime import date, timedelta
+import re
+import shutil
+from collections import Counter
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -21,10 +30,12 @@ from api.analytics.attention.discovery import (EXCHANGE_SERIES, FALLBACK_SERIES,
                                                load_config, source_impls, weights_for_day, x_setting)
 from api.analytics.attention import narratives
 from api.analytics.attention.universe import load_universe_rows
-from api.data.attention import registry, store, trends_keywords, universe_store
+from api.data import cache
+from api.data.attention import pc_pace, registry, store, trends_keywords, universe_store, web_queries, x_pool
+from api.data.attention import pc_adapter as pa
 from api.data.attention.types import MIN_HISTORY_DAYS
-from api.models.discovery import (DiscoveryKeywordGap, DiscoverySourceRow, DiscoverySourcesResponse,
-                                  DiscoveryTrendsKeyword)
+from api.models.discovery import (DiscoveryAccountHealth, DiscoveryKeywordGap, DiscoverySourceHealth,
+                                  DiscoverySourceRow, DiscoverySourcesResponse, DiscoveryTrendsKeyword)
 
 LABELS = {
     "wikipedia": "Wikipedia pageviews", "trends": "Google Trends", "reddit": "Reddit", "xsearch": "X search",
@@ -40,6 +51,150 @@ _file_cache: dict[str, tuple[int, int, int, date | None]] = {}   # path -> (mtim
 
 def clear_cache() -> None:
     _file_cache.clear()
+
+
+PC_STORES = frozenset({"xsearch_web", "reddit_web"})
+
+
+def _json_file(path: Path) -> dict | None:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _timestamp(value) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value)
+        return parsed.astimezone(UTC) if parsed.tzinfo is not None else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _collector():
+    try:
+        return web_queries.load().config
+    except (OSError, ValueError):
+        return None
+
+
+def _accounts(now: datetime, health: DiscoverySourceHealth) -> None:
+    """Reuse the pool's read-only loader and lock semantics, never its mutating methods or account DBs."""
+    cfg = _collector()
+    path = cache.CACHE_ROOT / "attention" / "_pc_state" / "x_pool.json"
+    if cfg is None or not cfg.x_accounts:
+        return
+    ages = _json_file(Path(cfg.x_accounts_db_path) / "cookie_ages.json") if cfg.x_accounts_db_path else None
+    if not path.exists():
+        return
+    try:
+        pool = x_pool.XPool(list(cfg.x_accounts), clock=lambda: now)
+        snapshot = pool.health()
+    except x_pool.XPoolStateError:
+        health.paused, health.pause_reason, health.pause_until = True, "state_error", None
+        return
+    health.accounts_active, health.accounts_total = snapshot["active"], snapshot["total"]
+    for account in snapshot["accounts"]:
+        refreshed = _timestamp((ages or {}).get(account["label"]))
+        health.accounts.append(DiscoveryAccountHealth(
+            **account, cookie_age_days=max(0, (now - refreshed).days) if refreshed else None))
+    if snapshot["pause_reason"]:
+        # One loaded snapshot: do not re-read a file that the producer may replace concurrently.
+        health.paused, health.pause_reason = True, snapshot["pause_reason"]
+        health.pause_until = None if pool._s["stopped"] else pool._s["pause_until"]
+
+
+def _completeness(store_id: str, day: date, now: datetime, health: DiscoverySourceHealth) -> None:
+    directory = cache.CACHE_ROOT / "attention" / store_id / "_meta" / "_completeness"
+    today_attempted = today_fetched = 0
+    known_today = directory.exists()
+    target = None
+    for path in sorted(directory.glob("*.json")):
+        doc = _json_file(path)
+        coins = doc.get("coins") if doc else None
+        if not isinstance(coins, dict) or not all(isinstance(c, dict) for c in coins.values()):
+            known_today = False
+            continue
+        if path.stem == day.isoformat():
+            target = coins
+        for coin in coins.values():
+            collected = _timestamp(coin.get("collected_at"))
+            if collected and collected.date() == now.date():
+                if coin.get("attempted") is None:
+                    known_today = False
+                else:
+                    today_attempted += coin.get("attempted") is True
+                    today_fetched += coin.get("reason") == "fetched"
+    if known_today:
+        health.attempted, health.fetched = today_attempted, today_fetched
+    if target is None:
+        return
+    reasons = Counter()
+    times = []
+    fetched = capped = attempted = 0
+    attempts_known = True
+    for coin in target.values():
+        reason = coin.get("reason")
+        if not isinstance(reason, str) or not re.fullmatch(r"[a-z_]{1,40}", reason):
+            reason = "invalid_evidence"
+        if reason == "fetched":
+            fetched += 1
+            capped += coin.get("capped") is True
+        else:
+            reasons[reason] += 1
+        attempts_known &= isinstance(coin.get("attempted"), bool)
+        attempted += coin.get("attempted") is True
+        collected = _timestamp(coin.get("collected_at"))
+        if collected:
+            times.append(collected)
+    health.completeness_attempted = attempted if attempts_known else None
+    health.completeness_fetched, health.capped = fetched, capped
+    health.missing, health.missing_reasons = sum(reasons.values()), dict(sorted(reasons.items()))
+    health.newest_age_hours = round(max(0, (now - max(times)).total_seconds()) / 3600, 1) if times else None
+
+
+def _health(store_id: str, day: date, now: datetime) -> DiscoverySourceHealth | None:
+    path = pc_pace.state_path(store_id)
+    if not path.exists():
+        return None
+    h = DiscoverySourceHealth(collection_day=now.date().isoformat(), completeness_day=day.isoformat(),
+                              completeness="")
+    state = _json_file(path)
+    if not pc_pace._valid_state(state):
+        h.paused, h.pause_reason, h.completeness = True, "state_error", "worker state unreadable"
+        return h
+    h.last_unit_at = state["last_unit_at"]
+    until = _timestamp(state["pause_until"])
+    if state["pause_reason"] in pa.OWNER_ACTION_REASONS or (state["pause_reason"] and until and now < until):
+        h.paused, h.pause_reason, h.pause_until = True, state["pause_reason"], state["pause_until"]
+    h.budget_used = state["used"] if state["budget_day"] == h.collection_day else 0
+    h.effective_budget = state["effective"]
+    h.budget_spent = state["spent_day"] == h.collection_day or h.budget_used >= h.effective_budget
+    schedule = _json_file(path.with_name(f"{store_id}_health.json")) or {}
+    gap = schedule.get("expected_gap_s")
+    if (schedule.get("mode") in ("baseline", "degraded") and isinstance(gap, (int, float))
+            and not isinstance(gap, bool) and math.isfinite(gap) and gap > 0):
+        h.mode, h.expected_gap_s = schedule["mode"], gap
+        last = _timestamp(h.last_unit_at)
+        h.stale = last is None or (now - last).total_seconds() > 2 * gap
+    if store_id == "xsearch_web":
+        _accounts(now, h)
+    _completeness(store_id, day, now, h)
+    count = lambda value: "unknown" if value is None else str(value)
+    h.completeness = (f"{day.isoformat()}: attempted {count(h.completeness_attempted)}, "
+                      f"fetched {count(h.completeness_fetched)}, missing {count(h.missing)}")
+    if h.missing_reasons:
+        h.completeness += " (" + ", ".join(f"{k} {v}" for k, v in h.missing_reasons.items()) + ")"
+    h.completeness += f", capped {count(h.capped)}, newest "
+    h.completeness += f"{h.newest_age_hours:g}h old" if h.newest_age_hours is not None else "unknown"
+    if h.stale:
+        h.completeness += "; stale"
+    try:
+        h.free_disk_bytes = shutil.disk_usage(cache.CACHE_ROOT).free
+    except OSError:
+        pass
+    return h
 
 
 def _scan(source: str, symbol: str) -> tuple[int, date | None]:
@@ -124,8 +279,12 @@ def _trends_keyword(eligible: list[str]) -> DiscoveryTrendsKeyword:
 
 
 def build_sources(today: date, *, probe_path: Path | None = None, universe_path: Path | None = None,
-                  config_path: Path | None = None) -> DiscoverySourcesResponse:
+                  config_path: Path | None = None, now: datetime | None = None) -> DiscoverySourcesResponse:
     cfg = load_config(config_path)
+    now = now or datetime.now(UTC)
+    if now.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
+    now = now.astimezone(UTC)
     end = today - timedelta(days=1)
     max_lag = int(cfg["max_source_lag_days"])
     rows, _ = load_universe_rows(universe_path)
@@ -152,7 +311,7 @@ def build_sources(today: date, *, probe_path: Path | None = None, universe_path:
         return DiscoverySourceRow(id=sid, label=LABELS[sid], kind=kind, weight=weight, state=state,
                                   newest=_iso(s.newest), history_days=s.history_days,
                                   coins_with_data=len(s.usable), eligible_size=n, note=note, reason=reason,
-                                  impl=impl)
+                                  impl=impl, health=_health(impl, end, now) if impl in PC_STORES else None)
 
     impls = source_impls(cfg)
 

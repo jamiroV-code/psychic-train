@@ -377,6 +377,10 @@ def run_search_unit(client: httpx.Client, src: pc_pace.PcSource, q: Queries, *, 
     url = search_url(q.subreddits, terms, q.config.reddit_search_time_filter)
     canary = canary_ok(now)
     src.spend(1)
+    # Durable dispatch evidence: a power cut leaves an attempted, interrupted coin-day, not invisible work.
+    # The terminal record in run_pass replaces this same key and counts the request only once.
+    _record(day, symbol, "unit_interrupted", out=SearchOutcome(None, "unit_interrupted"),
+            collected_at=now, count_request=False)
     try:
         entries = parse_feed(fetch_feed(client, url), ledger.hasher if ledger is not None else ephemeral_hasher())
     except pa.CollectorError as exc:
@@ -387,6 +391,7 @@ def run_search_unit(client: httpx.Client, src: pc_pace.PcSource, q: Queries, *, 
         return SearchOutcome(None, exc.reason, exc.status)
     except Exception:
         src.stamp_attempt()
+        _record(day, symbol, "failed", out=SearchOutcome(None, "failed"), collected_at=_utc(src.clock()))
         raise
     src.record_unit()
     if ledger is not None:
@@ -493,7 +498,7 @@ def read_completeness(day: date) -> dict:
 
 
 def _record(day: date, symbol: str, reason: str, *, out: SearchOutcome | None = None, value: float | None = None,
-            collected_at: datetime | None = None, budget_cut: bool = False) -> None:
+            collected_at: datetime | None = None, budget_cut: bool = False, count_request: bool = True) -> None:
     doc = read_completeness(day)
     attempted = out is not None and out.sent
     tally = out.tally if attempted else None
@@ -513,7 +518,7 @@ def _record(day: date, symbol: str, reason: str, *, out: SearchOutcome | None = 
             "excluded": tally.excluded if tally else dict.fromkeys(EXCLUSION_REASONS, 0),
             "canary_ok": bool(attempted and out.canary_ok),
             "value": value, "capped": bool(attempted and out.result is not None and out.result.capped)}
-        doc["requests"] += 1 if attempted else 0
+        doc["requests"] += 1 if attempted and count_request else 0
         doc["budget_cut"] = doc["budget_cut"] or budget_cut
         if attempted and collected_at is not None:
             doc["canary"] = read_canary(collected_at.date())  # the run day's canary, as seen at this record

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_serializer
 
 DiscoveryStatus = Literal["ok", "no-data"]
 
@@ -102,6 +102,45 @@ SourceReason = Literal["", "parked", "x_live_off", "not_probed", "stale", "insuf
                        "no_stored_data", "invalid_file"]
 
 
+class DiscoveryAccountHealth(BaseModel):
+    """One X account of the pool (AC47, AC52): opaque label only, never a cookie, token or username."""
+    label: str
+    state: Literal["active", "locked", "inactive", "suspect"]
+    reason: str | None = None
+    last_used: str | None = None
+    cookie_age_days: int | None = None   # None: never refreshed through `--refresh-cookies`
+
+
+class DiscoverySourceHealth(BaseModel):
+    """W8e2 health line (AC38, AC39): read from the worker's state and evidence files only."""
+    last_unit_at: str | None = None
+    paused: bool = False
+    pause_reason: str | None = None
+    pause_until: str | None = None  # None while paused: owner action needed or state unreadable
+    collection_day: str
+    attempted: int | None = None   # distinct coin-days attempted on collection_day; excludes canaries
+    fetched: int | None = None     # those coin-days successfully stored
+    completeness_day: str
+    completeness_attempted: int | None = None
+    completeness_fetched: int | None = None
+    missing: int | None = None
+    missing_reasons: dict[str, int] | None = None
+    capped: int | None = None
+    newest_age_hours: float | None = None  # age of newest collection, not the target day
+    budget_used: int | None = None  # today's count (X: posts loaded; Reddit: requests), includes canaries
+    effective_budget: int | None = None
+    budget_spent: bool | None = None
+    mode: Literal["baseline", "degraded"] | None = None
+    expected_gap_s: float | None = None  # worker's persisted upper interval; unknown for older state
+    stale: bool | None = None       # no unit for > 2 x expected gap; unknown without timing evidence
+    completeness: str
+    accounts_active: int | None = None
+    accounts_total: int | None = None
+    accounts: list[DiscoveryAccountHealth] = []
+    free_disk_bytes: int | None = None
+    clock_sync_age_seconds: float | None = None  # no clock-sync evidence persisted by this worker
+
+
 class DiscoverySourceRow(BaseModel):
     """One line of GET /api/narrative/sources."""
     id: str
@@ -116,6 +155,15 @@ class DiscoverySourceRow(BaseModel):
     note: str = ""
     reason: SourceReason = ""
     impl: str | None = None   # weighted sources: the store (method) the row reports, from `source_impl`
+    health: DiscoverySourceHealth | None = None   # W8e2: PC worker sources only, None without worker state
+
+    @model_serializer(mode="wrap")
+    def serialize_row(self, handler):
+        """Keep the pre-worker wire shape exactly when there is no worker state."""
+        row = handler(self)
+        if self.health is None:
+            row.pop("health", None)
+        return row
 
 
 class DiscoveryKeywordGap(BaseModel):
