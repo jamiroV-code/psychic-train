@@ -62,18 +62,16 @@ review -> in_progress (acceptance rejected, with reasons; counts against the ret
 
 A worker saying "done" yields `review` only. Missing tier evidence keeps the task at `review` and is recorded as a gap; a known gap is never a pass. A merged task that still needs (d) stays `review` after the merge until that evidence exists.
 
-## 5. Standing authorization (user, 02-10-26)
+## 5. Standing authorization (user, 02-10-26; merge and archive part superseded by D-28)
 
-User's words: "it spawns workers for tasks you already marked approved, without asking again (max 3 sessions at the same time excl. master planner session), each session can merge and archive on itself automatically if it's sure it's ready and safe to merge".
+History (user's words, 02-10-26, superseded by D-28 for the merge and archive part): "it spawns workers for tasks you already marked approved, without asking again (max 3 sessions at the same time excl. master planner session), each session can merge and archive on itself automatically if it's sure it's ready and safe to merge".
 
 1. **Spawn:** the Master Planner may spawn a worker for any `approved` task without asking again. Max 3 concurrent workers, excluding the planner.
-2. **Self-merge and self-archive** only when ALL hold: (a) CI green on the head commit (both `ci.yml` jobs `success`; pending, skipped or neutral is not green); (b) the risk-tier tests passed and were independently re-run or confirmed by CI; (c) the diff touches only declared files; (d) no merge conflicts; (e) the completion report is committed; (f) the Master Planner has recorded `accepted` then `archived` with commit refs (the worker requests it in report headings 9 and 10). (g) the diff touches neither CLAUDE.md nor AGENTS.md: such a diff stops at `review` for the user's diff check (user 03-10-26).
-3. **No class exception** (user, "no exceptions"): high-risk classes may self-merge when every condition holds.
-4. **Fail-safes:** an unsure worker stops at `review`; every condition must be evidenced; a denied or permission-prompting merge or archive call means stop at `review`, never retry around it.
-5. **Verifiability:** behaviour visible only on the user's PC (Windows PowerShell scripts at runtime, Task Scheduler, Tailscale, the live app) cannot be evidenced from the cloud, so such a task stops at `review` and the user verifies.
-6. **Merges are serialized:** the branch must contain the current `origin/main` tip with CI re-run; one self-merge at a time (the planner holds the merge token in the registry `Worker/session` column).
-7. **Post-merge check:** after each self-merge the Master Planner checks CI on the merge SHA on `main`; on red it proposes `git revert <merge sha>` and halts further self-merges until the user responds.
-8. **Decided 03-10-26 (Open Question 10):** a worker may self-merge anything inside its owned files except a diff touching CLAUDE.md or AGENTS.md (stops at `review`, see (g)); direct worker lane (Open Question 12): keep as is. Still open: RT4 bypass of user acceptance.
+2. **Merge and archive (D-28):** the owner merges every PR. A worker opens ONE draft PR and stops; it never merges and never archives. The Master Planner never merges. Registry `accepted` then `archived` is recorded only after the owner's merge is verified and the acceptance rule (section 4) holds; the worker requests it in report headings 9 and 10. A diff touching CLAUDE.md or AGENTS.md stops at `review` for the user's diff check (user 03-10-26).
+3. **Fail-safes:** an unsure worker stops at `review`; every condition must be evidenced; a denied or permission-prompting call means stop, never retry around it.
+4. **Verifiability:** behaviour visible only on the user's PC (Windows PowerShell scripts at runtime, Task Scheduler, Tailscale, the live app) cannot be evidenced from the cloud, so such a task stops at `review` and the user verifies.
+5. **Owner merge check:** after each owner merge the Master Planner checks CI on the merge SHA on `main`; on red it proposes `git revert <merge sha>` to the owner and stops.
+6. **Items superseded by D-28:** the 03-10-26 worker-merge items (no class exception, serialized merges with a merge token in the registry, Open Question 10) are superseded by D-28 and not operative. Direct worker lane (Open Question 12): keep as is. RT4 bypass of user acceptance: still open (kept from the old item 8).
 
 Nothing above is platform-enforced (repo PUBLIC, verified 03-10-26 with `gh api repos/jamiroV-code/psychic-train --jq .private` = false; `main` unprotected, `branches/main` protected = false; `allow_auto_merge` = true and `delete_branch_on_merge` = true, as returned): every control is procedure.
 
@@ -90,6 +88,7 @@ Nothing above is platform-enforced (repo PUBLIC, verified 03-10-26 with `gh api 
 |---|---|---|
 | Cloud | one session = one container + one branch | `create_session(prompt, branch)`; branch `claude/<task-id>-<slug>` |
 | User's PC | git worktree | user-driven; the planner records the path but cannot create or remove it |
+| Owner PC, omp | isolated checkout or git worktree plus `claude/<task-id>-<slug>` branch | not a cloud container; see omp-setup.md |
 
 Each lane lists owned and forbidden path globs in its registry row. Two lanes never own an overlapping glob; shared files (`.gitignore`, `process/context/all-context.md`, CLAUDE.md) have one owner at a time. Overlap found at queue time forces serialization.
 
@@ -112,6 +111,8 @@ Report: <task folder>/<slug>_REPORT_<dd-mm-yy>.md using the 11-heading template
 Stop and report at `review` if: irreversible or outward-facing action, scope expansion, unverifiable condition, any doubt
 Autonomy: <what this task may do without asking>
 ```
+
+omp children do not load CLAUDE.md or AGENTS.md; put role and hard rules in the envelope; name the agent in every spawn (omp-setup.md).
 
 ## 9. Completion report template
 
@@ -146,10 +147,10 @@ done | partial | failed
 |---|---|---|---|
 | A | Archive documents | move the task folder to `completed/`; add a row to `process/archive/index.md` | normal task flow, user-visible |
 | B | Mark logically complete | registry `accepted` then `archived` | only after the acceptance rule |
-| C | Archive a session | `archive_session` | after the handover report is durable and the merge is verified; never with unresolved asks; otherwise user approval |
+| C | Archive a session | `archive_session` | after the handover report is durable and the owner's merge is verified; never with unresolved asks; otherwise user approval |
 | D | Delete a branch / remove a worktree | GitHub branch delete or `git push origin --delete <branch>`; worktrees only by the user | see the consent below |
 
-**Branch-deletion standing consent (user, 02-10-26: "delete merged task branches after verified merge and saved report").** Covers only merged worker task branches `claude/<task-id>-<slug>` that the Master Planner created for a registry task (not `claude/p1-pipeline`, `claude/p2-deploy` or any of the 12 pre-existing branches). Order: merge verified (PR merged, merge SHA reachable from `origin/main`, CI on it green), report committed, registry `accepted` then `archived`; then write the Approvals Log row (date, branch, merge SHA, report path, 'standing consent 02-10-26', status `pending`); then delete; then set the row to `done`, `failed` or `deletion deferred`. An empty log means no removal is permitted. The delete mechanism is unverified until the Gate 6 pilot; if none works, the branch stays. Every other branch and every worktree needs explicit per-branch user approval.
+**Branch-deletion standing consent (user, 02-10-26: "delete merged task branches after verified merge and saved report").** Covers only merged worker task branches `claude/<task-id>-<slug>` that the Master Planner created for a registry task (not `claude/p1-pipeline`, `claude/p2-deploy` or any of the 12 pre-existing branches). Order: the OWNER's merge verified (PR merged by the owner, merge SHA reachable from `origin/main`, CI on it green), report committed, registry `accepted` then `archived`; then write the Approvals Log row (date, branch, merge SHA, report path, 'standing consent 02-10-26', status `pending`); then delete; then set the row to `done`, `failed` or `deletion deferred`. An empty log means no removal is permitted. The delete mechanism is unverified until the Gate 6 pilot; if none works, the branch stays. Every other branch and every worktree needs explicit per-branch user approval. The consent acts only after the owner's merge is verified; no worker or planner merge exists (D-28).
 
 Wording rule: say "report file written" for A and "registry updated" for B; state C or D only when the tool call returned success. Never discard active work: an unmerged branch or unresolved asks block C and D.
 

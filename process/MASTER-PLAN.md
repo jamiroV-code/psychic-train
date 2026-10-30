@@ -10,21 +10,21 @@ metadata:
 
 # my_site — Master Plan (board and task registry)
 
-**Last verified:** 2026-10-21 UTC at `origin/main` `faf416b` (PR #144 merge; nightly bot snapshot commits sit below it); PRs checked with `git log --merges` and the GitHub API; **built from:** revision 6 (`18ffd4f`). Gate reports: `process/general-plans/completed/master-planner-recovery_02-10-26/`.
+**Last verified:** 2026-10-29 UTC at `origin/main` `4b3f70a` (PR #189 merge; nightly bot snapshot commits sit below it); PRs checked with `gh pr list --state all`; **built from:** revision 6 (`18ffd4f`) plus the T118 and T221 reconciliations. Gate reports: `process/general-plans/completed/master-planner-recovery_02-10-26/`.
 
 **This file is the one board.** Each task has one row here; details live in its task folder. Revisions 1-6: `process/archive/master-plan-revisions_02-10-26.md`. Protocol: `process/development-protocols/master-planner.md`. Direction: north-star.md. State: current-state.md.
 
 ## Rules in one screen
 
 - **Writer:** only the Master Planner session edits this file. Workers request updates in report headings 9 and 10.
-- **Status vocabulary:** `proposed, approved, queued, in_progress, review, accepted, archived` plus `blocked, failed, cancelled, needs_input`. A status stronger than `review` needs independent evidence (merged PR, CI, vc-tester, user). `UNVERIFIED` = not re-checked.
+- **Status vocabulary:** `proposed, approved, queued, in_progress, review, accepted, archived` plus `blocked, failed, cancelled, needs_input`. A status stronger than `review` needs independent evidence (an independent review report, CI on the merge SHA read with `gh`, vc-tester, or the owner); a merge alone is `review`. `UNVERIFIED` = not re-checked.
 - **IDs:** `T#` historical tasks, `R#` recovery program, `P#` programs and product tasks. `Prio` is H / M / L. Test tiers are written RT0-RT4 (operating-instructions.md).
 - **Lanes:** max 3 concurrent worker sessions, excluding the Master Planner. Owned globs never overlap; shared files have one owner at a time.
 - **`approved`** = standing EXECUTE consent for that task only.
 
 ## Active lanes
 
-Lanes: T115 (U2, PR #146, open draft, in review), T117 (independent review of T115), T118 (this docs catch-up). Merge token: free. P10 slices U3, U5, U6 queued. P9: first dataset (BTC-HIST) open; owner-run probes pending; P8 PAUSED. Worker spend about 188 of the 200 USD ceiling (planner figures, 21-10-26).
+Open PRs: none at the 29-10-26 read (`gh pr list --state open`), before the T221 EXECUTE draft PR was opened; that PR waits for the owner's merge (D-28). Lanes: T221 (this docs catch-up, in_progress), T117 (independent review of T115: no report found, UNVERIFIED). P10: U1 #145, U2 #146, U3 #151, U4 #144, U6 #160 merged; U5 UNVERIFIED. P9: first dataset (BTC-HIST) open; owner-run probes pending; P8 PAUSED. Worker and planner spend: about 188 of the 200 USD ceiling at 21-10-26 (planner figures); spend after 21-10-26 is UNVERIFIED.
 
 ## Registry
 
@@ -71,43 +71,28 @@ Columns: ID · Objective · Prio · Status · Parent · Deps · Worker/session �
 | P7 | protect pytrends partial-hour fix and nightly archive (guard tests) | M | proposed | P4 | — | — | — | BASKETS Decision 16, AC-25 | RT2 | BASKETS SPEC | — | — |
 | P8 | Human-confirmed market framework | M | proposed, PAUSED by owner 14-10-26 | - | - | - | - | owner must decide which input fits which timeframe before resume | per SPEC | SPEC `active/market-framework_13-10-26/`; PR #63 | paused; its proposed exception text (labelled D-15 in the SPEC) is renumbered on resume | `active/market-framework_13-10-26/` |
 | P9 | Data integration tooling: REA wrapper + Scrapling tiers 1-3, `tools/data-integration` | M | approved (owner 14-10-26) | - | - | workers | `claude/t53..t67-*` | PLAN PASS; programme built, merged 13-16 Oct (T53-T67, PRs #66-#95), D-15, D-16 | RT0-RT3; worker spend 97.66 USD | plan `active/data-integration-tooling_13-10-26/` | BTC-HIST open; owner probes AC-16/17/20 pending; tiers 2/3 not proven live; P8 stays PAUSED | verbatim row: `process/archive/master-plan-archived-rows_21-10-26.md` |
-| P10 | weighted attention signal and tradeable universe | H | in_progress | P5 | - | workers per slice | `claude/t96..t118-*` | weighted scoring W1-W3, W9 done; universe U1, U4 done, U2 in review, U3 U5 U6 queued. Proposed, not approved: W4 detail table, W5 github_dev, W6 defillama, W7 exchange_activity (Coinbase, Kraken), W8 in-API fetch for sources GitHub cannot reach, T100 Trends backfill | RT0-RT3; ceiling 200 USD | SPECs and PLAN in `active/narrative-baskets_02-10-26/` (`weighted-signal_SPEC`, `universe-narratives_SPEC`, `universe-narratives_PLAN`); rows T95-T118 below | G-OWN review of the 11-narrative list passed by the owner 21-10-26 (planner-reported), file `status` flip to `reviewed` pending (separate small task); Reddit API access requested by the owner 18-10-26, awaiting approval; X stays off; weights are the owner's call (D-24); scheduled checks `trig_01L2U9sNDtrJ59DCjvXYdBVG` (2027-01-18 calibration) and `trig_015hASBMDARhqyxofVKv3Ghd` (2027-04-18 suggestions); T96-T107 skipped PLAN/VALIDATE/EVL (D-26) | D-22..D-26 |
+| P10 | weighted attention signal and tradeable universe | H | in_progress | P5 | - | workers per slice | `claude/t96..t118-*` | weighted scoring W1-W3, W9 done, weights v2 (#156); universe U1 #145, U2 #146, U3 #151, U4 #144, U6 #160 merged; U5 UNVERIFIED. Proposed, not approved: W4 detail table, W5 github_dev, W6 defillama, W7 exchange_activity (Coinbase, Kraken). Trends T100a, T100b, T100c and W8a-W8d2 merged, see board-2 | RT0-RT3; ceiling 200 USD | SPECs and PLAN in `active/narrative-baskets_02-10-26/` (`weighted-signal_SPEC`, `universe-narratives_SPEC`, `universe-narratives_PLAN`); rows T95-T118 below, T119-T221 in `process/MASTER-PLAN-board-2_29-10-26.md` | G-OWN review of the 11-narrative list passed by the owner 21-10-26 (planner-reported), merged as #148; Reddit and X access or enablement status UNVERIFIED (W8c #185 and W8d2 #186 code merged); weights are the owner's call (D-24); exchange tokens are IN as a narrative (D-27, #160); scheduled checks `trig_01L2U9sNDtrJ59DCjvXYdBVG` (2027-01-18 calibration) and `trig_015hASBMDARhqyxofVKv3Ghd` (2027-04-18 suggestions); T96-T107 skipped PLAN/VALIDATE/EVL (D-26) | D-22..D-28 |
 
 ### Weighted signal and universe tasks (T88-T118, compact rows)
 
-Columns: ID · What · Status · PR / evidence · Cost USD (planner-measured). `review` = merged but not independently reviewed or EVL-gated, or still open. Report-only tasks have no PR.
+Columns: ID · What · Status · PR / evidence · Cost. The 21-10-26 rows with their cost figures are verbatim in `process/archive/master-plan-archived-rows_29-10-26.md` (planner-measured costs are there; none is repeated or extended here). `review` = merged, not independently reviewed or EVL-gated. Report-only tasks have no PR. Tasks T119-T221: see `process/MASTER-PLAN-board-2_29-10-26.md`.
 
 | ID | What | Status | PR / evidence | Cost |
 |---|---|---|---|---|
-| T88 | P5 refresh fix | review | #124 | n/m |
-| T89 | P5 verifier fix | review | #125 | n/m |
-| T93 | P5 extra hardening | review | #129 | n/m |
-| T95 | discovery data check, report-only: per-source lag made every coin read under 2 sources | review | report only | not measured |
-| T96 | discovery lag fix | review | #131 | not measured |
-| T97 | sources audit, report-only | review | report only | 0.43 |
-| T98 | weighted-signal SPEC | review | #132 | 1.61 |
-| T99 | wiki articles (no coins added, shape test only) | review | #133 | 0.51 |
-| T101 | W1 weighted scoring and trigger | review | #134 | 1.06 |
-| T102 | Wikipedia title checker | review | #135 | 0.63 |
-| T103 | W2 point-in-time history endpoint | review | #136 | 1.14 |
-| T104 | W3 Discovery history chart | review | #138 | 1.67 |
-| T105 | W9 frozen daily signal snapshots | review | #137 | 0.73 |
-| T106 | Discovery table, ranked-category rule, sources panel | review | #140 | 1.81 |
-| T107 | history chart panels | review | #139 | 1.12 |
-| T108 | universe-narratives SPEC | review | #141 | 1.07 |
-| T109 | review, report-only | review | report only | 0.62 |
-| T110 | small fixes on #140 | review | commit `d434621` inside #140 | 0.40 |
-| T111 | universe-narratives PLAN | review | #142 | 1.05 |
-| T112 | VALIDATE of that PLAN, `Gate: PASS` | review | #143 | 3.69 |
-| T113 | U1 narratives file and loader | review | #145 (part merged before review) | 6.55 |
-| T114 | U4 symbol source (CoinGecko and Wikipedia cover the universe) | review | #144 (part merged before review); owner probe P-CG passed 21-10-26 on the owner's PC (planner-reported): `coingecko: 90/92 ok, 3605 rows written [ok 90, insufficient-history 2]`, was 56 of 103 ok before U4 | 1.84 |
-| T115 | U2 reasoned exclusions, label-only volume | review | PR #146 open draft | 3.75 |
-| T116 | review, report-only | review | report only | 0.69 |
-| T117 | independent review of T115 | in_progress | report only | - |
-| T118 | this docs catch-up | in_progress | draft PR | - |
-| T100 | Trends backfill | proposed | not approved | - |
+| T88, T89, T93 | P5 refresh fix, verifier fix, extra hardening | review | #124, #125, #129 | see archive |
+| T95, T97, T109, T116 | report-only: discovery data check, sources audit, reviews | review | report only | see archive |
+| T96, T98, T99, T101, T102 | discovery lag fix, weighted-signal SPEC, wiki articles, W1 scoring, Wikipedia title checker | review | #131, #132, #133, #134, #135 | see archive |
+| T103, T104, T105, T106, T107 | W2 history endpoint, W3 chart, W9 frozen snapshots, Discovery table, chart panels | review | #136, #138, #137, #140, #139 | see archive |
+| T108, T111, T112 | universe-narratives SPEC, PLAN, VALIDATE (`Gate: PASS`) | review | #141, #142, #143 | see archive |
+| T110 | small fixes on #140 | review | commit `d434621` inside #140 | see archive |
+| T113 | U1 narratives file and loader | review | #145 (part merged before review), merged 2026-10-21 | see archive |
+| T114 | U4 symbol source; owner probe P-CG passed 21-10-26 (planner-reported, see archive) | review | #144 (part merged before review), merged 2026-10-21 | see archive |
+| T115 | U2 reasoned exclusions, label-only volume | review | #146, merged 2026-10-21, merge `911a703` | 3.75 (21-10-26 row) |
+| T117 | independent review of T115 | UNVERIFIED | no report file found in the repo at 29-10-26; whether it ran is not recorded | unmeasured |
+| T118 | docs catch-up T95-T117 | review | #147, merged 2026-10-21, merge `b616e45` | unmeasured |
+| T100 | Trends backfill (original proposal); T100a, T100b, T100c merged, see board-2 | proposed | not approved as a single task | - |
 
-Worker spend: about 152 USD before this block (ceiling then 160), ceiling raised to 185 and then 200 on 18-10-26; measured sessions above sum to about 30; total about 188 of 200 at writing. T88-T95 and T96 are not measured.
+Worker spend: about 188 of the 200 USD ceiling at 21-10-26 (planner figures); spend after 21-10-26 is UNVERIFIED.
 
 ### Recovery program (master-planner-recovery)
 
