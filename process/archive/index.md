@@ -17,6 +17,7 @@
 | 2026-10-10 | MASTER-PLAN size cap: rows of archived or cancelled tasks (T16, T18-T20, PERF, T29-T31, T8-T10, T17, T24, T25) relocated verbatim (operation: history move, nothing deleted) | archived (history) | `claude/pensive-albattani-ou0cgv` | uncommitted | `process/archive/master-plan-archived-rows_10-10-26.md` |
 | 2026-10-29 | T221: `current-state.md` as stamped at `faf416b` (21-10-26) relocated verbatim when the file was caught up to #187 | archived (history) | `claude/t221-docs-catchup-exec` | uncommitted | `process/archive/current-state-archived_29-10-26.md` |
 | 2026-10-29 | T221: MASTER-PLAN compact block T88-T118 (with its worker-spend line) relocated verbatim; the board keeps every ID in a compact replacement | archived (history) | `claude/t221-docs-catchup-exec` | uncommitted | `process/archive/master-plan-archived-rows_29-10-26.md` |
+| 2026-10-30 | docs catch-up 2: `current-state.md` as stamped at `4b3f70a` (29-10-26) relocated verbatim when the file was caught up to `3cd39e2` | archived (history) | `claude/docs-catchup-2` | uncommitted | `process/archive/current-state-archived_30-10-26.md` |
 
 ## Approvals Log
 

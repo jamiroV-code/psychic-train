@@ -2,61 +2,61 @@
 name: context:current-state
 description: "Observed, timestamped state of the repo: commit, workflows, tests, validator results, scheduled-job evidence, and what is unverified. Re-verify when stale."
 keywords: current state, status, branch, commit, working tree, validators, baseline, ground truth, stale, verified, unverified, snapshot, cron
-date: 29-10-26
+date: 30-10-26
 ---
 
 # Current State
 
-**Stamp: commit `4b3f70a` (`origin/main`, PR #189 merge, a docs-only PLAN fix; last code merge is PR #186 at `b573309`), observed 2026-10-29 (UTC) from branch `claude/t221-docs-catchup-exec` (`origin/main` plus the T221 docs).** Nightly data-snapshot bot commits sit below it. The previous state (stamp `faf416b`, 21-10-26) is verbatim in `process/archive/current-state-archived_29-10-26.md`; the one before in `process/archive/current-state-archived_21-10-26.md`.
+**Stamp: commit `3cd39e2` (`origin/main`, PR #196 merge, a docs-only SPEC wording fix; last code merge is PR #197 at `3f45921`), observed 2026-10-30 (UTC) from branch `claude/docs-catchup-2` (`origin/main` plus this docs catch-up).** Nightly data-snapshot bot commits sit below it. Previous state (stamp `4b3f70a`, 29-10-26) verbatim in `process/archive/current-state-archived_30-10-26.md`; older ones in `process/archive/current-state-archived_29-10-26.md` and `_21-10-26.md`.
 
-Staleness rule (master-planner.md): stale when the stamp is not an ancestor of HEAD or when more than 10 non-cache commits landed since it (`git log 4b3f70a..HEAD --oneline -- . ':(exclude)api/data/cache' | wc -l`). Nightly bot commits do not make it stale.
+Staleness rule (master-planner.md): stale when the stamp is not an ancestor of HEAD or when more than 10 non-cache commits landed since it (`git log 3cd39e2..HEAD --oneline -- . ':(exclude)api/data/cache' | wc -l`). Nightly bot commits do not make it stale.
 
-## Observed (29-10-26)
+## Observed (30-10-26)
 
 | Fact | Value | Command |
 |---|---|---|
-| Last code merges | #185 (T210, W8c) 2026-10-29 18:52Z; #187 (T217, docs and PC scripts) 19:22Z; #186 (T212, W8d2) 19:23Z | `gh pr list --state merged --json number,mergedAt` |
-| Open PRs | none when read (before the T221 EXECUTE draft PR was opened; that PR waits for the owner's merge, D-28) | `gh pr list --state open`, 2026-10-29 |
-| Workflows | 7: `ci.yml`, `attention-refresh.yml`, `chain-growth-snapshot.yml`, `liqtide-snapshot.yml`, `liquidity-backfill-snapshot.yml`, `narrative-snapshot.yml`, `pairs-refresh-snapshot.yml` | `ls .github/workflows` |
-| `ci.yml` on main | success on `b573309` (#186) and `c06d91d` (#188); the run on `4b3f70a` was still in progress when read | `gh run list --workflow ci.yml --branch main --limit 5` |
-| Scheduled attention refresh | `chore: attention refresh` commits on 26, 27, 28 and 29 Oct 2026 | `git log origin/main --grep='attention refresh' --format=%ad --date=short` |
-| Frozen signal snapshots | 36 tracked files under `api/data/cache/attention/signals/`; the count grows daily | `git ls-files api/data/cache/attention/signals \| wc -l` |
-| `.agents/skills` | not a symlink to `.claude/skills` (validator failure) | `validate-context-discovery` |
+| Merged since #190's base | #190 (T221 docs, 11:20Z), #191 (W8c2 Reddit stream, 11:20Z), #192 (W8e PC worker, 29-10 23:28Z), #193 (W8f Discovery wiring, 00:02Z), #194 (W8e2 host guide) and #195 (W8e2 health line), 11:19Z, #197 (W8g Sources panel text, 11:37Z), #196 (SPEC x_pool wording, 11:37Z) | `gh pr list --state merged --json number,title,mergedAt` |
+| Open PRs | #198 (draft, W8c2 fix round 3: false feed end, retention, page cap, gap report); the wiring-plan PR and this docs PR may be open when read. The owner merges all (D-28) | `gh pr list --state open` |
+| Workflows | 7 files in `.github/workflows` (names as on 29-10-26) | `ls .github/workflows` |
+| `ci.yml` on main | success on `3cd39e2` and `d390dc9`; `3f45921` and `ff8e4a8` show `cancelled` (superseded runs) | `gh run list --workflow ci.yml --branch main` |
+| Scheduled attention refresh | latest `chore: attention refresh` commit 2026-10-29 (30-10 not yet seen when read) | `git log origin/main --grep='attention refresh'` |
 
-## Tests (worker reports in merged PR bodies, not re-run here)
+## Tests (worker reports, not re-run here)
 
-- #185: full `pytest api` 2842 passed, 1 skipped, 5 deselected. #186: full `api` suite 2803 passed, 1 skipped, 5 deselected. #187: 2755 passed on its first run; the tooling_guards folder (106 tests) was re-run green after a fix, the full suite was not re-run.
-- Web vitest and tsc for these PRs: UNVERIFIED (not read). Playwright e2e is not in CI.
+- #191 W8c2 report: attention + tooling_guards + scripts, 1595 passed, 1 skipped (Windows PC, 29-10-26); the later 270-test run was its own subset. #192 W8e report: 1218 passed, 40 failed on Windows, the same 40 router tests also fail with `api/main.py` at `origin/main` (worker-reported). Figures for #193-#197: UNVERIFIED (not read). Web vitest for #197: UNVERIFIED.
 
-## Validator results (run 2026-10-29 on the owner PC, CRLF checkout)
+## PC findings (OBSERVED, owner's PC, 30-10-26)
 
-| Validator | Result |
-|---|---|
-| validate-context-discovery | 54 failures, 11 warnings, mostly "missing name/description frontmatter" and backslash-path "not indexed" lines [INFERENCE: CRLF and Windows path separators]; the cloud baseline of 1 failure (`.agents/skills`) is history |
-| validate-all-context | `failures: []` |
+- 13 tests under `api/tests/routers/test_discovery.py` and `analytics/attention` `test_universe_classes.py::test_discovery_end_to_end_on_fixture` fail on plain `origin/main` with "handler must not reach the network" (found by the planner's verifier). Cause UNVERIFIED.
+- Known Windows failure `tooling_guards/test_cli_guard.py::test_nothing_outside_the_tool_references_the_cli` (path separators, INFERENCE).
+
+## omp model fallback (OBSERVED from session transcripts)
+
+On 2026-10-29 an opus EXECUTE worker hit an Anthropic usage limit mid-run; omp switched it through `retry.fallbackChains` (opus, then openai-codex gpt-6-astra for 37 requests, then gpt-6.1-sol) and the run died on that provider's usage limit. **Owner decision:** fallback stays allowed; the planner reads the model per run from the agent transcript and reports any switch; code written on a fallback model needs an extra independent review.
+
+## Validator results (owner PC, CRLF checkout, run 2026-10-29)
+
+validate-context-discovery: 54 failures, 11 warnings (CRLF and Windows path separators, INFERENCE); validate-all-context: `failures: []`. Re-run for this change in `process/general-plans/active/docs-catchup-omp_29-10-26/docs-catchup-2_EXEC-REPORT_30-10-26.md`.
 
 ## What runs
 
-- Screener and equities; Baskets (P5); data integration tooling (P9).
-- Discovery and weighted signal (P10): W1-W3, W9; weights v2 (PR #156); CoinGecko volume fallback counts for coverage only (PR #183).
-- Universe and narratives: U1 #145, U2 #146, U3 #151, U4 #144, U6 #160 merged; `U5 UNVERIFIED`. D-27: exchange tokens are IN as a narrative, supersedes D-20 (PR #160).
-- Trends: T100a (#152 and follow-ups), T100b (#162), T100c daily workflow (#170), point-in-time reads (#172), further fixes and probes (#149-#184, see `process/MASTER-PLAN-board-2_29-10-26.md`).
-- W8 collector slices merged: W8a vetting (#158, #169), W8b core (#161), W8c Reddit (#185), W8d1 X core (#173), W8d2 X reader (#186). SPEC and PLAN docs: #153, #167.
-- Docs and process: #147, #168, #187 (git flow D-28; `scripts/pc-sync/` merged, never run: UNVERIFIED); omp setup: `process/context/omp-setup.md`. Registry: `process/MASTER-PLAN.md` and the board-2 file; decisions D-22..D-28 in decisions.md.
+- Screener and equities; Baskets (P5); data integration tooling (P9); discovery and weighted signal (P10: W1-W3, W9, weights v2 #156, volume fallback #183); universe U1-U6 (`U5 UNVERIFIED`); D-27 exchange tokens IN.
+- Trends T100a-T100c and fixes (#149-#184, board-2). W8 collector slices merged: W8a, W8b, W8c (#185), W8d1 (#173), W8d2 (#186), W8c2 stream (#191, fix round 3 open in #198), W8e PC worker (#192), W8f Discovery wiring (#193), W8e2 host guide and health line (#194, #195), W8g Sources text (#197). All `review`; nothing is wired to a live provider here.
+- Owner decisions 29/30-10-26 recorded in the W8c2 PLAN and SPEC (combined feeds, coverage per feed kind, no stream zeros, order `reddit_web` then `reddit_stream`, Q17 answered). Probe P-R7 passed on the owner's machine (owner-reported, not verified here).
+- Docs and process: D-28 git flow; omp setup `process/context/omp-setup.md`; registry `process/MASTER-PLAN.md` and `process/MASTER-PLAN-board-2_29-10-26.md`; decisions D-22..D-28.
 
 ## Planner and worker spend
 
-About 188 of the 200 USD ceiling (planner figures, 21-10-26). Spend after 21-10-26 is UNVERIFIED.
+About 188 of the 200 USD ceiling (planner figures, 21-10-26). Spend after 21-10-26 is UNVERIFIED; costs of the rows since are `unmeasured`.
 
 ## Not run or unverified
 
-- Live provider reachability from the cloud; the owner's PC (deployed app, Task Scheduler, Tailscale). Open owner probes from 13-10-26 (P-S1-1, P-S2-1, P-S8-1, P-S4-1, P-S5a-1, P-S5b-1, P-S6-1, P-S7-1, P-S9-2, P-S9-3, P-S11-2, BTC deep backfill): each UNVERIFIED (no newer evidence read).
-- Reddit API request of 18-10-26 and X: W8c and W8d2 code merged; access or enablement status UNVERIFIED.
-- Weighted-signal calibration checks on 2027-01-18 and 2027-04-18 (still future).
-- Independent review: T96-T107 and part of T113 and T114 were merged before it (D-26); T117 (review of T115): no report found, UNVERIFIED. Every merged row since #145 is `review`.
+- Live provider reachability; the owner's PC (deployed app, Task Scheduler, Tailscale); open owner probes from 13-10-26 (P-S1-1, P-S2-1, P-S8-1, P-S4-1, P-S5a-1, P-S5b-1, P-S6-1, P-S7-1, P-S9-2, P-S9-3, P-S11-2, BTC backfill): UNVERIFIED.
+- Reddit and X access status; per-entry subreddit label on a combined Reddit feed (until the owner's probe); calibration checks 2027-01-18 and 2027-04-18 (future).
+- Independent review: T117 no report found, UNVERIFIED. Every merged row since #145 is `review`; code written on a fallback model needs an extra review.
 
 ## Next actions
 
-1. The owner reviews and merges the T221 EXECUTE PR (D-28) and reads the report-heading-9 owner flags.
+1. The owner reviews and merges open PRs (D-28), #198 first for W8c2.
 2. Re-verify this state at the next planner session.
 3. Owner probes above.
