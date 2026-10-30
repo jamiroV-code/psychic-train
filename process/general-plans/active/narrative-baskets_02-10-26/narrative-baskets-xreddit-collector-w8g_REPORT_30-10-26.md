@@ -29,7 +29,7 @@ review. Code, tests and draft PR done; owner visual probe of the Sources page st
 - Red: the two new files, 8 failed as expected before implementation.
 - Green: `pnpm test` in web/: 591 passed, 1 failed: `lib/__tests__/plot-ink.test.ts` ("globals.css has no rule for .spread-chart .tick text"). Not touched by this slice (globals.css unchanged); fails locally on this Windows checkout, see CI result in the PR for the Linux run.
 - `pnpm exec tsc --noEmit --incremental false`: clean. tsconfig.tsbuildinfo not modified.
-- CI: see section 10 / PR checks.
+- CI on PR #197 (run 41048488312): `web — vitest, tsc, island build` pass (incl. plot-ink, so its local failure is specific to Windows); `api — pytest` pass.
 
 ## 7 Tests NOT run
 - No visual check at 375/768/1280; overflow safety is by construction (single colSpan cell, `white-space: normal`, `overflow-wrap: anywhere`, table inside the existing `.discovery-scroll`) and unproven in a browser.
