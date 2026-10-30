@@ -74,8 +74,9 @@ REDDIT_DEFAULTS = {
     "reddit_search_time_filter": "week",
 }
 REDDIT_TIME_FILTERS = ("hour", "day", "week", "month", "year", "all")
-# Reddit stream keys added by W8c2 (SPEC A.2 M2, A.2b, AC14, AC26, AC30; owner deltas 29-10-26): optional in the
-# file. `reddit_stream_subreddits` None means the top-level `subreddits` list (the names are never duplicated).
+# Reddit stream keys added by W8c2 (SPEC A.2 M2, A.2b, AC14, AC26, AC30; owner deltas 29-10-26; fix round 3 owner
+# decisions E2 and E3): optional in the file. `reddit_stream_subreddits` None means the top-level `subreddits` list
+# (the names are never duplicated).
 REDDIT_STREAM_DEFAULTS = {
     "reddit_stream_subreddits": None,
     "reddit_comments_poll_interval_s": 7200,
@@ -84,6 +85,8 @@ REDDIT_STREAM_DEFAULTS = {
     "reddit_stream_min_coverage": 0.8,
     "reddit_comments_paging": True,
     "reddit_impl_order": ["reddit_web", "reddit_stream"],  # SPEC AC14 default order
+    "reddit_stream_poll_retention_days": 30,  # E2: the stream's poll files are kept and read this many days back
+    "reddit_stream_max_pages_per_poll": 10,  # E3: requests one poll may send, fresh, reconnecting and resumed
 }
 REDDIT_METHODS = ("reddit_stream", "reddit_web")
 _INT_KEYS = tuple(DEFAULTS)
@@ -150,6 +153,8 @@ class CollectorConfig:
     reddit_stream_min_coverage: float = REDDIT_STREAM_DEFAULTS["reddit_stream_min_coverage"]
     reddit_comments_paging: bool = REDDIT_STREAM_DEFAULTS["reddit_comments_paging"]
     reddit_impl_order: tuple[str, ...] = tuple(REDDIT_STREAM_DEFAULTS["reddit_impl_order"])
+    reddit_stream_poll_retention_days: int = REDDIT_STREAM_DEFAULTS["reddit_stream_poll_retention_days"]
+    reddit_stream_max_pages_per_poll: int = REDDIT_STREAM_DEFAULTS["reddit_stream_max_pages_per_poll"]
 
     def as_dict(self) -> dict:
         return asdict(self)
