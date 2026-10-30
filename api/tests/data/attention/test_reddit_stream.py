@@ -1117,3 +1117,121 @@ def test_day_before_retention_window_is_not_evaluated_again(q):
     rs.prune_polls(later, q.config.reddit_stream_poll_retention_days)
     assert rs.read_polls(D - timedelta(days=1), D + timedelta(days=2)) == []
     assert rs.commit_day(D, q, led, now=later) == doc and rs.read_completeness(D) == doc
+
+
+# --- fix round 4: a saved cursor whose resumed page is empty or makes no progress is dead (never resumed again);
+# --- a cursor whose resumed page failed (error, pause) stays retriable
+
+def _stale_cursor_setup(q, led) -> str:
+    """D covered to 20:00 by a complete poll (the floor), and a truncated poll at D+3 00:00 against that floor whose
+    one stretch (the 3 h before it) saved the cursor returned: its id."""
+    _d_covered_to_20h(q, led)
+    times = stream_times(at(72), span_h=3)
+    cursor = rid("t1", times[-1])
+    record(rs.Poll("comments", at(72), times[0], times[-1], 100, 1, True, at(20), ((times[-1], times[0], cursor),)))
+    return cursor
+
+
+def _resume_answers(clock: Clock, cursor: str, answer: str):
+    """The 3 h comments feed of `live_stream`, except that a request resumed at `cursor` gets `answer`: an empty
+    page, a page that makes no progress (the newest page again), a 503, or the real page below the cursor."""
+    live = live_stream(clock, comments_span_h=3)
+
+    def respond(req):
+        if parse_qs(urlsplit(str(req.url)).query).get("after") != [cursor] or answer == "live":
+            return live(req)
+        if answer == "empty":
+            return ok(atom([]))(req)
+        if answer == "no_progress":
+            return ok(stream_feed(clock(), span_h=3))(req)
+        return httpx.Response(503, content=b"down")
+    return respond
+
+
+@pytest.mark.parametrize("answer", ["empty", "no_progress"])
+def test_stale_cursor_with_empty_or_no_progress_resume_is_dead_and_next_poll_pages_fresh(q, answer):
+    """A syntactically valid cursor inside the retention window whose resumed page is empty (or makes no progress)
+    is marked dead in the poll that tried it: the poll stays truncated and D unsettled, the next poll spends no
+    request on that cursor and pages fresh toward the floor under the page cap as if no cursor existed, and the dead
+    mark survives the poll file round trip."""
+    led = ledger()
+    cursor = _stale_cursor_setup(q, led)
+    clock = Clock(at(74))
+    out, fake = poll(q, clock, _resume_answers(clock, cursor, answer), led=led)
+    assert after_ids(fake) == [None, cursor] and out.reason is None
+    assert out.poll.dead == (cursor,) and out.poll.truncated is True and out.poll.floor == at(20)
+    assert all(c != cursor for _, _, c in out.poll.spans())
+    [stored] = [p for p in rs.read_polls(D + timedelta(days=3), D + timedelta(days=3)) if p.collected_at == at(74)]
+    assert stored.dead == (cursor,)
+    _not_settled(q, led, at(75))
+    assert floor_at("comments", at(75)) == at(20)  # never the anchor
+    clock = Clock(at(76))
+    nxt, fake = poll(q, clock, _resume_answers(clock, cursor, answer), led=led)
+    assert cursor not in after_ids(fake)
+    assert nxt.requests == len(fake.requests) == q.config.reddit_stream_max_pages_per_poll  # fresh, under the cap
+    assert nxt.poll.oldest < out.poll.oldest and nxt.poll.truncated is True
+    _not_settled(q, led, at(77))
+
+
+def test_dead_cursor_costs_at_most_one_failed_resume_over_several_days(q):
+    """Polls every 2 h over three days: the stale cursor is requested once in total, never again, every poll stays
+    under the page cap, later polls still reach the floor (live cursors resume), and D settles without undercount
+    only after a poll whose own pages reached the floor."""
+    led = ledger()
+    cursor = _stale_cursor_setup(q, led)
+    cap = q.config.reddit_stream_max_pages_per_poll
+    tries, complete, t = 0, None, at(74)
+    while t < at(74 + 72):
+        clock = Clock(t)
+        out, fake = poll(q, clock, _resume_answers(clock, cursor, "empty"), led=led)
+        assert out.reason is None and len(fake.requests) <= cap
+        tries += after_ids(fake).count(cursor)
+        if complete is None and not out.poll.truncated:
+            complete = out
+        t += timedelta(hours=2)
+    assert tries == 1 and complete is not None and complete.poll.oldest <= at(20)
+    _settled_full(q, led, at(74 + 72), 3)
+
+
+def test_dead_cursor_is_not_recreated_from_a_later_stored_stretch(q):
+    """A later truncated poll of the same segment that stored the dead cursor again (as its stretch's cursor) does
+    not revive it: the next poll that reaches that coverage pages fresh instead of resuming it."""
+    led = ledger()
+    cursor = _stale_cursor_setup(q, led)
+    clock = Clock(at(74))
+    poll(q, clock, _resume_answers(clock, cursor, "empty"), led=led)
+    times = stream_times(at(72), span_h=3)
+    record(rs.Poll("comments", at(74.5), times[0], times[-1], 100, 1, True, at(20), ((times[-1], times[0], cursor),)))
+    clock = Clock(at(77))
+    _, fake = poll(q, clock, _resume_answers(clock, cursor, "empty"), led=led)
+    assert cursor not in after_ids(fake)
+
+
+def test_poll_never_stores_a_dead_cursor_as_its_stretch_cursor(q):
+    """A later poll whose own page happens to end at the dead cursor's entry (here cut by a page cap of 1) stores no
+    cursor for that stretch, so the dead cursor is not re-created once its dead mark leaves the retention window."""
+    led = ledger()
+    cursor = _stale_cursor_setup(q, led)
+    clock = Clock(at(74))
+    poll(q, clock, _resume_answers(clock, cursor, "empty"), led=led)
+    oldest = stream_times(at(72), span_h=3)[-1]
+    page = atom([entry(rid("t1", w), w) for w in stream_times(at(76), span_h=3, count=400) if w >= oldest])
+    out, fake = poll(with_cfg(q, reddit_stream_max_pages_per_poll=1), Clock(at(76)), ok(page), led=led)
+    assert len(fake.requests) == 1 and out.poll.truncated is True and out.poll.oldest == oldest
+    assert all(c != cursor for _, _, c in out.poll.spans())
+
+
+def test_failed_resume_keeps_the_cursor_retriable_unlike_an_empty_resume(q):
+    """A resumed page that FAILED (here a 503) is transient: the cursor is not marked dead and the next poll resumes
+    it and reaches deeper, while an empty resumed page marks it dead (see above)."""
+    led = ledger()
+    cursor = _stale_cursor_setup(q, led)
+    clock = Clock(at(74))
+    out, fake = poll(q, clock, _resume_answers(clock, cursor, "error"), led=led)
+    assert after_ids(fake) == [None, cursor] and out.reason is not None
+    assert out.poll.dead == () and out.poll.truncated is True
+    _not_settled(q, led, at(75))
+    clock = Clock(at(76))
+    nxt, fake = poll(q, clock, _resume_answers(clock, cursor, "live"), led=led)
+    assert cursor in after_ids(fake) and after_ids(fake).index(cursor) <= 2  # reconnected, then resumed
+    assert nxt.poll.dead == () and nxt.poll.oldest < at(70)

@@ -31,13 +31,19 @@ poll gets deeper toward the floor. Every request (fresh, reconnecting, resumed) 
 shared daily Reddit budget (`reddit_web.reddit_source`). A fresh prefix cut before it reconnects keeps only its own
 stretch: no span bridges an interval no page observed. A resumed page that is not wholly older than its cursor ends
 the poll (truncated); a cursor of another floor, outside the retention window or not a `t1_` id is never requested.
+A cursor whose resumed page is empty or makes no progress is DEAD (fix round 4): the poll stores it as such (`dead`,
+kept and pruned with its poll file inside the retention window), it is never resumed again nor stored as a stretch's
+cursor, and the next polls page fresh through that coverage toward the floor under the page cap; the stretches it
+belonged to cover only what was observed, the gap below stays uncovered and the poll truncated. A cursor whose
+resumed page FAILED (an error or a pause) is not dead: it stays retriable.
 Worst case per UTC day: comments `reddit_stream_polls_per_day_cap` x page cap (12 x 10 = 120 requests) plus one
 request per posts poll, all inside the shared budget.
 
 Every entry goes into the item ledger (`reddit_items`: Reddit id, author hash, subreddit, created, `collected_at`,
 feed kind, matched coins); the ids the stream saw are kept per created day, so an id counts once across polls and
 feeds. Each poll stores `collected_at`, its newest and oldest entry times, the entry count, the pages, whether it
-was truncated, the floor it ran against and, when they are more than one plain [oldest, newest], its stretches.
+was truncated, the floor it ran against, when they are more than one plain [oldest, newest] its stretches, and the
+cursors it found dead.
 After each poll the poll files of UTC days before the retention window are deleted (E2; the seen ids, completeness
 files and item ledger are other stores and stay), so a day before the window is not evaluated again: its last
 completeness file stays as written. A well-formed empty feed is a recorded, truncated poll with no entries (reason
@@ -141,6 +147,7 @@ class Poll:
     truncated: bool  # paging ended before the poll's floor (E1, E3): see `run_poll`
     floor: datetime | None = None  # the paging floor the poll ran against; None in a poll file of an earlier head
     runs: tuple[Run, ...] = ()  # the observed stretches (E3); empty: one stretch [oldest, newest] without a cursor
+    dead: tuple[str, ...] = ()  # cursors whose resumed page was empty or made no progress: never resumed again
 
     def spans(self) -> tuple[Run, ...]:
         """The stretches the poll observed; none for an empty feed."""
@@ -156,6 +163,8 @@ class Poll:
                "floor": self.floor.isoformat() if self.floor else None}
         if self.runs:
             doc["runs"] = [[a.isoformat(), b.isoformat(), c] for a, b, c in self.runs]
+        if self.dead:
+            doc["dead"] = list(self.dead)
         return doc
 
     @classmethod
@@ -165,7 +174,7 @@ class Poll:
         # a poll file of an earlier head may lack `truncated`: read as truncated, so it never settles a day
         return cls(d["kind"], datetime.fromisoformat(d["collected_at"]), t(d["newest"]), t(d["oldest"]), d["entries"],
                    d["pages"], d.get("truncated", True), t(d.get("floor")),
-                   tuple((t(a), t(b), c) for a, b, c in d.get("runs", [])))
+                   tuple((t(a), t(b), c) for a, b, c in d.get("runs", [])), tuple(d.get("dead", [])))
 
 
 def _meta() -> Path:
@@ -426,14 +435,21 @@ class _Block:
     cursor: str | None  # the `after=` id of the block's oldest entry; None when no valid t1 id is stored for it
 
 
+def _dead(kind: str, now: datetime, polls: list[Poll]) -> set[str]:
+    """The cursors of the kind marked dead by a poll in `polls` (the retention window) collected by `now`."""
+    return {c for p in polls if p.kind == kind and p.collected_at <= now for c in p.dead}
+
+
 def _blocks(kind: str, now: datetime, floor: datetime, polls: list[Poll]) -> list[_Block]:
     """What the open segment observed above the floor, as disjoint blocks, oldest first (E3).
 
     The segment is the truncated polls of the kind collected after the anchor and by `now` that ran against the same
     floor (`polls` holds the retention window only). A block joins stretches that overlap or touch, so it was
-    observed without a gap from its oldest to its newest entry; its cursor is its oldest stretch's, if a `t1_` id."""
+    observed without a gap from its oldest to its newest entry; its cursor is its oldest stretch's, if a `t1_` id
+    that no poll marked dead (fix round 4)."""
     anchor = _anchor(kind, now, polls)
-    runs = sorted(((a, b, c if isinstance(c, str) and _COMMENT_ID.fullmatch(c) else None)
+    dead = _dead(kind, now, polls)
+    runs = sorted(((a, b, c if isinstance(c, str) and _COMMENT_ID.fullmatch(c) and c not in dead else None)
                    for p in polls if p.kind == kind and p.truncated and p.floor == floor and p.collected_at <= now
                    and (anchor is None or p.collected_at > anchor.collected_at)
                    for a, b, c in p.spans() if floor < a <= b),
@@ -483,6 +499,7 @@ def run_poll(client: httpx.Client, src: pc_pace.PcSource, q: Queries, *, kind: s
     stretch: list | None = None  # the stretch being paged; None until its first page
     after, ceiling = None, None  # `ceiling`: a stretch resumed at a block's cursor lies below that block's oldest entry
     requests, pages, error, reached = 0, 0, None, False
+    dead: list[str] = []  # cursors this poll resumed whose page was empty or made no progress
     while True:
         src.spend(1)
         requests += 1
@@ -499,12 +516,16 @@ def run_poll(client: httpx.Client, src: pc_pace.PcSource, q: Queries, *, kind: s
             src.stamp_attempt()
             raise
         src.record_unit()
-        if not entries:
-            break  # an empty page before the floor
-        low, high = min(e.created for e in entries), max(e.created for e in entries)
-        if (stretch is not None and low >= stretch[0]) or (stretch is None and ceiling is not None
-                                                            and (low >= ceiling or high > ceiling)):
-            break  # no progress: a page that reaches no further back, or a resumed page not wholly below its cursor
+        resumed = stretch is None and ceiling is not None  # this request resumed at a stored cursor
+        low = min((e.created for e in entries), default=None)
+        high = max((e.created for e in entries), default=None)
+        # an empty page before the floor, or no progress: a page that reaches no further back, or a resumed page not
+        # wholly below its cursor
+        if (low is None or (stretch is not None and low >= stretch[0])
+                or (resumed and (low >= ceiling or high > ceiling))):
+            if resumed:  # a stale cursor: dead, never resumed again (fix round 4); a failed request keeps it
+                dead.append(after)
+            break
         if stretch is None:
             stretch = [low, ceiling or high, None]
             runs.append(stretch)
@@ -538,10 +559,12 @@ def run_poll(client: httpx.Client, src: pc_pace.PcSource, q: Queries, *, kind: s
                                       reddit_metrics.matched_coins(e.text, coins)) for e in seen)
     new_ids = _add_seen(seen)
     times = [e.created for e in seen]
-    # a truncated comments poll keeps each stretch's cursor for the next poll; one plain stretch is [oldest, newest]
-    spans = tuple((a, b, last if truncated and paging and _COMMENT_ID.fullmatch(last) else None) for a, b, last in runs)
+    # a truncated comments poll keeps each stretch's live cursor for the next poll; one plain stretch: [oldest, newest]
+    gone = _dead(kind, now, polls).union(dead)
+    spans = tuple((a, b, last if truncated and paging and _COMMENT_ID.fullmatch(last) and last not in gone else None)
+                  for a, b, last in runs)
     poll = Poll(kind, now, max(times), min(times), len(seen), pages, truncated, floor,
-                () if len(spans) == 1 and spans[0][2] is None else spans)
+                () if len(spans) == 1 and spans[0][2] is None else spans, tuple(dead))
     _store(poll, c.reddit_stream_poll_retention_days)
     return PollOutcome(kind, error.reason if error is not None else None,
                        error.status if error is not None else 200, requests, len(seen), new_ids, poll)
