@@ -133,6 +133,56 @@ export interface DiscoverySourceRow {
   coins_with_data: number;
   eligible_size: number;
   note: string;
+  /** W8f reason code; "" when none. */
+  reason?: DiscoverySourceReason;
+  /** W8f: the store (method) the row reports; null when unknown. */
+  impl?: string | null;
+  /** W8e2: PC worker sources only; absent without worker state. */
+  health?: DiscoverySourceHealth;
+}
+
+export type DiscoverySourceReason =
+  | "" | "parked" | "x_live_off" | "not_probed" | "stale" | "insufficient_history" | "no_stored_data" | "invalid_file";
+
+/** One X account of the pool: opaque label only. */
+export interface DiscoveryAccountHealth {
+  label: string;
+  state: "active" | "locked" | "inactive" | "suspect";
+  reason: string | null;
+  last_used: string | null;
+  /** null: never refreshed through `--refresh-cookies`. */
+  cookie_age_days: number | null;
+}
+
+/** W8e2 health line, computed by the API; the web only formats it. */
+export interface DiscoverySourceHealth {
+  last_unit_at: string | null;
+  paused: boolean;
+  pause_reason: string | null;
+  /** null while paused: owner action needed or state unreadable. */
+  pause_until: string | null;
+  collection_day: string;
+  attempted: number | null;
+  fetched: number | null;
+  completeness_day: string;
+  completeness_attempted: number | null;
+  completeness_fetched: number | null;
+  missing: number | null;
+  missing_reasons: Record<string, number> | null;
+  capped: number | null;
+  newest_age_hours: number | null;
+  budget_used: number | null;
+  effective_budget: number | null;
+  budget_spent: boolean | null;
+  mode: "baseline" | "degraded" | null;
+  expected_gap_s: number | null;
+  stale: boolean | null;
+  completeness: string;
+  accounts_active: number | null;
+  accounts_total: number | null;
+  accounts: DiscoveryAccountHealth[];
+  free_disk_bytes: number | null;
+  clock_sync_age_seconds: number | null;
 }
 
 /** T180: an eligible coin the daily Google Trends pull skips (no data, never a 0). */
