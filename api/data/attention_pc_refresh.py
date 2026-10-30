@@ -237,6 +237,51 @@ class Stream:
 
     rotation = False
 
+    def _health_schedule(self, q, src, syms) -> None:
+        """Persist the actual scheduling mode and upper interval, never a consumer-side guess."""
+        now = _utc(self.worker.clock())
+        gap = self._trickle(q, len(syms)).max_s
+        if self.source == X_SOURCE and self.worker.x_spread_over_day and self.worker.mode(now) == "baseline":
+            gap = max(gap, DAY_S / max(1, src.effective_budget() // q.config.x_sample_n))
+        path = pc_pace.state_path(self.source).with_name(f"{self.source}_health.json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        cache._atomic_write_json({"mode": self.worker.mode(now), "expected_gap_s": gap,
+                                  "observed_at": now.isoformat()}, path)
+
+    def _completeness(self, syms, day, *, symbol=None, reason="not_reached", attempted=False, result=None):
+        """Reddit-compatible target-day evidence; one latest record per coin-day, never canary or page counts.
+
+        A dispatched unit is durable before its first reader call. A power cut leaves `unit_interrupted`;
+        retries replace that record instead of adding another fetched coin-day.
+        """
+        path = cache.CACHE_ROOT / "attention" / self.source / "_meta" / "_completeness" / f"{day.isoformat()}.json"
+        if path.exists():
+            doc = json.loads(path.read_text(encoding="utf-8"))
+        else:
+            doc = {"day": day.isoformat(), "coins": {}, "requests": 0, "budget_cut": False, "canary": None}
+        for sym in syms:
+            previous = doc["coins"].get(sym)
+            if previous is None or previous["reason"] == "unit_interrupted":
+                stored = web_evidence.read_rows(self.source, sym).get(day)
+                if stored and day not in dict(store.read_points(self.source, sym)):
+                    stored = None
+                if previous is None or stored:
+                    doc["coins"][sym] = {
+                        "attempted": previous["attempted"] if previous else None if stored else False,
+                        "reason": "fetched" if stored else reason,
+                        "capped": bool(stored and (stored.capped or stored.pagecap)),
+                        "collected_at": stored.collected_at.isoformat() if stored else None,
+                        "n": stored.n if stored else None, "newest": None}
+        if symbol is not None:
+            previous = doc["coins"][symbol]
+            doc["coins"][symbol] = {
+                "attempted": attempted or previous["attempted"],
+                "reason": reason, "capped": bool(result and (result.capped or result.pagecap)),
+                "collected_at": _utc(self.worker.clock()).isoformat(),
+                "n": result.n if result else None, "newest": None}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        cache._atomic_write_json(reddit_web._summarize(doc), path)
+
     # --- shared ---
     def queue(self, q: web_queries.Queries | None = None, syms: list[str] | None = None) -> list[tuple[str, date]]:
         """(symbol, completed day) work, yesterday first, rebuilt from the store."""
@@ -290,13 +335,21 @@ class Stream:
                 log.warning("attention pc %s state unreadable: source paused, file kept", self.source)
                 return "state_error"
             syms = self._symbols(q)
+            self._health_schedule(q, src, syms)
+            today = _utc(self.worker.clock()).date()
+            hold = src.pause_reason() or ("budget_spent" if src.budget_spent() else "not_reached")
+            for offset in range(1, self._backfill_days(q.config) + 2):
+                self._completeness(syms, today - timedelta(days=offset), reason=hold)
             if not self.queue(q, syms):
                 return "done"
             if src.is_paused():
                 return "paused"
             if src.budget_spent():
                 return "budget_spent"
-            outcome = self._pass(q, src, syms, stop_at)
+            try:
+                outcome = self._pass(q, src, syms, stop_at)
+            finally:
+                self._health_schedule(q, src, syms)
             try:
                 self._prune(q)
             except Exception as exc:  # noqa: BLE001 - housekeeping never stops the collector
@@ -419,14 +472,25 @@ class XStream(Stream):
             policy = x_filters.FilterPolicy.from_config(c, entry)
             query = x_window.build_query(x_window.coin_terms(q, symbol), day, syntax=c.x_window_syntax,
                                          lang=policy.lang)
-            out = x_pool.run_unit(pool, start.readers, src, c, symbol=symbol, day=day, query=query,
-                                  coin=x_filters.Coin(symbol, entry["name"]), policy=policy, rng=self.rng,
-                                  sleep=w._sleep, fallback=start.fallback)
+            self._completeness(syms, day, symbol=symbol, reason="unit_interrupted", attempted=True)
+            try:
+                out = x_pool.run_unit(pool, start.readers, src, c, symbol=symbol, day=day, query=query,
+                                      coin=x_filters.Coin(symbol, entry["name"]), policy=policy, rng=self.rng,
+                                      sleep=w._sleep, fallback=start.fallback)
+            except Exception:
+                self._completeness(syms, day, symbol=symbol, reason="failed", attempted=True)
+                raise
+            stored = False
             if out.result is not None:
-                web_evidence.commit_day(X_SOURCE, symbol, day, out.result,
-                                        canary_ok=bool(out.row and out.row.get("canary_ok") is True),
-                                        trailing_median=_trailing_median(X_SOURCE, symbol, day),
-                                        now=_utc(w.clock()), method=X_METHOD)
+                stored = web_evidence.commit_day(
+                    X_SOURCE, symbol, day, out.result,
+                    canary_ok=bool(out.row and out.row.get("canary_ok") is True),
+                    trailing_median=_trailing_median(X_SOURCE, symbol, day),
+                    now=_utc(w.clock()), method=X_METHOD)
+            self._completeness(syms, day, symbol=symbol,
+                               reason="fetched" if stored else "zero_unconfirmed" if out.result else out.reason,
+                               attempted=out.attempts > 0, result=out.result if stored else None)
+            self._health_schedule(q, src, syms)
             due = self._next_due(trickle, src, c)
             if out.reason in ("budget_spent", "too_early"):
                 return out.reason
@@ -436,6 +500,8 @@ class XStream(Stream):
 
     def _prune(self, q):
         x_raw.prune(now=_utc(self.worker.clock()), retention_days=q.config.x_raw_retention_days)
+        _prune_day_files(cache.CACHE_ROOT / "attention" / X_SOURCE / "_meta" / "_completeness",
+                         _utc(self.worker.clock()).date(), q.config.x_raw_retention_days)
 
 
 class RedditStream(Stream):

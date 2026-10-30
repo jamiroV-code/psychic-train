@@ -675,6 +675,8 @@ def test_state_files_bounded_after_ninety_simulated_days(no_fsync):
     assert 0 < len(canary_days) <= 20 + 1
     completeness_days = list(rw.completeness_path(T0.date()).parent.glob("*.json"))
     assert 0 < len(completeness_days) <= 20 + 1
+    x_completeness = list((attention / X / "_meta" / "_completeness").glob("*.json"))
+    assert 0 < len(x_completeness) <= 10 + 1
     stored = dict(store.read_points(X, "SOL"))
     assert len(stored) >= 85  # it kept collecting the whole time
 
@@ -726,3 +728,99 @@ def test_no_network_in_tests():
     clock.t = T0  # the Reddit stream runs over the same ten minutes on its own lock
     w.streams[R].run_pass(stop_at=T0 + timedelta(minutes=10))
     assert reader.coin_units() and reddit.searches
+
+
+# --- W8e2: real producer path -> persisted files -> read-only Sources health -------------------------------
+
+def source_health(tmp_path, monkeypatch, clock, q, sid):
+    from api.analytics.attention import sources
+    from api.tests.analytics.attention.test_discovery import world
+
+    world(tmp_path, monkeypatch, {s: 5e7 for s in COINS}, cats={"ai": COINS},
+          source_impl={"xsearch": X, "reddit": R})
+    monkeypatch.setattr(sources, "_collector", lambda: q.config)
+    return next(row.health for row in sources.build_sources(clock().date(), now=clock()).sources if row.id == sid)
+
+
+def test_worker_files_feed_sources_health_without_network(tmp_path, monkeypatch):
+    clock = Clock()
+    q = queries(x_backfill_days=0)
+    worker, reader, reddit = make(clock, q=q)
+    assert worker.streams[X].run_pass(stop_at=T0 + timedelta(hours=1)) == "done"
+    x = source_health(tmp_path, monkeypatch, clock, q, "xsearch")
+    assert (x.attempted, x.fetched, x.completeness_attempted, x.completeness_fetched) == (3, 3, 3, 3)
+    assert x.missing == 0 and x.capped == 3 and x.mode == "degraded"
+    assert x.expected_gap_s == q.config.x_query_delay_max_s
+    assert x.budget_used == x_state(clock, q).used
+    assert len(reader.coin_units()) == 3  # daily canary did not inflate attempted
+    assert x.accounts_active == x.accounts_total == 1
+    clock.t = T0
+    assert worker.streams[R].run_pass(stop_at=T0 + timedelta(hours=1)) == "done"
+    r = source_health(tmp_path, monkeypatch, clock, q, "reddit")
+    assert r.attempted == len(reddit.searches) and r.fetched > 0
+    assert r.completeness_attempted == r.completeness_fetched == 3
+    assert r.expected_gap_s == q.config.reddit_request_delay_max_s
+    assert r.budget_used == len(reddit.searches) + len(reddit.canaries)
+    # Restart reads existing evidence; a fetched coin-day is neither requested nor counted twice.
+    restarted, _, _ = make(clock, q=q, reader=reader, reddit=reddit)
+    restarted.streams[X].run_pass(stop_at=clock() + timedelta(hours=1))
+    assert source_health(tmp_path, monkeypatch, clock, q, "xsearch").fetched == 3
+    assert len(reader.coin_units()) == 3
+
+
+@pytest.mark.parametrize("source,sid", [(X, "xsearch"), (R, "reddit")])
+def test_attempt_is_durable_before_reader_and_retry_is_distinct(tmp_path, monkeypatch, source, sid):
+    class PowerCut(BaseException):
+        pass
+
+    clock = Clock()
+    q = queries(x_backfill_days=0)
+    path = cache.CACHE_ROOT / "attention" / source / "_meta" / "_completeness" / f"{YESTERDAY}.json"
+
+    def cut():
+        record = json.loads(path.read_text())["coins"]["SOL"]
+        assert record["attempted"] is True and record["reason"] == "unit_interrupted"
+        raise PowerCut
+
+    class CuttingReader(DayReader):
+        def search_raw(self, query, kv, page):
+            if '"$' in query:
+                cut()
+            return super().search_raw(query, kv, page)
+
+    reddit = RedditFake(clock, respond=lambda request: cut())
+    worker, _, _ = make(clock, q=q, coins=["SOL"], reader=CuttingReader("acct_a", clock), reddit=reddit)
+    with pytest.raises(PowerCut):
+        worker.streams[source].run_pass()
+    h = source_health(tmp_path, monkeypatch, clock, q, sid)
+    assert h.attempted == 1 and h.fetched == 0
+    assert h.missing_reasons["unit_interrupted"] == 1
+    clock.t += timedelta(hours=1)
+    restarted, _, _ = make(clock, q=q, coins=["SOL"])
+    restarted.streams[source].run_pass(stop_at=clock() + timedelta(hours=1))
+    h = source_health(tmp_path, monkeypatch, clock, q, sid)
+    assert h.completeness_attempted == h.completeness_fetched == 1
+    assert h.missing == 0
+
+
+def test_terminal_reader_exception_records_failed_not_interrupted(tmp_path, monkeypatch):
+    clock = Clock()
+    q = queries(x_backfill_days=0)
+    worker, _, _ = make(clock, q=q, coins=["SOL"], reader=DayReader("acct_a", clock, fail=ValueError("test")))
+    with pytest.raises(ValueError):
+        worker.streams[X].run_pass()
+    h = source_health(tmp_path, monkeypatch, clock, q, "xsearch")
+    assert h.attempted == 1 and h.fetched == 0 and h.missing_reasons == {"failed": 1}
+
+
+def test_persisted_gap_changes_with_real_worker_mode(tmp_path, monkeypatch):
+    clock = Clock()
+    q = queries(x_backfill_days=0)
+    worker, _, _ = make(clock, q=q, coins=["SOL"])
+    worker.streams[X].run_pass(stop_at=clock() + timedelta(minutes=10))
+    assert source_health(tmp_path, monkeypatch, clock, q, "xsearch").mode == "degraded"
+    clock.t = MIDNIGHT
+    worker.streams[X].run_pass(stop_at=clock() + timedelta(minutes=10))
+    h = source_health(tmp_path, monkeypatch, clock, q, "xsearch")
+    assert h.mode == "baseline"
+    assert h.expected_gap_s == max(q.config.x_query_delay_max_s, 86400 / (h.effective_budget // q.config.x_sample_n))

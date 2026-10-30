@@ -26,8 +26,9 @@ def row(res, sid):
 @pytest.fixture
 def live(isolated_cache, tmp_path, monkeypatch):
     monkeypatch.delenv("X_LIVE", raising=False)
-    world(tmp_path, monkeypatch, COINS, cats={"ai": list(COINS)})
-    monkeypatch.setattr(web_queries, "QUERIES_PATH", tmp_path / "no_queries.json")   # collector defaults
+    world(tmp_path, monkeypatch, COINS, cats={"ai": list(COINS)},
+          source_impl={"xsearch": "xsearch_web", "reddit": "reddit_web"})
+    monkeypatch.setattr(web_queries, "QUERIES_PATH", tmp_path / "no_queries.json")
     src.clear_cache()
     return tmp_path
 
@@ -39,6 +40,9 @@ def put_state(source, **over):
     p = pc_pace.state_path(source)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(s), encoding="utf-8")
+    gap = 8640 if source == "xsearch_web" else 28800
+    p.with_name(f"{source}_health.json").write_text(json.dumps(
+        {"mode": "baseline", "expected_gap_s": gap, "observed_at": NOW.isoformat()}))
     return p
 
 
@@ -49,16 +53,16 @@ def put_x_evidence(symbol, *, capped=False, collected=NOW - timedelta(hours=2)):
     p.write_text(json.dumps({"rows": [r.to_json()]}), encoding="utf-8")
 
 
-def coin(reason, *, capped=False, collected=None, newest=None):
+def coin(reason, *, capped=False, collected=NOW - timedelta(hours=4), newest=None):
     return {"reason": reason, "attempted": reason != "not_reached", "capped": capped,
             "collected_at": collected.isoformat() if collected else None,
             "newest": newest.isoformat() if newest else None}
 
 
-def put_completeness(coins):
-    p = reddit_web.completeness_path(END)
+def put_completeness(coins, source="reddit_web", day=END):
+    p = cache.CACHE_ROOT / "attention" / source / "_meta" / "_completeness" / f"{day.isoformat()}.json"
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"day": END.isoformat(), "requests": 3, "budget_cut": False, "canary": None,
+    p.write_text(json.dumps({"day": day.isoformat(), "requests": 3, "budget_cut": False, "canary": None,
                              "coins": coins}), encoding="utf-8")
 
 
@@ -66,6 +70,7 @@ def test_health_payload_has_last_unit_pause_reason_attempted_fetched_budget(live
     put_state("xsearch_web")
     put_x_evidence("A")
     put_x_evidence("B")
+    put_completeness({"A": coin("fetched"), "B": coin("fetched"), "C": coin("failed")}, "xsearch_web")
     pool = cache.CACHE_ROOT / "attention" / "_pc_state" / "x_pool.json"
     pool.write_text(json.dumps({
         "accounts": {"a1": {"state": "active", "reason": None, "last_used": NOW.isoformat(), "lock_until": None,
@@ -89,6 +94,7 @@ def test_health_payload_has_last_unit_pause_reason_attempted_fetched_budget(live
     by = {a.label: a for a in h.accounts}
     assert (by["a1"].state, by["a1"].cookie_age_days) == ("active", 4)
     assert (by["a2"].state, by["a2"].reason, by["a2"].cookie_age_days) == ("inactive", "x_login_required", None)
+    assert h.free_disk_bytes > 0 and h.clock_sync_age_seconds is None
 
 
 def test_paused_source_shows_reason_code_and_end(live):
@@ -110,6 +116,8 @@ def test_stale_after_twice_the_expected_gap(live):
     put_state("xsearch_web", last_unit_at=(NOW - timedelta(hours=4)).isoformat())
     h = row(src.build_sources(TODAY, now=NOW), "xsearch").health
     assert (h.expected_gap_s, h.stale) == (8640, False)
+    put_state("xsearch_web", last_unit_at=(NOW - timedelta(seconds=17280)).isoformat())
+    assert row(src.build_sources(TODAY, now=NOW), "xsearch").health.stale is False
     put_state("xsearch_web", last_unit_at=(NOW - timedelta(hours=5)).isoformat())
     assert row(src.build_sources(TODAY, now=NOW), "xsearch").health.stale is True
     # Reddit: max(120 s, 24 h / 3 coins) = 28800 s, stale after 16 h
@@ -145,6 +153,7 @@ def test_health_reads_files_only_no_network(live, monkeypatch):
     monkeypatch.setattr(socket.socket, "connect", refuse)
     monkeypatch.setattr(socket, "create_connection", refuse)
     monkeypatch.setattr(socket, "getaddrinfo", refuse)
+    monkeypatch.setattr(pc_pace.PcSource, "__init__", refuse)  # do not invoke the mutating day-roll object
     res = src.build_sources(TODAY + timedelta(days=3), now=NOW + timedelta(days=3))   # a later day: no roll
     assert row(res, "xsearch").health is not None and row(res, "reddit").health is not None
     assert p.read_bytes() == before                                               # read only, never written
@@ -157,3 +166,41 @@ def test_existing_sources_rows_unchanged_when_no_worker_state(live):
     assert not (cache.CACHE_ROOT / "attention" / "_pc_state").exists()
     baseline = src.build_sources(TODAY)
     assert [r.model_dump() for r in baseline.sources] == [r.model_dump() for r in res.sources]
+    assert all("health" not in r.model_dump() for r in res.sources)
+
+
+def test_historical_unknowns_are_not_fabricated_from_units(live):
+    p = put_state("xsearch_web")
+    p.with_name("xsearch_web_health.json").unlink()
+    put_x_evidence("A")
+    h = row(src.build_sources(TODAY, now=NOW), "xsearch").health
+    assert h.attempted is None and h.fetched is None
+    assert h.expected_gap_s is None and h.stale is None
+    assert h.completeness_attempted is None and h.missing_reasons is None
+    assert "attempted unknown" in h.completeness
+
+
+def test_collection_counts_exclude_old_attempts_and_include_backfill(live):
+    put_state("reddit_web")
+    put_completeness({"A": coin("fetched"), "B": coin("fetched", collected=NOW - timedelta(days=1))})
+    put_completeness({"A": coin("failed")}, day=END - timedelta(days=1))
+    h = row(src.build_sources(TODAY, now=NOW), "reddit").health
+    assert (h.attempted, h.fetched) == (2, 1)
+    assert (h.completeness_attempted, h.completeness_fetched) == (2, 2)
+    assert h.collection_day == TODAY.isoformat() and h.completeness_day == END.isoformat()
+
+
+@pytest.mark.parametrize("raw", ["broken", "[]", "{}"])
+def test_bad_state_is_read_only_and_unknown_not_zero(live, raw):
+    p = put_state("reddit_web")
+    p.write_text(raw)
+    h = row(src.build_sources(TODAY, now=NOW), "reddit").health
+    assert h.paused and h.pause_reason == "state_error"
+    assert h.attempted is None and h.effective_budget is None and h.stale is None
+    assert p.read_text() == raw
+
+
+def test_worker_state_does_not_attach_to_unrelated_selected_store(live, monkeypatch):
+    put_state("xsearch_web")
+    world(live, monkeypatch, COINS, cats={"ai": list(COINS)}, source_impl={"xsearch": "xsearch"})
+    assert row(src.build_sources(TODAY, now=NOW), "xsearch").health is None
