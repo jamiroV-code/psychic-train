@@ -449,3 +449,81 @@ No blockers. Items for the planner:
 ### 11 Context cost
 
 Files loaded (partly): `reddit_stream.py` (full), `test_reddit_stream.py` (full), `web_queries.py` and `attention_queries.json` (stream keys), the `probe_pc_sources.py` and `test_probe_pc_sources.py` diffs, `pc_pace.py` (state API by grep), `reddit_items.py` (`LedgerRow`), the attention `conftest.py`, the SPEC lines named in the envelope, PLAN lines 180-192, and this report. About 45,000 tokens of files. Tools: read, grep, edit, bash (git, uv, pytest). Model: one model throughout (no switch observed, no usage limit hit in this run).
+
+## 15 Fix round 4 (30-10-26, after the independent review of head `0eed24e9`)
+
+### 1 Task ID
+
+W8c2 fix round 4 on branch `claude/w8c2-reddit-stream` (draft PR #198). Worker: riper-opus, RT2. Input: the review finding at `reddit_stream.py` lines 502-503 and 523-528 of `0eed24e9`: a syntactically valid but stale saved cursor (Reddit answers the resumed request with an empty page) was neither invalidated nor advanced, so every later poll reconnected the prefix and retried the same cursor, for up to the 30-day retention, without progress.
+
+### 2 Outcome
+
+review
+
+### 3 Summary
+
+- A resumed request (one sent with a block's saved cursor) whose page is empty, or makes no progress (not wholly older than the cursor), marks that cursor DEAD. The poll stores it in a new poll field `dead` (written only when non-empty; a poll file of an earlier head reads as none). The poll ends truncated, as before.
+- `_blocks` drops every cursor that a poll inside the retention window marked dead, so the block has no cursor: the next poll spends no request on it and pages fresh through that coverage toward the floor under the page cap, as if no cursor existed. A later live stretch below it gets its own cursor again, so deeper progress continues.
+- A dead cursor is not re-created: `_blocks` ignores it even when a later stored stretch carries it again, and `run_poll` never stores a dead cursor (known or found in this poll) as a stretch's cursor.
+- Coverage is unchanged: the stretches of the segment still cover only what was observed; the gap below stays uncovered (never bridged, never complete, never 0), and a dead cursor never makes a poll complete or a day settled.
+- A resumed page that FAILED (an HTTP error, a block or a pause) does not mark the cursor dead: it stays retriable (transient), as in section 14.
+- State: the dead marks live in the poll files only, so they are pruned with them (E2) and bounded by the retention window. A mark is always in a poll file collected after the stretch that saved the cursor, so it is kept at least as long as that stretch.
+- This supersedes section 14, heading 8 item 9 ("a failed resume ... leaves the cursor stored; the next poll tries it again") for empty and no-progress pages, and the matching risk in section 14, heading 9 (one resumed request per poll for up to 30 days). The cost of a dead cursor is now one request in total.
+
+### 4 Files changed
+
+- `api/data/attention/reddit_stream.py`: `Poll.dead` (with `to_json` and `from_json`), `_dead`, `_blocks` (drops dead cursors), `run_poll` (marks a resumed empty or no-progress page's cursor dead; never stores a dead cursor), and the module docstring.
+- `api/tests/data/attention/test_reddit_stream.py`: helpers `_stale_cursor_setup` and `_resume_answers`, and 5 new test functions (6 cases). No existing test changed.
+- This report (this section).
+- `git diff --name-only origin/main...HEAD` (origin/main `3cd39e26`): the same 7 files as before this round. Changed this round: the two files above and this report. Changed in earlier rounds and not touched now: `api/data/attention/web_queries.py`, `api/data/attention_queries.json`, `api/scripts/probe_pc_sources.py`, `api/tests/data/attention/test_web_queries.py`.
+
+### 5 Commits
+
+- `1faa6ceb5be0c9695ffcceed07ccb3f66b98eaf7`: fix round 4 code and tests (parent `0eed24e9`).
+- The commit that adds this section (its SHA is in the PR).
+
+### 6 Tests run
+
+All runs: `UV_FROZEN=1 uv run --project api pytest <target> -q -p no:cacheprovider`.
+
+- New tests:
+  - `test_stale_cursor_with_empty_or_no_progress_resume_is_dead_and_next_poll_pages_fresh[empty|no_progress]`: the resumed request is sent once, the cursor is stored as dead (also after the poll file round trip), the poll stays truncated, D unsettled and the floor unchanged; the next poll requests no stale cursor, spends the page cap paging fresh and reaches deeper, and D stays unsettled.
+  - `test_dead_cursor_costs_at_most_one_failed_resume_over_several_days`: polls every 2 h for 3 days: the stale cursor is requested once in total, every poll stays under the cap, a later poll reaches the floor, and D settles with the full count only then.
+  - `test_dead_cursor_is_not_recreated_from_a_later_stored_stretch` and `test_poll_never_stores_a_dead_cursor_as_its_stretch_cursor`.
+  - `test_failed_resume_keeps_the_cursor_retriable_unlike_an_empty_resume`: a 503 on the resumed request keeps the cursor (no dead mark); the next poll resumes it and reaches deeper.
+- Red, new tests only (`-k "dead or stale_cursor or failed_resume"`), 2026-10-30T12:25:06Z, code unchanged at `0eed24e9`: 5 failed. The stale-cursor and failed-resume tests failed on the missing `Poll.dead`; the several-days test counted 36 requests of the stale cursor against 1; the re-create test found the stale cursor requested again.
+- Green, `test_reddit_stream.py`, before the commit: 90 passed (2026-10-30T12:36:22Z run of the final file).
+- Mutation checks (temporary edits, then restored):
+  - no dead mark on an empty or no-progress resume, 12:27:14Z: 4 failed, 1 passed (the error-keeps-cursor test passes, as it should).
+  - a dead mark also on a failed resume, plus `_blocks` not dropping dead cursors, 12:27:55Z: 5 failed (the error test failed on `('t1_...',) == ()`; the others requested the stale cursor again).
+  - `run_poll` storing a dead cursor as a stretch cursor, 12:28:55Z: `test_poll_never_stores_a_dead_cursor_as_its_stretch_cursor` failed.
+- Gates on the green code (before one comment line was shortened to 120 characters; the stream test file was re-run after it, 90 passed):
+  - `api/tests/data/attention`, 2026-10-30T12:29:10Z to 12:32:11Z: 884 passed, 1 skipped, 0 failed.
+  - `api/tests/tooling_guards`, 12:32:11Z to 12:32:26Z: 128 passed, 0 failed. The known Windows failure in `test_cli_guard.py` did not occur.
+  - `api/tests/scripts`, 12:32:26Z to 12:35:04Z: 648 passed, 0 failed, 2 warnings.
+- `git diff --check`: no output. New and changed lines in `reddit_stream.py` are at most 120 characters.
+- Hygiene and verdict words: the added lines of the diff against `0eed24e9` were grepped for `bullish|bearish|signal strength|confidence|triggered|confirmed|trust weight|TODO|FIXME`, the repo owner and slug, user paths, URLs, `cookie`, `api key` and `token`: no hits.
+
+### 7 Tests NOT run
+
+- No live Reddit request; how Reddit answers a stale `after=` id (empty page, or something else) is UNVERIFIED. The fix treats an empty page and a no-progress page alike.
+- No linter: `ruff` and `pyflakes` are not in the project environment.
+
+### 8 Deviations
+
+None. No existing test changed. `web_queries.py`, `attention_queries.json` and the probe were not needed.
+
+### 9 Blockers
+
+No blockers. For the planner:
+
+- A cursor is marked dead after a single empty resumed page. If Reddit can answer a valid cursor with a transient empty page, that cursor is given up and the next polls page fresh through the coverage (bounded by the page cap), so the cost is depth progress, never a wrong value. Section 14's PLAN/SPEC update list (AC26, AC30, A.2b) should also name the `dead` poll field and this rule.
+
+### 10 Follow-up
+
+- Owner: the `--stream-status` probe after a host stop also shows whether polls keep making progress.
+- Planner: the PLAN/SPEC lines in section 14, heading 9, plus the `dead` field above.
+
+### 11 Context cost
+
+Files loaded (partly): `reddit_stream.py` (full), `test_reddit_stream.py` (helpers and the E1-E3 tests), `reddit_web.py` (`fetch_feed`), and section 14 of this report. About 30,000 tokens of files. Tools: read, grep, edit, bash (git, uv, pytest). One model throughout; no usage limit hit and no model switch in this run.
