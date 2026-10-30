@@ -43,8 +43,8 @@ done (CI result is in heading 6)
   - Failure 1: `test_worker_state_does_not_attach_to_unrelated_selected_store`. My test was invalid: config validation already rejects that `source_impl`. I removed the test.
   - Failure 2: `test_universe_classes.py::test_discovery_end_to_end_on_fixture`. It fails inside the Starlette TestClient portal (the Windows ProactorEventLoop against the no-network guard) before reaching our code. This is the known Windows host failure.
   - Before that: `test_sources.py::test_100_coin_fixture_is_fast_and_cached` failed once while the machine was loaded (cold 11.4 s). On its own it passed (cold 1.7 s).
+- CI on PR #195 at 53094a81 (Linux): `api — pytest` pass (3m48s), `web — vitest, tsc, island build` pass (58s). This covers the router tests that cannot run on this Windows host.
 - After removing the invalid test: `test_sources_health.py` 11 passed.
-- CI: see the PR checks. Main records the final result at review.
 
 ## 7 Tests NOT run
 - `api/tests/routers` on this Windows host (known ProactorEventLoop failures on plain main). CI on Linux is the judge.
