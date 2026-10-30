@@ -26,6 +26,8 @@
   "reddit_stream_min_coverage": 0.8,
   "reddit_comments_paging": true,
   "reddit_impl_order": ["reddit_web", "reddit_stream"],
+  "reddit_stream_poll_retention_days": 30,
+  "reddit_stream_max_pages_per_poll": 10,
   "x_lang": "en",
   "x_window_syntax": "since_time",
   "x_min_account_age_days": 30,

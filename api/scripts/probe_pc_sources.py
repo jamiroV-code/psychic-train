@@ -136,7 +136,7 @@ def stream_status(clock) -> int:
     """W8c2: the stream's polls and coverage from local files only; no request is sent."""
     from api.data.attention import reddit_stream
 
-    st = reddit_stream.stream_status(clock())
+    st = reddit_stream.stream_status(clock(), web_queries.load())
     print(report_line("stream_today", **st["today"]))
     for day, numbers in st["days"].items():
         print(report_line("stream_day", day=int(day.replace("-", "")), **numbers))

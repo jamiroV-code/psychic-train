@@ -167,3 +167,21 @@ def test_stream_keys_rejected_when_invalid(doc, key, bad):
     doc["collector"][key] = bad
     with pytest.raises(wq.QueriesError, match=key):
         wq.validate(doc)
+
+
+# --- W8c2 fix round 3: poll-file retention (E2) and the per-poll page cap (E3) ---
+
+@pytest.mark.parametrize("key,default", [("reddit_stream_poll_retention_days", 30),
+                                         ("reddit_stream_max_pages_per_poll", 10)])
+def test_stream_retention_and_page_cap_keys(doc, key, default):
+    assert getattr(wq.load().config, key) == default and wq.REDDIT_STREAM_DEFAULTS[key] == default
+    doc["collector"][key] = 7
+    assert getattr(wq.validate(doc).config, key) == 7
+
+
+@pytest.mark.parametrize("key", ["reddit_stream_poll_retention_days", "reddit_stream_max_pages_per_poll"])
+@pytest.mark.parametrize("bad", [0, -1, True, False, 1.5, "10", None])
+def test_stream_retention_and_page_cap_rejected_when_invalid(doc, key, bad):
+    doc["collector"][key] = bad
+    with pytest.raises(wq.QueriesError, match=key):
+        wq.validate(doc)
