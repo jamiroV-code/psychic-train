@@ -185,3 +185,28 @@ def test_stream_retention_and_page_cap_rejected_when_invalid(doc, key, bad):
     doc["collector"][key] = bad
     with pytest.raises(wq.QueriesError, match=key):
         wq.validate(doc)
+
+
+# --- W8c2w: the stream's share of the Reddit request budget (owner Q1 option b, default 0.45) ---
+
+def test_budget_share_default_is_0_45():
+    assert wq.REDDIT_STREAM_DEFAULTS["reddit_stream_budget_share"] == 0.45
+    assert wq.load().config.reddit_stream_budget_share == 0.45
+
+
+@pytest.mark.parametrize("bad", [0, 0.0, -0.1, -1, True, False, 1.0001, 2, "0.45", None])
+def test_budget_share_rejects_zero_negative_bool_over_one_text_and_none(doc, bad):
+    doc["collector"]["reddit_stream_budget_share"] = bad
+    with pytest.raises(wq.QueriesError, match="reddit_stream_budget_share"):
+        wq.validate(doc)
+
+
+@pytest.mark.parametrize("good", [1, 1.0, 0.5, 0.45, 0.01])
+def test_budget_share_accepts_one_and_fractions(doc, good):
+    doc["collector"]["reddit_stream_budget_share"] = good
+    assert wq.validate(doc).config.reddit_stream_budget_share == good
+
+
+def test_budget_share_absent_key_uses_default(doc):
+    doc["collector"].pop("reddit_stream_budget_share", None)
+    assert wq.validate(doc).config.reddit_stream_budget_share == 0.45
