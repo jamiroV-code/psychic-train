@@ -91,8 +91,9 @@ def test_registered_and_not_probed_without_record(tmp_path):
     assert {"exchange_volume", "hyperliquid_volume"} <= set(registry.FETCHERS)
     p = tmp_path / "p.json"
     p.write_text("{}")
-    for src in ("exchange_volume", "hyperliquid_volume"):
-        assert registry.read_series(src, "BTC", today=TODAY, probe_path=p).state == "not-probed"
+    # Hyperliquid still needs its probe record; the PC-fetched Binance store (exchange_volume) is read without one.
+    assert registry.read_series("hyperliquid_volume", "BTC", today=TODAY, probe_path=p).state == "not-probed"
+    assert registry.read_series("exchange_volume", "BTC", today=TODAY, probe_path=p).state != "not-probed"
 
 
 def test_binance_451_reason_carries_class_and_status_only():

@@ -296,7 +296,7 @@ def build_sources(today: date, *, probe_path: Path | None = None, universe_path:
 
     def series(sid: str, name: str, lag: int = max_lag, gate: int = MIN_HISTORY_DAYS) -> tuple:
         s = _Series(name, eligible, end, lag, gate)
-        return (s, *_state(name, s, name in probed or name in registry.PC_STORES, x_live))
+        return (s, *_state(name, s, name in probed or name in registry.PROBE_EXEMPT, x_live))
 
     def weighted_series(sid: str) -> tuple[tuple, str]:
         """(series tuple, store) of the `source_impl` store this row reports."""
