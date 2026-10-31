@@ -51,6 +51,8 @@ def _worker(fetch, **kwargs) -> RefreshWorker:
         clock=lambda: NOW,
         fetch=fetch,
         symbols=lambda: ["ETH"],
+        universe=lambda: [],
+        recompute_pairs=lambda: None,
         retry_markets=lambda: False,
         is_fresh=lambda *a: False,
         first_delay_seconds=3600,
