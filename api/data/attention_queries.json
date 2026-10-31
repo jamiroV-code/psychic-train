@@ -28,6 +28,7 @@
   "reddit_impl_order": ["reddit_web", "reddit_stream"],
   "reddit_stream_poll_retention_days": 30,
   "reddit_stream_max_pages_per_poll": 10,
+  "reddit_stream_budget_share": 0.45,
   "x_lang": "en",
   "x_window_syntax": "since_time",
   "x_min_account_age_days": 30,

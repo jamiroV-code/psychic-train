@@ -548,16 +548,19 @@ def _commit(symbol: str, day: date, out: SearchOutcome, now: datetime) -> tuple[
 def run_pass(client: httpx.Client, src: pc_pace.PcSource, q: Queries, *, queue: list[tuple[str, date]],
              clock: Callable[[], datetime], sleep: Callable[[float], None], rng: random.Random, degraded: bool,
              ledger: reddit_items.Ledger | None = None, stop_at: datetime | None = None, n_coins: int | None = None,
-             logger: logging.Logger = log) -> PassResult:
+             logger: logging.Logger = log, canary_days: set[date] | None = None) -> PassResult:
     """Work through (symbol, completed day) items at the mode's pace until done, paused, out of budget or `stop_at`.
 
     Items left when the pass stops stay for a later pass (the worker re-queues missing days, yesterday first).
+    `canary_days` (optional, kept by the caller across passes): the UTC days a canary was already sent on; a day in it
+    gets no further canary attempt. Without it each pass may try one canary per UTC day, as before (W8c2w, Q7).
     """
+    sent_days: set[date] = set() if canary_days is None else canary_days
     n = n_coins if n_coins is not None else len({s for s, _ in queue})
     trickle = search_trickle(q.config, n, degraded=degraded, rng=rng)
     due = trickle.first_due(_utc(clock()), src.last_unit_at())
     requests = stored = canaries = 0
-    canary_days: set[date] = set()  # UTC days this pass already tried a canary on
+    tried: set[date] = set()  # UTC days this pass already tried a canary on
     canary_gap = search_trickle(q.config, n, degraded=True, rng=rng)  # the configured 60-120 s
     stop = "done"
     items = list(queue)
@@ -568,10 +571,11 @@ def run_pass(client: httpx.Client, src: pc_pace.PcSource, q: Queries, *, queue: 
             _record(day, symbol, "ambiguous")
             continue
         today = _utc(clock()).date()
-        if today not in canary_days and not canary_ok(_utc(clock())) and not src.is_paused() and src.can_spend(1):
+        if (today not in tried and today not in sent_days and not canary_ok(_utc(clock())) and not src.is_paused()
+                and src.can_spend(1)):
             # one canary attempt per pass and UTC day, before the day's first search; the search follows at the
             # configured minimum spacing so it runs on the same UTC day as its canary
-            canary_days.add(today)
+            tried.add(today)
             if stop_at is not None and due >= _utc(stop_at):
                 stop = "host_stopped"
                 break
@@ -583,6 +587,8 @@ def run_pass(client: httpx.Client, src: pc_pace.PcSource, q: Queries, *, queue: 
                 stop = "too_early"
                 break
             canaries += c_out.sent
+            if c_out.sent:
+                sent_days.add(today)
             due = canary_gap.next_due(_utc(clock()))
         if src.is_paused() or not src.can_spend(1):
             if src.is_paused():

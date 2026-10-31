@@ -805,3 +805,23 @@ def test_density_span_comes_from_raw_entries_not_matched_ones():
     span = (at(24) - at(14, 5)).total_seconds() / 3600
     assert reason is None and result.capped and tally.counted == 50
     assert result.span_hours == pytest.approx(span) and result.value == pytest.approx(24 * 50 / span)
+
+
+# --- W8c2w (Q7): optional `canary_days` kept by the caller across sliced passes ---
+
+def test_run_pass_default_canary_behaviour_unchanged(q, attention_cache):
+    short = ok(feed_at([NOW - timedelta(minutes=i) for i in range(3)]))  # below CANARY_MIN_ENTRIES: not ok
+    clock = Clock(NOW)
+    fake = Fake(ok(EXACT), clock, canary=short)
+    src = rw.reddit_source(q.config, degraded=True, clock=clock)
+    for sym in ("SOL", "ETH"):  # default: each pass tries one canary per UTC day, as before
+        rw.run_pass(fake.client(), src, q, queue=[(sym, D)], clock=clock, sleep=clock.sleep, rng=random.Random(1),
+                    degraded=True)
+    assert len(fake.canary) == 2 and not rw.canary_ok(clock())
+    kept: set[date] = set()
+    clock.t = NOW + timedelta(days=1)
+    for sym in ("SOL", "ETH"):  # a caller-kept set: one canary per UTC day across passes
+        rw.run_pass(fake.client(), src, q, queue=[(sym, D + timedelta(days=1))], clock=clock, sleep=clock.sleep,
+                    rng=random.Random(1), degraded=True, canary_days=kept)
+    assert len(fake.canary) == 3 and kept == {clock().date()}
+    assert len(fake.requests) == 4  # every search still ran

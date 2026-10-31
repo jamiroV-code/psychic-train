@@ -37,6 +37,11 @@ and runners never start it. The app lifespan starts it after the equities worker
   `x_raw_retention_days`, Reddit ledger partitions and per-day canary and completeness files pruned after
   `ledger_retention_days` (default 400, the SPEC's `reddit_ledger_retention_days`); no in-memory structure grows
   with the number of days. Times are UTC; a naive clock is refused.
+- Reddit stream (W8c2w, T222): off unless `SCREENER_ATTENTION_REDDIT_STREAM` is exactly `1`. Then each Reddit pass
+  first polls the due `reddit_stream` feeds (`reddit_stream.run_due`, same lock, client, budget and pause state),
+  commits every settled open day, and runs the search pass only until the next poll is due (outcome `stream_due`).
+  The stream's requests per UTC day are capped by `reddit_stream_budget_share` of the current mode's budget
+  (`StreamShare`, counted once in `reddit_stream/_meta/_budget/<day>.json`); no Sources row (owner Q3).
 
 Logs carry a source, an outcome or reason code and an exception class name only.
 """
@@ -44,6 +49,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import random
 import statistics
@@ -56,8 +62,10 @@ from pathlib import Path
 
 from api.data import cache
 from api.data.attention import (
+    pc_adapter,
     pc_pace,
     reddit_items,
+    reddit_stream,
     reddit_web,
     store,
     web_evidence,
@@ -72,8 +80,11 @@ from api.data.attention import x_reader as xr
 log = logging.getLogger(__name__)
 
 FLAG_ENV = "SCREENER_ATTENTION_PC_WORKER"
+# W8c2w (owner Q2): the Reddit stream (`reddit_stream`) polls inside the Reddit pass only when this is exactly `1`.
+STREAM_ENV = "SCREENER_ATTENTION_REDDIT_STREAM"
 X_SOURCE = "xsearch_web"
 REDDIT_SOURCE = reddit_web.SOURCE
+STREAM_SOURCE = reddit_stream.SOURCE
 PC_SIDE = "pc_side"
 GITHUB_SIDE = "github"
 # Default fetch side per Discovery source (W8e deviation: W8f adds `fetch_side` to discovery.json and validates it).
@@ -304,9 +315,22 @@ class Stream:
             return now + timedelta(seconds=RETRY_SECONDS)
         if outcome in ("state_error", "start_refused"):
             return now + timedelta(seconds=RECHECK_SECONDS)
-        if outcome in NEXT_DAY:
+        if outcome in NEXT_DAY and not (outcome == "done" and self._wakes_between_days()):
             return _next_day(now)
         return self._behind(now)
+
+    # --- hooks: a second wake source besides the search queue (the Reddit stream); X keeps the defaults ---
+    def _idle(self, q: web_queries.Queries, syms: list[str]) -> bool:
+        """Nothing to do in this pass (default: the queue is empty)."""
+        return not self.queue(q, syms)
+
+    def _wakes_between_days(self) -> bool:
+        """Whether `done` may wake before the next UTC day (default: no)."""
+        return False
+
+    def _extra_wake(self, q: web_queries.Queries, src: pc_pace.PcSource, now: datetime) -> datetime | None:
+        """When the second wake source is next due (default: None, there is none)."""
+        return None
 
     def _behind(self, now: datetime) -> datetime:
         q = self.worker.queries()
@@ -315,16 +339,24 @@ class Stream:
         except pc_pace.PcStateError:
             return now + timedelta(seconds=RECHECK_SECONDS)
         syms = self._symbols(q)
-        if not self.queue(q, syms) or src.is_paused() or src.budget_spent():
+        queued = bool(self.queue(q, syms))
+        if src.is_paused() or src.budget_spent():
+            return _next_day(now)
+        extra = self._extra_wake(q, src, now)
+        if not queued and extra is None:
             return _next_day(now)
         held = self._held(q)
         if held == "state_error":
             return now + timedelta(seconds=RECHECK_SECONDS)
         if held:
             return _next_day(now)
+        if not queued:
+            return extra
         due = self._trickle(q, len(syms)).first_due(now, src.last_unit_at())
         resume = self._resume_at(q)
-        return due if resume is None else max(due, resume)
+        if resume is not None:
+            due = max(due, resume)
+        return due if extra is None else min(due, extra)
 
     def run_pass(self, stop_at: datetime | None = None) -> str:
         """Work the queue at the source's pace until done, paused, out of budget or `stop_at` (the host stops).
@@ -347,7 +379,7 @@ class Stream:
             hold = src.pause_reason() or ("budget_spent" if src.budget_spent() else "not_reached")
             for offset in range(1, self._backfill_days(q.config) + 2):
                 self._completeness(syms, today - timedelta(days=offset), reason=hold)
-            if not self.queue(q, syms):
+            if self._idle(q, syms):
                 return "done"
             if src.is_paused():
                 return "paused"
@@ -528,13 +560,115 @@ class XStream(Stream):
                          _utc(self.worker.clock()).date(), q.config.x_raw_retention_days)
 
 
+def stream_budget_path(day: date) -> Path:
+    """The stream's request count of one UTC day (W11, W12): `reddit_stream/_meta/_budget/<day>.json`."""
+    return reddit_stream.seen_path(day).parent.parent / "_budget" / f"{day.isoformat()}.json"
+
+
+def read_stream_budget(day: date) -> dict | None:
+    """The stream's day record, or None when the stream sent nothing that day (no entry, never 0)."""
+    path = stream_budget_path(day)
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+class StreamShare:
+    """The shared Reddit `PcSource` capped by the stream's share (owner Q1 option b; W11, W11b, W12).
+
+    The ONE counting path of the stream's requests: `reddit_stream.run_poll` calls `spend(1)` immediately before
+    every request it sends, so `spend` writes the UTC day's count first and then delegates to the shared source; a
+    refused delegate restores the count (a crash in between over-counts by one, never under-counts). A request
+    starts only while the persisted count is below the cap of the CURRENT mode, `floor(share * budget)` (112 of 250
+    BASELINE, 67 of 150 DEGRADED at 0.45); the count is never refunded or rescaled. The shared budget stays the hard
+    limit; a share that ran out never marks it spent (the searches keep the rest) and is recorded in the day file as
+    `share_exhausted` with the cap and budget in force. Every other attribute is the shared source's.
+    """
+
+    def __init__(self, src: pc_pace.PcSource, *, share: float, budget: Callable[[], int]):
+        self.src, self.share, self._budget = src, share, budget
+
+    def __getattr__(self, name):
+        return getattr(self.src, name)
+
+    def budget(self) -> int:
+        return self._budget()
+
+    def cap(self) -> int:
+        return math.floor(self.share * self.budget())
+
+    def _doc(self) -> dict:
+        day = _utc(self.src.clock()).date()
+        return read_stream_budget(day) or {"day": day.isoformat(), "requests": 0, "cap": None, "budget": None,
+                                           "share_exhausted": False, "exhausted_at": None}
+
+    @staticmethod
+    def _write(doc: dict) -> None:
+        path = stream_budget_path(date.fromisoformat(doc["day"]))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        cache._atomic_write_json(doc, path)
+
+    def requests(self) -> int:
+        return self._doc()["requests"]
+
+    def _fits(self, n: int, doc: dict) -> bool:
+        return doc["requests"] + n <= self.cap()
+
+    def share_spent(self) -> bool:
+        return not self._fits(1, self._doc())
+
+    def _exhausted(self, doc: dict) -> None:
+        if not doc["share_exhausted"]:
+            doc.update(share_exhausted=True, exhausted_at=_utc(self.src.clock()).isoformat(), cap=self.cap(),
+                       budget=self.budget())
+            self._write(doc)
+
+    def can_spend(self, n: int) -> bool:
+        if not self.src.can_spend(n):
+            return False
+        doc = self._doc()
+        if self._fits(n, doc):
+            return True
+        self._exhausted(doc)
+        return False
+
+    def spend(self, n: int) -> None:
+        doc = self._doc()
+        if not self._fits(n, doc):
+            self._exhausted(doc)
+            raise pc_adapter.BudgetSpent()
+        before = doc["requests"]
+        doc["requests"] = before + n
+        if not doc["share_exhausted"]:
+            doc["cap"], doc["budget"] = self.cap(), self.budget()
+        self._write(doc)
+        try:
+            self.src.spend(n)
+        except Exception:
+            doc["requests"] = before
+            self._write(doc)
+            raise
+
+    def mark_spent(self) -> None:
+        if self.src.can_spend(1):
+            self._exhausted(self._doc())  # the share is the reason: the shared budget stays open for the searches
+        else:
+            self.src.mark_spent()
+
+
 class RedditStream(Stream):
-    """Reddit: the daily canary and one `search.rss` request per coin-day (`reddit_web.run_pass`)."""
+    """Reddit: the daily canary and one `search.rss` request per coin-day (`reddit_web.run_pass`); with
+    `SCREENER_ATTENTION_REDDIT_STREAM=1` also the stream polls (`reddit_stream.run_due`) in the same pass, under the
+    same lock, budget and pause state (W8c2w)."""
 
     def __init__(self, worker, source, rng):
         super().__init__(worker, source, rng)
         self._ledger: reddit_items.Ledger | None = None
         self._ledger_ready = False
+        # per feed kind, when its last poll failed with no poll stored (5xx, network): it waits its interval like a
+        # stored poll, so a failing feed is not retried at the request spacing and never crowds out the searches
+        self._failed_at: dict[str, datetime] = {}
+        # with the stream on the search pass is sliced at each poll: the UTC days a canary was sent on (Q7), so a
+        # failed canary is not retried once per slice; only today is kept
+        self._canary_days: set[date] = set()
 
     def _degraded(self) -> bool:
         return self.worker.mode(_utc(self.worker.clock())) == "degraded"
@@ -560,16 +694,116 @@ class RedditStream(Stream):
             self._ledger, self._ledger_ready = self.worker.reddit_ledger(), True
         return self._ledger
 
+    # --- the stream (W8c2w) ---
+    def _streaming(self) -> bool:
+        """The switch is on and the item ledger exists (without it nothing is stored, W7)."""
+        return self.worker.reddit_stream and self._ledger_obj() is not None
+
+    def stream_share(self, q: web_queries.Queries, src: pc_pace.PcSource) -> StreamShare:
+        return StreamShare(src, share=q.config.reddit_stream_budget_share,
+                           budget=lambda: reddit_web.daily_budget(q.config, degraded=self._degraded()))
+
+    def next_poll_due(self, q: web_queries.Queries, now: datetime) -> datetime | None:
+        """When the next stream poll is due: `reddit_stream.due_kinds` read ahead from the stored polls (interval per
+        kind, daily poll cap) and the day's share; None while the stream is off."""
+        if not self._streaming():
+            return None
+        now, c = _utc(now), q.config
+        intervals = {"comments": c.reddit_comments_poll_interval_s, "new": c.reddit_posts_poll_interval_s}
+        back = max(intervals.values()) // int(DAY_S) + 1
+        recent = reddit_stream.read_polls(now.date() - timedelta(days=back), now.date())
+        tomorrow = _day_start(now) + timedelta(days=1)
+        dues = []
+        for kind in reddit_stream.KINDS:
+            mine = [p for p in recent if p.kind == kind]
+            due = mine[-1].collected_at + timedelta(seconds=intervals[kind]) if mine else now
+            failed = self._failed_at.get(kind)
+            if failed is not None and (not mine or failed > mine[-1].collected_at):
+                due = max(due, failed + timedelta(seconds=intervals[kind]))
+            if sum(p.collected_at.date() == now.date() for p in mine) >= c.reddit_stream_polls_per_day_cap:
+                due = max(due, tomorrow)
+            dues.append(due)
+        due = min(dues)
+        share = self.stream_share(q, self.source_state(q))
+        return max(due, tomorrow) if share.share_spent() else due
+
+    def _wakes_between_days(self) -> bool:
+        return self._streaming()
+
+    def _idle(self, q, syms):
+        if not self._streaming():
+            return super()._idle(q, syms)
+        now = _utc(self.worker.clock())
+        return not self.queue(q, syms) and self.next_poll_due(q, now) > now + timedelta(seconds=BEHIND_DELAY_S)
+
+    def _extra_wake(self, q, src, now):
+        due = self.next_poll_due(q, now)
+        if due is None:
+            return None
+        lo = q.config.reddit_request_delay_min_s
+        return max(due, pc_pace.Trickle(lo, q.config.reddit_request_delay_max_s, self.rng).first_due(
+            now, src.last_unit_at()))
+
+    def _commit_open_days(self, q, ledger) -> None:
+        now = _utc(self.worker.clock())
+        for day in reddit_stream.open_days(now):
+            try:
+                reddit_stream.commit_day(day, q, ledger, now=now)
+            except Exception as exc:  # noqa: BLE001 - a day that fails to commit stays open; the pass goes on
+                log.warning("attention pc %s commit skipped: %s", STREAM_SOURCE, type(exc).__name__)
+
+    def _stream_round(self, client, q, src, ledger, stop_at) -> str | None:
+        """The due polls, then the commit of every settled open day; an outcome ends the pass, None goes on."""
+        w = self.worker
+        now = _utc(w.clock())
+        due = self.next_poll_due(q, now)
+        if now < due <= now + timedelta(seconds=BEHIND_DELAY_S) and (stop_at is None or due < stop_at):
+            w._wait_until(due)  # the pass began the behind delay before its first unit
+        share = self.stream_share(q, src)
+        if not share.share_spent():
+            res = reddit_stream.run_due(client, share, q, ledger=ledger, clock=w.clock, sleep=w._sleep,
+                                        rng=self.rng, stop_at=stop_at)
+            for out in res.outcomes:
+                if out.poll is None and out.requests > 0:
+                    self._failed_at[out.kind] = _utc(w.clock())
+            if src.is_paused():
+                return "paused"
+            if src.budget_spent():
+                return "budget_spent"
+            if res.stop == "host_stopped":
+                return "host_stopped"
+        self._commit_open_days(q, ledger)
+        return None
+
     def _pass(self, q, src, syms, stop_at):
         w = self.worker
         ledger = self._ledger_obj()
+        streaming = self._streaming()
+        if w.reddit_stream and not streaming:
+            log.warning("attention pc %s held for this pass: ledger_unavailable", STREAM_SOURCE)
         client = w.reddit_client()
         try:
-            res = reddit_web.run_pass(client, src, q, queue=self.queue(q, syms), clock=w.clock, sleep=w._sleep,
-                                      rng=self.rng, degraded=self._degraded(), ledger=ledger, stop_at=stop_at,
-                                      n_coins=len(syms))
+            slice_stop = stop_at
+            if streaming:
+                held = self._stream_round(client, q, src, ledger, stop_at)
+                if held is not None:
+                    return held
+                poll_due = self.next_poll_due(q, _utc(w.clock()))
+                slice_stop = poll_due if stop_at is None else min(stop_at, poll_due)
+            queue = self.queue(q, syms)
+            if not queue:
+                return "done"
+            sliced = {}
+            if streaming:
+                self._canary_days.intersection_update({_utc(w.clock()).date()})
+                sliced["canary_days"] = self._canary_days
+            res = reddit_web.run_pass(client, src, q, queue=queue, clock=w.clock, sleep=w._sleep,
+                                      rng=self.rng, degraded=self._degraded(), ledger=ledger, stop_at=slice_stop,
+                                      n_coins=len(syms), **sliced)
         finally:
             client.close()
+        if streaming and res.stop == "host_stopped" and (stop_at is None or slice_stop < stop_at):
+            return "stream_due"  # the next poll is due before the host stops: the schedule wakes for it
         return res.stop
 
     def _prune(self, q):
@@ -577,6 +811,10 @@ class RedditStream(Stream):
         _prune_day_files(reddit_items.ledger_path(today).parent, today, keep)
         _prune_day_files(reddit_web.canary_path(today).parent, today, keep)
         _prune_day_files(reddit_web.completeness_path(today).parent, today, keep)
+        # the stream's seen ids, completeness and budget day files (W6; `reddit_stream` prunes only its poll files)
+        _prune_day_files(reddit_stream.seen_path(today).parent, today, keep)
+        _prune_day_files(reddit_stream.completeness_path(today).parent, today, keep)
+        _prune_day_files(stream_budget_path(today).parent, today, keep)
 
 
 # --- the worker -----------------------------------------------------------------------------------------------------
@@ -593,7 +831,7 @@ class AttentionPcWorker:
                  reddit_ledger: Callable[[], reddit_items.Ledger | None] | None = None,
                  seed: int | None = None, discovery_path: Path | None = None,
                  ledger_retention_days: int = LEDGER_RETENTION_DAYS_DEFAULT, x_spread_over_day: bool = True,
-                 x_rotation: bool = True):
+                 x_rotation: bool = True, reddit_stream: bool | None = None):
         self.clock = clock or _default_clock
         self.started_at = _utc(self.clock())  # refuses a naive clock
         if not isinstance(ledger_retention_days, int) or isinstance(ledger_retention_days, bool) \
@@ -609,6 +847,7 @@ class AttentionPcWorker:
         self.ledger_retention_days = ledger_retention_days
         self.x_spread_over_day = x_spread_over_day
         self.x_rotation = x_rotation
+        self.reddit_stream = reddit_stream is True  # None: off here; `start_from_env` reads `STREAM_ENV`
         self._stopping = threading.Event()
         self._state_lock = threading.Lock()
         self.threads: dict[str, threading.Thread] = {}
@@ -736,6 +975,12 @@ def enabled(env=None) -> bool:
     return env.get(FLAG_ENV) == "1"
 
 
+def stream_enabled(env=None) -> bool:
+    """The Reddit stream switch: `SCREENER_ATTENTION_REDDIT_STREAM` exactly `1`; anything else is off."""
+    env = os.environ if env is None else env
+    return env.get(STREAM_ENV) == "1"
+
+
 def start_from_env(env=None, **worker_kwargs) -> AttentionPcWorker | None:
     """Lifespan entry: start only with `SCREENER_ATTENTION_PC_WORKER=1`; never raises."""
     global _worker, _handler, _disabled_reason
@@ -751,6 +996,7 @@ def start_from_env(env=None, **worker_kwargs) -> AttentionPcWorker | None:
             old_handler, _handler = _handler, handler
         if old_handler is not None:
             remove_log_handler(old_handler)
+        worker_kwargs.setdefault("reddit_stream", stream_enabled(env))
         worker = AttentionPcWorker(**worker_kwargs)
         with _registry_lock:
             previous, _worker = _worker, worker

@@ -87,6 +87,8 @@ REDDIT_STREAM_DEFAULTS = {
     "reddit_impl_order": ["reddit_web", "reddit_stream"],  # SPEC AC14 default order
     "reddit_stream_poll_retention_days": 30,  # E2: the stream's poll files are kept and read this many days back
     "reddit_stream_max_pages_per_poll": 10,  # E3: requests one poll may send, fresh, reconnecting and resumed
+    # W8c2w (owner Q1 option b): the stream's share of the day's Reddit request budget, a fraction in (0, 1]
+    "reddit_stream_budget_share": 0.45,
 }
 REDDIT_METHODS = ("reddit_stream", "reddit_web")
 _INT_KEYS = tuple(DEFAULTS)
@@ -155,6 +157,7 @@ class CollectorConfig:
     reddit_impl_order: tuple[str, ...] = tuple(REDDIT_STREAM_DEFAULTS["reddit_impl_order"])
     reddit_stream_poll_retention_days: int = REDDIT_STREAM_DEFAULTS["reddit_stream_poll_retention_days"]
     reddit_stream_max_pages_per_poll: int = REDDIT_STREAM_DEFAULTS["reddit_stream_max_pages_per_poll"]
+    reddit_stream_budget_share: float = REDDIT_STREAM_DEFAULTS["reddit_stream_budget_share"]
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -203,7 +206,7 @@ def _stream_value(key: str, v) -> bool:
         return v is None or (isinstance(v, (list, tuple)) and bool(v)
                              and all(isinstance(s, str) and SUBREDDIT_RE.fullmatch(s) for s in v)
                              and len({s.lower() for s in v}) == len(v))
-    if key == "reddit_stream_min_coverage":
+    if key in ("reddit_stream_min_coverage", "reddit_stream_budget_share"):
         return isinstance(v, (int, float)) and not isinstance(v, bool) and 0 < v <= 1
     if key == "reddit_comments_paging":
         return isinstance(v, bool)
