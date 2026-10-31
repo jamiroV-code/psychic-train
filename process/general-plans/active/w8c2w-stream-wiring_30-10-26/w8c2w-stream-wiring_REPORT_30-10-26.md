@@ -1,4 +1,4 @@
-# W8c2w report: Reddit stream wiring PLAN (PLAN-REV 4, plan fixes round 3)
+# W8c2w report: Reddit stream wiring PLAN (PLAN-REV 5, plan fixes round 4)
 
 ## 1 Task ID
 
@@ -6,9 +6,16 @@ T222 (ID free: T221 is the highest in `git log --all` subjects and PR titles; no
 
 ## 2 Outcome
 
-done (plan revised to PLAN-REV 4 and re-validated; nothing implemented; all owner questions Q1-Q9 decided, none open; one display point flagged in section 8)
+done (plan revised to PLAN-REV 5 and re-validated; nothing implemented; all owner questions Q1-Q9 decided, none open; one display point flagged in section 8)
 
 ## 3 Summary
+
+Round 4 changes (PLAN-REV 5):
+
+- Fix 1: section 1 now separates stream completeness/status (poll and completeness files, reported by `--stream-status`) from the private budget day record `reddit_stream/_meta/_budget/<day>.json`, which `--stream-status` does NOT print; the owner reads it by hand (decision 2026-10-31, no probe slice). Matches W9.
+- Fix 2: one exact name, `test_stream_never_starts_a_request_when_count_at_or_above_current_mode_cap` (W11b was the only deviant; table row is the single definition).
+- Fix 3: `test_baseline_cap_reached_mid_day_truncates_remaining_polls_next_utc_day_continues_nothing_dropped` was already defined once in the section 4 table (Budget share row, next to `test_cap_truncated_day_is_missing_or_partial_never_zero`); no change needed. Name audit: 86 table names, all unique; every test name in G4/G8 is in the table; 86 >= the G4 floor of 50 for the stream file.
+- Marker `PLAN-REV: 5`; envelope check updated; envelope still 5,972 B.
 
 Round 3 changes (PLAN-REV 4):
 
@@ -16,7 +23,7 @@ Round 3 changes (PLAN-REV 4):
 - Fix 2 (blocking, new W11b): the cap follows the CURRENT mode, but the mode follows uptime. Rule: the persisted day count is never refunded or rescaled; before every request the wrapper requires `count < cap_of_current_mode`; a request is never started when `count >= current cap`. BASELINE to DEGRADED above the new cap (100 against 67): nothing more that UTC day; DEGRADED to BASELINE: the remaining BASELINE cap. The shared `reddit_web` budget stays the hard limit in both modes. Acceptance sentences (W-AC9, envelope, Public Contracts, one test name) reworded to "never starts a request once the count has reached the current mode's cap; the count is not retroactive". Red-first tests: `test_budget_baseline_to_degraded_same_utc_day_count_not_refunded_stream_sends_nothing_more`, `test_budget_degraded_to_baseline_same_utc_day_remaining_baseline_cap_applies`, `test_stream_never_starts_a_request_when_count_at_or_above_current_mode_cap`, `test_shared_reddit_web_budget_stays_hard_limit_in_both_modes`; the first two and both guard tests are in G4 and checked by identity in G8.
 - Fix 3 (G8): new function `idcheck` runs the pytest `-k` selection with `-v` and requires each named test to appear with PASSED (exit 0, no FAILED/ERROR/SKIPPED/XFAIL/XPASS among the selected ids). Used for the four switch tests and, as `g8b`, for the two mode-change tests and the two Sources guard tests.
 - Fix 4: collision text rewritten in the present tense: re-run `gh pr list --state open` on 30-10-26 shows ONE open PR, #200 (this plan); #198 and #199 are MERGED. The dated historical note on #198 is kept; G10 unchanged; G0 comment updated. Also verified on `origin/main` (`reddit_stream.py` lines 47-48): `_seen` and `_completeness` are NOT pruned by the library, so the worker prunes them (W6, RFC-6; the old UNVERIFIED wording is gone).
-- Fix 5: envelope 5,972 B (`wc -c`, cap 8,000), first line `ROLE: WORKER`, marker `PLAN-REV: 4` (plain text outside the fence) with the envelope check and the handoff text updated.
+- Fix 5: envelope 5,972 B (`wc -c`, cap 8,000), first line `ROLE: WORKER`, marker `PLAN-REV: 5` (plain text outside the fence) with the envelope check and the handoff text updated.
 
 ## 4 Files changed
 
