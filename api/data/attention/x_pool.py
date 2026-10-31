@@ -253,17 +253,23 @@ class XPool:
         self._s["pause_until"], self._s["pause_reason"] = self._next_midnight(), reason
         self._save()
 
-    def pause_no_account(self) -> str:
-        """No usable account: wait for the earliest in-flight lock end when an account waits for one, else pause
-        the UTC day (`no_usable_account`). Returns the pause reason."""
+    def pause_for_locks(self) -> bool:
+        """Pause X until the earliest in-flight lock end of the accounts that wait for one; False when none waits."""
         ends = [self._acct(x)["lock_until"] for x in self.labels if self.account_state(x) == ("locked", WAIT_REASON)]
         if not ends:
-            self.pause_day("no_usable_account")
-            return "no_usable_account"
+            return False
         self._s["pause_until"] = min(ends, key=datetime.fromisoformat)
         self._s["pause_reason"] = WAIT_REASON
         self._save()
-        return WAIT_REASON
+        return True
+
+    def pause_no_account(self) -> str:
+        """No usable account: wait for the earliest in-flight lock end when an account waits for one, else pause
+        the UTC day (`no_usable_account`). Returns the pause reason."""
+        if self.pause_for_locks():
+            return WAIT_REASON
+        self.pause_day("no_usable_account")
+        return "no_usable_account"
 
     def resume_at(self) -> datetime | None:
         """When a pause for an in-flight lock ends; None for no pause or any other pause."""
@@ -459,7 +465,9 @@ def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcS
                      fallback: Fallback | None = None) -> CanaryOutcome:
     """The day's canary before any unit: one page of the canary query over the last complete hour on the least
     recently canaried accounts, read at the global spacing and counted against the global budget. A block goes
-    through the same fallback rule as a unit read (one curl retry for the canary, then the day pauses)."""
+    through the same fallback rule as a unit read (one curl retry for the canary, then the day pauses). An account
+    waiting for the library's in-flight lock does not drop out of the day's canary: the whole canary runs again
+    after that lock ends (its reads so far still count)."""
     if pool.canary_passed_today():
         return CanaryOutcome(True, reason="already_passed")
     if pool.is_paused() or src.is_paused():
@@ -472,6 +480,7 @@ def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcS
     query, kv = canary_query(config, start, end), x_window.search_kv()
     results: dict[str, set] = {}
     events = []
+    waited = False
     for i, label in enumerate(labels):
         if not src.can_spend(xr.PAGE_ENTRIES):
             src.mark_spent()
@@ -487,7 +496,7 @@ def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcS
             src.stamp_attempt()
             if not _is_block(f):
                 if f.kind == "no_account":
-                    _account_failure(pool, label, reader, f)
+                    waited |= _account_failure(pool, label, reader, f) == "wait"
                 continue
             raw, block = _on_block(pool, f, config, fallback, label, query, kv, 0, events)
             if block:
@@ -500,6 +509,8 @@ def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcS
         pool.note_remaining(label, raw.rate_limit_remaining)
         src.record_unit()
         results[label] = xr.canary_ids(reader.parse_tweets(raw.body), start, end)
+    if waited and pool.pause_for_locks():
+        return CanaryOutcome(False, reason=WAIT_REASON)
     pool.mark_canaried(list(results))
     if not results:
         reason = pool.pause_no_account()
