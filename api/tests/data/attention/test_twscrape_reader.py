@@ -358,13 +358,14 @@ def test_noaccounterror_cause_read_from_pool_row_inactive_locked_active_error(tm
     r = s.readers["acct1"]
     later = T0 + timedelta(minutes=10)
     lib.rows["acct1"] = row(active=False, error="(326) Authorization: Denied by access control")
-    assert xr.no_account_cause(r.pool_row(), T0) == ("inactive", "x_account_suspended")
+    assert xr.no_account_cause(r.pool_row(), T0, rate_limit_evidence=False) == ("inactive", "x_account_suspended")
     lib.rows["acct1"] = row(active=False, error="(32) Could not authenticate you")
-    assert xr.no_account_cause(r.pool_row(), T0) == ("inactive", "x_login_required")
+    assert xr.no_account_cause(r.pool_row(), T0, rate_limit_evidence=False) == ("inactive", "x_login_required")
     lib.rows["acct1"] = row(active=True, locks={"SearchTimeline": later.replace(tzinfo=None)})
-    assert xr.no_account_cause(r.pool_row(), T0) == ("locked", "rate_limited")
+    assert xr.no_account_cause(r.pool_row(), T0, rate_limit_evidence=True) == ("locked", "rate_limited")
+    assert xr.no_account_cause(r.pool_row(), T0, rate_limit_evidence=False) == ("waiting", "in_flight_lock")
     lib.rows["acct1"] = row(active=True, error="server")
-    assert xr.no_account_cause(r.pool_row(), T0) == ("server_error", "failed")
+    assert xr.no_account_cause(r.pool_row(), T0, rate_limit_evidence=False) == ("server_error", "failed")
     del lib.rows["acct1"]
     assert r.pool_row() == xr.PoolRow(False, None)
     assert ("get", r._api.db, "acct1") in lib.calls
@@ -424,17 +425,22 @@ def test_html_block_without_flag_pauses_day(tmp_path, lib):
     s.close()
 
 
-def test_all_accounts_locked_pauses_day(tmp_path, lib):
+def test_all_accounts_bare_locked_wait_for_lock_end_not_day(tmp_path, lib):
+    """A killed process leaves the library's in-flight lock (now + 15 min) with no rate-limit evidence on our
+    side: the pool waits for the earliest lock end, never for 00:00 UTC (restart test 30-10-26)."""
     s, d = start(tmp_path, lib)
     for label in ("acct1", "acct2"):
         lib.scripts[str(d / f"{label}.db")] = [NoAccountError("x")]
         lib.rows[label] = row(active=True, locks={"SearchTimeline": T0 + timedelta(minutes=14)})
     clock, config = Clock(), cfg(d)
-    _unit(s, config, clock=clock)
-    clock.now += timedelta(seconds=config.x_query_delay_max_s + 1)
     out, pool = _unit(s, config, clock=clock)
-    assert pool.pause_reason() == "no_usable_account" and out.result is None
-    assert [pool.account_state(x)[0] for x in ("acct1", "acct2")] == ["locked", "locked"]
+    end = T0 + timedelta(minutes=14, seconds=xp.LOCK_MARGIN_S)
+    assert out.result is None and out.reason == "in_flight_lock" and pool.pause_reason() == "in_flight_lock"
+    assert pool.resume_at() == end
+    assert [pool.account_state(x) for x in ("acct1", "acct2")] == [("locked", "in_flight_lock")] * 2
+    assert not [c for c in lib.calls if "reset" in c[0] or "unlock" in c[0] or "lock_until" in c[0]]
+    clock.now = end
+    assert not pool.is_paused() and pool.usable() == ["acct1", "acct2"]
     s.close()
 
 

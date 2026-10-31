@@ -6,9 +6,13 @@ objects and exceptions onto `RawPage`, `PoolRow`, `ReaderFailure` and `x_filters
   no guard. W8d2 installs it in an optional dependency group and checks the installed commit id against this.
 - `XReader`: one reader holds ONE account (design A: one accounts file and one API per account), so a unit can
   never span two accounts; failover happens only in `x_pool`.
-- `no_account_cause`: a NoAccountError is ambiguous (ban, rate limit or server error), so the cause is read from
-  that account's pool row: inactive is a ban or logout (codes 88, 326, 32 or a bare 403), active with a future
-  search lock is a rate limit, anything else is a server error.
+- `no_account_cause`: a NoAccountError is ambiguous (ban, rate limit, the library's in-flight lock or server
+  error), so the cause is read from that account's pool row: inactive is a ban or logout (codes 88, 326, 32 or a
+  bare 403); active with a future search lock is a rate limit only with rate-limit evidence from our side (an
+  HTTP 429, the code 88 on an active row, `x-rate-limit-remaining` at `RATE_LIMIT_NEAR` or below on that account's
+  last page) or a lock longer than an in-flight lock can be; a bare lock without that evidence is the library's
+  in-flight lock (taken at queue take for `IN_FLIGHT_LOCK`, left behind by a killed process) and is waited out;
+  anything else is a server error.
 - `fallback_decision`: the owner-allowed curl backend fallback (rule 19, amended by T179) applies only to an abort
   whose text starts with `Blocked by Cloudflare` or `Blocked by HTML` on the default backend, only with
   `x_allow_curl_backend` true, and only once per UTC day for the whole pool (canary and units together); it never
@@ -24,7 +28,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Protocol, runtime_checkable
 
 from api.data.attention import x_filters, x_window
@@ -34,6 +38,12 @@ TWSCRAPE_REPO = "https://github.com/vladkens/twscrape"
 TWSCRAPE_PINNED_COMMIT = "63f61a518e576ea5c132f1156c03dda0520d76c1"
 CURL_CFFI_PIN = "0.16.3"  # the fallback process only; hash-pinned wheel, W8d2
 SEARCH_QUEUE = "SearchTimeline"
+IN_FLIGHT_LOCK = timedelta(minutes=15)  # the library's in-use lock at queue take (removed on unlock)
+IN_FLIGHT_SLACK = timedelta(minutes=1)  # clock skew between the library's stamp and ours
+IN_FLIGHT_REASON = "in_flight_lock"
+RATE_LIMIT_CODE = 88
+RATE_LIMIT_STATUS = 429
+RATE_LIMIT_NEAR = 1  # remaining at or below this: the next request reaches 0 (the library hides the 0 itself)
 CLOUDFLARE_PREFIX = "Blocked by Cloudflare"
 HTML_PREFIX = "Blocked by HTML"
 PARSER_VERSION = "x-parse-1"
@@ -127,11 +137,23 @@ def _aware(ts: datetime) -> datetime:
     return ts.astimezone(timezone.utc)
 
 
-def no_account_cause(row: PoolRow, now: datetime) -> tuple[str, str]:
+def near_rate_limit(remaining: int | None) -> bool:
+    """A page's `x-rate-limit-remaining` says the account's next request reaches the limit."""
+    return remaining is not None and remaining <= RATE_LIMIT_NEAR
+
+
+def search_lock(row: PoolRow) -> datetime | None:
+    lock = (row.locks or {}).get(SEARCH_QUEUE)
+    return None if lock is None else _aware(lock)
+
+
+def no_account_cause(row: PoolRow, now: datetime, *, rate_limit_evidence: bool) -> tuple[str, str]:
     """(cause, reason) for a NoAccountError from the account's pool row.
 
     inactive: ("inactive", owner alert reason); 32, a bare 403 (no text) or text without a code need a fresh
-    login (cookie refresh), 88, 326 and any other code are a suspension. Active with a future search lock: ("locked", "rate_limited"). Otherwise
+    login (cookie refresh), 88, 326 and any other code are a suspension. Active with a future search lock:
+    ("locked", "rate_limited") with `rate_limit_evidence` from our side, the code 88 on the row, or a lock longer
+    than an in-flight lock; else ("waiting", "in_flight_lock"), a lock that ends by itself. Otherwise
     ("server_error", "failed").
     """
     if not row.active:
@@ -139,10 +161,13 @@ def no_account_cause(row: PoolRow, now: datetime) -> tuple[str, str]:
         if code in INACTIVE_CODES:
             return "inactive", INACTIVE_CODES[code]
         return "inactive", "x_login_required" if row.error_msg is None or code is None else "x_account_suspended"
-    lock = (row.locks or {}).get(SEARCH_QUEUE)
-    if lock is not None and _aware(lock) > _aware(now):
+    lock, now = search_lock(row), _aware(now)
+    if lock is None or lock <= now:
+        return "server_error", "failed"
+    longer = lock > now + IN_FLIGHT_LOCK + IN_FLIGHT_SLACK  # no in-flight lock lasts that long
+    if rate_limit_evidence or error_code(row.error_msg) == RATE_LIMIT_CODE or longer:
         return "locked", "rate_limited"
-    return "server_error", "failed"
+    return "waiting", IN_FLIGHT_REASON
 
 
 def fallback_decision(kind: str, *, allow_curl: bool, retried: bool) -> str:
