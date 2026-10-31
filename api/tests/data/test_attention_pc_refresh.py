@@ -922,7 +922,14 @@ def test_both_accounts_bare_locked_pass_retries_after_lock_end_not_next_day(day_
     clock = Clock()
     q = queries(x_backfill_days=0)
     q = dataclasses.replace(q, config=dataclasses.replace(q.config, x_accounts=("acct_a", "acct_b")))
-    readers = {x: LockingReader(x, clock) for x in ("acct_a", "acct_b")}
+    canary = {}
+
+    class SameCanary(LockingReader):  # both accounts see the same canary hour, so the canary agrees
+        def search_raw(self, query, kv, page):
+            raw = super().search_raw(query, kv, page)
+            return raw if '"$' in query else canary.setdefault(query, raw)
+
+    readers = {x: SameCanary(x, clock) for x in ("acct_a", "acct_b")}
     for r in readers.values():
         r.lock = T0 + IN_FLIGHT  # a killed process left both accounts' in-flight locks
     kwargs, _, _ = fakes(clock, q=q)
