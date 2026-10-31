@@ -386,6 +386,12 @@ def _finish(symbol: str, timeframe: str, df: pd.DataFrame, now: pd.Timestamp, re
 from api.data.freshness import as_utc  # noqa: E402  (S9A: added, no existing line changed)
 
 
+# Tickers the provider answered 404 for. A cache-only read has nothing for
+# them and would call it an outage; this keeps the real reason. In-process
+# only: the next refresh re-establishes it.
+_known_bad_tickers: set[str] = set()
+
+
 def read_cached_equity(symbol: str, timeframe: str, now=None) -> tuple[EquityOhlcvResult, pd.Timestamp | None]:
     """The cached bars and their sidecar `fetched_at`, never the network.
 
@@ -405,6 +411,8 @@ def read_cached_equity(symbol: str, timeframe: str, now=None) -> tuple[EquityOhl
     now = as_utc(_now() if now is None else now)
     cached = _read_cache(ticker, timeframe)
     if cached is None or cached.empty:
+        if ticker in _known_bad_tickers:
+            return EquityOhlcvResult(ticker, timeframe, empty, "bad_symbol", "unknown-ticker"), None
         return EquityOhlcvResult(ticker, timeframe, empty, "unavailable", "no-data"), None
     return _finish(ticker, timeframe, cached, now, "fresh-cache"), _fetched_at(ticker, timeframe)
 
@@ -427,6 +435,10 @@ def refresh_equity(symbol: str, transport=None, now=None) -> EquityOhlcvResult:
             return _with_cached(ticker, "1d", "unavailable", "missing-key")
 
         daily, status, reason = _request_daily(ticker, key, now, transport)
+        if status == "bad_symbol":
+            _known_bad_tickers.add(ticker)
+        elif daily is not None:
+            _known_bad_tickers.discard(ticker)
         if daily is None:
             return _with_cached(ticker, "1d", status, reason)
 

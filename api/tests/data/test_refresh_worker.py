@@ -81,6 +81,9 @@ def adapter_env(isolated_cache, monkeypatch):
     ccxt_adapter.reset_exchange_cache()
     ccxt_adapter.set_refresh_hook(None)
     monkeypatch.setattr(watchlist_store, "read_watchlist", lambda path=None: ["ETH"])
+    # No pairs universe and no recompute unless a test injects them.
+    monkeypatch.setattr(refresh_worker, "_default_universe", lambda: [])
+    monkeypatch.setattr(refresh_worker, "_default_recompute", lambda: None)
     yield isolated_cache
     ccxt_adapter.set_refresh_hook(None)
     ccxt_adapter.reset_exchange_cache()
@@ -90,6 +93,31 @@ def adapter_env(isolated_cache, monkeypatch):
 
 def _plan(symbols=("BTC", "ETH", "HYPE")) -> set[tuple[str, str]]:
     return {(s, tf) for s in symbols for tf in PLAN_TIMEFRAMES}
+
+
+def test_tick_fetches_daily_bars_of_pairs_universe_coins_and_then_recomputes(adapter_env):
+    ex = FakeExchange()
+    recomputed: list[int] = []
+    worker = RefreshWorker(
+        clock=lambda: NOW, exchange=ex, universe=lambda: ["eth", "DOGE", "BCH"],
+        recompute_pairs=lambda: recomputed.append(len(ex.calls)),
+    )
+    worker.run_tick()
+
+    # Universe-only coins get 1d alone; watchlist/benchmark coins keep the full plan.
+    assert {c for c in ex.calls if c[0] in ("DOGE", "BCH")} == {("DOGE", "1d"), ("BCH", "1d")}
+    assert set(ex.calls) >= _plan(("BTC", "ETH", "HYPE"))
+    # Recompute ran once, after every fetch of the tick.
+    assert recomputed == [len(ex.calls)]
+
+
+def test_pairs_recompute_failure_never_fails_the_tick(adapter_env):
+    def boom():
+        raise RuntimeError("statsmodels exploded")
+
+    worker = RefreshWorker(clock=lambda: NOW, exchange=FakeExchange(), recompute_pairs=boom)
+    counts = worker.run_tick()
+    assert worker.ticks == 1 and counts["ok"] > 0
 
 
 def test_tick_refreshes_watchlist_plus_benchmarks_all_timeframes(adapter_env):

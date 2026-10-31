@@ -278,6 +278,17 @@ def _load(coins: list[str]) -> _Loaded:
     return _Loaded("fresh", None, prov.get("computed_at"), table)
 
 
+def recompute_if_needed() -> ComputeSummary | None:
+    """Recompute when the stored results are missing or stale; None when fresh.
+
+    The refresh worker calls this after each tick so the pair screener follows
+    the OHLCV cache without a manual `compute_pairs` run. Cache reads only.
+    """
+    if _load(pairs_universe.load_universe()).status == "fresh":
+        return None
+    return compute_and_persist()
+
+
 def _summary_fields(row: dict) -> dict:
     ok = row["status"] == "ok"
     johansen = None

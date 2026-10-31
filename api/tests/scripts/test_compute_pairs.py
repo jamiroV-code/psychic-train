@@ -220,3 +220,16 @@ def test_empty_cache_real_compute_returns_two(tmp_path, monkeypatch, capsys):
     assert len(table) == expected
     assert set(table.status) == {"coin_unavailable"}
     assert (tmp_path / "pairs" / "results.parquet").exists()
+
+
+def test_recompute_if_needed_computes_missing_then_skips_fresh_then_follows_new_bars(seeded):
+    first = pairs_response.recompute_if_needed()
+    assert first is not None and first.pair_count == 10          # no results yet -> computed
+    assert pairs_response.recompute_if_needed() is None           # fresh -> nothing to do
+
+    prov_path = cache.pairs_provenance_path()
+    prov = json.loads(prov_path.read_text())
+    prov["per_coin_last_bar_date"]["AAA"] = "2000-01-01"          # cache now looks newer than results
+    prov_path.write_text(json.dumps(prov))
+    assert pairs_response.recompute_if_needed() is not None       # stale -> recomputed
+    assert pairs_response.recompute_if_needed() is None

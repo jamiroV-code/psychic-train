@@ -276,6 +276,21 @@ def set_refresh_hook(hook: Callable[[str, str], object] | None) -> None:
     _refresh_hook = hook
 
 
+# Tickers a live fetch proved are not listed (or are rejected as a symbol).
+# Cache-only reads have nothing cached for such a ticker, and would otherwise
+# call it an outage ("Data source unavailable") when it is a configuration
+# fact. In-process only: the worker's next tick re-establishes it after a
+# restart.
+_known_bad_symbols: set[str] = set()
+
+
+def _mark_symbol(symbol: str, bad: bool) -> None:
+    if bad:
+        _known_bad_symbols.add(symbol)
+    else:
+        _known_bad_symbols.discard(symbol)
+
+
 def _cached_only_result(symbol, timeframe, cached, fetched_at) -> OhlcvResult:
     note = None
     hook = _refresh_hook
@@ -287,7 +302,8 @@ def _cached_only_result(symbol, timeframe, cached, fetched_at) -> OhlcvResult:
             # A failing hook must never break a page read.
             note = None
     if cached.empty:
-        return _result(symbol, timeframe, cached, "unavailable", None, note)
+        status = "bad_symbol" if symbol in _known_bad_symbols else "unavailable"
+        return _result(symbol, timeframe, cached, status, None, note)
     return _result(symbol, timeframe, cached, _tail_status(cached, timeframe), fetched_at, note)
 
 
@@ -562,7 +578,9 @@ def fetch_ohlcv(
     if market_symbol is None:
         # Ticker matches no listed market. This is a configuration fact, not
         # an outage — say so (gap G3).
+        _mark_symbol(symbol, True)
         return _result(symbol, timeframe, cached, "bad_symbol", fetched_at)
+    _mark_symbol(symbol, False)
 
     if tail:
         effective_since = _tail_since(timeframe, _now())
@@ -580,6 +598,8 @@ def fetch_ohlcv(
         # Serve cache, mark the real reason — never a silent stale-reuse
         # pretending to be fresh, and never an outage label on a config error.
         # Cache and fetch time stay as they were.
+        if failure == "bad_symbol":
+            _mark_symbol(symbol, True)
         return _result(symbol, timeframe, cached, failure, fetched_at)
 
     try:
