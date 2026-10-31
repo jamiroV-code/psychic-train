@@ -86,3 +86,19 @@ def test_refresh_equity_fetches_inside_fresh_window_and_writes_both(monkeypatch)
     monkeypatch.delenv("LSE_API_KEY")
     missing = lse_adapter.refresh_equity("AAPL", transport=transport, now=NOW)
     assert (missing.reason, transport.calls) == ("missing-key", 2)
+
+
+def test_unknown_ticker_stays_bad_symbol_for_cache_only_reads(monkeypatch):
+    """A 404 from the provider is a ticker fact; the board must not call it an outage."""
+    monkeypatch.setattr(lse_adapter, "_known_bad_tickers", set())
+    monkeypatch.setenv("LSE_API_KEY", "k")
+    monkeypatch.setattr(lse_adapter, "_request_daily", lambda *a, **k: (None, "bad_symbol", "unknown-ticker"))
+    assert lse_adapter.read_cached_equity("SPX", "1d", now=NOW)[0].status == "unavailable"
+
+    assert lse_adapter.refresh_equity("SPX", now=NOW).status == "bad_symbol"
+    result, _ = lse_adapter.read_cached_equity("SPX", "1d", now=NOW)
+    assert (result.status, result.reason) == ("bad_symbol", "unknown-ticker")
+
+    monkeypatch.setattr(lse_adapter, "_request_daily", lambda *a, **k: (fx.daily_frame(END, 120), "ok", "fetched"))
+    assert lse_adapter.refresh_equity("SPX", now=NOW).status == "ok"
+    assert lse_adapter.read_cached_equity("SPX", "1d", now=NOW)[0].status != "bad_symbol"

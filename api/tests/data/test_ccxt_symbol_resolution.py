@@ -292,3 +292,25 @@ def test_weekly_derivation_from_a_fresh_daily_cache_needs_no_exchange(isolated_c
     assert result.status == "ok"
     assert not result.df.empty
     assert result.df["source"].unique().tolist() == ["fixture"]
+
+
+# --------------------------------------------------------------------------
+# A ticker the exchange does not list reads as bad_symbol (not an outage) from
+# the cache-only path the screener uses while the refresh worker runs.
+# --------------------------------------------------------------------------
+def test_cache_only_read_keeps_bad_symbol_after_a_live_fetch_proved_it(isolated_cache, monkeypatch):
+    monkeypatch.setattr(ccxt_adapter, "_known_bad_symbols", set())
+    with ccxt_adapter.cached_reads_only():
+        assert ccxt_adapter.fetch_ohlcv("NOPE", "1d", exchange=FakeExchange()).status == "unavailable"
+
+    assert ccxt_adapter.fetch_ohlcv("NOPE", "1d", exchange=FakeExchange()).status == "bad_symbol"
+    with ccxt_adapter.cached_reads_only():
+        assert ccxt_adapter.fetch_ohlcv("NOPE", "1d", exchange=FakeExchange()).status == "bad_symbol"
+        assert ccxt_adapter.fetch_ohlcv("NOPE", "1w", exchange=FakeExchange()).status == "bad_symbol"
+
+
+def test_a_listed_ticker_clears_a_remembered_bad_symbol(isolated_cache, monkeypatch):
+    monkeypatch.setattr(ccxt_adapter, "_known_bad_symbols", {"BTC"})
+    assert ccxt_adapter.fetch_ohlcv("BTC", "1d", exchange=FakeExchange()).status != "bad_symbol"
+    with ccxt_adapter.cached_reads_only():
+        assert ccxt_adapter.fetch_ohlcv("BTC", "1d", exchange=FakeExchange()).status != "bad_symbol"

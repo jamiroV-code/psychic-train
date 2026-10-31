@@ -41,7 +41,7 @@ from typing import Callable, Iterator
 
 import pandas as pd
 
-from api.data import cache, ccxt_adapter, freshness
+from api.data import cache, ccxt_adapter, freshness, pairs_universe
 from api.data import watchlist as watchlist_store
 
 logger = logging.getLogger(__name__)
@@ -69,6 +69,17 @@ def _default_symbols() -> list[str]:
     return list(watchlist_store.read_watchlist())
 
 
+def _default_universe() -> list[str]:
+    return pairs_universe.load_universe()
+
+
+def _default_recompute() -> None:
+    # Imported here: pulls in statsmodels, which the API's other pages never need.
+    from api.analytics.cointegration import pairs_response
+
+    pairs_response.recompute_if_needed()
+
+
 def pair_is_fresh(symbol: str, timeframe: str, now: pd.Timestamp) -> bool:
     """The worker's skip rule: a cached file whose fetch time is fresh (B4).
     A missing file is never fresh. `1w` has no forming TTL of its own and is
@@ -90,6 +101,8 @@ class RefreshWorker:
         fetch: Callable[..., object] | None = None,
         exchange=None,
         symbols: Callable[[], list[str]] | None = None,
+        universe: Callable[[], list[str]] | None = None,
+        recompute_pairs: Callable[[], object] | None = None,
         is_fresh: Callable[[str, str, pd.Timestamp], bool] | None = None,
         retry_markets: Callable[[], object] | None = None,
         pool_size: int = POOL_SIZE,
@@ -101,6 +114,8 @@ class RefreshWorker:
         self._fetch = fetch or _default_fetch
         self._exchange = exchange
         self._symbols = symbols or _default_symbols
+        self._universe = universe or _default_universe
+        self._recompute_pairs = recompute_pairs or _default_recompute
         self._is_fresh = is_fresh or pair_is_fresh
         self._retry_markets = retry_markets or ccxt_adapter.retry_markets_if_latched
         self._pool_size = pool_size
@@ -243,10 +258,21 @@ class RefreshWorker:
             symbols = []
         coins = sorted({s.upper() for s in symbols} | set(BENCHMARK_SYMBOLS))
         plan = [(s, tf) for s in coins for tf in TICK_TIMEFRAMES]
+        # Pair-screener coins need only daily bars (the one timeframe compute_pairs reads).
+        try:
+            extra = sorted({c.upper() for c in self._universe()} - set(coins))
+        except Exception as exc:
+            logger.warning("pairs universe unreadable: %s", type(exc).__name__)
+            extra = []
+        plan.extend((s, "1d") for s in extra)
         for key in self._take_queue():
             if key not in plan:
                 plan.append(key)
         counts = self._run_pairs(plan)
+        try:
+            self._recompute_pairs()
+        except Exception as exc:
+            logger.warning("pairs recompute failed: %s", type(exc).__name__)
 
         self.ticks += 1
         self.last_tick_ok = counts["ok"]
