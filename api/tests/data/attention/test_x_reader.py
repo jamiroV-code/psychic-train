@@ -135,17 +135,25 @@ def test_none_short_empty_exception_is_missing_never_zero():
 
 def test_noaccounterror_cause_read_from_pool_row():
     now = T0
-    assert xrd.no_account_cause(inactive_row("(88) Rate limit exceeded"), now) == ("inactive", "x_account_suspended")
-    assert xrd.no_account_cause(inactive_row("(326) Authorization: Denied by access control"), now) == (
-        "inactive", "x_account_suspended")
-    assert xrd.no_account_cause(inactive_row("(32) Could not authenticate you"), now) == ("inactive", "x_login_required")
-    assert xrd.no_account_cause(inactive_row(None), now) == ("inactive", "x_login_required")  # bare 403
+
+    def cause(row, evidence=False):
+        return xrd.no_account_cause(row, now, rate_limit_evidence=evidence)
+
+    assert cause(inactive_row("(88) Rate limit exceeded")) == ("inactive", "x_account_suspended")
+    assert cause(inactive_row("(326) Authorization: Denied by access control")) == ("inactive", "x_account_suspended")
+    assert cause(inactive_row("(32) Could not authenticate you")) == ("inactive", "x_login_required")
+    assert cause(inactive_row(None)) == ("inactive", "x_login_required")  # bare 403
     locked = xrd.PoolRow(True, None, {"SearchTimeline": now + timedelta(minutes=9)}, now)
-    assert xrd.no_account_cause(locked, now) == ("locked", "rate_limited")
+    assert cause(locked, evidence=True) == ("locked", "rate_limited")  # our side saw the rate limit
+    assert cause(locked) == ("waiting", "in_flight_lock")  # a bare library lock: at most 15 minutes, never a day
+    coded = xrd.PoolRow(True, "(88) Rate limit exceeded", {"SearchTimeline": now + timedelta(minutes=9)}, now)
+    assert cause(coded) == ("locked", "rate_limited")  # an active row carrying the rate-limit code is evidence
+    longer = xrd.PoolRow(True, None, {"SearchTimeline": now + timedelta(minutes=30)}, now)
+    assert cause(longer) == ("locked", "rate_limited")  # longer than an in-flight lock can be
     stale = xrd.PoolRow(True, None, {"SearchTimeline": now - timedelta(minutes=1)}, now)
-    assert xrd.no_account_cause(stale, now) == ("server_error", "failed")
+    assert cause(stale) == ("server_error", "failed")
     other_queue = xrd.PoolRow(True, "(130) Over capacity", {"UserByScreenName": now + timedelta(hours=1)}, now)
-    assert xrd.no_account_cause(other_queue, now) == ("server_error", "failed")
+    assert cause(other_queue) == ("server_error", "failed")
 
 
 def test_codes_88_326_32_403_pause_day_and_alert():
@@ -407,7 +415,7 @@ def test_rate_limit_lock_ends_at_day_boundary_not_inactive():
     clock, pool, src = setup()
     pass_canary(pool)
     locked = xrd.PoolRow(True, None, {"SearchTimeline": T0 + timedelta(minutes=15)}, T0)
-    a = reader("acct_a", [xrd.ReaderFailure("no_account")], locked)
+    a = reader("acct_a", [xrd.ReaderFailure("no_account", status=429)], locked)  # rate-limit evidence: HTTP 429
     out = unit(pool, {"acct_a": a, "acct_b": reader("acct_b", day_pages())}, src)
     assert out.label == "acct_b" and out.restarts == 1
     assert pool.account_state("acct_a") == ("locked", "rate_limited") and pool.alerts() == []
@@ -468,8 +476,8 @@ def test_second_failure_gives_account_failed_missing():
     _, pool, src = setup(("acct_a", "acct_b", "acct_c"))
     pass_canary(pool)
     locked = xrd.PoolRow(True, None, {"SearchTimeline": T0 + timedelta(minutes=15)}, T0)
-    a = reader("acct_a", [xrd.ReaderFailure("no_account")], locked)
-    b = reader("acct_b", [xrd.ReaderFailure("no_account")], locked)
+    a = reader("acct_a", [xrd.ReaderFailure("no_account", status=429)], locked)
+    b = reader("acct_b", [xrd.ReaderFailure("no_account", status=429)], locked)
     c = reader("acct_c", day_pages())
     out = unit(pool, {"acct_a": a, "acct_b": b, "acct_c": c}, src)
     assert out.result is None and out.reason == "account_failed" and (out.attempts, out.restarts) == (2, 1)
@@ -960,3 +968,146 @@ def test_one_curl_retry_per_utc_day_pool_wide_canary_then_unit():
                fallback=ok)
     assert got.reason == "html_block" and pool.pause_reason() == "html_block" and calls == ["acct_a"]
     assert pool.health()["curl_uses"] == 1
+
+
+# --- unclean stop: the library's in-flight lock is not a rate limit (restart test 30-10-26) ----------------------
+
+NEXT_MIDNIGHT = datetime(2026, 10, 22, tzinfo=timezone.utc)
+
+
+def bare_lock(until: datetime) -> xrd.PoolRow:
+    """What a killed process leaves in the account file: active, no error, the 15-minute in-flight search lock."""
+    return xrd.PoolRow(True, None, {"SearchTimeline": until}, T0)
+
+
+@pytest.fixture
+def no_day_lock(monkeypatch):
+    calls = []
+    real = xp.XPool.lock_for_day
+
+    def spy(self, label):
+        calls.append(label)
+        real(self, label)
+
+    monkeypatch.setattr(xp.XPool, "lock_for_day", spy)
+    return calls
+
+
+def test_bare_library_lock_does_not_day_lock_account(no_day_lock):
+    clock, pool, src = setup()
+    pass_canary(pool)
+    row = bare_lock(T0 + timedelta(minutes=15))
+    a = reader("acct_a", [xrd.ReaderFailure("no_account")], row)
+    out = unit(pool, {"acct_a": a, "acct_b": reader("acct_b", day_pages())}, src)
+    assert out.result is not None and out.label == "acct_b"
+    assert no_day_lock == [] and pool.alerts() == [] and not pool.is_paused()
+    assert pool.account_state("acct_a") == ("locked", "in_flight_lock")
+    assert a.row is row and row.locks == {"SearchTimeline": T0 + timedelta(minutes=15)}  # library file untouched
+    clock.now = T0 + timedelta(minutes=15, seconds=xp.LOCK_MARGIN_S - 1)
+    assert pool.account_state("acct_a")[0] == "locked"
+    clock.now = T0 + timedelta(minutes=15, seconds=xp.LOCK_MARGIN_S)  # the lock's own end, not 00:00 UTC
+    assert pool.account_state("acct_a") == ("active", None)
+    assert xp.XPool(["acct_a", "acct_b"], clock=clock).account_state("acct_a") == ("active", None)
+
+
+def test_bare_lock_unit_waits_for_lock_end_and_resumes(no_day_lock):
+    clock, pool, src = setup(("acct_a",))
+    pass_canary(pool)
+    a = reader("acct_a", [xrd.ReaderFailure("no_account")], bare_lock(T0 + timedelta(minutes=12)))
+    out = unit(pool, {"acct_a": a}, src)
+    assert out.result is None and out.reason == "in_flight_lock"  # not failed, not account_failed
+    assert no_day_lock == [] and pool.pause_reason() == "in_flight_lock"
+    end = T0 + timedelta(minutes=12, seconds=xp.LOCK_MARGIN_S)
+    assert pool.resume_at() == end and src.used == 0
+    clock.now = end - timedelta(seconds=1)
+    assert pool.is_paused() and unit(pool, {"acct_a": a}, src).reason == "paused" and len(a.calls) == 1
+    clock.now = end
+    a.row, a.items = ACTIVE, day_pages()  # the library's lock expired by itself
+    again = unit(pool, {"acct_a": a}, src)
+    assert again.result is not None and again.label == "acct_a" and not pool.is_paused()
+    assert len(xr.read_x_rows("SOL")) == 1 and src.used == 40
+
+
+@pytest.mark.parametrize("evidence", ["code_88", "http_429", "remaining_0", "remaining_persisted"])
+def test_real_rate_limit_evidence_still_day_locks_account(evidence):
+    clock, pool, src = setup()
+    pass_canary(pool)
+    lock = {"SearchTimeline": T0 + timedelta(minutes=12)}
+    row = xrd.PoolRow(True, "(88) Rate limit exceeded" if evidence == "code_88" else None, lock, T0)
+    fail = xrd.ReaderFailure("no_account", status=429 if evidence == "http_429" else None)
+    items = [fail]
+    if evidence == "remaining_0":
+        items = [page(tweets(20, END - timedelta(minutes=1)), remaining=0), fail]
+    if evidence == "remaining_persisted":
+        # An earlier unit on acct_a read the window down to its last request, then the process restarted.
+        first = unit(pool, {"acct_a": reader("acct_a", [day_pages()[0], page(tweets(20, END - timedelta(hours=4)),
+                                                                           remaining=1)])}, src, symbol="ETH")
+        assert first.label == "acct_a" and first.result is not None
+        clock.advance(minutes=5)
+        pool = xp.XPool(["acct_a", "acct_b"], clock=clock)
+        pool.mark_used("acct_b")
+        clock.advance(minutes=1)
+    a = reader("acct_a", items, row)
+    out = unit(pool, {"acct_a": a, "acct_b": reader("acct_b", day_pages())}, src)
+    assert out.label == "acct_b" and out.restarts == 1 and out.result is not None
+    assert pool.account_state("acct_a") == ("locked", "rate_limited")
+    clock.advance(minutes=30)  # far past the library's lock: ours lasts the UTC day
+    assert pool.account_state("acct_a") == ("locked", "rate_limited")
+    clock.now = NEXT_MIDNIGHT
+    assert pool.account_state("acct_a") == ("active", None)
+
+
+def test_failover_uses_unlocked_account_when_other_has_bare_lock(no_day_lock):
+    clock, pool, src = setup()
+    pass_canary(pool)
+    a = reader("acct_a", [xrd.ReaderFailure("no_account")], bare_lock(T0 + timedelta(minutes=15)))
+    b = reader("acct_b", day_pages() + day_pages())
+    out = unit(pool, {"acct_a": a, "acct_b": b}, src)
+    assert out.label == "acct_b" and (out.attempts, out.restarts) == (2, 1) and out.result is not None
+    clock.advance(minutes=10)
+    out2 = unit(pool, {"acct_a": a, "acct_b": b}, src, symbol="ETH")
+    assert out2.label == "acct_b" and out2.restarts == 0 and len(a.calls) == 1  # acct_a still waits
+    clock.advance(minutes=6)  # past the lock end and margin: acct_a is usable again, least recently used
+    assert pool.usable() == ["acct_a", "acct_b"] and pool.select().label == "acct_a"
+    assert no_day_lock == [] and not pool.is_paused()
+
+
+def test_both_accounts_bare_locked_pass_retries_after_lock_end_not_next_day(no_day_lock):
+    clock, pool, src = setup()
+    pass_canary(pool)
+    a = reader("acct_a", [xrd.ReaderFailure("no_account")], bare_lock(T0 + timedelta(minutes=10)))
+    b = reader("acct_b", [xrd.ReaderFailure("no_account")], bare_lock(T0 + timedelta(minutes=14)))
+    out = unit(pool, {"acct_a": a, "acct_b": b}, src)
+    assert out.result is None and out.reason == "in_flight_lock" and out.reason != "account_failed"
+    assert no_day_lock == [] and pool.pause_reason() == "in_flight_lock"
+    end = T0 + timedelta(minutes=10, seconds=xp.LOCK_MARGIN_S)  # the earliest lock end, not 00:00 UTC
+    assert pool.resume_at() == end and pool.health()["pause_until"] == end.isoformat()
+    clock.now = end
+    assert not pool.is_paused() and pool.usable() == ["acct_a"]
+
+
+def test_canary_on_bare_locked_accounts_waits_for_lock_end(no_day_lock):
+    clock, pool, src = setup()
+    readers = {x: reader(x, [xrd.ReaderFailure("no_account")], bare_lock(T0 + timedelta(minutes=9)))
+               for x in ("acct_a", "acct_b")}
+    out = xp.run_daily_canary(pool, readers, src, cfg(), rng=random.Random(1), sleep=lambda s: None)
+    assert not out.passed and out.reason == "in_flight_lock" and not pool.canary_passed_today()
+    assert no_day_lock == [] and pool.resume_at() == T0 + timedelta(minutes=9, seconds=xp.LOCK_MARGIN_S)
+
+
+def test_attempt_stamped_before_each_request():
+    clock, pool, src = setup(("acct_a",))
+    pass_canary(pool)
+    seen = []
+
+    class Killed(BaseException):
+        pass
+
+    class Cut(xrd.FakeXReader):
+        def search_raw(self, query, kv, page_no):
+            seen.append(src.last_unit_at())
+            raise Killed
+
+    with pytest.raises(Killed):
+        unit(pool, {"acct_a": Cut("acct_a")}, src)
+    assert seen == [T0]  # stamped before the request went out, so a kill still counts for the spacing

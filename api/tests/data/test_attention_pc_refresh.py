@@ -26,7 +26,7 @@ from fastapi.testclient import TestClient
 
 from api.data import attention_pc_refresh as apr
 from api.data import cache
-from api.data.attention import pc_pace, store, web_evidence
+from api.data.attention import pc_pace, store, web_evidence, x_raw
 from api.data.attention import reddit_web as rw
 from api.data.attention import web_queries as wq
 from api.data.attention import x_filters as xf
@@ -824,3 +824,149 @@ def test_persisted_gap_changes_with_real_worker_mode(tmp_path, monkeypatch):
     h = source_health(tmp_path, monkeypatch, clock, q, "xsearch")
     assert h.mode == "baseline"
     assert h.expected_gap_s == max(q.config.x_query_delay_max_s, 86400 / (h.effective_budget // q.config.x_sample_n))
+
+
+# --- unclean stop: the library's in-flight lock after a kill (restart test 30-10-26) ------------------------------
+
+IN_FLIGHT = timedelta(minutes=15)
+
+
+class PowerCut(BaseException):
+    """The host dies: nothing after it runs, nothing unlocks the account in the library's file."""
+
+
+class LockingReader(DayReader):
+    """The library's view of one account file. A request takes the 15-minute in-flight lock at queue take and
+    releases it when the page comes back; a kill leaves it. While the lock is in the future the library has no
+    account for the queue and raises NoAccountError (`no_account`); the pool row shows the bare lock, active, no
+    error. Two ticks per request: `2 i` kills while request i is in flight, `2 i + 1` after X served the page and
+    before it reached us. `returned` counts the entries that reached our side."""
+
+    def __init__(self, label, clock, kill_at=None):
+        super().__init__(label, clock)
+        self.kill_at, self.ticks, self.lock, self.returned, self.taken, self.refused = kill_at, 0, None, 0, [], 0
+
+    def pool_row(self):
+        return xrd.PoolRow(True, None, {"SearchTimeline": self.lock} if self.lock else {}, None)
+
+    def _tick(self):
+        tick, self.ticks = self.ticks, self.ticks + 1
+        if tick == self.kill_at:
+            raise PowerCut
+
+    def search_raw(self, query, kv, page):
+        now = self.clock()
+        if self.lock is not None and now < self.lock:
+            self.refused += 1
+            raise xrd.ReaderFailure("no_account")
+        self.lock = now + IN_FLIGHT
+        self.taken.append(now)
+        self._tick()
+        raw = super().search_raw(query, kv, page)
+        self._tick()
+        self.lock = None
+        self.returned += len(raw.entry_ids)
+        return raw
+
+
+@pytest.fixture
+def day_locks(monkeypatch):
+    calls = []
+    real = xp.XPool.lock_for_day
+
+    def spy(self, label):
+        calls.append(label)
+        real(self, label)
+
+    monkeypatch.setattr(xp.XPool, "lock_for_day", spy)
+    return calls
+
+
+def _killed(clock, q, reader):
+    w, _, _ = make(clock, q=q, reader=reader)
+    with pytest.raises(PowerCut):
+        w.streams[X].run_pass()
+    return reader.taken[-1]
+
+
+def test_attempt_stamped_before_request_so_killed_request_counts_for_spacing():
+    clock = Clock()
+    q = queries(x_backfill_days=0)
+    reader = LockingReader("acct_a", clock, kill_at=2)  # ticks 0-1 are the canary; the first coin page is in flight
+    killed_at = _killed(clock, q, reader)
+    assert x_state(clock, q).last_unit_at() == killed_at
+    clock.t = killed_at + timedelta(seconds=30)
+    w2, _, _ = make(clock, q=q, reader=reader)
+    assert w2.streams[X].schedule() >= killed_at + timedelta(seconds=q.config.x_query_delay_min_s)
+
+
+def test_health_shows_transient_pause_with_real_end(day_locks, tmp_path, monkeypatch):
+    clock = Clock()
+    q = queries(x_backfill_days=0)
+    reader = LockingReader("acct_a", clock, kill_at=2)
+    _killed(clock, q, reader)
+    end = reader.lock + timedelta(seconds=xp.LOCK_MARGIN_S)
+    clock.t += timedelta(minutes=1)
+    w2, _, _ = make(clock, q=q, reader=reader)
+    assert w2.streams[X].run_pass() == "account_wait"
+    health = xp.XPool(["acct_a"], clock=clock).health()
+    assert (health["pause_reason"], health["pause_until"]) == ("in_flight_lock", end.isoformat())
+    assert (health["accounts"][0]["state"], health["accounts"][0]["reason"]) == ("locked", "in_flight_lock")
+    h = source_health(tmp_path, monkeypatch, clock, q, "xsearch")
+    assert (h.paused, h.pause_reason, h.pause_until) == (True, "in_flight_lock", end.isoformat())
+    assert w2.streams[X].schedule("account_wait") == end < MIDNIGHT
+    assert day_locks == []
+
+
+def test_both_accounts_bare_locked_pass_retries_after_lock_end_not_next_day(day_locks):
+    clock = Clock()
+    q = queries(x_backfill_days=0)
+    q = dataclasses.replace(q, config=dataclasses.replace(q.config, x_accounts=("acct_a", "acct_b")))
+    readers = {x: LockingReader(x, clock) for x in ("acct_a", "acct_b")}
+    for r in readers.values():
+        r.lock = T0 + IN_FLIGHT  # a killed process left both accounts' in-flight locks
+    kwargs, _, _ = fakes(clock, q=q)
+    kwargs["x_start"] = lambda _cfg: SimpleNamespace(readers=readers, fallback=None, close=lambda: None)
+    w = apr.AttentionPcWorker(**kwargs)
+    assert w.streams[X].run_pass() == "account_wait"
+    end = T0 + IN_FLIGHT + timedelta(seconds=xp.LOCK_MARGIN_S)
+    pool = xp.XPool(["acct_a", "acct_b"], clock=clock)
+    assert pool.pause_reason() == "in_flight_lock" and pool.resume_at() == end
+    due = w.streams[X].schedule("account_wait")
+    assert due == end < MIDNIGHT
+    clock.t = due - timedelta(seconds=apr.BEHIND_DELAY_S)
+    assert w.streams[X].run_pass(stop_at=clock() + timedelta(hours=3)) == "done"
+    assert day_locks == [] and all(t >= end for r in readers.values() for t in r.taken)
+    for s in COINS:
+        assert [d for d, _v in store.read_points(X, s)] == [YESTERDAY]
+
+
+@pytest.mark.parametrize("tick", range(14))  # canary + 3 coins x 2 pages = 7 requests, two ticks each
+def test_kill_at_every_tick_never_pauses_a_utc_day(tick, day_locks, tmp_path, monkeypatch):
+    clock = Clock()
+    q = queries(x_backfill_days=0)
+    reader = LockingReader("acct_a", clock, kill_at=tick)
+    killed_at = _killed(clock, q, reader)
+    assert reader.lock == killed_at + IN_FLIGHT  # the kill left the library's in-flight lock
+    clock.t += timedelta(minutes=1)  # back a minute later, well inside the lock
+    w, _, _ = make(clock, q=q, reader=reader)  # the restart
+    outcome, outcomes = None, []
+    for _ in range(8):  # the worker loop: each pass at the time `schedule` gives
+        due = w.streams[X].schedule(outcome)
+        assert due < MIDNIGHT, outcomes  # never 'paused until the next UTC day'
+        clock.t = max(clock.t, due - timedelta(seconds=apr.BEHIND_DELAY_S))
+        outcome = w.streams[X].run_pass(stop_at=clock() + timedelta(hours=3))
+        outcomes.append(outcome)
+        if outcome == "done":
+            break
+    assert outcomes[-1] == "done" and "paused" not in outcomes and reader.refused >= 1
+    assert day_locks == []
+    pool = xp.XPool(["acct_a"], clock=clock)
+    assert pool.account_state("acct_a") == ("active", None) and not pool.is_paused()
+    assert [t for t in reader.taken if killed_at < t < killed_at + IN_FLIGHT] == []  # waited the lock out
+    for s in COINS:
+        assert [d for d, _v in store.read_points(X, s)] == [YESTERDAY]  # no duplicate coin-day
+        assert len(x_raw.read_x_rows(s)) == 1
+    h = source_health(tmp_path, monkeypatch, clock, q, "xsearch")
+    assert h.completeness_attempted == h.completeness_fetched == len(COINS) and h.missing == 0
+    assert x_state(clock, q).used == reader.returned  # only what reached us, each page once
