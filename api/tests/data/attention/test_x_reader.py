@@ -1095,6 +1095,25 @@ def test_canary_on_bare_locked_accounts_waits_for_lock_end(no_day_lock):
     assert no_day_lock == [] and pool.resume_at() == T0 + timedelta(minutes=9, seconds=xp.LOCK_MARGIN_S)
 
 
+def test_canary_with_one_bare_locked_account_runs_again_after_lock_end(no_day_lock):
+    """A kill during the canary leaves one account's in-flight lock: the canary does not pass on the other alone
+    (that would leave the locked account's units without a canary for the whole UTC day); it runs again on both
+    after the lock ends."""
+    clock, pool, src = setup()
+    a = reader("acct_a", [xrd.ReaderFailure("no_account")], bare_lock(T0 + timedelta(minutes=9)))
+    b = reader("acct_b", [page(CANARY_TWS)])
+    out = xp.run_daily_canary(pool, {"acct_a": a, "acct_b": b}, src, cfg(), rng=random.Random(1),
+                              sleep=lambda s: None)
+    assert not out.passed and out.reason == "in_flight_lock" and pool.canary_labels() == []
+    end = T0 + timedelta(minutes=9, seconds=xp.LOCK_MARGIN_S)
+    assert pool.resume_at() == end and no_day_lock == []
+    clock.now = end
+    a.row, a.items, b.items = ACTIVE, [page(CANARY_TWS)], [page(CANARY_TWS)]
+    again = xp.run_daily_canary(pool, {"acct_a": a, "acct_b": b}, src, cfg(), rng=random.Random(1),
+                                sleep=lambda s: None)
+    assert again.passed and pool.canary_labels() == ["acct_a", "acct_b"]
+
+
 def test_attempt_stamped_before_each_request():
     clock, pool, src = setup(("acct_a",))
     pass_canary(pool)
