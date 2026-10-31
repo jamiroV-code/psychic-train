@@ -14,9 +14,10 @@ and runners never start it. The app lifespan starts it after the equities worker
 - Schedule (the T51 `_behind` pattern): at start a source with work is due `BEHIND_DELAY_S` (20 s) later, never
   earlier than the configured minimum delay after its previous unit, also right after a restart (the last unit time
   is persisted, `pc_pace.Trickle.first_due`). A source that is up to date, paused or out of budget waits for the next
-  UTC day (00:00 + 20 s). A pass that raised is retried after `RETRY_SECONDS`; unreadable state pauses the source,
-  keeps the file and is re-checked after `RECHECK_SECONDS`. A pass begins 20 s before its due time because its
-  first unit is scheduled that long after the pass begins.
+  UTC day (00:00 + 20 s); X waiting for an account's in-flight lock (`account_wait`, `x_pool.XPool.resume_at`)
+  is due at that lock's end instead. A pass that raised is retried after `RETRY_SECONDS`; unreadable state pauses
+  the source, keeps the file and is re-checked after `RECHECK_SECONDS`. A pass begins 20 s before its due time
+  because its first unit is scheduled that long after the pass begins.
 - Modes (rule 15, AC37): BASELINE once the worker has been up since before 00:00 UTC of the current day, DEGRADED
   otherwise (rule 10, AC24), so a restart is degraded for the rest of that UTC day; never a fixed hour of the day.
   BASELINE spreads the X units over the day (`x_spread_over_day`: at least 24 h / (effective budget / `x_sample_n`)
@@ -226,6 +227,10 @@ class Stream:
         """Why the source cannot run before the next day (or `state_error`), beyond pause and budget."""
         return None
 
+    def _resume_at(self, q: web_queries.Queries) -> datetime | None:
+        """A short hold that is not a day pause: the source's first unit waits until then (X: an in-flight lock)."""
+        return None
+
     def _pass(self, q, src, syms, stop_at) -> str:
         raise NotImplementedError
 
@@ -317,7 +322,9 @@ class Stream:
             return now + timedelta(seconds=RECHECK_SECONDS)
         if held:
             return _next_day(now)
-        return self._trickle(q, len(syms)).first_due(now, src.last_unit_at())
+        due = self._trickle(q, len(syms)).first_due(now, src.last_unit_at())
+        resume = self._resume_at(q)
+        return due if resume is None else max(due, resume)
 
     def run_pass(self, stop_at: datetime | None = None) -> str:
         """Work the queue at the source's pace until done, paused, out of budget or `stop_at` (the host stops).
@@ -391,9 +398,16 @@ class XStream(Stream):
         if not q.config.x_accounts:
             return "not_configured"
         try:
-            return "paused" if self._pool(q.config).is_paused() else None
+            pool = self._pool(q.config)
+            return "paused" if pool.is_paused() and pool.resume_at() is None else None
         except x_pool.XPoolStateError:
             return "state_error"
+
+    def _resume_at(self, q):
+        try:
+            return self._pool(q.config).resume_at() if q.config.x_accounts else None
+        except x_pool.XPoolStateError:
+            return None
 
     def _reader(self, config):
         start = self._start
@@ -436,7 +450,7 @@ class XStream(Stream):
         except x_pool.XPoolStateError:
             log.warning("attention pc %s pool state unreadable: source paused, file kept", X_SOURCE)
             return "state_error"
-        if pool.is_paused():
+        if pool.is_paused() and pool.resume_at() is None:
             return "paused"
         start = self._reader(c)
         if start is None:
@@ -448,8 +462,10 @@ class XStream(Stream):
             items = [item for item in self.queue(q, syms) if item not in tried]
             if not items:
                 return "done"
-            if pool.is_paused() or src.is_paused():
+            if src.is_paused() or (pool.is_paused() and pool.resume_at() is None):
                 return "paused"
+            if pool.resume_at() is not None:  # an account's in-flight lock: wait it out, never the day
+                due = max(due, pool.resume_at())
             if not src.can_spend(xr.PAGE_ENTRIES):
                 src.mark_spent()
                 return "budget_spent"
@@ -464,6 +480,10 @@ class XStream(Stream):
                     continue
                 if canary.reason in ("budget_spent", "too_early"):
                     return canary.reason
+                if pool.resume_at() is not None:
+                    log.warning("attention pc %s canary waits for an account lock until %s", X_SOURCE,
+                                pool.resume_at().isoformat())
+                    return "account_wait"
                 log.warning("attention pc %s canary did not pass: %s", X_SOURCE, canary.reason)
                 return "paused"
             symbol, day = items[0]
@@ -494,6 +514,10 @@ class XStream(Stream):
             due = self._next_due(trickle, src, c)
             if out.reason in ("budget_spent", "too_early"):
                 return out.reason
+            if pool.resume_at() is not None:
+                log.warning("attention pc %s waits for an account lock until %s", X_SOURCE,
+                            pool.resume_at().isoformat())
+                return "account_wait"
             if pool.is_paused() or src.is_paused():
                 log.warning("attention pc %s paused: %s", X_SOURCE, pool.pause_reason() or src.pause_reason())
                 return "paused"

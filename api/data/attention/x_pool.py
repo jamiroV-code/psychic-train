@@ -3,14 +3,20 @@ unit across the pool. Pure logic over injected readers, clock, RNG and sleep; no
 
 - Selection is ours: the least recently used of the usable accounts (active, not locked, not suspect), ties broken
   by registration order (the order of the configured labels), never alphabetical; each choice is logged by label.
-- States: active; locked (a rate limit locks that account until the next 00:00 UTC, it stays active);
-  inactive (ban or logout, with an owner alert naming the label, until the owner acts); suspect (the canary saw a
-  smaller result, until the owner clears it). The state file under `<cache>/attention/_pc_state/x_pool.json`
-  survives a restart; the library's own locks are never reset (a crash's in-use lock expires by itself).
+- States: active; locked (a rate limit locks that account until the next 00:00 UTC, it stays active; the
+  library's bare in-flight lock, left by a killed process, locks it only until that lock's end plus
+  `LOCK_MARGIN_S`); inactive (ban or logout, with an owner alert naming the label, until the owner acts);
+  suspect (the canary saw a smaller result, until the owner clears it). The state file under
+  `<cache>/attention/_pc_state/x_pool.json` survives a restart; the library's own locks are never reset or
+  rewritten (a crash's in-use lock expires by itself). A rate limit needs evidence from our side
+  (`x_reader.no_account_cause`): an HTTP 429, the code 88 on an active row, or `x-rate-limit-remaining` near 0
+  on that account's last page within the rate window (persisted as `rate_limit_seen`).
 - A unit is fetched by one account end to end. A ban, logout or lock restarts it once on another account
   (`x_unit_max_restarts`): the aborted attempt's tweets are discarded, its reads still count against the GLOBAL
   budget, and a second failure leaves the coin-day missing (`account_failed`). Zero usable accounts pause X for
-  the rest of the UTC day; budget, sample size and spacing are global (one `PcSource` for the whole pool).
+  the rest of the UTC day, unless an account waits for an in-flight lock: then X pauses only until the earliest
+  such lock ends (`in_flight_lock`, `resume_at`). Budget, sample size and spacing are global (one `PcSource` for
+  the whole pool); each request is stamped before it is sent, so a killed request still counts for the spacing.
 - Fail closed: a None, empty or short result, an exception or a block page is missing with a reason, never 0.
   An empty page after a FULL page, or a page of repeated ids, is a stalled cursor (`x_window.cursor_end`), never
   an exact count. An exact count from an exhausted cursor needs the unit's account among the accounts that passed
@@ -41,13 +47,18 @@ from api.data.attention.web_queries import CollectorConfig
 LABEL_RE = re.compile(r"[a-z0-9_]{1,24}")
 STATES = ("active", "inactive", "suspect")
 DAY_PAUSE_REASONS = ("no_usable_account", "cloudflare_block", "html_block", "empty_results", "canary_disagree")
+WAIT_REASON = xr.IN_FLIGHT_REASON
+PAUSE_REASONS = (*DAY_PAUSE_REASONS, WAIT_REASON)
+LOCK_MARGIN_S = 30  # past the library's lock end before the account is tried again
+RATE_LIMIT_WINDOW = timedelta(minutes=15)  # X's rate-limit window: older near-zero headers are no evidence
 SUSPECT_REASON = "x_account_suspect"
 ALERT_REASONS = ("x_account_suspended", "x_login_required", SUSPECT_REASON)
 DRIFT_STOP = 3
 SINGLE_ACCOUNT_NOTE = "comparison skipped: single active account"
 TOP_KEYS = {"accounts", "alerts", "pause_until", "pause_reason", "stopped", "drift_streak", "canary_day",
             "canary_note", "canary_labels", "curl_uses", "curl_last_use"}
-ACCOUNT_KEYS = {"state", "reason", "last_used", "lock_until", "last_canary", "suspect_since"}
+ACCOUNT_KEYS = {"state", "reason", "last_used", "lock_until", "last_canary", "suspect_since", "rate_limit_seen"}
+TIME_KEYS = ("last_used", "lock_until", "last_canary", "suspect_since", "rate_limit_seen")
 
 
 class XPoolStateError(ValueError):
@@ -76,11 +87,11 @@ def _valid(s) -> bool:
         return False
     for a in s["accounts"].values():
         if not (isinstance(a, dict) and set(a) == ACCOUNT_KEYS and a["state"] in STATES
-                and all(_iso(a[k]) for k in ("last_used", "lock_until", "last_canary", "suspect_since"))):
+                and all(_iso(a[k]) for k in TIME_KEYS)):
             return False
     return all((
         isinstance(s["alerts"], list), _iso(s["pause_until"]), _iso(s["curl_last_use"]),
-        s["pause_reason"] is None or s["pause_reason"] in DAY_PAUSE_REASONS,
+        s["pause_reason"] is None or s["pause_reason"] in PAUSE_REASONS,
         s["stopped"] in (None, "layout_changed"),
         isinstance(s["drift_streak"], int) and isinstance(s["curl_uses"], int),
         isinstance(s["canary_labels"], list) and all(isinstance(x, str) for x in s["canary_labels"]),
@@ -118,6 +129,10 @@ class XPool:
                 raise XPoolStateError("pool state unreadable") from None
             if isinstance(s, dict):
                 s.setdefault("canary_labels", [])  # a state file from before T190: no account passed yet
+                accounts = s.get("accounts")
+                for a in accounts.values() if isinstance(accounts, dict) else ():
+                    if isinstance(a, dict):
+                        a.setdefault("rate_limit_seen", None)  # a state file from before the in-flight lock fix
             if not _valid(s):
                 raise XPoolStateError("pool state invalid")
             if set(s["accounts"]) - set(self.labels):
@@ -147,7 +162,7 @@ class XPool:
         if a["state"] != "active":
             return a["state"], a["reason"]
         if a["lock_until"] and self._now() < datetime.fromisoformat(a["lock_until"]):
-            return "locked", "rate_limited"
+            return "locked", WAIT_REASON if a["reason"] == WAIT_REASON else "rate_limited"
         return "active", None
 
     def usable(self) -> list[str]:
@@ -171,8 +186,35 @@ class XPool:
 
     def lock_for_day(self, label: str) -> None:
         """A rate limit: no retry on this account until the next 00:00 UTC; it stays active."""
-        self._acct(label)["lock_until"] = self._next_midnight()
+        a = self._acct(label)
+        a["lock_until"] = self._next_midnight()
+        if a["reason"] == WAIT_REASON:
+            a["reason"] = None
         self._save()
+
+    def wait_for_lock(self, label: str, lock_end: datetime) -> None:
+        """The library's bare in-flight lock: skip this account until that lock ends (plus a margin), never for
+        the day; the library's own lock is left as it is and expires by itself."""
+        a = self._acct(label)
+        a["lock_until"] = (_utc(lock_end) + timedelta(seconds=LOCK_MARGIN_S)).isoformat()
+        a["reason"] = WAIT_REASON
+        self.log.append(f"x pool: {label} waits for the library's in-flight lock until {a['lock_until']}")
+        self._save()
+
+    def note_remaining(self, label: str, remaining: int | None) -> None:
+        """Keep the rate-limit evidence of a page's `x-rate-limit-remaining`: near 0 is evidence, more clears it."""
+        a = self._acct(label)
+        if xr.near_rate_limit(remaining):
+            a["rate_limit_seen"] = self._now().isoformat()
+        elif remaining is not None and a["rate_limit_seen"] is not None:
+            a["rate_limit_seen"] = None
+        else:
+            return
+        self._save()
+
+    def rate_limit_evidence(self, label: str) -> bool:
+        seen = self._acct(label)["rate_limit_seen"]
+        return seen is not None and self._now() - datetime.fromisoformat(seen) < RATE_LIMIT_WINDOW
 
     def _alert(self, label: str, reason: str) -> None:
         if not any(a["label"] == label and a["reason"] == reason for a in self._s["alerts"]):
@@ -210,6 +252,24 @@ class XPool:
             raise ValueError("unknown pause reason")
         self._s["pause_until"], self._s["pause_reason"] = self._next_midnight(), reason
         self._save()
+
+    def pause_no_account(self) -> str:
+        """No usable account: wait for the earliest in-flight lock end when an account waits for one, else pause
+        the UTC day (`no_usable_account`). Returns the pause reason."""
+        ends = [self._acct(x)["lock_until"] for x in self.labels if self.account_state(x) == ("locked", WAIT_REASON)]
+        if not ends:
+            self.pause_day("no_usable_account")
+            return "no_usable_account"
+        self._s["pause_until"] = min(ends, key=datetime.fromisoformat)
+        self._s["pause_reason"] = WAIT_REASON
+        self._save()
+        return WAIT_REASON
+
+    def resume_at(self) -> datetime | None:
+        """When a pause for an in-flight lock ends; None for no pause or any other pause."""
+        if self._s["stopped"] or self._s["pause_reason"] != WAIT_REASON or not self.is_paused():
+            return None
+        return datetime.fromisoformat(self._s["pause_until"])
 
     def stop(self, reason: str = "layout_changed") -> None:
         self._s["stopped"] = reason
@@ -283,13 +343,15 @@ class XPool:
         self._save()
 
     def health(self) -> dict:
-        """Active over total and per-account label, state and last use; never a secret."""
+        """Active over total and per-account label, state and last use; the pause and its end; never a secret."""
         accts = []
         for x in self.labels:
             state, reason = self.account_state(x)
             accts.append({"label": x, "state": state, "reason": reason, "last_used": self._acct(x)["last_used"]})
+        paused = self.is_paused() and not self._s["stopped"]
         return {"active": sum(1 for a in accts if a["state"] == "active"), "total": len(self.labels),
-                "accounts": accts, "pause_reason": self.pause_reason(), "drift_streak": self._s["drift_streak"],
+                "accounts": accts, "pause_reason": self.pause_reason(),
+                "pause_until": self._s["pause_until"] if paused else None, "drift_streak": self._s["drift_streak"],
                 "canary_note": self._s["canary_note"], "curl_uses": self._s["curl_uses"],
                 "curl_last_use": self._s["curl_last_use"]}
 
@@ -348,14 +410,20 @@ class CanaryOutcome:
 
 
 def _account_failure(pool: XPool, label: str, reader: xr.XReader, failure: xr.ReaderFailure) -> str:
-    """Apply a NoAccountError's cause to our state; return `restart` or the unit's missing reason."""
-    cause, reason = xr.no_account_cause(reader.pool_row(), pool._now())
+    """Apply a NoAccountError's cause to our state; return `restart`, `wait` (the account waits for the library's
+    in-flight lock; another account may take the unit) or the unit's missing reason."""
+    row = reader.pool_row()
+    evidence = failure.status == xr.RATE_LIMIT_STATUS or pool.rate_limit_evidence(label)
+    cause, reason = xr.no_account_cause(row, pool._now(), rate_limit_evidence=evidence)
     if cause == "inactive":
         pool.mark_inactive(label, reason)
         return "restart"
     if cause == "locked":
         pool.lock_for_day(label)
         return "restart"
+    if cause == "waiting":
+        pool.wait_for_lock(label, xr.search_lock(row))
+        return "wait"
     return reason
 
 
@@ -412,6 +480,7 @@ def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcS
             sleep(rng.uniform(config.x_query_delay_min_s, config.x_query_delay_max_s))
         pool.mark_used(label)
         reader = readers[label]
+        src.stamp_attempt()  # before the request: a request killed in flight still counts for the spacing
         try:
             raw = reader.search_raw(query, kv, 0)
         except xr.ReaderFailure as f:
@@ -428,12 +497,13 @@ def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcS
             results[label] = set()
             continue
         src.record_loaded(len(raw.entry_ids))
+        pool.note_remaining(label, raw.rate_limit_remaining)
         src.record_unit()
         results[label] = xr.canary_ids(reader.parse_tweets(raw.body), start, end)
     pool.mark_canaried(list(results))
     if not results:
-        pool.pause_day("no_usable_account")
-        return CanaryOutcome(False, reason="no_usable_account")
+        reason = pool.pause_no_account()
+        return CanaryOutcome(False, reason=reason)
     suspects, note = [], SINGLE_ACCOUNT_NOTE if len(results) == 1 else None
     if len(results) >= 2:
         suspects, inconclusive = compare_canary(results, labels, config.x_canary_tolerance,
@@ -500,6 +570,7 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
         if page_no:
             sleep(rng.uniform(config.x_page_gap_min_s, config.x_page_gap_max_s))
         backend = "default"
+        src.stamp_attempt()  # before the request: a request killed in flight still counts for the spacing
         try:
             raw = reader.search_raw(query, kv, page_no)
         except xr.ReaderFailure as f:
@@ -511,7 +582,7 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
                 backend = "curl"
             elif f.kind == "no_account":
                 step = _account_failure(pool, label, reader, f)
-                return _Attempt("restart" if step == "restart" else "stop", step)
+                return _Attempt("restart" if step in ("restart", "wait") else "stop", step)
             elif f.kind in xr.DRIFT_KINDS or f.kind == "abort":
                 return _Attempt("stop", _drift(pool))
             else:
@@ -523,6 +594,7 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
             raw = xr.RawPage({}, ())  # rule 20b: None is not an error, it is an exhausted cursor
         n = len(raw.entry_ids)
         src.record_loaded(n)
+        pool.note_remaining(label, raw.rate_limit_remaining)
         counts["reads"] += n
         counts["pages"] += 1 + raw.retries
         x_raw.write_page(symbol, day, attempt=attempt, page=page_no, body=raw.body, entry_ids=raw.entry_ids,
@@ -594,11 +666,11 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
             src.stamp_attempt()  # requests were sent: the next unit still waits the minimum delay
         return XUnitOutcome(result, reason, label, attempts, restarts, row, counts["pages"], counts["reads"])
 
+    waiting = False  # the last attempt's account waits for the library's in-flight lock
     while attempts < 1 + config.x_unit_max_restarts:
         sel = pool.select()
         if sel is None:
-            pool.pause_day("no_usable_account")
-            return done(None, "no_usable_account")
+            return done(None, pool.pause_no_account())
         if attempts:
             restarts += 1
         attempts += 1
@@ -607,6 +679,7 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
         att = _run_attempt(pool, reader, src, config, label=label, attempt=attempts, symbol=symbol, day=day,
                            query=query, rng=rng, sleep=sleep, fallback=fallback, collected_at=now, counts=counts)
         if att.status == "restart":
+            waiting = att.reason == "wait"
             continue
         if att.status == "stop":
             return done(None, att.reason)
@@ -627,4 +700,6 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
                             parser_version=xr.PARSER_VERSION, policy=policy)
         x_raw.write_x_row(symbol, row)
         return done(summary.result, att.reason, row)
+    if waiting:  # not failed: the coin-day is tried again after the lock ends
+        return done(None, pool.pause_no_account() if not pool.usable() else WAIT_REASON)
     return done(None, "account_failed")
