@@ -287,7 +287,7 @@ def selection(state: dict, eligible: list[str], km: tk.KeywordMap | None
     ambiguous = km.ambiguous if km else frozenset()
     entries = km.entries if km else {}
     coins = state.get("coins", {})
-    order = list(dict.fromkeys([*eligible, *sorted(ambiguous), *(s for s in coins if s in eligible)]))
+    order = list(dict.fromkeys([*eligible, *sorted(ambiguous), *coins]))   # every tested coin gets a line
     lines = ["selection (stage 2): one term or topic per coin; a bundle only checks variants; rising never decides; "
              "ambiguous coins need a topic or the owner's approved term",
              "coin | current keyword (status) | verdict | chosen | flags | others (why not chosen)"]
@@ -308,9 +308,6 @@ def selection(state: dict, eligible: list[str], km: tk.KeywordMap | None
         others = "; ".join(f"{t} {why}" for t, why in sel.others) or "-"
         lines.append(f"{s} | current: {kw} ({status}) | {sel.verdict} | {chosen} | {', '.join(sel.flags) or '-'} | "
                      f"{'; '.join(sel.reasons)} | others: {others}")
-    for s in coins:
-        if s not in order and s not in entries:
-            lines.append(f"{s} | not in the keyword file")
     counts = {v: sum(p[0].verdict == v for p in picked.values()) for v in ts.VERDICTS}
     lines.append("selection verdicts: " + ", ".join(f"{v} {n}" for v, n in counts.items()))
     return lines, picked

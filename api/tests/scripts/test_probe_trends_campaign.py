@@ -238,7 +238,8 @@ def test_eligible_set_change_between_runs(tmp_path):
     assert sent(c) == ["the open network toncoin"]
     code, text, _ = run(["--report", str(st)], eligible=("AKE", "GRAM"), factory=no_client)
     assert code == 0
-    assert "BTW" in text and "no longer eligible" in text.split("BTW")[-2] + text.split("BTW")[-1]
+    table = text.split("selection (stage 2)")[0]   # stage 2 selection lines follow the campaign table
+    assert "BTW" in table and "no longer eligible" in table.split("BTW")[-2] + table.split("BTW")[-1]
 
 
 def test_no_eligible_coins_refuses(tmp_path):
@@ -484,6 +485,7 @@ def _stage2_state(tmp_path):
                       (["ake crypto"], "ok", _sel_metrics(zero=1), "loader-valid")])
     _coin(st, "SKY", [(["sky crypto"], "ok", _sel_metrics(), p.NEEDS_APPROVAL_FLAG)])
     _coin(st, "USD0", [(["usual usd crypto"], "ok", _sel_metrics(), "loader-valid")])
+    _coin(st, "BTW", [(["bitway crypto"], "ok", _sel_metrics(), "loader-valid")])   # tested, not eligible now
     path = tmp_path / "c.json"
     tc.save_state(path, st)
     return path
@@ -511,7 +513,7 @@ def test_report_is_read_only_and_sends_no_request(tmp_path, monkeypatch):
 def test_report_selection_lines_per_coin(tmp_path):
     """AC13, AC15: verdict, chosen term, flags and why the others lost; STABLE untested; USD0 not in the file."""
     path = _stage2_state(tmp_path)
-    code, text, _ = run(["--report", str(path)], eligible=("AKE", "SKY", "BTW"), factory=no_client)
+    code, text, _ = run(["--report", str(path)], eligible=("AKE", "SKY"), factory=no_client)
     assert code == 0, text
     sel = text.split("selection (stage 2)")[1]
     lines = {ln.split(" | ")[0]: ln for ln in sel.splitlines() if " | " in ln}
@@ -521,9 +523,9 @@ def test_report_selection_lines_per_coin(tmp_path):
     assert "| needs-approval | sky crypto (suggestion only" in lines["SKY"]
     assert "current: sky crypto (skipped-unqualified)" in lines["SKY"]
     assert "| untested |" in lines["STABLE"] and "use-term" not in lines["STABLE"]
-    assert "| untested |" in lines["BTW"]
+    assert "| untested |" in lines["PEPE"] and "| use-term | bitway crypto |" in lines["BTW"]
     assert lines["USD0"] == "USD0 | not in the keyword file"
-    assert "selection verdicts: use-term 1, use-topic 0, needs-approval 1" in sel
+    assert "selection verdicts: use-term 2, use-topic 0, needs-approval 1" in sel
 
 
 def test_report_waking_up_approved_coin_says_approved_pulled(tmp_path):
