@@ -53,9 +53,9 @@ A slice is NOT complete until: (1) its named tests pass; (2) the changed behavio
 | D6 | The waking-up watch list is shown on the Sources panel only, not in any score. |
 | D7 | Ambiguity list = the 12 of the T125 review plus SKY, PI, JST, NEAR, GRAM, RAIN, M, CC, LIT, NIGHT, STABLE (23). |
 
-### Owner input needed before EXECUTE (one list, not a question per coin)
+### Owner input before EXECUTE: Q1 ANSWERED (owner, 01-11-26)
 
-Q1. Which listed coins' current terms do you approve? Seeded as `approved: true` by EXECUTE exactly as you list them; every listed coin with a term you do not approve stops being pulled (shown as waiting for approval, signal missing) from the first daily run after merge. Default if you give no list: none approved. Evidence from the campaign, for your decision:
+Q1 (answered). Approved, seeded as `approved: true` by EXECUTE on the current term: ONDO (`ondo crypto`), PEPE (`Pepe coin`), TRX (`tron crypto`), APT (`aptos crypto`), CRO (`cronos crypto`), MORPHO (`morpho crypto`). APT, CRO and MORPHO are approved although the campaign reads them as waking up (median 0, no usable group): the owner wants them tracked daily and shown on the watch list when they surge. NOT approved, left as they are, so they stop being pulled and show as waiting for approval or needs owner after merge: CC, JST, RAIN, SKY, GRAM, LIT, NIGHT, M, STABLE (STABLE is also untested). Other listed coins already use a topic (BNB, HBAR, ICP, LINK, NEAR, PI, SHIB, SOL) and need no approval. Evidence from the campaign that informed the answer:
 
 | Listed coin | Current term | Campaign view |
 |---|---|---|
@@ -75,7 +75,7 @@ Q1. Which listed coins' current terms do you approve? Seeded as `approved: true`
 | M | memecore crypto | no usable group, needs owner |
 | STABLE | stable chain | untested |
 
-The six that are pulled today under the T125 rule (APT, CRO, MORPHO, ONDO, PEPE, TRX) are the ones whose behaviour changes most if not approved.
+Effect of the answer: the six approved coins keep their keyword and are still pulled. CC, JST, RAIN, SKY, GRAM, LIT, NIGHT, M and STABLE are not on the T125 list, so they ARE pulled today with their current terms; after merge these nine stop being pulled and their Trends signal reads missing with the reason "waiting for owner approval" until a topic or an approved term exists. EXECUTE reports the exact set of coins whose pull status changes, read from the shipped file before and after.
 
 ## S1. Keyword file: ambiguity list and approvals (AC6, AC7, AC11)
 
@@ -87,7 +87,7 @@ Rules (validator, applied at load; a bad file is `bad keyword file`, never a cra
 - R3. Every symbol in `_ambiguous` must have an entry (existing placed-coin rule) and `_ambiguous` may not contain `_anchor`.
 - R4. `keyword_status(km, symbol)`: for a symbol in `_ambiguous` a `term` entry returns `skipped-unqualified` unless it has `approved: true`; a topic returns `topic`; no-keyword stays `no-keyword`. A symbol not in `_ambiguous` is not restricted (the T125 constant no longer decides). The status string `skipped-unqualified` is kept so run files and readers do not change vocabulary; the Sources note says "waiting for owner approval".
 - R5. `trends.NAME_RISK_SYMBOLS` is removed (single source of truth is the file). `trends.is_qualified_term` and `QUALIFIER_WORDS` stay: the candidate builder still uses them to make qualified candidate terms for listed coins. `trends_candidates` receives the ambiguous set as an argument instead of importing the constant.
-- R6. The shipped file gets `_ambiguous` = the 23 coins of D7 and `approved: true` on exactly the terms the owner lists in Q1.
+- R6. The shipped file gets `_ambiguous` = the 23 coins of D7 and `approved: true` on exactly these six terms (Q1, answered): ONDO, PEPE, TRX, APT, CRO, MORPHO. No other term is approved.
 
 Tests: `test_trends_keywords.py` (new cases: `_ambiguous` valid, duplicate, unknown shape, `_anchor` in list, `approved` on a topic, `approved: false`, approved term for an ambiguous coin pulled, unapproved term skipped, listed coin with topic pulled, unlisted coin with bare term pulled); `test_trends.py` (`test_name_risk_symbols_match_t125_list` becomes a test that the shipped `_ambiguous` list equals the 23 coins of D7); `test_trends_candidates.py` and `test_trends_t202.py` updated to pass the ambiguous set.
 
@@ -191,7 +191,7 @@ Baseline: 24 failures that also fail on `main` (12 in `test_discovery.py`, 11 in
 
 | Risk | Mitigation |
 |---|---|
-| Up to 15 listed coins stop being pulled after merge | Q1 is answered before EXECUTE; the Sources note lists them; the owner edits `approved` and nothing else is needed |
+| Nine coins stop being pulled after merge (CC, JST, RAIN, SKY, GRAM, LIT, NIGHT, M, STABLE) | Q1 is answered; the Sources note lists them as waiting for approval; the owner edits `approved` or sets a topic and nothing else is needed; EXECUTE reports the before and after set |
 | A changed keyword mixes two terms in one history | the daily run records the keyword per day; no splicing; history reads are unchanged and asserted |
 | Variant check misjudges weak extra variants | D4: warns only, never rejects |
 | Thresholds are placeholders | named constants, tuned after the first real run |
@@ -212,7 +212,7 @@ RIPER-5: this PLAN, then VALIDATE, then the owner's ENTER EXECUTE MODE for T-Tre
 2. Last completed phase or step: PLAN written; nothing executed.
 3. Validate-contract status: pending (VALIDATE not run).
 4. Supporting context files loaded: the SPEC, `trends_keywords.py`, the scout facts on `refresh_attention.py`, `trends_campaign.py`, `probe_trends.py`, `sources.py`, `DiscoverySourcesPanel.tsx`, `store.py`, `discovery_history.py`.
-5. Next step for a fresh agent: wait for the owner's answer to Q1, run VALIDATE, get ENTER EXECUTE MODE, then start at S1.
+5. Next step for a fresh agent: Q1 is answered (see Owner decisions); run VALIDATE, get ENTER EXECUTE MODE, then start at S1.
 
 ## Validate Contract
 
