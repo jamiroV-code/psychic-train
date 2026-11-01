@@ -161,13 +161,16 @@ def _keywords(tmp_path, monkeypatch, text):
 
 
 def test_trends_keyword_coverage_over_eligible_coins(live, monkeypatch):
-    """T180: every eligible coin without a usable keyword is listed with reason no-trends-keyword."""
-    _keywords(live, monkeypatch, '{"_anchor": {"term": "Bitcoin", "label": "B"}, "A": {"topic": "/m/0a", "label": "A"},'
+    """T180: every eligible coin without a usable keyword is listed with reason no-trends-keyword; stage 2 (AC8):
+    an ambiguous coin without an approved term reads skipped-unqualified (the waiting-for-approval group)."""
+    _keywords(live, monkeypatch, '{"_anchor": {"term": "Bitcoin", "label": "B"}, "_ambiguous": ["A"],'
+              ' "A": {"term": "a crypto", "label": "A"},'
               ' "B": {"no-keyword": true, "label": "B", "note": "unidentified"}, "OLD": {"term": "Old", "label": "O"}}')
     tk = src.build_sources(TODAY).trends_keyword
-    assert (tk.eligible_size, tk.with_keyword) == (3, 1)
+    assert (tk.eligible_size, tk.with_keyword) == (3, 0)
     assert [(g.symbol, g.reason, g.detail) for g in tk.missing] == [
-        ("B", "no-trends-keyword", "no-keyword"), ("C", "no-trends-keyword", "no-entry")]
+        ("A", "no-trends-keyword", "skipped-unqualified"), ("B", "no-trends-keyword", "no-keyword"),
+        ("C", "no-trends-keyword", "no-entry")]
 
 
 def test_trends_keyword_bad_file_counts_every_coin_missing(live, monkeypatch):

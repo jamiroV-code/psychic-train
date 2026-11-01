@@ -27,17 +27,18 @@ function summary(d: DiscoverySourcesResponse): { text: string; tone: "ok" | "par
 /** Watch-list file cap (api trends_runs.WATCH_MAX_FILES): a streak this long reads "30+". */
 const WATCH_CAP = 30;
 
-/** Watch-list file cap (api trends_runs.WATCH_MAX_FILES): a streak this long reads "30+". */
-const WATCH_CAP = 30;
-
-/** The Trends row's note gains the keyword coverage and the coins without a keyword (T180). */
+/** The Trends row's note gains the keyword coverage and the coins without a keyword (T180), grouped by detail
+ * (stage 2): no keyword or no entry yet, waiting for the owner's approval, or an invalid keyword file. */
 function note(r: DiscoverySourceRow, d: DiscoverySourcesResponse): string {
   const tk = d.trends_keyword;
   if (r.id !== "trends" || !tk) return r.note;
   const parts = [r.note, `Trends keyword: ${tk.with_keyword} of ${tk.eligible_size} eligible coins`];
-  if (tk.missing.length) {
-    parts.push(`${formatNarrativeReason("no-trends-keyword")}: ${tk.missing.map((g) => g.symbol).join(", ")}`);
-  }
+  const syms = (details: string[]) => tk.missing.filter((g) => details.includes(g.detail)).map((g) => g.symbol);
+  const none = syms(["no-keyword", "no-entry"]);
+  if (none.length) parts.push(`${formatNarrativeReason("no-trends-keyword")}: ${none.join(", ")}`);
+  const waiting = syms(["skipped-unqualified"]);
+  if (waiting.length) parts.push(`Waiting for owner approval: ${waiting.join(", ")}`);
+  if (syms(["bad-file"]).length) parts.push("Keyword file invalid");
   return parts.filter(Boolean).join(". ");
 }
 
