@@ -42,7 +42,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 # NOTE (RFC-002/RFC-003 scope): routers/regime.py (item 42) and
 # routers/narrative.py (item 56) are now both wired in.
-from api.data import attention_pc_refresh, equities_refresh, refresh_worker
+from api.data import attention_pc_refresh, equities_refresh, refresh_worker, spot_volume_refresh
 from api.routers import attention as attention_router
 from api.routers import discovery as discovery_router
 from api.routers import equities
@@ -54,6 +54,7 @@ async def lifespan(_app: FastAPI):
     refresh_worker.start_from_env()
     equities_refresh.start_from_env()
     attention_pc_refresh.start_from_env()
+    spot_volume_refresh.start_from_env()
     try:
         yield
     finally:
@@ -63,7 +64,10 @@ async def lifespan(_app: FastAPI):
             try:
                 equities_refresh.stop_worker()
             finally:
-                attention_pc_refresh.stop_worker()
+                try:
+                    attention_pc_refresh.stop_worker()
+                finally:
+                    spot_volume_refresh.stop_worker()
 
 
 app = FastAPI(title="Momentum Screener API", lifespan=lifespan)

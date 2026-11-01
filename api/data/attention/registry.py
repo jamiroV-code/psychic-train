@@ -29,6 +29,11 @@ SOURCE_IMPLS = {"xsearch": ("xsearch", "xsearch_web"), "reddit": ("reddit", "red
 # step: a stored file is itself the evidence that the worker ran there, so the probe-record gate does not apply.
 PC_STORES = frozenset({"xsearch_web", "reddit_web", "reddit_stream"})
 
+# Spot exchange volume (Binance, Coinbase, Kraken), fetched daily by the PC worker `spot_volume_refresh`: same
+# reasoning, a stored file is the evidence. Unlike PC_STORES these are plain registry series (fetch side `github`).
+SPOT_VOLUME_STORES = frozenset({"exchange_volume", "coinbase_volume", "kraken_volume"})
+PROBE_EXEMPT = PC_STORES | SPOT_VOLUME_STORES
+
 PROBE_RECORDS_PATH = Path(__file__).with_name("probe_records.json")
 
 
@@ -60,7 +65,7 @@ def read_series(source: str, symbol: str, today: date | None = None,
                 probe_path: Path | None = None, *, known_at_time: bool = False) -> SourceSeries:
     """Read one series from the store. A source without a probe record is not-probed (PC stores excepted).
     `known_at_time` keeps only the points known the day after them (backfilled values excluded)."""
-    if source not in PC_STORES and source not in load_probe_records(probe_path):
+    if source not in PROBE_EXEMPT and source not in load_probe_records(probe_path):
         return SourceSeries(source, symbol, [], "not-probed", "no probe record")
     try:
         pts = store.read_points(source, symbol)

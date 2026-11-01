@@ -54,7 +54,7 @@ def test_empty_records_mean_not_probed_for_every_source(attention_cache, tmp_pat
     _store(100)
     p = tmp_path / "probe.json"
     p.write_text("{}")
-    for source in registry.FETCHERS:
+    for source in set(registry.FETCHERS) - registry.PROBE_EXEMPT:
         assert registry.read_series(source, "BTC", today=TODAY, probe_path=p).state == "not-probed"
 
 
@@ -63,7 +63,7 @@ def test_ok_record_makes_only_that_source_usable(attention_cache, tmp_path):
     p = tmp_path / "probe.json"
     p.write_text(json.dumps({"wikipedia": {"state": "ok"}}))
     assert registry.read_series("wikipedia", "BTC", today=TODAY, probe_path=p).state == "ok"
-    for source in set(registry.FETCHERS) - {"wikipedia"}:
+    for source in set(registry.FETCHERS) - {"wikipedia"} - registry.PROBE_EXEMPT:
         assert registry.read_series(source, "BTC", today=TODAY, probe_path=p).state == "not-probed"
 
 

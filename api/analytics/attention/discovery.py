@@ -41,7 +41,7 @@ CONFIG_PATH = Path(__file__).resolve().parents[2] / "data" / "discovery.json"
 
 SLOT = "exchange_activity"
 WEIGHTED_SOURCES = (SLOT, "wikipedia", "trends", "reddit", "xsearch", "github_dev", "defillama")
-# Exchange member -> registry series. Coinbase and Kraken have no fetcher yet (W7): not-probed, so they drop out.
+# Exchange member -> registry series. Binance, Coinbase and Kraken are spot volume fetched daily by the PC worker.
 EXCHANGE_SERIES = {"binance": "exchange_volume", "coinbase": "coinbase_volume", "kraken": "kraken_volume",
                    "hyperliquid": "hyperliquid_volume"}
 FALLBACK_SERIES = "coingecko"
