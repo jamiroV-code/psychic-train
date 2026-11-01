@@ -154,6 +154,21 @@ def _completeness(store_id: str, day: date, now: datetime, health: DiscoverySour
     health.newest_age_hours = round(max(0, (now - max(times)).total_seconds()) / 3600, 1) if times else None
 
 
+def _idle_until(state: dict) -> datetime | None:
+    """When a by-design wait in the persisted worker state ends: a spent day's budget waits for the next UTC day's
+    first due time (00:00 plus the behind delay, as the worker schedules it); a timed warning pause waits for its
+    `pause_until`. None when the worker is not waiting on purpose (an owner-action pause has no end)."""
+    ends = []
+    spent = state["spent_day"] or (state["budget_day"] if state["used"] >= state["effective"] else None)
+    if spent:
+        ends.append(datetime.combine(date.fromisoformat(spent) + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
+                    + timedelta(seconds=pc_pace.BEHIND_DELAY_S))
+    until = _timestamp(state["pause_until"])
+    if until and state["pause_reason"] not in pa.OWNER_ACTION_REASONS:
+        ends.append(until)
+    return max(ends, default=None)
+
+
 def _health(store_id: str, day: date, now: datetime) -> DiscoverySourceHealth | None:
     path = pc_pace.state_path(store_id)
     if not path.exists():
@@ -171,12 +186,14 @@ def _health(store_id: str, day: date, now: datetime) -> DiscoverySourceHealth | 
     h.budget_used = state["used"] if state["budget_day"] == h.collection_day else 0
     h.effective_budget = state["effective"]
     h.budget_spent = state["spent_day"] == h.collection_day or h.budget_used >= h.effective_budget
+    idle_until = _idle_until(state)
     schedule = _json_file(path.with_name(f"{store_id}_health.json")) or {}
     gap = schedule.get("expected_gap_s")
     if (schedule.get("mode") in ("baseline", "degraded") and isinstance(gap, (int, float))
             and not isinstance(gap, bool) and math.isfinite(gap) and gap > 0):
         h.mode, h.expected_gap_s = schedule["mode"], gap
-        last = _timestamp(h.last_unit_at)
+        # Waiting on purpose is not stale: the gap counts from the later of the last unit and the wait's end (AC39).
+        last = max(filter(None, (_timestamp(h.last_unit_at), idle_until)), default=None)
         h.stale = last is None or (now - last).total_seconds() > 2 * gap
     if store_id == "xsearch_web":
         _accounts(now, h)
@@ -190,6 +207,8 @@ def _health(store_id: str, day: date, now: datetime) -> DiscoverySourceHealth | 
     h.completeness += f"{h.newest_age_hours:g}h old" if h.newest_age_hours is not None else "unknown"
     if h.stale:
         h.completeness += "; stale"
+    elif idle_until and now < idle_until:
+        h.completeness += "; waiting for next UTC day"
     try:
         h.free_disk_bytes = shutil.disk_usage(cache.CACHE_ROOT).free
     except OSError:
