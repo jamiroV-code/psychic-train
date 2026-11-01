@@ -181,7 +181,7 @@ def build_coin_panel(
 
     display_df = dfs_by_tf[timeframe]
     display_available = len(display_df) >= sma_mod.SMA_LENGTH
-    # RFC-005: carry the adapter's own verdict for the displayed timeframe.
+    # RFC-005: carry the adapter's reported data status for the displayed timeframe.
     display_status = statuses_by_tf.get(timeframe)
 
     return CoinPanel(

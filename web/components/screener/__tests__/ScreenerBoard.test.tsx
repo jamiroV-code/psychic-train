@@ -1,8 +1,4 @@
-// SANDBOX NOTE: `vitest`/`@testing-library/react`/`lightweight-charts` could
-// not be installed in this sandbox (no package-registry network access —
-// see EXECUTE report Deviations). This file is written to run under
-// `pnpm --filter web test -- ScreenerBoard` once `pnpm install` succeeds
-// with real network access; it was not executable in this session.
+// Verified 2026-11-01: vitest green in CI (Linux, `pnpm --filter web test`) and locally.
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ScreenerBoard } from "@/components/screener/ScreenerBoard";
@@ -228,9 +224,6 @@ describe("ScreenerBoard", () => {
     expect(screen.getByTestId("chart-unavailable").textContent).toContain("Not enough history at this timeframe");
   });
 
-  // RFC-006 (reason-value-rendering slice): written but NOT executed in the
-  // session that added it — no shell reachable on the machine holding this
-  // repo, same limitation as the file-level SANDBOX NOTE above.
   it("distinguishes a bad-symbol chart-unavailable reason from the generic history message", async () => {
     const coins = [
       makeCoin("BADSYM", { chart: { price: [], sma: [], available: false, reason: "bad-symbol" as const, ...NO_FRESHNESS } }),

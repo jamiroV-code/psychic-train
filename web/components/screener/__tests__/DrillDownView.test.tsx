@@ -1,5 +1,4 @@
-// SANDBOX NOTE: see ScreenerBoard.test.tsx — same environment limitation
-// (vitest/@testing-library/react/lightweight-charts not installable here).
+// Verified 2026-11-01: vitest green in CI (Linux, `pnpm --filter web test`) and locally.
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { DrillDownView } from "@/components/screener/DrillDownView";
@@ -58,9 +57,6 @@ describe("DrillDownView", () => {
     await waitFor(() => expect(fetchChart).toHaveBeenCalledWith("BTC", "1d"));
   });
 
-  // RFC-006 (reason-value-rendering slice): written but NOT executed in the
-  // session that added it — same environment limitation as the file-level
-  // SANDBOX NOTE below.
   it("distinguishes a source-unavailable chart reason from the generic history message (drilldown-chart-unavailable)", async () => {
     const fetchChart = vi.fn(async (_symbol: string, tf: Timeframe) => ({
       symbol: "BTC",
@@ -75,10 +71,6 @@ describe("DrillDownView", () => {
     expect(el.getAttribute("data-reason")).toBe("source-unavailable");
   });
 
-  // SANDBOX NOTE (RFC-006 getjson-timeout-catch): the two cases below were
-  // written but NOT executed in the session that added them — no shell was
-  // reachable on the machine holding this repo, so vitest never ran. Same
-  // limitation as the file-level note above; treat as written-to-spec only.
   it("renders drilldown-error and keeps the header/Close/timeframe-toggle rendered when the fetch rejects (AC-2)", async () => {
     const fetchChart = vi.fn(async () => {
       throw new Error("API request timed out after 10000ms: /api/screener/BTC/chart?timeframe=4h");

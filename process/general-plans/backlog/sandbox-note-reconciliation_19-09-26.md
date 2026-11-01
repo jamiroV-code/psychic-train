@@ -3,7 +3,7 @@
 **Date raised**: 19-09-26
 **Raised by**: `getjson-timeout-catch_PLAN_19-09-26.md` EXECUTE Results ("New observation flagged
 for UPDATE PROCESS") and confirmed at EVL
-**Status**: OPEN
+**Status**: RESOLVED 01-11-26 for `ScreenerBoard.test.tsx` and `DrillDownView.test.tsx`: CI (`ci.yml` job "web — vitest, tsc, island build", `pnpm --filter web test`) is green on main and both files pass locally (19/19); their SANDBOX NOTE blocks were replaced by a one-line dated "verified" comment. Other files in the folder not audited here (`ScreenerBoardLayout.test.tsx` deliberately untouched).
 **Origin plan**: `process/general-plans/active/momentum-screener_17-09-26/getjson-timeout-catch_PLAN_19-09-26.md`
 
 ## Why this exists
