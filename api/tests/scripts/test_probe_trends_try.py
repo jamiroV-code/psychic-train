@@ -277,7 +277,7 @@ def test_paste_ready_json_is_best_loader_valid_usable_group():
     _, text, _ = _summary_runs()
     block = text.split("paste-ready JSON")[1]
     doc = json.loads(block[block.index("{"):block.rindex("}") + 1])
-    assert doc == {"XTON": {"terms": ["ton coin"]}}
+    assert doc == {"XTON": {"term": "ton coin"}}   # stage 2: keyword file shape, one term
     assert "MORPHO: no loader-valid usable group" in block
     assert "informational" in text and "written nowhere" in text
 

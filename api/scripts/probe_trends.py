@@ -43,6 +43,7 @@ from api.data.attention import store, trends
 from api.data.attention import trends_candidates as tcand
 from api.data.attention import trends_groups as tg
 from api.data.attention import trends_keywords as tk
+from api.data.attention import trends_select as tsel
 from api.scripts import trends_campaign as camp
 from api.scripts.trends_cli_common import (
     http_status,
@@ -72,7 +73,7 @@ CAMPAIGN_PAUSE_EVERY = 40
 CAMPAIGN_PAUSE_SECONDS = 20
 DEFAULT_MAX_AGE_DAYS = 14
 MAX_AGE_LIMIT = 365
-STAGE2_JSON_LABEL = "stage-2 shape, not accepted by the loader yet"
+STAGE2_JSON_LABEL = "keyword file shape (term or topic); proposal; you apply it"
 # Looser than the loader's TERM_RE so bare words and '+' or ':' can be tried; never '|', quotes, shell or control
 # characters. Each term is still flagged with the real loader check.
 LOOSE_TERM_RE = re.compile(r"[\w .'&+:-]{2,60}")
@@ -420,14 +421,14 @@ def _print_summary(results, km, out) -> None:
                   f"median {m.group.median:g} (own scale only)", file=out)
         for _, terms, _, reason in (r for r in mine if r[2] is None):
             print(f"  -  [{' | '.join(terms)}] | {reason}", file=out)
-        best = next((terms for _, terms, m, _ in ranked if m.verdict == "ok"
-                     and all(loader_flag(sym, t, km) == "loader-valid" for t in terms)), None)
+        best = next((terms[0] for _, terms, m, _ in ranked if m.verdict == "ok" and not m.spike and len(terms) == 1
+                     and loader_flag(sym, terms[0], km) == "loader-valid"), None)
         if best is None:
             none.append(sym)
         else:
-            suggestion[sym] = {"terms": best}
-    print(f"\n--- paste-ready JSON (best loader-valid usable group per coin; {STAGE2_JSON_LABEL}; informational, "
-          "written nowhere) ---", file=out)
+            suggestion[sym] = {"topic" if tk.is_valid_topic(best) else "term": best}
+    print(f"\n--- paste-ready JSON (best loader-valid usable single term per coin; a bundle only checks variants; "
+          f"{STAGE2_JSON_LABEL}; informational, written nowhere) ---", file=out)
     print(json.dumps(suggestion, indent=2), file=out)
     for sym in none:
         print(f"{sym}: no loader-valid usable group", file=out)
@@ -585,6 +586,12 @@ def _run_report(args, km, eligible_reader, health_reader, runs_reader, out, err)
         print(note, file=out)
     for line in camp.report_lines(state, list(eligible), km, health_reader(km, eligible)):
         print(line, file=out)
+    lines, picked = camp.selection(state, list(eligible), km)
+    print("", file=out)
+    for line in lines:
+        print(line, file=out)
+    print(f"\n--- paste-ready JSON ({STAGE2_JSON_LABEL}; written nowhere; never carries 'approved') ---", file=out)
+    print(json.dumps(tsel.proposal(picked), indent=2, ensure_ascii=True), file=out)
     return 0
 
 
