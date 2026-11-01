@@ -6,6 +6,7 @@ import { CoinPanel } from "@/components/screener/CoinPanel";
 import { useVariant } from "@/components/screener/VariantProvider";
 import type { ChartRange } from "@/lib/island-loader";
 import { countText } from "@/lib/screener-variant";
+import type { SortKey } from "@/lib/layout-state";
 import type { LayoutGroup } from "@/lib/types/layout";
 import type { CoinPanel as CoinPanelData, Timeframe } from "@/lib/types/screener";
 
@@ -34,7 +35,14 @@ export interface CoinGroupProps {
   onRenameGroup: (groupId: string, name: string) => string | null;
   onMoveGroup: (groupId: string, delta: -1 | 1) => void;
   onDeleteGroup: (groupId: string) => void;
+  onSortGroup: (groupId: string, key: SortKey) => void;
 }
+
+const SORTS: readonly { key: SortKey; label: string; aria: string }[] = [
+  { key: "name", label: "Sort: name", aria: "name, A to Z" },
+  { key: "change", label: "% change", aria: "% change, high to low" },
+  { key: "rsi", label: "RSI", aria: "RSI, high to low" },
+];
 
 interface CoinCellProps {
   panel: CoinPanelData;
@@ -121,6 +129,7 @@ export function CoinGroup({
   onRenameGroup,
   onMoveGroup,
   onDeleteGroup,
+  onSortGroup,
 }: CoinGroupProps) {
   const variant = useVariant();
   const inputId = useId();
@@ -210,6 +219,19 @@ export function CoinGroup({
           >
             Down
           </button>
+          {SORTS.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              className="board-button"
+              data-testid={`sort-group-${s.key}-${group.id}`}
+              aria-label={`Sort group ${group.name} by ${s.aria}`}
+              aria-disabled={off(count < 2)}
+              onClick={() => editable && count >= 2 && onSortGroup(group.id, s.key)}
+            >
+              {s.label}
+            </button>
+          ))}
           {confirmingDelete ? (
             <span className="coin-group__confirm" role="alert" data-testid={`delete-group-warning-${group.id}`}>
               {`Its ${countText(variant, count)} will move to ${groupOptions[position === 0 ? 1 : position - 1]?.name ?? "another group"}.`}

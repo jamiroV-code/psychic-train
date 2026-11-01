@@ -122,6 +122,41 @@ export function moveGroup(groups: readonly LayoutGroup[], id: string, delta: -1 
   return next;
 }
 
+export type SortKey = "name" | "change" | "rsi";
+
+/**
+ * AC-8: one-shot sort of one group's coins. "name" is A to Z; "change" and
+ * "rsi" are high to low from `values`. A missing, null or non-finite value
+ * is never read as 0: those coins go last. Ties (and the missing block) are
+ * ordered by symbol, so the result does not depend on the current order.
+ */
+export function sortGroup(
+  groups: readonly LayoutGroup[],
+  groupId: string,
+  key: SortKey,
+  values: ReadonlyMap<string, number | null>,
+): LayoutGroup[] {
+  const at = groups.findIndex((g) => g.id === groupId);
+  if (at < 0) return groups as LayoutGroup[];
+  const bySymbol = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  const valueOf = (s: string): number | null => {
+    const v = values.get(s);
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  };
+  const coins = [...groups[at].coins].sort((a, b) => {
+    if (key === "name") return bySymbol(a, b);
+    const va = valueOf(a);
+    const vb = valueOf(b);
+    if (va === null || vb === null) {
+      if (va !== vb) return va === null ? 1 : -1;
+      return bySymbol(a, b);
+    }
+    return vb - va || bySymbol(a, b);
+  });
+  if (coins.every((c, i) => c === groups[at].coins[i])) return groups as LayoutGroup[];
+  return groups.map((g, i) => (i === at ? { ...g, coins } : g));
+}
+
 export function toggleLine(hidden: readonly string[], symbol: string): string[] {
   return hidden.includes(symbol) ? hidden.filter((s) => s !== symbol) : [...hidden, symbol];
 }
