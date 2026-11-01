@@ -11,8 +11,10 @@ path-based code did) and writes junk into a file handle when handed one (what
 the helper does). A handle-only fake would pass vacuously on the old code.
 
 What this does NOT prove: behaviour under real power loss / SIGKILL (KG1), or
-Windows `os.replace` against an open reader (KG2). Scope is `cache.py` only —
-`etf_flows_adapter.merge_into_cache` is a known, separate non-atomic writer (KG5).
+Windows `os.replace` against an open reader (KG2). The two append-only JSON
+archive writers (KG4) are covered at the end of this file; the ETF-flows cache
+(KG5) in `test_etf_flows_adapter.py` and the pairs cache (KG3) in
+`tests/scripts/test_compute_pairs.py`.
 
 Isolation (T22): every test takes `isolated_cache`; the autouse fixture below
 also redirects the watchlist store, so the real `api/data/cache` and
@@ -346,3 +348,72 @@ def test_exchange_rmw_interrupted_then_resumed(isolated_cache):
     out = cache.read_exchange_series("ai")
     assert out["date"].astype(str).tolist() == ["2026-09-01", "2026-09-02"]
     assert out["volume_share"].tolist() == [0.1, 0.2]
+
+
+# --- KG4: append-only JSON archive writers ------------------------------------
+
+
+# Each case: (write, target path, exact bytes the writer has always produced)
+JSON_WRITERS = {
+    "write_liqtide_raw": (
+        lambda: cache.write_liqtide_raw("2026-09-24", {"a": 1, "n": "é"}),
+        lambda: cache.liqtide_raw_path("2026-09-24"),
+        '{"a":1,"n":"é"}'.encode("utf-8"),
+    ),
+    "write_exchange_market_snapshot": (
+        lambda: cache.write_exchange_market_snapshot("2026-09-24", ["FET", "BTC", "FET"]),
+        lambda: cache.exchange_market_snapshot_path("2026-09-24"),
+        b'["BTC", "FET"]',
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(JSON_WRITERS))
+def test_json_writer_bytes_unchanged(name, isolated_cache):
+    write, path_fn, expected = JSON_WRITERS[name]
+    assert write() is True
+    assert path_fn().read_bytes() == expected
+    assert _temps(isolated_cache) == []
+
+
+@pytest.mark.parametrize("name", sorted(JSON_WRITERS))
+def test_json_writer_leaves_other_writers_temp_alone(name, isolated_cache):
+    """KG4: the old fixed temp name (`<date>.json.tmp`) belongs to nobody; a
+    concurrent writer's file sitting there is neither overwritten nor renamed."""
+    write, path_fn, expected = JSON_WRITERS[name]
+    path = path_fn()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    other = path.with_suffix(".json.tmp")
+    other.write_bytes(b"another writer")
+    assert write() is True
+    assert other.read_bytes() == b"another writer"
+    assert path.read_bytes() == expected
+
+
+@pytest.mark.parametrize("name", sorted(JSON_WRITERS))
+def test_json_writer_fsyncs_before_replace(name, isolated_cache, monkeypatch):
+    write, _path_fn, _expected = JSON_WRITERS[name]
+    events: list[str] = []
+    real_fsync = os.fsync
+
+    def spy_fsync(fd):
+        events.append("fsync")
+        return real_fsync(fd)
+
+    def spy_replace(src, dst, *a, **k):
+        events.append("replace")
+        return _REAL_REPLACE(src, dst, *a, **k)
+
+    monkeypatch.setattr(cache.os, "fsync", spy_fsync)
+    monkeypatch.setattr(cache.os, "replace", spy_replace)
+    assert write() is True
+    assert events == ["fsync", "replace"]
+
+
+@pytest.mark.parametrize("name", sorted(JSON_WRITERS))
+def test_json_writer_replace_failure_leaves_nothing(name, isolated_cache):
+    write, path_fn, _expected = JSON_WRITERS[name]
+    with _fail_replace(isolated_cache), pytest.raises(OSError):
+        write()
+    assert not path_fn().exists()
+    assert _temps(isolated_cache) == []

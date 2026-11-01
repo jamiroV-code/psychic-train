@@ -6,6 +6,7 @@ touches the cache uses `isolated_cache` so nothing reaches the live tree.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import httpx
@@ -156,6 +157,30 @@ class TestFetch:
         assert flows["2024-01-10"] == 1.0  # older cached row kept
         assert flows["2024-01-11"] == pytest.approx(655.3)  # newest fetch wins
         assert merged["date"].is_unique
+
+    def test_merge_interrupted_write_keeps_prior_cache(self, isolated_cache):
+        """KG5: a crash mid-write leaves the previous cache byte-identical and
+        no temp file behind. The fake writer truncates a path target (what an
+        in-place write does) and writes junk into a handle (what the atomic
+        helper passes), so it cannot pass vacuously on the old code."""
+        etf.merge_into_cache(pd.DataFrame({"date": [pd.Timestamp("2024-01-10")], "net_flow_usd_m": [1.0]}))
+        before = etf.cache_path().read_bytes()
+
+        def fake(self, target, *args, **kwargs):
+            if isinstance(target, (str, os.PathLike)):
+                with open(target, "wb") as fh:
+                    fh.write(b"JUNKJUNKJU")
+            else:
+                target.write(b"JUNKJUNKJU")
+            raise RuntimeError("simulated crash mid-write")
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(pd.DataFrame, "to_parquet", fake)
+            with pytest.raises(RuntimeError):
+                etf.merge_into_cache(pd.DataFrame({"date": [pd.Timestamp("2024-01-11")], "net_flow_usd_m": [2.0]}))
+        assert etf.cache_path().read_bytes() == before
+        assert _flows(etf.read_cached()) == {"2024-01-10": 1.0}
+        assert [p.name for p in etf.cache_path().parent.iterdir() if p.name.endswith(".tmp")] == []
 
 
 @pytest.mark.integration
