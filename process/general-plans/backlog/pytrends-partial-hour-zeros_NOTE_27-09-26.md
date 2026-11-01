@@ -7,10 +7,12 @@ feature: none
 
 # Pytrends partial-hour zeros (backlog note)
 
-**TL;DR:** Some nightly pytrends points are 0 because the value we store is the last hour of
+**TL;DR:** Some nightly pytrends points were 0 because the value we stored was the last hour of
 Google's hourly "now 7-d" frame, and that hour is still incomplete. Separately, 2026-09-25 has no
-narrative point at all and cannot be recovered. Neither is fixed. Found during
-`process/general-plans/active/snapshot-cron-timing_27-09-26/`.
+narrative point at all and cannot be recovered. Finding 1 is fixed; Finding 2 is a permanent gap.
+Found during `process/general-plans/active/snapshot-cron-timing_27-09-26/`.
+
+**Status (01-11-26):** code fixed (partial rows dropped at `api/data/pytrends_adapter.py:66-70, 204-205`).
 
 ## Finding 1 — partial-hour zeros
 
@@ -41,4 +43,4 @@ honestly dated, per the original suggestion below.
 - Unrecoverable: Google Trends' short window, Reddit search and CoinGecko trending keep no history.
   pytrends' own `backfill_pytrends_history.py` could refill pytrends only, and only on a different
   request scale (`mixed_scale`) — not done, left as a documented gap.
-- Cause fixed by the cron move (narrative now `17 18 * * *`); no further action planned.
+- Cause fixed by the cron move (narrative now `47 12 * * *` per `.github/workflows/narrative-snapshot.yml`); no further action planned.

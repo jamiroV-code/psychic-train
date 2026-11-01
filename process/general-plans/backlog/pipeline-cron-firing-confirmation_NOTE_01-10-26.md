@@ -11,6 +11,8 @@ feature: general
 
 **Priority:** High (cheap, and the delay varies by hours).
 
+**Status (01-11-26):** crons fire. `gh run list --event schedule` shows pairs-refresh, liquidity-backfill, chain-growth, narrative and liqtide snapshots plus attention-refresh ran every day 2026-10-27..31 (attention to 11-01), all `success`, but each run was created about 4.5-7 h after its cron slot (e.g. narrative 12:47 slot -> 17:22-18:39Z; attention 07:23 -> 13:41-14:25Z). The 10 h scheduler-delay budget is NOT evidenced beyond the ~7 h observed.
+
 **Checks (per workflow: pairs-refresh, liquidity-backfill, chain-growth, narrative, liqtide):**
 - `gh run list --workflow <file> --json event,createdAt,startedAt` - started-at vs the cron time (11:17 / 11:47 / 12:17 / 12:47 / 13:17 UTC). Every no-history run must start on the cron's UTC day.
 - Observed delay vs the 10h budget. It was 2h39m-5h01m on 2026-09-27/28; on 2026-09-29/30 narrative and liqtide were about 4h late (narrative 4h02m/4h01m at 22:18:55Z/22:18:40Z, liqtide 3h52m/3h52m at 22:39:27Z/22:38:43Z, against the old 18:17/18:47 crons), so it varies by hours rather than growing steadily. Watch that the variance stays inside the budget.

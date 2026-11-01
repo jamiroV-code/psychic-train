@@ -178,10 +178,10 @@ Carry these into any plan that touches them. Do not resolve them silently.
 Still open, one line each (history and resolved items: context-changelog.md):
 
 - `layer 2 crypto` / `l2s` pytrends values read 0.0 every night; `pytrends-blended/rwa` once wrote
-  0.0 as `fresh` (registry T26).
-- Whether the five snapshot crons fire on time at their 11:17-13:17 UTC slots (registry T27).
+  0.0 as `fresh` (registry T26). Partial-hour zeros are fixed in code (`isPartial` rows dropped in
+  `api/data/pytrends_adapter.py`); whether that explains these series is not re-checked.
+- The five snapshot crons fire (all `success` 27-31 Oct) but start ~4.5-6 h after their 11:17-13:17 UTC slots; the 10 h delay budget is not evidenced beyond that (registry T27).
 - `web/e2e/screener.spec.ts:103` flake, not yet reproduced against a clean base.
-- `mapping.py` tripwire test is weak (`trigger.py`, which had a stronger one, was deleted in P5).
 - Hyperliquid's apparent daily-history floor (~2020-08-19) and its data terms are unverified.
 - No adapter-level failure counting or circuit breaker exists (needs INNOVATE before any code).
 - The 2017 leg-boundary backtest window has no usable composite coverage before 2018-01-11.
