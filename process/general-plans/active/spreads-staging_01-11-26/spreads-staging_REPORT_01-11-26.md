@@ -1,10 +1,10 @@
 # spreads-staging report (01-11-26)
 
 ## 1 Task ID
-spreads-staging (KG3 follow-up from `process/general-plans/backlog/pipeline-cache-hardening-followups_NOTE_01-10-26.md` and `process/general-plans/active/cache-hardening_01-11-26/cache-hardening_REPORT_01-11-26.md` §10). Branch `claude/pairs-spreads-staging` from origin/main c69d1b2f. Worktree `C:/Users/jamir/.herdr/worktrees/my_site/wt-spreads-staging` (left in place). Draft PR: see the PR on this branch.
+spreads-staging (KG3 follow-up from `process/general-plans/backlog/pipeline-cache-hardening-followups_NOTE_01-10-26.md` and `process/general-plans/active/cache-hardening_01-11-26/cache-hardening_REPORT_01-11-26.md` §10). Branch `claude/pairs-spreads-staging` from origin/main c69d1b2f. Worktree `C:/Users/jamir/.herdr/worktrees/my_site/wt-spreads-staging` (left in place). Draft PR #221.
 
 ## 2 Outcome
-done. Linux CI result: see §6.
+done. Linux CI is green on PR #221 (see §6).
 
 ## 3 Summary
 `compute_and_persist` staged spreads in a fixed `pairs/spreads.tmp` dir. On c69d1b2f a second run's `rmtree(staging)` deleted the first run's staged files, and a mid-staging failure left `spreads.tmp` behind. Now:
@@ -21,14 +21,14 @@ done. Linux CI result: see §6.
 - This report.
 
 ## 5 Commits
-`claude/pairs-spreads-staging`: 9a24e8e4 (red tests), daba7617 (fix + note status), plus the commit that adds this report.
+`claude/pairs-spreads-staging`: 9a24e8e4 (red tests), daba7617 (fix + note status), the report commit, plus the commit that records the CI result here.
 
 ## 6 Tests run
 All runs were local on Windows, with `uv run --project api pytest ... -q -p no:cacheprovider`, on 2026-11-01:
 - Red, at 9a24e8e4 (old code): `test_compute_pairs.py` gave 3 failed. The overlap test failed with `PermissionError(13)` plus `BrokenBarrierError`. The failure test found `spreads.tmp` left behind. The stale test found `spreads.tmp.crashed` still present. A first version of the overlap test passed on the old code, because both runs wrote identical bytes into the shared dir. It was strengthened before commit: run B's spreads are shifted, and each run checks that its staged bytes are unchanged.
 - Green, at the fix: `test_compute_pairs.py` gave 22 passed. The 3 new tests were run 8 more times in a row and passed every time.
 - Broad: `tests/scripts/test_compute_pairs.py tests/scripts/test_seed_pairs_fixture.py tests/routers/test_pairs.py tests/data/test_cache_pairs_helpers.py api/tests/analytics api/tests/data` gave 2260 passed, 2 failed, 3 skipped. Both failures are known host-only failures: `test_universe_classes::test_discovery_end_to_end_on_fixture` (no-network guard) and `test_equities_store::test_path_override_honoured_at_call_time` (`/` separator on Windows).
-- Linux CI on the draft PR: reported in the final result message (`gh pr checks`).
+- Linux CI on draft PR #221 (run 41326700557, at the report commit): `api — pytest` passed (4m47s) and `web — vitest, tsc, island build` passed (37s).
 
 ## 7 Tests NOT run
 - The full `api/tests/routers` suite, because ~40 tests fail on this host on plain main. Linux CI is the judge.
