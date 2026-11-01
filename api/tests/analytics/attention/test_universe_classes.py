@@ -74,6 +74,14 @@ def test_wrapped_staked_excluded_with_reason():
                                     "STETH": ("wrapped-staked", "wrapped or staked")}, ["BTC"])
 
 
+def test_gold_backed_and_usd0_are_out_with_their_reasons():
+    rows = [{"symbol": s, "volume_24h": 5e7} for s in ("PAXG", "XAUT", "USD0", "BTC")]
+    u = shipped(rows)
+    assert (u.out, u.eligible) == ({"PAXG": ("commodity-backed", "gold or commodity backed"),
+                                    "XAUT": ("commodity-backed", "gold or commodity backed"),
+                                    "USD0": ("stablecoin", "stablecoin")}, ["BTC"])
+
+
 def venues(binance=None, hyperliquid=None) -> dict[str, tm.VenueList]:
     """None = that venue's list is missing; a dict = a fresh list (symbol -> 24h volume)."""
     return {name: tm.VenueList(name, "missing") if vols is None else tm.VenueList(name, "ok", "2026-10-25", vols)
@@ -147,7 +155,8 @@ def test_uni_jup_aero_cake_hype_eligible(snap):
 def test_exchange_tokens_eligible_and_counts_on_fixture(snap):
     u = shipped(snap)
     assert {"BNB", "LEO", "CRO", "OKB", "BGB", "GT", "KCS", "WBT", "HTX"} <= set(u.eligible)
-    assert len(u.eligible) == 76 and not reasons(u, "wrapped-staked")
+    assert len(u.eligible) == 74 and not reasons(u, "wrapped-staked")
+    assert reasons(u, "commodity-backed") == {"PAXG", "XAUT"}
 
 
 def test_no_volume_reason_and_thin_label_on_fixture(snap):
@@ -213,8 +222,9 @@ def test_excluded_counts_sum_to_universe_minus_shown(isolated_cache, tmp_path, m
                                                     "tokenized_fund": ["F"]}, "not_tradeable": {"X": "no venue"}})
     gain("A"), gain("B"), gain("HID")
     res = disc.build_discovery(30, today=TODAY)
-    assert res.excluded_counts == {"stablecoin": 1, "wrapped-staked": 1, "no-market": 1, "not-tradeable-config": 1,
-                                   "not-tradeable": 1, "unassigned": 1, "hidden-narrative": 1, "no-source-data": 1}
+    assert res.excluded_counts == {"stablecoin": 1, "wrapped-staked": 1, "commodity-backed": 0, "no-market": 1,
+                                   "not-tradeable-config": 1, "not-tradeable": 1, "unassigned": 1,
+                                   "hidden-narrative": 1, "no-source-data": 1}
     assert res.shown_size == 2 and res.universe_size == 10
     assert res.shown_size + sum(res.excluded_counts.values()) == res.universe_size
     assert {c.symbol: c.reason for c in res.excluded_coins}["HID"] == "hidden-narrative"
@@ -239,7 +249,7 @@ def test_sources_eligible_size_is_the_in_set(snap, tmp_path, monkeypatch):
     monkeypatch.setattr(registry, "PROBE_RECORDS_PATH", probe)
     src.clear_cache()
     res = src.build_sources(TODAY)
-    assert (res.universe_size, res.eligible_size) == (100, 76)
+    assert (res.universe_size, res.eligible_size) == (100, 74)
 
 
 def test_discovery_end_to_end_on_fixture(snap, tmp_path, monkeypatch):
@@ -259,11 +269,12 @@ def test_discovery_end_to_end_on_fixture(snap, tmp_path, monkeypatch):
     monkeypatch.setattr(socket.socket, "connect", boom)
     body = TestClient(app).get("/api/narrative/discovery", params={"window": 30}).json()
     counts = body["excluded_counts"]
-    assert body["status"] == "ok" and body["universe_size"] == 100 and body["eligible_size"] == 76
-    assert (counts["stablecoin"], counts["no-market"], counts["unassigned"], counts["wrapped-staked"]) == (16, 8, 1, 0)
+    assert body["status"] == "ok" and body["universe_size"] == 100 and body["eligible_size"] == 74
+    assert (counts["stablecoin"], counts["no-market"], counts["unassigned"], counts["wrapped-staked"],
+            counts["commodity-backed"]) == (16, 8, 1, 0, 2)
     assert body["unassigned"] == ["M"] and set(counts) == set(uc.REASONS)
     assert body["shown_size"] + sum(counts.values()) == 100
-    assert body["excluded"]["below_volume_floor"] == 0 and body["excluded"]["exclusion_list"] == 24
+    assert body["excluded"]["below_volume_floor"] == 0 and body["excluded"]["exclusion_list"] == 26
     shown = {c["symbol"]: c for n in body["categories"] for c in n["coins"]}
     assert {"LEO", "CRO", "GT", "PI", "NEXO", "BNB"} <= set(shown)
     assert shown["LEO"]["thin_volume"] is True and shown["LEO"]["tradeability"] == "unverified"
@@ -298,9 +309,9 @@ def test_discovery_on_fixture_with_zero_volume_fund_and_failed_venue_file(snap, 
     res = disc.build_discovery(30, today=TODAY)
     out = {c.symbol: (c.reason, c.detail) for c in res.excluded_coins}
     assert out["JAAA"] == ("not-tradeable", "zero 24h volume") and res.excluded_counts["not-tradeable"] == 1
-    assert res.universe_size == 100 and res.eligible_size == 76 and res.excluded_counts["no-market"] == 7
+    assert res.universe_size == 100 and res.eligible_size == 74 and res.excluded_counts["no-market"] == 7
     assert res.shown_size + sum(res.excluded_counts.values()) == res.universe_size
-    assert res.excluded.exclusion_list == 16 + 7 + 1
+    assert res.excluded.exclusion_list == 16 + 7 + 1 + 2
     shown = {c.symbol: c for n in res.categories for c in n.coins}
     assert {"LEO", "CRO", "GT"} <= set(shown)
     assert {s: shown[s].tradeability for s in ("LEO", "PEPE", "SHIB", "BTC")} == {

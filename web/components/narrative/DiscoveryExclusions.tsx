@@ -8,6 +8,7 @@ export const REASON_LABEL: Record<DiscoveryExclusionReason, string> = {
   stablecoin: "stablecoins",
   "no-market": "tokenized funds / no market",
   "wrapped-staked": "wrapped or staked copies",
+  "commodity-backed": "gold or commodity backed tokens",
   "not-tradeable-config": "not tradeable (config)",
   "not-tradeable": "not tradeable (zero trading volume)",
   unassigned: "unassigned",
@@ -24,6 +25,8 @@ function reasonSentence(reason: string, minCategoryCoins: number): string {
       return "Tokenized funds: no exchange market to trade them on.";
     case "wrapped-staked":
       return "Wrapped, staked or bridged copies of another coin.";
+    case "commodity-backed":
+      return "Gold or commodity backed tokens: their price follows the commodity, so attention says nothing about the token.";
     case "not-tradeable-config":
       return "Marked not tradeable in the config.";
     case "not-tradeable":

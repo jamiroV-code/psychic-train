@@ -1,7 +1,7 @@
 """Discovery universe classes (T115 U2): why a top-100 coin is OUT, from a closed reason list.
 
 Order per coin: `force_include` wins over a class and over `not-tradeable`; then the class (stablecoin,
-wrapped-staked, tokenized fund = `no-market`), then `not_tradeable` (config), then the venue lists
+wrapped-staked, commodity-backed, tokenized fund = `no-market`), then `not_tradeable` (config), then the venue lists
 (`tradeable_markets`, T189): no trading market = zero 24h volume, or no listing on any fresh tracked venue list,
 reason `not-tradeable`. A venue list that failed, is stale or is not built is `unknown`: the coin stays IN as
 `unverified`, never cut. If the no-market rule would cut more than `MAX_NO_MARKET_SHARE` of the coins that
@@ -19,9 +19,10 @@ from api.data.attention import tradeable_markets
 
 # Closed list for `excluded_coins` / `excluded_counts`. The last three are not exclusions: an IN coin that is not
 # shown (no narrative, only hidden narratives, no usable source until U5), so shown + sum(counts) = universe.
-REASONS = ("stablecoin", "wrapped-staked", "no-market", "not-tradeable-config", "not-tradeable", "unassigned",
-           "hidden-narrative", "no-source-data")
+REASONS = ("stablecoin", "wrapped-staked", "commodity-backed", "no-market", "not-tradeable-config", "not-tradeable",
+           "unassigned", "hidden-narrative", "no-source-data")
 CLASS_REASON = {"stablecoin": ("stablecoin", "stablecoin"), "wrapped_staked": ("wrapped-staked", "wrapped or staked"),
+                "commodity_backed": ("commodity-backed", "gold or commodity backed"),
                 "tokenized_fund": ("no-market", "tokenized fund")}
 THIN_VOLUME_DEFAULT_USD = 20_000_000
 SYMBOL_PATTERN = r"^[A-Z0-9_\-]{1,24}$"
@@ -80,7 +81,7 @@ def validate_rules(cfg: dict) -> None:
 
 
 def classify(symbol: str, rules: dict) -> str:
-    """`stablecoin`, `wrapped_staked`, `tokenized_fund` or `normal`."""
+    """`stablecoin`, `wrapped_staked`, `commodity_backed`, `tokenized_fund` or `normal`."""
     for name, syms in rules.get("classes", {}).items():
         if symbol in syms:
             return name

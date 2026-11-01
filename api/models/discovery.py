@@ -45,7 +45,7 @@ class DiscoveryCategory(BaseModel):
 class DiscoveryExcluded(BaseModel):
     """Legacy (deprecated, kept for the old web; U2): `excluded_counts` folded into the old four keys.
     They add up to universe - shown."""
-    exclusion_list: int = 0       # stablecoin + wrapped-staked + no-market + not-tradeable-config + not-tradeable
+    exclusion_list: int = 0       # stablecoin + wrapped-staked + commodity-backed + no-market + not-tradeable-*
     below_volume_floor: int = 0   # always 0: there is no volume cut
     no_category: int = 0          # unassigned + hidden-narrative
     no_source_data: int = 0       # in a visible narrative but no source has usable data

@@ -421,8 +421,8 @@ def _excluded(u: universe_classes.Universe, nm: narratives.Memberships, shown: s
         coins.append(DiscoveryExcludedCoin(symbol=s, reason=reason, detail=detail))
     counts = {k: sum(c.reason == k for c in coins) for k in universe_classes.REASONS}
     legacy = DiscoveryExcluded(
-        exclusion_list=sum(counts[k] for k in ("stablecoin", "wrapped-staked", "no-market", "not-tradeable-config",
-                                               "not-tradeable")),
+        exclusion_list=sum(counts[k] for k in ("stablecoin", "wrapped-staked", "commodity-backed", "no-market",
+                                               "not-tradeable-config", "not-tradeable")),
         below_volume_floor=0, no_category=counts["unassigned"] + counts["hidden-narrative"],
         no_source_data=counts["no-source-data"])
     return {"excluded_coins": coins, "excluded_counts": counts, "excluded": legacy}

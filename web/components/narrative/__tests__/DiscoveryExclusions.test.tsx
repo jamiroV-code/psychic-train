@@ -39,12 +39,12 @@ describe("DiscoveryExclusions", () => {
   });
 
   it("gives each reason one plain sentence and keeps unknown reasons readable", () => {
-    const all = ["stablecoin", "wrapped-staked", "no-market", "not-tradeable-config", "not-tradeable", "unassigned", "hidden-narrative", "no-source-data", "brand-new"]
+    const all = ["stablecoin", "wrapped-staked", "commodity-backed", "no-market", "not-tradeable-config", "not-tradeable", "unassigned", "hidden-narrative", "no-source-data", "brand-new"]
       .map((reason, i) => ({ symbol: `C${i}`, reason, detail: "" }));
     render(<DiscoveryExclusions coins={all} counts={{}} minCategoryCoins={3} />);
     fireEvent.click(screen.getByTestId("discovery-exclusions-toggle"));
     const groups = screen.getAllByTestId(/^discovery-excluded-/);
-    expect(groups).toHaveLength(9);
+    expect(groups).toHaveLength(10);
     for (const g of groups) {
       const sentence = g.querySelector(".discovery-exclusions__why")?.textContent ?? "";
       expect(sentence).toMatch(/^[A-Z].*\.$/);
