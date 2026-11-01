@@ -404,7 +404,7 @@ STAGE2_AMBIGUOUS = frozenset({"TRX", "ONDO", "MORPHO", "ICP", "SHIB", "PEPE", "B
 STAGE2_APPROVED = {"ONDO": "ondo crypto", "PEPE": "Pepe coin", "TRX": "tron crypto", "APT": "aptos crypto",
                    "CRO": "cronos crypto", "MORPHO": "morpho crypto", "RAIN": "rain protocol",
                    "CC": "canton coin", "JST": "just crypto", "GRAM": "the open network",
-                   "LIT": "lighter crypto", "NIGHT": "midnight crypto"}
+                   "LIT": "lighter crypto", "NIGHT": "midnight crypto", "STABLE": "stable chain"}
 TOPIC = {"topic": "/m/0abc", "label": "X"}
 NOKW = {"no-keyword": True, "label": "X", "note": "n"}
 

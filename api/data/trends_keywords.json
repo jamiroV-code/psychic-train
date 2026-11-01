@@ -338,6 +338,7 @@
   },
   "STABLE": {
     "term": "stable chain",
+    "approved": "stable chain",
     "label": "Stable",
     "note": "owner-named 26-10-26, qualified-term, not checker PASS"
   },

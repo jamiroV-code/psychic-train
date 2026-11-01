@@ -51,7 +51,7 @@ PINNED_ELIGIBLE = (
 UNAPPROVED_PINNED = ["M", "SKY"]
 SHIPPED_GAPS = {"no-entry": [], "no-keyword": [], "skipped-unqualified": UNAPPROVED_PINNED,
                 "allowlist-has-keyword": []}
-STAGE2_STOPPED = {"SKY", "M", "STABLE"}
+STAGE2_STOPPED = {"SKY", "M"}
 
 
 def _ambiguous_doc(**coins) -> dict:
