@@ -107,9 +107,12 @@ def test_five_terms_allowed_and_bare_words_accepted():
 
 
 def test_loader_valid_flag_uses_the_real_loader_check():
-    _, text, _ = _run([frame(["morpho", "morpho protocol"])], ["--try", "MORPHO=morpho|morpho protocol"])
-    assert "term morpho: needs qualifier word" in text      # MORPHO is a name-risk symbol
-    assert "term morpho protocol: loader-valid" in text
+    _, text, _ = _run([frame(["morpho", "morpho protocol", "morpho crypto"])],
+                      ["--try", "MORPHO=morpho|morpho protocol|morpho crypto"])
+    # stage 2: MORPHO is on `_ambiguous`; only its approved term ("morpho crypto") is loader-valid
+    assert "term morpho: needs approval (ambiguous)" in text
+    assert "term morpho protocol: needs approval (ambiguous)" in text
+    assert "term morpho crypto: loader-valid" in text
 
 
 # --- per-group output ---
@@ -252,7 +255,8 @@ def _summary_runs():
     low = {"toncoin crypto": [1] * N}
     frames = [frame(list(low), values=low), frame(list(flat_high), values=flat_high), frame(list(clean), values=clean),
               forbidden()]
-    argv = ["--try", "GRAM=toncoin crypto", "--try", "GRAM=toncoin", "--try", "GRAM=ton coin",
+    # XTON: an unlisted symbol (GRAM is on `_ambiguous` since stage 2, so its unapproved terms are not loader-valid)
+    argv = ["--try", "XTON=toncoin crypto", "--try", "XTON=toncoin", "--try", "XTON=ton coin",
             "--try", "MORPHO=morpho"]
     return _run(frames, argv)
 
@@ -261,7 +265,7 @@ def test_ranked_summary_per_symbol():
     code, text, _ = _summary_runs()
     assert code == 0
     summary = text.split("ranked summary")[1].split("paste-ready JSON")[0]
-    gram = summary.split("GRAM")[1].split("MORPHO")[0]
+    gram = summary.split("XTON")[1].split("MORPHO")[0]
     lines = [ln.strip() for ln in gram.strip().splitlines()]
     assert lines[0].startswith("1. [ton coin] | verdict ok | clean rising yes")
     assert lines[1].startswith("2. [toncoin] | verdict ok | clean rising no | median 50")
@@ -273,7 +277,7 @@ def test_paste_ready_json_is_best_loader_valid_usable_group():
     _, text, _ = _summary_runs()
     block = text.split("paste-ready JSON")[1]
     doc = json.loads(block[block.index("{"):block.rindex("}") + 1])
-    assert doc == {"GRAM": {"terms": ["ton coin"]}}
+    assert doc == {"XTON": {"term": "ton coin"}}   # stage 2: keyword file shape, one term
     assert "MORPHO: no loader-valid usable group" in block
     assert "informational" in text and "written nowhere" in text
 

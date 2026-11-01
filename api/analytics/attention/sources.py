@@ -31,11 +31,13 @@ from api.analytics.attention.discovery import (EXCHANGE_SERIES, FALLBACK_SERIES,
 from api.analytics.attention import narratives
 from api.analytics.attention.universe import load_universe_rows
 from api.data import cache
-from api.data.attention import pc_pace, registry, store, trends_keywords, universe_store, web_queries, x_pool
+from api.data.attention import (pc_pace, registry, store, trends_keywords, trends_runs, universe_store, web_queries,
+                                x_pool)
 from api.data.attention import pc_adapter as pa
 from api.data.attention.types import MIN_HISTORY_DAYS
 from api.models.discovery import (DiscoveryAccountHealth, DiscoveryKeywordGap, DiscoverySourceHealth,
-                                  DiscoverySourceRow, DiscoverySourcesResponse, DiscoveryTrendsKeyword)
+                                  DiscoverySourceRow, DiscoverySourcesResponse, DiscoveryTrendsKeyword,
+                                  DiscoveryTrendsWatch)
 
 LABELS = {
     "wikipedia": "Wikipedia pageviews", "trends": "Google Trends", "reddit": "Reddit", "xsearch": "X search",
@@ -372,4 +374,5 @@ def build_sources(today: date, *, probe_path: Path | None = None, universe_path:
         as_of=end.isoformat(), universe_size=len(rows), eligible_size=n, live_sources=len(live),
         total_sources=len(weighted), live_weight=sum(r.weight or 0 for r in live),
         newest=max((r.newest for r in live if r.newest), default=None), sources=out,
-        trends_keyword=_trends_keyword(eligible))
+        trends_keyword=_trends_keyword(eligible),
+        trends_watch=[DiscoveryTrendsWatch(**w) for w in trends_runs.watch_list(today)])

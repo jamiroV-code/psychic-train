@@ -60,11 +60,13 @@ TRENDS_RUN_OUTCOMES = ("ok", "too-little-interest", "quiet-then-surge", "no-keyw
                        "capped", "time-budget")
 _TRENDS_REASON_OUTCOME = {trends.TOO_LITTLE_INTEREST: "too-little-interest",
                           trends.QUIET_THEN_SURGE: "quiet-then-surge",
-                          trends.NAME_AMBIGUOUS: "skipped-unqualified", "no keyword mapped": "no-keyword",
+                          trends.WAITING_APPROVAL: "skipped-unqualified", "no keyword mapped": "no-keyword",
+                          # pre-stage-2 run files and stored reasons keep reading as skipped-unqualified
+                          "name-ambiguous: needs topic or qualified term": "skipped-unqualified",
                           "non-daily": "non-daily"}
 # trends_keywords.keyword_status of a coin with no usable keyword -> its Trends reason (T180: existing strings kept).
 MISSING_KEYWORD_REASON = {"no-entry": "no keyword mapped", "no-keyword": "no keyword mapped",
-                          "skipped-unqualified": trends.NAME_AMBIGUOUS}
+                          "skipped-unqualified": trends.WAITING_APPROVAL}
 # Store mode per source; every source not listed keeps first-write-wins.
 WRITE_MODES = {"trends": "replace-series"}
 TRENDREQ_FACTORY = make_trendreq  # pytrends is imported on first use only; tests inject a fake
@@ -308,7 +310,7 @@ def _run_coin_record(item, meta) -> dict:
             "median": st.get("median"), "zero_share_pct": st.get("zero_share_pct"),
             "last7_vs_prior28_ratio": st.get("last7_vs_prior28_ratio"),
             "attempts": meta.get("attempts", 0), "retried": bool(meta.get("retried")),
-            "retry_skipped": meta.get("retry_skipped")}
+            "retry_skipped": meta.get("retry_skipped"), "keyword": meta.get("keyword")}
 
 
 def _pytrends_version() -> str | None:
@@ -342,7 +344,7 @@ def _run_trends(symbols, client, today, sleep):
         status = trends_keywords.keyword_status(km, s)
         if status in ("topic", "term"):
             todo.append((s, km.keyword_for(s)))
-            metas[s] = {"kind": status}
+            metas[s] = {"kind": status, "keyword": km.keyword_for(s)}   # D5: the keyword assigned and attempted
         else:
             out[s] = SourceSeries("trends", s, [], "unavailable", MISSING_KEYWORD_REASON.get(status, bad))
             metas[s] = {"kind": "term" if status == "skipped-unqualified" else "none"}

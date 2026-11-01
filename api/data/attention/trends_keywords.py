@@ -1,7 +1,9 @@
 """Google Trends keyword file: loader and validator (T100a).
 
 One entry per placed coin: exactly one of `topic` (a Trends topic id), `term` (a safe search term) or
-`"no-keyword": true` (with a `note`). `_anchor` is the shared scale term, not a coin. Pure: no network,
+`"no-keyword": true` (with a `note`). `_anchor` is the shared scale term, not a coin. Stage 2 (D-30): the reserved key
+`_ambiguous` lists the owner's ambiguous symbols; such a coin's `term` is pulled only when the entry carries
+`"approved": "<the same term>"` (the approval is bound to the term, so editing the term drops it). Pure: no network,
 no pytrends, no import from api.analytics (the caller passes the placed or Discovery-eligible symbols).
 
 T180: `keyword_status` is the one rule for whether a coin has a usable keyword (the daily runner and the
@@ -14,10 +16,10 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from api.data.attention import trends
 
 KEYWORDS_PATH = Path(__file__).resolve().parents[1] / "trends_keywords.json"
 ANCHOR_KEY = "_anchor"
+AMBIGUOUS_KEY = "_ambiguous"
 BAD_FILE_REASON = "bad keyword file"
 # Same pattern as api/analytics/attention/narratives.py SYMBOL_RE (a test keeps them equal).
 SYMBOL_RE = re.compile(r"[A-Z0-9_]{1,24}")
@@ -26,7 +28,7 @@ TERM_RE = re.compile(r"[A-Za-z0-9 .'&-]{2,40}")
 LABEL_MAX = 60
 NOTE_MAX = 200
 KIND_FIELDS = ("topic", "term", "no-keyword")
-ALLOWED_FIELDS = frozenset(KIND_FIELDS + ("label", "note"))
+ALLOWED_FIELDS = frozenset(KIND_FIELDS + ("label", "note", "approved"))
 # Tickers nobody has identified yet (T160): they keep a no-keyword entry until the owner names the coin. The
 # guard test fails when one gains a topic or term, so this list only shrinks; every other Discovery coin needs one.
 # T192: the owner named all seven, so it is empty now; a future unidentified ticker is added here on purpose.
@@ -81,7 +83,25 @@ def _check_entry(name: str, entry, *, anchor: bool) -> dict:
         raise KeywordFileError(f"keywords: {name} label must be 1-{LABEL_MAX} printable characters")
     if "note" in entry and not _text_ok(entry["note"], NOTE_MAX):
         raise KeywordFileError(f"keywords: {name} note must be 1-{NOTE_MAX} printable characters")
+    if "approved" in entry:
+        if anchor or kind != "term":
+            raise KeywordFileError(f"keywords: {name} approved is allowed only on a coin's term entry")
+        if not isinstance(entry["approved"], str) or entry["approved"] != entry["term"]:
+            raise KeywordFileError(f"keywords: {name} approved must equal its term exactly (re-approve after a term edit)")
     return dict(entry)
+
+
+def _check_ambiguous(value) -> frozenset[str]:
+    if not isinstance(value, list):
+        raise KeywordFileError(f"keywords: {AMBIGUOUS_KEY} must be a list of symbols")
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str) or item == ANCHOR_KEY or not SYMBOL_RE.fullmatch(item):
+            raise KeywordFileError(f"keywords: {AMBIGUOUS_KEY} items must be symbols matching {SYMBOL_RE.pattern}")
+        if item in seen:
+            raise KeywordFileError(f"keywords: {AMBIGUOUS_KEY} lists {item} twice")
+        seen.add(item)
+    return frozenset(seen)
 
 
 def validate(doc, placed_symbols=None) -> dict:
@@ -91,11 +111,12 @@ def validate(doc, placed_symbols=None) -> dict:
     if ANCHOR_KEY not in doc:
         raise KeywordFileError(f"keywords: {ANCHOR_KEY} is required")
     anchor = _check_entry(ANCHOR_KEY, doc[ANCHOR_KEY], anchor=True)
+    ambiguous = _check_ambiguous(doc[AMBIGUOUS_KEY]) if AMBIGUOUS_KEY in doc else frozenset()
     entries: dict[str, dict] = {}
     topics: dict[str, str] = {}
     terms: dict[str, str] = {}
     for key, entry in doc.items():
-        if key == ANCHOR_KEY:
+        if key in (ANCHOR_KEY, AMBIGUOUS_KEY):
             continue
         if not isinstance(key, str) or not SYMBOL_RE.fullmatch(key):
             raise KeywordFileError(f"keywords: key {str(key)[:30]!r} must be {ANCHOR_KEY} or match {SYMBOL_RE.pattern}")
@@ -110,6 +131,9 @@ def validate(doc, placed_symbols=None) -> dict:
                 raise KeywordFileError(f"keywords: {key} term must be unique, case-insensitive (also used by {terms[folded]})")
             terms[folded] = key
         entries[key] = e
+    unlisted = sorted(ambiguous - set(entries))
+    if unlisted:
+        raise KeywordFileError(f"keywords: {AMBIGUOUS_KEY} symbol(s) without an entry: {', '.join(unlisted[:5])}")
     warnings: list[str] = []
     if placed_symbols is not None:
         placed = set(placed_symbols)
@@ -120,7 +144,8 @@ def validate(doc, placed_symbols=None) -> dict:
         warnings = [f"keywords: {s} is not a placed coin" for s in not_placed]
     else:
         not_placed = []
-    return {"entries": entries, "anchor": anchor, "warnings": warnings, "not_placed": not_placed}
+    return {"entries": entries, "anchor": anchor, "warnings": warnings, "not_placed": not_placed,
+            "ambiguous": ambiguous}
 
 
 @dataclass
@@ -129,6 +154,7 @@ class KeywordMap:
     anchor: dict
     warnings: list[str] = field(default_factory=list)
     not_placed: list[str] = field(default_factory=list)   # keys outside the placed symbols passed to load
+    ambiguous: frozenset[str] = frozenset()                # owner's `_ambiguous` list (stage 2)
 
     def keyword_for(self, symbol: str) -> str | None:
         e = self.entries.get(symbol)
@@ -167,8 +193,8 @@ def safe_load(path: Path | None = None, placed_symbols=None) -> tuple[KeywordMap
 
 
 def keyword_status(km: KeywordMap | None, symbol: str) -> str:
-    """"topic" or "term" when the runner pulls the coin, else one of MISSING_STATUSES. A name-risk symbol's bare
-    (unqualified) term is not pulled."""
+    """"topic" or "term" when the runner pulls the coin, else one of MISSING_STATUSES. A symbol on the file's
+    `_ambiguous` list has its term pulled only when `approved` equals that term exactly (stage 2, D-30)."""
     if km is None:
         return "bad-file"
     e = km.entries.get(symbol)
@@ -178,7 +204,7 @@ def keyword_status(km: KeywordMap | None, symbol: str) -> str:
         return "topic"
     if "term" not in e:
         return "no-keyword"
-    if symbol in trends.NAME_RISK_SYMBOLS and not trends.is_qualified_term(e["term"]):
+    if symbol in km.ambiguous and e.get("approved") != e["term"]:
         return "skipped-unqualified"
     return "term"
 

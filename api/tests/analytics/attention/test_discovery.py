@@ -664,3 +664,29 @@ def test_tradeability_unknown_counts_shown_coins_only(isolated_cache, tmp_path, 
     res = disc.build_discovery(30, today=TODAY)
     assert res.shown_size == 2 and res.excluded_counts["no-source-data"] == 1
     assert res.tradeability_unknown == 2
+
+
+# --- stage 2 (D-30, AC9): the waking-up watch list never touches Discovery scoring ---
+
+def test_discovery_scores_identical_with_and_without_a_watch_list_coin(isolated_cache, tmp_path, monkeypatch):
+    from api.data.attention import trends_runs
+    world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7}, cats={"ai": ["A", "B"]})
+    gain("A"), gain("B", factor=1.5)
+    before = disc.build_discovery(30, today=TODAY).model_dump()
+    d = isolated_cache / "attention" / "trends_runs"
+    d.mkdir(parents=True, exist_ok=True)
+    for i in range(7):
+        day = TODAY - timedelta(days=i)
+        (d / f"{day.isoformat()}.json").write_text(json.dumps({"coins": {"A": {"outcome": "quiet-then-surge"}}}))
+    assert trends_runs.watch_list(TODAY) == [{"symbol": "A", "days_held": 7}]
+    assert disc.build_discovery(30, today=TODAY).model_dump() == before
+
+
+def test_discovery_does_not_import_the_watch_list_or_sources():
+    import ast
+    import inspect
+    tree = ast.parse(inspect.getsource(disc))
+    mods = {n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
+    names = {a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names}
+    assert not any("trends_runs" in m or m.endswith(".sources") for m in mods)
+    assert "trends_runs" not in names and "sources" not in names

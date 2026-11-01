@@ -18,6 +18,8 @@ from api.data.attention import trends
 from api.data.attention import trends_candidates as tc_
 from api.data.attention import trends_groups as tg
 from api.data.attention import trends_keywords as tk
+from api.data.attention import trends_select as ts
+from api.data.attention.trends_runs import MAX_RUN_FILE_BYTES, RUN_FILE_RE, RUN_OUTCOMES, _latest_run
 
 STATE_VERSION = 1
 TESTER_VERSION = "t201-1"
@@ -137,20 +139,6 @@ def record(state: dict, symbol: str, cand: tc_.Candidate, loader_flags: dict, ou
     ranked = _ranked(coin)
     coin["best_group"] = ranked[0][0] if ranked else None
     coin["verdict"] = ranked[0][1]["metrics"]["verdict"] if ranked else None
-
-
-RUN_FILE_RE = re.compile(r"\d{4}-\d{2}-\d{2}\.json")
-RUN_OUTCOMES = frozenset({"ok", "too-little-interest", "quiet-then-surge", "no-keyword", "skipped-unqualified",
-                          "failed", "capped", "time-budget"})  # the daily run's own outcome strings (T197)
-MAX_RUN_FILE_BYTES = 5_000_000
-
-
-def _latest_run(doc) -> dict | None:
-    """The newest run of one file: a single run is the document itself, a second run on the same UTC day turns the
-    file into {"runs": [...]} (oldest first). None for any other shape."""
-    if isinstance(doc, dict) and isinstance(doc.get("runs"), list):
-        doc = doc["runs"][-1] if doc["runs"] else None
-    return doc if isinstance(doc, dict) and isinstance(doc.get("coins"), dict) else None
 
 
 def read_runs(runs_dir: Path) -> tuple[dict[str, str], str | None]:
@@ -290,3 +278,36 @@ def report_lines(state: dict, eligible: list[str], km: tk.KeywordMap | None, hea
     lines.append("stage 2 (not built): the Discovery gate could require 'keyword tested' status; each coin's state "
                  "keeps last_tested, best_group and verdict for that.")
     return lines
+
+
+def selection(state: dict, eligible: list[str], km: tk.KeywordMap | None
+              ) -> tuple[list[str], dict[str, tuple[ts.Selection, dict | None]]]:
+    """Stage 2 (D-30): one selection line per coin (eligible coins, then every listed coin outside them) and the
+    selections behind them. Read-only: the keyword file is never written and `approved` is never produced."""
+    ambiguous = km.ambiguous if km else frozenset()
+    entries = km.entries if km else {}
+    coins = state.get("coins", {})
+    order = list(dict.fromkeys([*eligible, *sorted(ambiguous), *coins]))   # every tested coin gets a line
+    lines = ["selection (stage 2): one term or topic per coin; a bundle only checks variants; rising never decides; "
+             "ambiguous coins need a topic or the owner's approved term",
+             "coin | current keyword (status) | verdict | chosen | flags | others (why not chosen)"]
+    picked: dict[str, tuple[ts.Selection, dict | None]] = {}
+    for s in order:
+        entry = entries.get(s)
+        if entry is None:
+            if s in coins:
+                lines.append(f"{s} | not in the keyword file")
+            continue
+        kw = entry.get("topic") or entry.get("term") or "none"
+        status = tk.keyword_status(km, s)
+        sel = ts.select(s, coins.get(s), entry, ambiguous)
+        picked[s] = (sel, entry)
+        chosen = sel.term or "-"
+        if sel.verdict == "needs-approval":
+            chosen = f"{sel.term} (suggestion only; approve it in the keyword file)"
+        others = "; ".join(f"{t} {why}" for t, why in sel.others) or "-"
+        lines.append(f"{s} | current: {kw} ({status}) | {sel.verdict} | {chosen} | {', '.join(sel.flags) or '-'} | "
+                     f"{'; '.join(sel.reasons)} | others: {others}")
+    counts = {v: sum(p[0].verdict == v for p in picked.values()) for v in ts.VERDICTS}
+    lines.append("selection verdicts: " + ", ".join(f"{v} {n}" for v, n in counts.items()))
+    return lines, picked

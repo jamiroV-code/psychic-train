@@ -181,6 +181,12 @@ class DiscoveryTrendsKeyword(BaseModel):
     missing: list[DiscoveryKeywordGap] = []
 
 
+class DiscoveryTrendsWatch(BaseModel):
+    """A coin waking up in the daily Trends pulls (stage 2, D-30): shown on the Sources panel only, never scored."""
+    symbol: str
+    days_held: int         # consecutive quiet-then-surge days; at the 30-file cap the panel shows "30+"
+
+
 class DiscoverySourcesResponse(BaseModel):
     as_of: str
     universe_size: int
@@ -191,6 +197,7 @@ class DiscoverySourcesResponse(BaseModel):
     newest: str | None     # newest stored date over live sources
     sources: list[DiscoverySourceRow]
     trends_keyword: DiscoveryTrendsKeyword | None = None   # additive (T180)
+    trends_watch: list[DiscoveryTrendsWatch] | None = None  # additive (stage 2): waking-up watch list, not scored
 
 
 class DiscoveryHistoryDay(BaseModel):

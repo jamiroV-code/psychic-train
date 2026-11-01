@@ -23,6 +23,7 @@ KEYWORDS = {
     "SOL": {"topic": "/m/0sol", "label": "Solana"},
     "LINK": {"term": "Chainlink", "label": "Chainlink"},
     "USDX": {"no-keyword": True, "label": "USDX", "note": "stablecoin"},
+    "_ambiguous": ["LINK", "SOL"],   # stage 2: owner-kept ambiguity list (SOL is a topic, so still pulled)
 }
 
 
@@ -108,7 +109,7 @@ def test_no_keyword_costs_no_request(monkeypatch):
 
 def test_name_risk_term_skipped_topic_fetched(monkeypatch):
     out, client, _, _ = _run(monkeypatch, ["LINK", "SOL"])
-    assert out["LINK"].state == "unavailable" and out["LINK"].reason == trends.NAME_AMBIGUOUS
+    assert out["LINK"].state == "unavailable" and out["LINK"].reason == trends.WAITING_APPROVAL
     assert out["SOL"].state == "ok" and len(out["SOL"].points) == 100
     assert client.terms() == ["/m/0sol"]
 
@@ -293,18 +294,19 @@ def test_time_budget_checked_inside_backoff(monkeypatch):
 
 
 @pytest.mark.parametrize("trx, apt, fetched", [
-    ("Tron", "Aptos", []),                                    # bare names: skipped, no request
-    ("tron crypto", "Aptos Crypto", ["tron crypto", "Aptos Crypto"]),   # qualified-term fallback: pulled
+    ({"term": "Tron"}, {"term": "aptos crypto"}, []),       # unapproved (bare or qualified): skipped, no request
+    ({"term": "tron crypto", "approved": "tron crypto"}, {"term": "Aptos Crypto", "approved": "Aptos Crypto"},
+     ["tron crypto", "Aptos Crypto"]),                      # stage 2: an approved term is pulled
 ])
 def test_risky_symbol_bare_term_skipped_qualified_term_fetched(monkeypatch, _env, capsys, trx, apt, fetched):
-    kw = dict(KEYWORDS, TRX={"term": trx, "label": "TRON", "note": "qualified-term fallback"},
-              APT={"term": apt, "label": "Aptos"})
+    kw = dict(KEYWORDS, TRX={**trx, "label": "TRON", "note": "qualified-term fallback"},
+              APT={**apt, "label": "Aptos"}, _ambiguous=["LINK", "SOL", "TRX", "APT"])
     _env.write_text(json.dumps(kw))
     out, client, _, _ = _run(monkeypatch, ["TRX", "APT", "SOL"], today=_day(0, len(fetched) + 1))
     assert client.terms() == fetched + ["/m/0sol"]  # a topic entry is always fetched
     for s in ("TRX", "APT"):
         assert (out[s].state == "ok") == bool(fetched)
-        assert bool(fetched) or out[s].reason == trends.NAME_AMBIGUOUS
+        assert bool(fetched) or out[s].reason == trends.WAITING_APPROVAL
     line = next(ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("trends detail:"))
     assert line == ("trends detail: ok 3" if fetched else "trends detail: ok 1, skipped-unqualified 2")
 
@@ -407,7 +409,7 @@ def test_store_failed_reason_is_a_code_reason():
 @pytest.mark.parametrize("sym,reason,outcome", [
     ("ZZZ", "no keyword mapped", "no-keyword"),          # no entry
     ("USDX", "no keyword mapped", "no-keyword"),         # no-keyword entry
-    ("LINK", trends.NAME_AMBIGUOUS, "skipped-unqualified"),
+    ("LINK", trends.WAITING_APPROVAL, "skipped-unqualified"),
 ])
 def test_coin_without_usable_keyword_is_missing_never_zero(monkeypatch, capsys, sym, reason, outcome):
     """T180: the runner's skip follows trends_keywords.keyword_status; the reason is the existing pinned one."""
@@ -419,3 +421,53 @@ def test_coin_without_usable_keyword_is_missing_never_zero(monkeypatch, capsys, 
     assert refresh_attention.MISSING_KEYWORD_REASON[trends_keywords.keyword_status(km, sym)] == reason
     line = next(ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("trends detail:"))
     assert line == f"trends detail: {outcome} 1"
+
+
+# --- stage 2 (D-30, S3): reason text, one request per pulled coin, D5 limit ---
+
+def test_waiting_approval_constant_replaces_name_ambiguous():
+    assert trends.WAITING_APPROVAL == "waiting for owner approval"
+    assert not hasattr(trends, "NAME_AMBIGUOUS")
+    assert refresh_attention.MISSING_KEYWORD_REASON["skipped-unqualified"] == trends.WAITING_APPROVAL
+    from api.data.attention.types import SourceSeries
+    s = SourceSeries("trends", "X", [], "unavailable", trends.WAITING_APPROVAL)
+    assert refresh_attention._trends_outcome(s) == "skipped-unqualified"
+
+
+def test_old_reason_string_still_reads_as_skipped_unqualified():
+    from api.data.attention.types import SourceSeries
+    old = SourceSeries("trends", "X", [], "unavailable", "name-ambiguous: needs topic or qualified term")
+    assert refresh_attention._trends_outcome(old) == "skipped-unqualified"
+
+
+def test_request_count_equals_pulled_coins_and_unapproved_sends_none(monkeypatch, _env, capsys):
+    """AC8, AC12: one request per pulled coin (no-retry fixture); an unapproved ambiguous coin costs nothing."""
+    kw = dict(KEYWORDS, SKY={"term": "sky crypto", "label": "Sky"},
+              TRX={"term": "tron crypto", "label": "TRON", "approved": "tron crypto"},
+              _ambiguous=["LINK", "SOL", "SKY", "TRX"])
+    _env.write_text(json.dumps(kw))
+    syms = ["AAVE", "INJ", "SOL", "SKY", "TRX", "LINK", "USDX"]
+    out, client, _, _ = _run(monkeypatch, syms)
+    pulled = [s for s in syms if trends_keywords.keyword_status(trends_keywords.load(), s) in ("topic", "term")]
+    assert sorted(pulled) == ["AAVE", "INJ", "SOL", "TRX"]
+    assert len(client.payloads) == len(pulled) and "sky crypto" not in client.terms()
+    assert (out["SKY"].state, out["SKY"].reason, out["SKY"].points) == ("unavailable", trends.WAITING_APPROVAL, [])
+    line = next(ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("trends detail:"))
+    assert "skipped-unqualified 2" in line
+
+
+def test_d5_failed_pull_under_changed_keyword_keeps_old_series_and_records_new_keyword(monkeypatch, _env):
+    """D5 limit, stated and tested: the store still holds the older term's series; the run file names the new one."""
+    import json as _json
+
+    from api.data import cache
+    d1, d2 = fx.TODAY, fx.TODAY + timedelta(days=1)
+    _main(monkeypatch, ["AAVE"], today=d1)
+    before = store.read_points("trends", "AAVE")
+    assert len(before) == 100
+    _env.write_text(json.dumps(dict(KEYWORDS, AAVE={"term": "aave crypto", "label": "Aave"})))
+    _main(monkeypatch, ["AAVE"], {"aave crypto": [fx.forbidden()]}, today=d2)
+    assert store.read_points("trends", "AAVE") == before
+    run = _json.loads((cache.CACHE_ROOT / "attention" / "trends_runs" / f"{d2.isoformat()}.json").read_text())
+    rec = run["coins"]["AAVE"]
+    assert rec["outcome"] == "failed" and rec["keyword"] == "aave crypto"

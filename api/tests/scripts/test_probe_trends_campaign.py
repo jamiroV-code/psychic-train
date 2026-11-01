@@ -124,7 +124,8 @@ def test_keyword_health_from_runs_then_stored_series():
     reader = {"AKE": good, "BTW": low, "OKB": []}.get
     h = tc.keyword_health(km, ["AKE", "BTW", "OKB", "NOPE", "GRAM"], {"GRAM": "too-little-interest"},
                           lambda s: reader(s, good))
-    assert h == {"AKE": "ok", "BTW": "weak", "OKB": "empty", "NOPE": "missing", "GRAM": "weak"}
+    # stage 2: GRAM is ambiguous and unapproved, so it has no pulled keyword and reads missing
+    assert h == {"AKE": "ok", "BTW": "weak", "OKB": "empty", "NOPE": "missing", "GRAM": "missing"}
     assert tc.keyword_health(km, ["AKE"], {"AKE": "ok"}, lambda s: low) == {"AKE": "ok"}
 
 
@@ -237,7 +238,8 @@ def test_eligible_set_change_between_runs(tmp_path):
     assert sent(c) == ["the open network toncoin"]
     code, text, _ = run(["--report", str(st)], eligible=("AKE", "GRAM"), factory=no_client)
     assert code == 0
-    assert "BTW" in text and "no longer eligible" in text.split("BTW")[-2] + text.split("BTW")[-1]
+    table = text.split("selection (stage 2)")[0]   # stage 2 selection lines follow the campaign table
+    assert "BTW" in table and "no longer eligible" in table.split("BTW")[-2] + table.split("BTW")[-1]
 
 
 def test_no_eligible_coins_refuses(tmp_path):
@@ -350,7 +352,8 @@ def test_report_sends_no_request_and_recommends(tmp_path):
     st = _state_with_results(tmp_path)
     code, text, _ = run(["--report", str(st)], eligible=("AKE", "BTW", "GRAM", "OKB"), factory=no_client)
     assert code == 0, text
-    lines = {ln.split(" | ")[0].strip(): ln for ln in text.splitlines() if " | " in ln}
+    table = text.split("selection (stage 2)")[0]   # stage 2 adds selection lines after the campaign table
+    lines = {ln.split(" | ")[0].strip(): ln for ln in table.splitlines() if " | " in ln}
     assert "recommend: keep" in lines["AKE"] and "clean rising yes" in lines["AKE"]
     assert "recommend: switch to [btw crypto]" in lines["BTW"]
     assert "current: bitway crypto (too-little-interest)" in lines["BTW"]
@@ -402,7 +405,7 @@ def test_try_output_labels_json_as_stage_2_and_medians_own_scale():
     client = AutoTrendReq()
     code, text, _ = run(["--try", "AKE=akedo crypto"], client=client)
     assert code == 0
-    assert "stage-2 shape, not accepted by the loader yet" in text
+    assert p.STAGE2_JSON_LABEL in text and "proposal; you apply it" in text
     assert "own scale only" in text
     assert "never compared across groups" in text
 
@@ -467,3 +470,74 @@ def test_failed_requests_only_are_untested_and_set_no_last_tested():
     lines, text = _report(st, ["AKE", "BTW"])
     assert "AKE" not in lines and "AKE" in text.split("untested")[1]
     assert "tested 1 of 2 eligible coins" in text and "needs owner" in lines["BTW"]
+
+
+# --- stage 2 (D-30): selection lines and proposal block in --report ---
+
+def _sel_metrics(verdict="ok", zero=0, distinct=20, corr=None, spike=False):
+    return {**_metrics(verdict), "zero_pct": zero, "distinct": distinct, "identity_corr": corr, "spike": spike,
+            "moves_alone": []}
+
+
+def _stage2_state(tmp_path):
+    st = tc.new_state()
+    _coin(st, "AKE", [(["akedo crypto"], "ok", _sel_metrics("too-little-interest"), "loader-valid"),
+                      (["ake crypto"], "ok", _sel_metrics(zero=1), "loader-valid")])
+    _coin(st, "SKY", [(["sky crypto"], "ok", _sel_metrics(), p.NEEDS_APPROVAL_FLAG)])
+    _coin(st, "USD0", [(["usual usd crypto"], "ok", _sel_metrics(), "loader-valid")])
+    _coin(st, "BTW", [(["bitway crypto"], "ok", _sel_metrics(), "loader-valid")])   # tested, not eligible now
+    path = tmp_path / "c.json"
+    tc.save_state(path, st)
+    return path
+
+
+def test_report_is_read_only_and_sends_no_request(tmp_path, monkeypatch):
+    """AC14, E6: --report never fetches, never writes the keyword file or the state, never emits approved."""
+    from api.data.attention import trends_keywords as tk
+    path = _stage2_state(tmp_path)
+    monkeypatch.setattr(p, "_fetch", lambda *a, **k: (_ for _ in ()).throw(AssertionError("fetch")))
+    kw_before = tk.KEYWORDS_PATH.read_bytes()
+    data_before = tree_snapshot(tk.KEYWORDS_PATH.parent)
+    state_before = path.read_bytes()
+    code, text, client = run(["--report", str(path)], eligible=("AKE", "SKY", "BTW"), factory=no_client)
+    assert code == 0, text
+    assert client.payloads == []
+    assert tk.KEYWORDS_PATH.read_bytes() == kw_before and tree_snapshot(tk.KEYWORDS_PATH.parent) == data_before
+    assert path.read_bytes() == state_before
+    block = text.split("paste-ready JSON")[1]
+    doc = json.loads(block[block.index("{"):block.rindex("}") + 1])
+    assert doc == {"AKE": {"term": "ake crypto", "label": "Akedo"}}
+    assert '"approved"' not in block and "proposal; you apply it" in text
+
+
+def test_report_selection_lines_per_coin(tmp_path):
+    """AC13, AC15: verdict, chosen term, flags and why the others lost; STABLE untested; USD0 not in the file."""
+    path = _stage2_state(tmp_path)
+    code, text, _ = run(["--report", str(path)], eligible=("AKE", "SKY"), factory=no_client)
+    assert code == 0, text
+    sel = text.split("selection (stage 2)")[1]
+    lines = {ln.split(" | ")[0]: ln for ln in sel.splitlines() if " | " in ln}
+    assert "| use-term | ake crypto |" in lines["AKE"] and "unchecked (no volume)" in lines["AKE"]
+    assert "[akedo crypto] not usable: too-little-interest" in lines["AKE"]
+    assert "current: akedo crypto (term)" in lines["AKE"]
+    assert "| needs-approval | sky crypto (suggestion only" in lines["SKY"]
+    assert "current: sky crypto (skipped-unqualified)" in lines["SKY"]
+    assert "| untested |" in lines["STABLE"] and "use-term" not in lines["STABLE"]
+    assert "| untested |" in lines["PEPE"] and "| use-term | bitway crypto |" in lines["BTW"]
+    assert lines["USD0"] == "USD0 | not in the keyword file"
+    assert "selection verdicts: use-term 2, use-topic 0, needs-approval 1" in sel
+
+
+def test_report_waking_up_approved_coin_says_approved_pulled(tmp_path):
+    st = tc.new_state()
+    _coin(st, "APT", [(["aptos crypto"], "ok", _sel_metrics("quiet-then-surge"), "loader-valid")])
+    path = tmp_path / "c.json"
+    tc.save_state(path, st)
+    _, text, _ = run(["--report", str(path)], eligible=("APT",), factory=no_client)
+    line = next(ln for ln in text.split("selection (stage 2)")[1].splitlines() if ln.startswith("APT |"))
+    assert "| waking-up |" in line and "approved, pulled" in line
+
+
+def test_report_state_path_inside_repo_is_still_refused():
+    code, text, _ = run(["--report", str(REPO / "api" / "x.json")], factory=no_client)
+    assert code == 2 and "inside the repository" in text

@@ -49,3 +49,21 @@ describe("DiscoverySourcesPanel health", () => {
     expect(screen.getByTestId("sources-row-wikipedia").textContent).not.toContain("Method");
   });
 });
+
+describe("DiscoverySourcesPanel waking-up watch list (stage 2)", () => {
+  const trendsRow = { id: "trends", label: "Google Trends", kind: "weighted" as const, weight: 25, state: "ok" as const, newest: "2026-10-29", history_days: 100, coins_with_data: 40, eligible_size: 50, note: "", reason: "" as const, impl: "pytrends" };
+
+  it("renders the watch text with days held", async () => {
+    render(<DiscoverySourcesPanel fetchSources={() => Promise.resolve({ ...resp, sources: [trendsRow], trends_watch: [{ symbol: "QNT", days_held: 5 }] })} />);
+    expect(await screen.findByTestId("sources-trends-watch")).toHaveTextContent("Waking up (daily pulls): QNT (5 days)");
+  });
+
+  it("renders nothing when the list is empty, null or missing", async () => {
+    for (const trends_watch of [[], null, undefined]) {
+      const { unmount } = render(<DiscoverySourcesPanel fetchSources={() => Promise.resolve({ ...resp, sources: [trendsRow], trends_watch })} />);
+      expect(await screen.findByTestId("sources-row-trends")).toBeInTheDocument();
+      expect(screen.queryByTestId("sources-trends-watch")).toBeNull();
+      unmount();
+    }
+  });
+});

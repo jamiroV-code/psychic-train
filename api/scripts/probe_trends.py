@@ -43,6 +43,7 @@ from api.data.attention import store, trends
 from api.data.attention import trends_candidates as tcand
 from api.data.attention import trends_groups as tg
 from api.data.attention import trends_keywords as tk
+from api.data.attention import trends_select as tsel
 from api.scripts import trends_campaign as camp
 from api.scripts.trends_cli_common import (
     http_status,
@@ -72,7 +73,7 @@ CAMPAIGN_PAUSE_EVERY = 40
 CAMPAIGN_PAUSE_SECONDS = 20
 DEFAULT_MAX_AGE_DAYS = 14
 MAX_AGE_LIMIT = 365
-STAGE2_JSON_LABEL = "stage-2 shape, not accepted by the loader yet"
+STAGE2_JSON_LABEL = "keyword file shape (term or topic); proposal; you apply it"
 # Looser than the loader's TERM_RE so bare words and '+' or ':' can be tried; never '|', quotes, shell or control
 # characters. Each term is still flagged with the real loader check.
 LOOSE_TERM_RE = re.compile(r"[\w .'&+:-]{2,60}")
@@ -253,8 +254,8 @@ def _run_alone(client, km: tk.KeywordMap, symbols: list[str], timeframe: str, da
         if sent:
             sleep(INTERVAL_SECONDS)
         sent = True
-        risk = " (bare name-risk term: the daily run skips it until a topic or qualified term is set)" if (
-            sym in trends.NAME_RISK_SYMBOLS and not tk.is_valid_topic(kw) and not trends.is_qualified_term(kw)) else ""
+        risk = (" (ambiguous coin, term not approved: the daily run skips it until a topic or an approved term is set)"
+                if tk.keyword_status(km, sym) == "skipped-unqualified" else "")
         print(f"\nalone request: {sym} [{kw}]{risk}", file=out)
         frame, error, latency = _fetch(client, [kw], timeframe, clock)
         print(f"outcome: {_outcome(error)}", file=out)
@@ -287,14 +288,18 @@ def _try_arg(value: str) -> tuple[str, list[str]]:
     return sym, terms
 
 
-def loader_flag(sym: str, term: str) -> str:
-    """The daily runner's own check: a topic or safe term, and a name-risk coin's term needs a qualifier word."""
+NEEDS_APPROVAL_FLAG = "needs approval (ambiguous)"
+
+
+def loader_flag(sym: str, term: str, km: tk.KeywordMap | None) -> str:
+    """The daily runner's own check: a topic or safe term; an ambiguous coin's (`_ambiguous`) term is pulled only
+    when the owner approved exactly that term."""
     if tk.is_valid_topic(term):
         return "loader-valid"
     if not tk.is_valid_term(term):
         return "not loader-safe (length or characters)"
-    if sym in trends.NAME_RISK_SYMBOLS and not trends.is_qualified_term(term):
-        return "needs qualifier word"
+    if km is not None and sym in km.ambiguous and (km.entries.get(sym) or {}).get("approved") != term:
+        return NEEDS_APPROVAL_FLAG
     return "loader-valid"
 
 
@@ -344,7 +349,7 @@ def _print_metrics(m: tg.GroupMetrics, out) -> None:
     print(f"  clean rising: {'yes' if m.clean else 'no (' + '; '.join(m.reasons) + ')'}", file=out)
 
 
-def _run_try(client, groups, day: date, sleep, clock, jitter, volume_reader, out) -> int:
+def _run_try(client, km, groups, day: date, sleep, clock, jitter, volume_reader, out) -> int:
     """--try: one request per group; stops at the first HTTP 429 or MAX_CONSECUTIVE_FAILURES failures in a row."""
     timeframe = trends.explicit_timeframe(day)
     print(f"try: {len(groups)} group(s), one request each, timeframe \"{timeframe}\"; {INTERVAL_SECONDS:g} s apart "
@@ -367,7 +372,7 @@ def _run_try(client, groups, day: date, sleep, clock, jitter, volume_reader, out
                 sleep(INTERVAL_SECONDS + jitter())
             print(f"\ngroup {n + 1}/{len(groups)}: {sym} [{' | '.join(terms)}]", file=out)
             for t in terms:
-                print(f"  term {t}: {loader_flag(sym, t)}", file=out)
+                print(f"  term {t}: {loader_flag(sym, t, km)}", file=out)
             frame, error, latency = _fetch(client, terms, timeframe, clock)
             print(f"outcome: {_outcome(error)}", file=out)
             print(f"latency: {latency:.2f} s", file=out)
@@ -398,11 +403,11 @@ def _run_try(client, groups, day: date, sleep, clock, jitter, volume_reader, out
         for sym, terms in groups[len(results):]:  # after Ctrl-C the group in flight has no result either
             results.append((sym, terms, None, f"not run ({stop})"))
             print(f"{sym} [{' | '.join(terms)}]: not run ({stop})", file=out)
-    _print_summary(results, out)
+    _print_summary(results, km, out)
     return code
 
 
-def _print_summary(results, out) -> None:
+def _print_summary(results, km, out) -> None:
     print("\n--- ranked summary (best first: usable, then clean rising, then fewer zero days, then more distinct "
           "values, then volume correlation; medians are own scale only, never compared across groups) ---", file=out)
     suggestion: dict[str, dict] = {}
@@ -416,14 +421,14 @@ def _print_summary(results, out) -> None:
                   f"median {m.group.median:g} (own scale only)", file=out)
         for _, terms, _, reason in (r for r in mine if r[2] is None):
             print(f"  -  [{' | '.join(terms)}] | {reason}", file=out)
-        best = next((terms for _, terms, m, _ in ranked if m.verdict == "ok"
-                     and all(loader_flag(sym, t) == "loader-valid" for t in terms)), None)
+        best = next((terms[0] for _, terms, m, _ in ranked if m.verdict == "ok" and not m.spike and len(terms) == 1
+                     and loader_flag(sym, terms[0], km) == "loader-valid"), None)
         if best is None:
             none.append(sym)
         else:
-            suggestion[sym] = {"terms": best}
-    print(f"\n--- paste-ready JSON (best loader-valid usable group per coin; {STAGE2_JSON_LABEL}; informational, "
-          "written nowhere) ---", file=out)
+            suggestion[sym] = {"topic" if tk.is_valid_topic(best) else "term": best}
+    print(f"\n--- paste-ready JSON (best loader-valid usable single term per coin; a bundle only checks variants; "
+          f"{STAGE2_JSON_LABEL}; informational, written nowhere) ---", file=out)
     print(json.dumps(suggestion, indent=2), file=out)
     for sym in none:
         print(f"{sym}: no loader-valid usable group", file=out)
@@ -500,7 +505,7 @@ def _run_campaign(args, km, start, today: date, now, sleep, jitter, clock, volum
     order = camp.priority_order(eligible, health)
     cands = {s: tcand.candidate_groups(s, km.entries.get(s), query_name=names.get(s), coingecko_id=ids.get(s),
                                        max_groups=args.max_groups, usable=health.get(s) == camp.OK,
-                                       max_usable=args.max_usable) for s in order}
+                                       max_usable=args.max_usable, ambiguous=km.ambiguous) for s in order}
     pending = camp.plan(order, cands, state, today, args.max_age)
     print("probe_trends campaign: reads Google Trends, writes only the state file (terms, outcomes, metrics)",
           file=out)
@@ -527,7 +532,7 @@ def _run_campaign(args, km, start, today: date, now, sleep, jitter, clock, volum
             note = f" ({cand.note})" if cand.note else ""
             print(f"\n{sym} (current keyword: {health.get(sym, 'n/a')}) {cand.kind}{note}: [{' | '.join(cand.terms)}]",
                   file=out)
-            flags = {t: loader_flag(sym, t) for t in cand.terms}
+            flags = {t: loader_flag(sym, t, km) for t in cand.terms}
             frame, error, latency = _fetch(client, list(cand.terms), timeframe, clock)
             sent += 1
             print(f"outcome: {_outcome(error)} | latency: {latency:.2f} s", file=out)
@@ -581,6 +586,12 @@ def _run_report(args, km, eligible_reader, health_reader, runs_reader, out, err)
         print(note, file=out)
     for line in camp.report_lines(state, list(eligible), km, health_reader(km, eligible)):
         print(line, file=out)
+    lines, picked = camp.selection(state, list(eligible), km)
+    print("", file=out)
+    for line in lines:
+        print(line, file=out)
+    print(f"\n--- paste-ready JSON ({STAGE2_JSON_LABEL}; written nowhere; never carries 'approved') ---", file=out)
+    print(json.dumps(tsel.proposal(picked), indent=2, ensure_ascii=True), file=out)
     return 0
 
 
@@ -689,7 +700,7 @@ def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep
     if args.groups is not None:
         print("probe_trends: read-only, writes nothing", file=out)
         print(f"pytrends version: {version()}", file=out)
-        return _run_try(client, args.groups, today(), sleep, clock, jitter, volume_reader, out)
+        return _run_try(client, km, args.groups, today(), sleep, clock, jitter, volume_reader, out)
 
     if args.alone is not None:
         print("probe_trends: read-only, writes nothing", file=out)

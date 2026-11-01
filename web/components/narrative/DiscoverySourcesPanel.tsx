@@ -24,15 +24,33 @@ function summary(d: DiscoverySourcesResponse): { text: string; tone: "ok" | "par
   return { text: `Sources: ${d.live_sources} of ${d.total_sources} live, ${Math.round(d.live_weight)} of 100 weight${newest}`, tone };
 }
 
-/** The Trends row's note gains the keyword coverage and the coins without a keyword (T180). */
+/** Watch-list file cap (api trends_runs.WATCH_MAX_FILES): a streak this long reads "30+". */
+const WATCH_CAP = 30;
+
+/** The Trends row's note gains the keyword coverage and the coins without a keyword (T180), grouped by detail
+ * (stage 2): no keyword or no entry yet, waiting for the owner's approval, or an invalid keyword file. */
 function note(r: DiscoverySourceRow, d: DiscoverySourcesResponse): string {
   const tk = d.trends_keyword;
   if (r.id !== "trends" || !tk) return r.note;
   const parts = [r.note, `Trends keyword: ${tk.with_keyword} of ${tk.eligible_size} eligible coins`];
-  if (tk.missing.length) {
-    parts.push(`${formatNarrativeReason("no-trends-keyword")}: ${tk.missing.map((g) => g.symbol).join(", ")}`);
-  }
+  const syms = (details: string[]) => tk.missing.filter((g) => details.includes(g.detail)).map((g) => g.symbol);
+  const none = syms(["no-keyword", "no-entry"]);
+  if (none.length) parts.push(`${formatNarrativeReason("no-trends-keyword")}: ${none.join(", ")}`);
+  const waiting = syms(["skipped-unqualified"]);
+  if (waiting.length) parts.push(`Waiting for owner approval: ${waiting.join(", ")}`);
+  if (syms(["bad-file"]).length) parts.push("Keyword file invalid");
   return parts.filter(Boolean).join(". ");
+}
+
+/** Stage 2 (D-30): coins waking up in the daily pulls, with days held; shown only, never scored. */
+function watchText(d: DiscoverySourcesResponse): string | null {
+  const w = d.trends_watch;
+  if (!w || w.length === 0) return null;
+  const items = w.map((x) => {
+    const n = x.days_held >= WATCH_CAP ? `${WATCH_CAP}+` : String(x.days_held);
+    return `${x.symbol} (${n} ${x.days_held === 1 ? "day" : "days"})`;
+  });
+  return `Waking up (daily pulls): ${items.join(", ")}`;
 }
 
 /** Compact, collapsed-by-default status of every Discovery input. */
@@ -84,6 +102,7 @@ export function DiscoverySourcesPanel({ fetchSources = fetchDefault }: Discovery
           <tbody>
             {data.sources.map((r) => {
               const health = sourceHealthLines(r);
+              const watch = r.id === "trends" ? watchText(data) : null;
               return (
                 <Fragment key={r.id}>
                   <tr data-testid={`sources-row-${r.id}`} className={r.kind === "exchange-member" ? "discovery-sources__sub" : undefined}>
@@ -97,6 +116,11 @@ export function DiscoverySourcesPanel({ fetchSources = fetchDefault }: Discovery
                     <td>{r.newest ?? "—"}</td>
                     <td className="discovery-muted">{note(r, data)}</td>
                   </tr>
+                  {watch && (
+                    <tr data-testid="sources-trends-watch">
+                      <td colSpan={7} className="discovery-muted" style={{ whiteSpace: "normal", overflowWrap: "anywhere" }}>{watch}</td>
+                    </tr>
+                  )}
                   {health && (
                     <tr data-testid={`sources-health-${r.id}`}>
                       {/* One cell over all columns: the lines wrap instead of widening the table on phones. */}

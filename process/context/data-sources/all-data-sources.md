@@ -447,3 +447,4 @@ A selector miss prints a page outline, missing columns a table outline (no text)
 ## Attention sources (P5)
 
 Wikipedia, CoinGecko, exchange volume (Binance, Hyperliquid), Google Trends, Reddit and X feed the attention store (`api/data/attention/`); X is low-trust and needs 90 own days. Ranking uses a top-100 market-cap reference (`universe`); Discovery reads `categories`. Daily refresh: `attention-refresh.yml`; probe states: `record_probe.py`.
+Google Trends keywords (D-30): one term or topic per coin in `api/data/trends_keywords.json`; ambiguous coins (`_ambiguous`) are pulled by topic or an owner-approved term only (`approved` equals the term); the daily run file `trends_runs/<date>.json` records the keyword attempted; `probe_trends --report` proposes changes and writes nothing; the Sources response carries the waking-up watch list (`trends_watch`, not scored).

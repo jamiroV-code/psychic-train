@@ -201,6 +201,13 @@ export interface DiscoveryTrendsKeyword {
   missing: DiscoveryKeywordGap[];
 }
 
+/** Stage 2: a coin waking up in the daily Trends pulls; shown on the Sources panel only, never scored. */
+export interface DiscoveryTrendsWatch {
+  symbol: string;
+  /** consecutive quiet-then-surge days; 30 is the file cap and reads "30+" */
+  days_held: number;
+}
+
 export interface DiscoverySourcesResponse {
   as_of: string;
   universe_size: number;
@@ -211,6 +218,7 @@ export interface DiscoverySourcesResponse {
   newest: string | null;
   sources: DiscoverySourceRow[];
   trends_keyword?: DiscoveryTrendsKeyword | null;
+  trends_watch?: DiscoveryTrendsWatch[] | null;
 }
 
 /** GET /api/narrative/discovery/history: shared by the coin and category payloads. */

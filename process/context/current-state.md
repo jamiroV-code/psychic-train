@@ -42,6 +42,7 @@ validate-context-discovery: 54 failures, 11 warnings (CRLF and Windows path sepa
 
 - Screener and equities; Baskets (P5); data integration tooling (P9); discovery and weighted signal (P10: W1-W3, W9, weights v2 #156, volume fallback #183); universe U1-U6 (`U5 UNVERIFIED`); D-27 exchange tokens IN.
 - Trends T100a-T100c and fixes (#149-#184, board-2). W8 collector slices merged: W8a, W8b, W8c (#185), W8d1 (#173), W8d2 (#186), W8c2 stream (#191, fix round 3 open in #198), W8e PC worker (#192), W8f Discovery wiring (#193), W8e2 host guide and health line (#194, #195), W8g Sources text (#197). All `review`; nothing is wired to a live provider here.
+- Trends stage 2 (D-30, branch `claude/trends-stage2`, draft PR, `review`): ambiguity list and term-bound approvals in the keyword file, selection rule and proposal in `probe_trends --report`, `keyword` in the daily run file, waking-up watch list on the Sources panel. Nine ambiguous unapproved coins (CC JST RAIN SKY GRAM LIT NIGHT M STABLE) stop being pulled after merge. Owner probe P-T1 (AC16) not run.
 - Owner decisions 29/30-10-26 recorded in the W8c2 PLAN and SPEC (combined feeds, coverage per feed kind, no stream zeros, order `reddit_web` then `reddit_stream`, Q17 answered). Probe P-R7 passed on the owner's machine (owner-reported, not verified here).
 - Docs and process: D-28 git flow; omp setup `process/context/omp-setup.md`; registry `process/MASTER-PLAN.md` and `process/MASTER-PLAN-board-2_29-10-26.md`; decisions D-22..D-28.
 
