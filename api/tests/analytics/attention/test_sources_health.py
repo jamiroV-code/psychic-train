@@ -198,3 +198,97 @@ def test_bad_state_is_read_only_and_unknown_not_zero(live, raw):
     assert h.paused and h.pause_reason == "state_error"
     assert h.attempted is None and h.effective_budget is None and h.stale is None
     assert p.read_text() == raw
+
+
+# --- idle by design (budget spent, timed pause) is not stale; a stuck source still is (AC39) ---
+NEXT_DUE = datetime.combine(TODAY + timedelta(days=1), time(0), tzinfo=timezone.utc) + timedelta(
+    seconds=pc_pace.BEHIND_DELAY_S)
+GAP = 360  # the degraded X in-day gap from the real run
+
+
+def put_spent(source="xsearch_web", **over):
+    p = put_state(source, **({"used": 792, "effective": 800, "spent_day": TODAY.isoformat(),
+                              "last_unit_at": (NOW - timedelta(hours=10)).isoformat()} | over))
+    p.with_name(f"{source}_health.json").write_text(json.dumps(
+        {"mode": "degraded", "expected_gap_s": GAP, "observed_at": NOW.isoformat()}))
+    return p
+
+
+def x_health(now, day=TODAY):
+    return row(src.build_sources(day, now=now), "xsearch").health
+
+
+def test_budget_spent_idle_until_next_day_is_not_stale(live):
+    put_spent()
+    for now in (NOW, NEXT_DUE - timedelta(seconds=1), NEXT_DUE + timedelta(seconds=2 * GAP)):
+        h = x_health(now, now.date())
+        assert (h.stale, h.paused, h.pause_reason) == (False, False, None), now
+    h = x_health(NOW)
+    assert h.budget_spent is True and h.expected_gap_s == GAP
+    put_spent(spent_day=None, used=800)                                          # spent by count, not marked
+    assert x_health(NOW).stale is False
+
+
+def test_budget_spent_stale_again_after_next_due_plus_two_gaps(live):
+    put_spent()
+    late = NEXT_DUE + timedelta(seconds=2 * GAP + 1)
+    h = x_health(late, late.date())
+    assert h.stale is True and h.completeness.endswith("; stale")
+    put_spent(spent_day=None, used=800)
+    assert x_health(late, late.date()).stale is True
+    put_spent(last_unit_at=(NEXT_DUE + timedelta(seconds=GAP)).isoformat())     # the worker resumed on time
+    assert x_health(late, late.date()).stale is False
+
+
+def test_future_pause_until_idle_is_not_stale(live):
+    until = datetime.combine(TODAY + timedelta(days=1), time(0), tzinfo=timezone.utc)
+    put_spent(used=120, spent_day=None, pause_reason="rate_limited", pause_until=until.isoformat())
+    h = x_health(NOW)
+    assert (h.paused, h.pause_reason, h.stale) == (True, "rate_limited", False)
+    assert not h.completeness.endswith("; stale")
+    edge = until + timedelta(seconds=2 * GAP)
+    assert x_health(edge, edge.date()).stale is False
+    late = edge + timedelta(seconds=1)
+    h = x_health(late, late.date())
+    assert (h.paused, h.stale) == (False, True)
+
+
+def test_owner_action_pause_keeps_existing_stale_rule(live):
+    put_spent(used=120, spent_day=None, pause_reason="x_login_required", pause_until=None)
+    h = x_health(NOW)
+    assert (h.paused, h.pause_reason, h.pause_until, h.stale) == (True, "x_login_required", None, True)
+    assert h.completeness.endswith("; stale")
+    put_spent(used=120, spent_day=None, pause_reason="x_login_required", pause_until=None,
+              last_unit_at=(NOW - timedelta(seconds=GAP)).isoformat())
+    assert x_health(NOW).stale is False
+
+
+def test_stuck_source_without_budget_spent_is_still_stale(live):
+    put_spent(used=300, spent_day=None, last_unit_at=(NOW - timedelta(seconds=2 * GAP + 1)).isoformat())
+    h = x_health(NOW)
+    assert (h.budget_spent, h.paused, h.stale) == (False, False, True)
+    assert h.completeness.endswith("; stale")
+    put_spent(used=300, spent_day=None, last_unit_at=None)                        # never ran a unit
+    assert x_health(NOW).stale is True
+    yesterday = (TODAY - timedelta(days=1)).isoformat()                           # an old spent day ended long ago
+    put_spent(budget_day=yesterday, used=800, spent_day=yesterday)
+    assert x_health(NOW).stale is True
+
+
+def test_completeness_text_has_no_stale_suffix_when_waiting_by_design(live):
+    put_spent()
+    h = x_health(NOW)
+    assert "stale" not in h.completeness
+    assert h.completeness.endswith("; waiting for next UTC day")
+    late = NEXT_DUE + timedelta(seconds=2 * GAP + 1)
+    assert "waiting" not in x_health(late, late.date()).completeness
+
+
+def test_rows_without_worker_state_unchanged(live):
+    baseline = [r.model_dump() for r in src.build_sources(TODAY, now=NOW).sources]
+    put_spent()
+    res = src.build_sources(TODAY, now=NOW)
+    assert row(res, "xsearch").health is not None
+    assert row(res, "reddit").health is None and "health" not in row(res, "reddit").model_dump()
+    assert ([r.model_dump() for r in res.sources if r.id != "xsearch"]
+            == [r for r in baseline if r["id"] != "xsearch"])
