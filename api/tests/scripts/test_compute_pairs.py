@@ -10,6 +10,7 @@ no fixture.
 from __future__ import annotations
 
 import json
+import os
 from itertools import combinations
 
 import pandas as pd
@@ -112,6 +113,29 @@ def test_writes_land_under_isolated_root(seeded, tmp_path):
     assert (tmp_path / "pairs" / "spreads" / "AAA_BBB.parquet").exists()
     assert not (tmp_path / "pairs" / "spreads.tmp").exists()
     assert not list((tmp_path / "pairs").glob("*.tmp"))
+
+
+def test_persisted_files_are_fsynced_with_unique_temps(seeded, monkeypatch):
+    """KG3: results, provenance and every spread file are fsynced before they
+    are renamed into place, through cache.py's same-directory unique temps; a
+    file sitting at the old fixed temp names is never overwritten or renamed."""
+    pairs_dir = cache.pairs_results_path().parent
+    pairs_dir.mkdir(parents=True, exist_ok=True)
+    foreign = [pairs_dir / "results.parquet.tmp", pairs_dir / "provenance.json.tmp"]
+    for f in foreign:
+        f.write_bytes(b"another writer")
+    synced: list[int] = []
+    real_fsync = os.fsync
+
+    def spy(fd):
+        synced.append(fd)
+        return real_fsync(fd)
+
+    monkeypatch.setattr(cache.os, "fsync", spy)
+    pairs_response.compute_and_persist()
+    assert len(synced) == 3 + 2  # three ok-pair spreads, results, provenance
+    assert [f.read_bytes() for f in foreign] == [b"another writer"] * 2
+    assert json.loads(cache.pairs_provenance_path().read_text())["universe"] == seeded
 
 
 def test_rerun_after_universe_change_updates_provenance(seeded, tmp_path, monkeypatch):

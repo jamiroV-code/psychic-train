@@ -135,14 +135,14 @@ def ohlcv_meta_path(symbol: str, timeframe: Timeframe) -> Path:
     return CACHE_ROOT / "ohlcv" / symbol.upper() / f"{timeframe}.meta.json"
 
 
-def _atomic_write_json(obj: dict, path: Path) -> None:
+def _atomic_write_bytes(data: bytes, path: Path) -> None:
     """Same all-or-nothing discipline as `_atomic_to_parquet`, for a small
-    JSON file: unique temp in the same directory, fsync, `os.replace`, temp
-    removed on any exception."""
+    file whose bytes are already built: unique temp in the same directory,
+    fsync, `os.replace`, temp removed on any exception. Written 0o644."""
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(obj, fh, separators=(",", ":"))
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
             fh.flush()
             os.fsync(fh.fileno())
         os.chmod(tmp, 0o644)
@@ -153,6 +153,11 @@ def _atomic_write_json(obj: dict, path: Path) -> None:
         except OSError:
             pass
         raise
+
+
+def _atomic_write_json(obj: dict, path: Path) -> None:
+    """Compact JSON through `_atomic_write_bytes`."""
+    _atomic_write_bytes(json.dumps(obj, separators=(",", ":")).encode("utf-8"), path)
 
 
 def write_ohlcv(
@@ -346,9 +351,7 @@ def write_liqtide_raw(date: str, raw: dict) -> bool:
     if path.exists():
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(raw, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    tmp.replace(path)
+    _atomic_write_bytes(json.dumps(raw, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), path)
     return True
 
 
@@ -526,9 +529,7 @@ def write_exchange_market_snapshot(date: str, names: list[str]) -> bool:
     if path.exists():
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(sorted(set(names)), ensure_ascii=False), encoding="utf-8")
-    tmp.replace(path)
+    _atomic_write_bytes(json.dumps(sorted(set(names)), ensure_ascii=False).encode("utf-8"), path)
     return True
 
 

@@ -2,6 +2,8 @@
 
 Source: T32 / S1 (screener batch 1, freshness core), decisions D7 and D18. Not scheduled.
 
+**Re-check 01-11-26 (not built):** D7 — S8 merged: while the worker runs (default on) page reads are cache-only (`refresh_worker.py:449-451`, `ccxt_adapter.py:547-549`) and failed pairs are skipped until the next backoff-aware tick (`refresh_worker.py:127-130,292,339`). Residual only with `SCREENER_REFRESH_WORKER=0`, where `ccxt_adapter.py:597-603` still retries per request. D18 — unchanged (`ccxt_adapter.py:632-635`, `gap-kept`); still needs the owner decision below.
+
 ## 1. Failed fetches are not negatively cached (D7)
 
 Since S1, a cache is fresh only when it was fetched inside the current bar and within `FORMING_TTL`. A fetch that FAILS (network error, rate limit, bad symbol) leaves the cache and its `fetched_at` sidecar untouched, so the next request retries the exchange at once. While the exchange is down, every board request therefore pays one failing call per (coin, timeframe): up to 30 coins x 4 fetched timeframes, each up to the ccxt timeout. `load_markets` failure is already latched per process (gap G4); per-fetch failures are not.

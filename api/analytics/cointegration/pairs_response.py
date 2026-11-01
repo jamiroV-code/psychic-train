@@ -131,12 +131,6 @@ def _spread_frame(spread: pd.Series) -> pd.DataFrame:
     })
 
 
-def _atomic_write_bytes(path, data: bytes) -> None:
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_bytes(data)
-    os.replace(tmp, path)
-
-
 def _coin_snapshot(coins: list[str]) -> tuple[dict, dict]:
     stats_by_coin = cache.ohlcv_footer_stats_many(coins, TIMEFRAME)
     last = {c: _iso(ts) for c, (_, ts) in stats_by_coin.items()}
@@ -171,17 +165,14 @@ def compute_and_persist() -> ComputeSummary:
     staging.mkdir(parents=True)
     for r in results:
         if r.status == "ok" and r.spread is not None:
-            _spread_frame(r.spread).to_parquet(
-                staging / cache.pairs_spread_path(r.symbol_a, r.symbol_b).name, index=False
+            cache._atomic_to_parquet(
+                _spread_frame(r.spread), staging / cache.pairs_spread_path(r.symbol_a, r.symbol_b).name
             )
     shutil.rmtree(spreads_dir, ignore_errors=True)
     os.replace(staging, spreads_dir)
 
     table = pd.DataFrame([_row(r, p) for r, p in zip(results, p_bh)])
-    res_path = cache.pairs_results_path()
-    tmp = res_path.with_name(res_path.name + ".tmp")
-    table.to_parquet(tmp, index=False)
-    os.replace(tmp, res_path)
+    cache._atomic_to_parquet(table, cache.pairs_results_path())
 
     provenance = {
         "computed_at": _utc_now_iso(),
@@ -191,7 +182,7 @@ def compute_and_persist() -> ComputeSummary:
         "statsmodels_version": statsmodels.__version__,
         "eg_autolag": stats.EG_AUTOLAG,
     }
-    _atomic_write_bytes(prov_path, json.dumps(provenance, indent=2).encode("utf-8"))
+    cache._atomic_write_bytes(json.dumps(provenance, indent=2).encode("utf-8"), prov_path)
 
     counts = {s: 0 for s in ("ok", "insufficient_overlap", "coin_unavailable")}
     for r in results:
