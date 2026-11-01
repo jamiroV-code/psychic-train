@@ -25,14 +25,16 @@ from api.data.attention.http_retry import describe_exc  # noqa: E402
 from api.data.attention import (  # noqa: E402
     coingecko_attention, exchange_volume, reddit, registry, store, trends, trends_keywords, trends_runs,
     universe_store,
-    categories_store, wikipedia, xsearch)
+    categories_store, coin_ledger, onboarding_settings, onboarding_store, wikipedia, xsearch)
 from api.scripts.attention_extra import reason_kind  # noqa: E402
 from api.scripts.trends_cli_common import PytrendsMissing, make_trendreq  # noqa: E402
 
 WIKI_ARTICLES_PATH = Path(__file__).resolve().parents[1] / "data" / "wiki_articles.json"
 DEFAULT_SYMBOLS = ("BTC", "ETH")
 # Volume and Trends are opt-in (--sources): they reach ccxt/pytrends, and are not-probed until G.
-DEFAULT_SOURCES = ("wikipedia", "coingecko", "universe", "signals")
+# T223: `ledger` follows `universe` (it reads today's snapshot) and never decides the exit code (see main()).
+DEFAULT_SOURCES = ("wikipedia", "coingecko", "universe", "ledger", "signals")
+LEDGER_EVENTS = ("entered", "joined", "inactive", "returned", "removed")
 # Consecutive rate-limited series after which the rest of a source is skipped (no more requests).
 CIRCUIT_BREAKER_AFTER = 5
 # Soft wall-clock per opt-in source (workflow step timeout is 8 min): stop cleanly, keep what was fetched.
@@ -150,14 +152,37 @@ def _collect_guarded(symbols, fetch, source: str, *, budget: float | None = None
     return out
 
 
+def _band_member_ids() -> set[str]:
+    """Coin ids the onboarding ledger holds as `member`; empty when there is no usable ledger."""
+    led, _ = onboarding_store.read_ledger()
+    return {cid for cid, e in led["coins"].items() if e["state"] == "member"} if led else set()
+
+
 def _universe_rows() -> list[dict]:
-    """Rows of the latest universe snapshot minus stablecoins and wrapped coins; [] when there is no snapshot."""
+    """Rows of the latest universe snapshot minus stablecoins and wrapped coins; [] when there is no snapshot.
+    T223 cap: rank 1-100 plus ledger members at rank 101 to the exit band, so the 120-row snapshot does not add
+    20 coins to every provider call. Rows without a rank (snapshots older than T223) are all kept."""
     snap = universe_store.read_latest()
     rows = snap.get("coins") if snap else None
     if not isinstance(rows, list):
         return []
     skip = coingecko_attention.STABLECOIN_SYMBOLS | coingecko_attention.WRAPPED_SYMBOLS
-    return [r for r in rows if isinstance(r, dict) and r.get("symbol") and str(r["symbol"]).upper() not in skip]
+    settings, _ = onboarding_settings.safe_load()
+    band = settings.exit_band_rank if settings else coin_ledger.TOP
+    members: set[str] | None = None
+    out = []
+    for r in rows:
+        if not (isinstance(r, dict) and r.get("symbol") and str(r["symbol"]).upper() not in skip):
+            continue
+        rank = r.get("rank")
+        if isinstance(rank, int) and not isinstance(rank, bool) and rank > coin_ledger.TOP:
+            if rank > band:
+                continue
+            members = _band_member_ids() if members is None else members
+            if r.get("id") not in members:
+                continue
+        out.append(r)
+    return out
 
 
 def _symbols(arg: str | None) -> list[str]:
@@ -450,10 +475,48 @@ def _run_signals(symbols, client, today, sleep):
     return signal_snapshots.take_snapshot(today)
 
 
+def _run_ledger(symbols, client, today, sleep) -> str:
+    """T223: advance the onboarding ledger from today's snapshot (seed it once when absent). No network call.
+    Returns the fixed-token status after `ledger: `; never a name or id (those go to the sanitized log only)."""
+    settings, _ = onboarding_settings.safe_load()
+    if settings is None:
+        return "unavailable settings"
+    snap = universe_store.read_latest()
+    if not snap:
+        return "unavailable no snapshot"
+    if snap.get("date") != today.isoformat():
+        return "skipped, stale snapshot"
+    if coin_ledger.band_rows(snap, settings.exit_band_rank) is None:
+        return "unavailable short snapshot"
+    led, state = onboarding_store.read_ledger()
+    if state == "corrupt":
+        return "unavailable corrupt ledger"
+    day = snap["date"]
+    if led is None:
+        lost = onboarding_store.has_log_history()
+        res = coin_ledger.seed(snap, settings)
+        onboarding_store.write_ledger(res.ledger)
+        onboarding_store.append_log(day, [{"source": "ledger", "action": "seeded", "coins": len(res.ledger["coins"]),
+                                           "lost_progress": lost}])
+        if lost:
+            print("ledger: warning re-seeded, probation progress lost", file=sys.stderr)
+        return f"ok seeded {len(res.ledger['coins'])}"
+    res = coin_ledger.advance(led, snap, settings)
+    if res.status == "same-date":
+        return "ok same-date, nothing changed"
+    onboarding_store.write_ledger(res.ledger)
+    coins = res.ledger["coins"]
+    onboarding_store.append_log(day, [
+        {"source": "ledger", "action": ev, "coin_id": cid,
+         "symbol": coins.get(cid, led["coins"].get(cid, {})).get("symbol")} for ev, cid in res.events])
+    counts = {k: sum(1 for ev, _ in res.events if ev == k) for k in LEDGER_EVENTS}
+    return "ok advanced" + "".join(f", {k} {n}" for k, n in counts.items() if n)
+
+
 RUNNERS = {"universe": _run_universe, "wikipedia": _run_wikipedia, "coingecko": _run_coingecko,
            "exchange_volume": _run_exchange_volume, "hyperliquid_volume": _run_hyperliquid_volume,
            "trends": _run_trends, "reddit": _run_reddit, "xsearch": _run_xsearch,
-           "categories": _run_categories, "signals": _run_signals}
+           "categories": _run_categories, "signals": _run_signals, "ledger": _run_ledger}
 
 
 def _snapshot_signals(run, symbols, client, today, sleep) -> None:
@@ -492,6 +555,9 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
     symbols = _symbols(args.symbols)
     if args.dry_run:
         for name in names:
+            if name == "ledger":
+                print("ledger: dry run, would advance the onboarding ledger (no network call, nothing written)")
+                continue
             if name == "signals":
                 print("signals: dry run, would snapshot windows 7,30,90 (no network call, nothing written)")
                 continue
@@ -502,6 +568,15 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
     results: dict[str, str] = {}
     try:
         for name in names:
+            if name == "ledger":   # never decides the exit code; one explicit fixed-token line
+                if results.get("universe") == "error":
+                    print("ledger: skipped, universe step failed")
+                    continue
+                try:
+                    print(f"ledger: {RUNNERS[name](symbols, client, today, sleep)}")
+                except Exception as exc:  # noqa: BLE001 - class only, never the message
+                    print(f"ledger: unavailable error {type(exc).__name__}")
+                continue
             if name == "signals":
                 _snapshot_signals(RUNNERS[name], symbols, client, today, sleep)
                 continue

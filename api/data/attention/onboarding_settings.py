@@ -16,7 +16,7 @@ MODES = ("shadow", "enforce")
 DEFAULT_MODE = "shadow"
 CLASSES = ("normal", "stablecoin", "wrapped_staked", "commodity_backed", "tokenized_fund")
 SOURCES = ("wikipedia", "trends", "reddit_x")
-SYMBOL_RE = re.compile(r"^[A-Z0-9_]{1,24}$")
+SYMBOL_RE = re.compile(r"^[A-Z0-9_\-]{1,24}$")
 INT_KEYS = {"probation_days": (1, 365), "exit_band_rank": (101, 250), "exit_days": (1, 365),
             "resolver_max_coins_per_run": (0, 100), "classify_max_coins_per_run": (0, 100),
             "identity_min_days": (1, 365), "wiki_min_days": (1, 365)}

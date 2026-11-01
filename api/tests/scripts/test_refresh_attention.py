@@ -100,7 +100,7 @@ def test_rerun_first_wins(isolated_cache):
 
 def test_default_sources_exclude_opt_in_volume_and_trends(isolated_cache):
     # default run must stay wikipedia + coingecko: no ccxt or pytrends (live) call
-    assert refresh_attention.DEFAULT_SOURCES == ("wikipedia", "coingecko", "universe", "signals")
+    assert refresh_attention.DEFAULT_SOURCES == ("wikipedia", "coingecko", "universe", "ledger", "signals")
     assert {"exchange_volume", "hyperliquid_volume", "trends"} <= set(refresh_attention.RUNNERS)
 
 
@@ -136,10 +136,10 @@ def test_universe_failure_keeps_old_file_and_counts_error(isolated_cache, capsys
 
 
 def test_default_sources_and_runners_are_pinned():
-    assert refresh_attention.DEFAULT_SOURCES == ("wikipedia", "coingecko", "universe", "signals")
+    assert refresh_attention.DEFAULT_SOURCES == ("wikipedia", "coingecko", "universe", "ledger", "signals")
     assert set(refresh_attention.RUNNERS) == {
         "universe", "wikipedia", "coingecko", "exchange_volume", "hyperliquid_volume",
-        "trends", "reddit", "xsearch", "categories", "signals"}
+        "trends", "reddit", "xsearch", "categories", "signals", "ledger"}
     for key, fn in refresh_attention.RUNNERS.items():
         assert fn.__name__ == "_run_" + key
 
@@ -246,7 +246,7 @@ def test_signals_option_writes_snapshot(isolated_cache, tmp_path, monkeypatch, c
 
 
 def test_signals_is_last_default_source():
-    assert refresh_attention.DEFAULT_SOURCES == ("wikipedia", "coingecko", "universe", "signals")
+    assert refresh_attention.DEFAULT_SOURCES == ("wikipedia", "coingecko", "universe", "ledger", "signals")
 
 
 def test_signals_dry_run_writes_nothing(isolated_cache, tmp_path, monkeypatch):

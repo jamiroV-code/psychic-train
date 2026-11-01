@@ -53,7 +53,7 @@ def test_top100_markets_unfiltered_with_volume(markets_json):
     c = client_for(lambda r: httpx.Response(200, json=markets_json))
     rows = cg.fetch_top100_markets(client=c)
     assert len(rows) == len(markets_json)
-    assert set(rows[0]) == {"id", "symbol", "market_cap", "volume_24h"}
+    assert set(rows[0]) == {"id", "symbol", "market_cap", "volume_24h", "rank", "name"}
     assert rows[0]["symbol"] == "BTC"
     assert {"USDT"} <= {r["symbol"] for r in rows} or len(rows) == len(markets_json)
 
@@ -62,6 +62,40 @@ def test_top100_markets_failure_returns_none():
     assert cg.fetch_top100_markets(client=client_for(lambda r: httpx.Response(500))) is None
     assert cg.fetch_top100_markets(client=client_for(lambda r: httpx.Response(429)),
                                    sleep=lambda x: None) is None
+
+
+def test_markets_fetch_asks_for_120_rows_and_keeps_rank_and_name():
+    seen = []
+    body = [{"id": f"coin-{i}", "symbol": f"c{i}", "name": f"Coin {i}", "market_cap": 1000 - i,
+             "total_volume": i} for i in range(120)]
+
+    def h(r: httpx.Request):
+        seen.append(r.url.params.get("per_page"))
+        return httpx.Response(200, json=body)
+    rows = cg.fetch_top100_markets(client=client_for(h))
+    assert seen == ["120"] == [str(cg.MARKETS_ROWS)]
+    assert [r["rank"] for r in rows] == list(range(1, 121))
+    assert rows[0]["name"] == "Coin 0" and rows[119]["symbol"] == "C119"
+
+
+def test_markets_fetch_drops_hostile_symbol_and_id_and_keeps_the_rank_of_the_rest():
+    body = [{"id": "bitcoin", "symbol": "btc", "name": "Bitcoin", "market_cap": 3},
+            {"id": "bad/../id", "symbol": "x", "name": "X", "market_cap": 2},
+            {"id": "ok-id", "symbol": "::warning::", "name": "Y", "market_cap": 1},
+            {"id": "eth.er_1", "symbol": "eth", "name": "\u202eEther", "market_cap": 1}]
+    rows = cg.fetch_top100_markets(client=client_for(lambda r: httpx.Response(200, json=body)))
+    assert [(r["id"], r["rank"]) for r in rows] == [("bitcoin", 1), ("eth.er_1", 4)]
+    assert rows[1]["name"] == "Ether"
+
+
+def test_chart_url_quotes_the_id():
+    seen = []
+
+    def h(r: httpx.Request):
+        seen.append(r.url.raw_path.decode())
+        return httpx.Response(200, json=chart_payload(95))
+    cg.fetch_series("BTC", "a b", client=client_for(h), today=TODAY)
+    assert "/coins/a%20b/market_chart" in seen[0]
 
 
 def _cat_handler(by_cat, status=200):

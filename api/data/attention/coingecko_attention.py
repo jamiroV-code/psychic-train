@@ -6,8 +6,10 @@ UTC days only; the store drops today).
 """
 from __future__ import annotations
 
+import re
 import time
 from datetime import date, datetime, timezone
+from urllib.parse import quote
 
 import httpx
 
@@ -28,6 +30,13 @@ PACER = Pacer(MIN_INTERVAL_SECONDS)
 # Why the last fetch_* call returned None (redacted, short); read by the refresh script.
 LAST_FAILURE = ""
 CATEGORY_PAUSE_SECONDS = 2.0
+# T223: the markets snapshot holds the exit band too (rank 101-120); scoring still takes the first 100.
+MARKETS_ROWS = 120
+# `-` is kept because live symbols carry it (BSC-USD); nothing that could open a workflow marker (`:`) passes.
+SNAPSHOT_SYMBOL_RE = re.compile(r"^[A-Z0-9_\-]{1,24}$")
+SNAPSHOT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,99}$")
+_NAME_UNSAFE = re.compile("[\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]")
+NAME_MAX = 100
 
 # Excluded from the D-3 reference universe (stablecoins, wrapped/staked wrappers).
 STABLECOIN_SYMBOLS = frozenset({"USDT", "USDC", "DAI", "USDE", "FDUSD", "TUSD", "USDD", "PYUSD", "USDS", "USD1"})
@@ -71,18 +80,27 @@ def fetch_top100(*, client: httpx.Client, sleep=time.sleep) -> list[dict] | None
 
 
 def fetch_top100_markets(*, client: httpx.Client, sleep=time.sleep) -> list[dict] | None:
-    """Top-100 by market cap, unfiltered: {id, symbol, market_cap, volume_24h}. None on failure.
+    """Top MARKETS_ROWS by market cap, unfiltered: {id, symbol, name, rank, market_cap, volume_24h}. None on failure.
 
-    The markets endpoint carries no category tags, so none are kept.
+    `rank` is the position in the cap-ordered answer (1-based). A row whose symbol or id fails the snapshot
+    patterns is dropped (its rank stays unused, so the ledger sees the gap and fails closed). The markets
+    endpoint carries no category tags, so none are kept.
     """
     _fail("")
     try:
         resp = _get(client, MARKETS_URL, {"vs_currency": "usd", "order": "market_cap_desc",
-                                          "per_page": 100, "page": 1}, sleep)
+                                          "per_page": MARKETS_ROWS, "page": 1}, sleep)
         if resp.status_code >= 400:
             return _status_failure(resp)
-        return [{"id": r["id"], "symbol": str(r["symbol"]).upper(), "market_cap": r.get("market_cap"),
-                 "volume_24h": r.get("total_volume")} for r in resp.json()]
+        out = []
+        for i, r in enumerate(resp.json()):
+            sym, cid = str(r["symbol"]).upper(), r["id"]
+            if not (isinstance(cid, str) and SNAPSHOT_ID_RE.match(cid) and SNAPSHOT_SYMBOL_RE.match(sym)):
+                continue
+            name = _NAME_UNSAFE.sub("", str(r.get("name") or ""))[:NAME_MAX] or None
+            out.append({"id": cid, "symbol": sym, "name": name, "rank": i + 1, "market_cap": r.get("market_cap"),
+                        "volume_24h": r.get("total_volume")})
+        return out
     except Exception as exc:
         return _fail(describe_exc(exc))
 
@@ -115,7 +133,7 @@ def fetch_series(symbol: str, coin_id: str, *, client: httpx.Client,
     sym = symbol.upper()
     today = today or datetime.now(timezone.utc).date()
     try:
-        resp = _get(client, CHART_URL.format(coin_id=coin_id),
+        resp = _get(client, CHART_URL.format(coin_id=quote(str(coin_id), safe="")),
                     {"vs_currency": "usd", "days": 100, "interval": "daily"}, sleep)
         if resp.status_code == 429:
             return SourceSeries("coingecko", sym, [], "capped", "HTTP 429")
