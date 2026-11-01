@@ -21,6 +21,8 @@ import {
   moveGroup,
   renameGroup,
   toggleLine,
+  sortGroup,
+  type SortKey,
 } from "@/lib/layout-state";
 import { shareStructure, VOLATILE } from "@/lib/same-data";
 import type { Layout, LayoutUpdate } from "@/lib/types/layout";
@@ -142,8 +144,8 @@ export function ScreenerBoard({
 
   // Callbacks below read the latest values from refs, so they stay stable
   // and the memo panels are not re-rendered by a new function.
-  const latest = useRef({ groups, hidden: layout?.hidden_lines ?? [], timeframe, fetchBoard, addCoin, removeCoin });
-  latest.current = { groups, hidden: layout?.hidden_lines ?? [], timeframe, fetchBoard, addCoin, removeCoin };
+  const latest = useRef({ groups, panels, hidden: layout?.hidden_lines ?? [], timeframe, fetchBoard, addCoin, removeCoin });
+  latest.current = { groups, panels, hidden: layout?.hidden_lines ?? [], timeframe, fetchBoard, addCoin, removeCoin };
   const alive = useRef(true);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The data-testid to focus after the next render (a moved control, a heading).
@@ -301,6 +303,35 @@ export function ScreenerBoard({
     [commit, announce, variant.nounPlural],
   );
 
+  // AC-8: a one-shot sort rewrites the saved order. % change is the shown
+  // timeframe's chip; a missing value is never read as 0 and goes last.
+  const onSortGroup = useCallback(
+    (groupId: string, key: SortKey) => {
+      const { groups: current, panels: byCoin, hidden, timeframe: tf } = latest.current;
+      const group = current.find((g) => g.id === groupId);
+      if (!group) return;
+      const values = new Map<string, number | null>(
+        group.coins.map((c) => {
+          const p = byCoin.get(c);
+          return [c, key === "rsi" ? (p?.rsi?.value ?? null) : (p?.gain_by_timeframe?.[tf]?.pct ?? null)];
+        }),
+      );
+      const next = sortGroup(current, groupId, key, values);
+      if (next !== current) commit(next, hidden);
+      if (key === "name") {
+        announce(`${group.name} sorted by name, A to Z.`);
+        return;
+      }
+      const missing = group.coins.filter((c) => {
+        const v = values.get(c);
+        return typeof v !== "number" || !Number.isFinite(v);
+      }).length;
+      const label = key === "rsi" ? "RSI" : `% change (${tf})`;
+      announce(`${group.name} sorted by ${label}, high to low${missing ? `; ${missing} without a value placed last` : ""}.`);
+    },
+    [commit, announce],
+  );
+
   const onToggleLine = useCallback(
     (symbol: string) => {
       const { groups: current, hidden } = latest.current;
@@ -456,6 +487,7 @@ export function ScreenerBoard({
                   onRenameGroup={onRenameGroup}
                   onMoveGroup={onMoveGroup}
                   onDeleteGroup={onDeleteGroup}
+                  onSortGroup={onSortGroup}
                 />
               ))}
             </div>
