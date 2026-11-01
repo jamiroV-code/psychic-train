@@ -244,3 +244,9 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 - **Date:** 29-10-26. **Reason:** GitHub stays the shared source of truth while more than one machine works on the repo. **Alternatives:** keep committing on `main` locally (rejected: diverges from the PC agent's pushes).
 - **Consequences:** supersedes the old "commit on main" rule in CLAUDE.md, AGENTS.md, implementation-standards.md, master-planner.md and operating-instructions.md. The daily data workflows push to `main` as github-actions[bot] and are untouched. Tooling: `scripts/pc-sync/`. omp mapping notes (UNVERIFIED): `process/context/omp-setup.md`.
 - **Status:** active.
+
+### D-29 Pegged and commodity-backed tokens are out of the Discovery universe
+- **Decision:** (owner, 01-11-26) tokens whose price is pegged to a fiat currency or a commodity are excluded from the Discovery universe: USD0 joins the `stablecoin` class; a new class `commodity_backed` (reason `commodity-backed`, detail "gold or commodity backed") holds PAXG and XAUT. Both are listed in `api/data/discovery.json` under `universe_rules.classes`.
+- **Date:** 01-11-26. **Reason:** attention to a pegged token measures attention to the peg or the commodity, not to the coin. USD0 was missing from the stablecoin list; no class existed for gold-backed tokens. **Alternatives:** use `not_tradeable` config text (rejected: it says "not tradeable", which is wrong for PAXG and XAUT); leave in and only label (rejected by the owner).
+- **Consequences:** a new closed reason `commodity-backed` in `excluded_counts` and `excluded_coins` (API additive key, web label and sentence added); on the shipped fixture the eligible universe is 74 (was 76). Further gold or commodity tokens are added to the class list, not the code. Does not change D-22..D-27.
+- **Status:** active.

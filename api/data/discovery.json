@@ -82,8 +82,9 @@
     "thin_volume_label_below_usd": 20000000,
     "classes": {
       "stablecoin": ["USDT", "USDC", "USDS", "USDE", "DAI", "USD1", "PYUSD", "USDD", "USDG", "RLUSD", "USDF", "BFUSD",
-                     "USDGO", "OUSD", "GHO", "U", "FDUSD", "TUSD"],
+                     "USDGO", "OUSD", "GHO", "U", "FDUSD", "TUSD", "USD0"],
       "wrapped_staked": ["WBTC", "WETH", "STETH", "WSTETH", "WEETH", "CBBTC", "WBETH", "BSC-USD", "WBNB"],
+      "commodity_backed": ["PAXG", "XAUT"],
       "tokenized_fund": ["USDY", "BUIDL", "USYC", "USTB", "EUTBL", "EURSAFO", "BCAP", "FIGR_HELOC"]
     },
     "not_tradeable": {},

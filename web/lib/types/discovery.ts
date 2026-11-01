@@ -57,6 +57,7 @@ export interface DiscoveryExcluded {
 export type DiscoveryExclusionReason =
   | "stablecoin"
   | "wrapped-staked"
+  | "commodity-backed"
   | "no-market"
   | "not-tradeable-config"
   | "not-tradeable"

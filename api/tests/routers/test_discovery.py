@@ -106,8 +106,8 @@ def test_payload_is_backward_compatible_with_a_not_tradeable_coin(isolated_cache
     body = TestClient(app).get(URL, params={"window": 30}).json()
     assert OLD_TOP <= set(body) and set(body) - OLD_TOP == {"tradeability_unknown", "venue_lists",
                                                              "tradeability_data_suspect"}
-    assert set(body["excluded_counts"]) == OLD_REASONS | {"not-tradeable"}
-    assert all(body["excluded_counts"][k] == 0 for k in OLD_REASONS)
+    assert set(body["excluded_counts"]) == OLD_REASONS | {"not-tradeable", "commodity-backed"}
+    assert all(body["excluded_counts"][k] == 0 for k in OLD_REASONS | {"commodity-backed"})
     assert body["excluded_counts"]["not-tradeable"] == 1
     assert body["excluded_coins"] == [{"symbol": "JAAA", "reason": "not-tradeable", "detail": "zero 24h volume"}]
     assert body["excluded"] == {"exclusion_list": 1, "below_volume_floor": 0, "no_category": 0, "no_source_data": 0}
