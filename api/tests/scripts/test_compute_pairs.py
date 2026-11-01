@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+import time
 from itertools import combinations
 
 import pandas as pd
@@ -113,6 +115,7 @@ def test_writes_land_under_isolated_root(seeded, tmp_path):
     assert (tmp_path / "pairs" / "spreads" / "AAA_BBB.parquet").exists()
     assert not (tmp_path / "pairs" / "spreads.tmp").exists()
     assert not list((tmp_path / "pairs").glob("*.tmp"))
+    assert not list((tmp_path / "pairs").glob("spreads.tmp*"))
 
 
 def test_persisted_files_are_fsynced_with_unique_temps(seeded, monkeypatch):
@@ -146,6 +149,127 @@ def test_rerun_after_universe_change_updates_provenance(seeded, tmp_path, monkey
     assert prov["universe"] == ["AAA", "BBB", "CCC"]
     assert len(pd.read_parquet(cache.pairs_results_path())) == 3
     assert len(list(cache.pairs_spreads_dir().iterdir())) == 3  # stale spread files removed
+
+
+# ------------------------------------------- spreads staging (KG3 follow-up)
+
+OK_SPREADS = ["AAA_BBB.parquet", "AAA_CCC.parquet", "BBB_CCC.parquet"]
+
+
+def _is_spread_write(path) -> bool:
+    return path.parent != cache.pairs_results_path().parent
+
+
+def _assert_one_complete_spreads_dir(pairs_dir):
+    spreads = cache.pairs_spreads_dir()
+    assert sorted(p.name for p in spreads.iterdir()) == OK_SPREADS
+    for name in OK_SPREADS:
+        sp = pd.read_parquet(spreads / name)
+        assert list(sp.columns) == ["date", "spread", "z_score"] and len(sp) == 500
+    assert not list(pairs_dir.glob("spreads.tmp*"))  # no staging dir left behind
+
+
+def test_overlapping_runs_do_not_clobber_each_others_staging(seeded, monkeypatch):
+    """Run B starts staging while run A has already staged a spread file; then
+    both finish staging and swap at the same moment. Neither run may lose or
+    have overwritten the files it staged, both must finish, and exactly one
+    complete spreads dir must remain, holding one run's files only, with no
+    staging dir left behind. B's spreads are shifted so the runs' bytes differ."""
+    a_staged, b_staged = threading.Event(), threading.Event()
+    swap_together = threading.Barrier(2, timeout=10)
+    real_write, real_bh = cache._atomic_to_parquet, stats.bh_adjust
+    written: dict[str, dict] = {"A": {}, "B": {}}
+    clobbered: list[str] = []
+
+    def bh_adjust(results):
+        if threading.current_thread().name == "B":
+            assert a_staged.wait(10)  # B reaches its staging step only after A staged a file
+        return real_bh(results)
+
+    def write(df, path):
+        if not _is_spread_write(path):
+            return real_write(df, path)
+        me = threading.current_thread().name
+        if me == "B":
+            df = df.assign(spread=df["spread"] + 1.0)
+        real_write(df, path)
+        mine = written[me]
+        mine[path] = path.read_bytes()
+        if len(mine) == 1:
+            if me == "A":
+                a_staged.set()
+                assert b_staged.wait(10)  # A keeps staging only after B has started staging
+            else:
+                b_staged.set()
+        if len(mine) == len(OK_SPREADS):
+            clobbered.extend(f"{me}:{p.name}" for p, b in mine.items()
+                             if not p.exists() or p.read_bytes() != b)
+            swap_together.wait()
+
+    monkeypatch.setattr(stats, "bh_adjust", bh_adjust)
+    monkeypatch.setattr(cache, "_atomic_to_parquet", write)
+    errors: list[BaseException] = []
+
+    def run():
+        try:
+            pairs_response.compute_and_persist()
+        except BaseException as e:  # noqa: BLE001 - surfaced by the assertion below
+            errors.append(e)
+
+    threads = [threading.Thread(target=run, name=n) for n in ("A", "B")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(60)
+    assert not any(t.is_alive() for t in threads)
+    assert errors == [] and clobbered == []
+    _assert_one_complete_spreads_dir(cache.pairs_results_path().parent)
+    final = {p.name: p.read_bytes() for p in cache.pairs_spreads_dir().iterdir()}
+    assert final in [{p.name: b for p, b in written[r].items()} for r in ("A", "B")]  # one run's set, not a mix
+    assert json.loads(cache.pairs_provenance_path().read_text())["universe"] == seeded
+
+
+def test_failure_mid_staging_keeps_previous_spreads_and_cleans_staging(seeded, monkeypatch):
+    pairs_response.compute_and_persist()
+    spreads = cache.pairs_spreads_dir()
+    before = {p.name: p.read_bytes() for p in spreads.iterdir()}
+    real_write = cache._atomic_to_parquet
+    calls = []
+
+    def write(df, path):
+        if _is_spread_write(path):
+            calls.append(path)
+            if len(calls) == 2:
+                raise OSError("disk full")
+        return real_write(df, path)
+
+    monkeypatch.setattr(cache, "_atomic_to_parquet", write)
+    with pytest.raises(OSError, match="disk full"):
+        pairs_response.compute_and_persist()
+    assert {p.name: p.read_bytes() for p in spreads.iterdir()} == before
+    assert not list(spreads.parent.glob("spreads.tmp*"))
+
+
+def test_stale_staging_dirs_swept_but_live_one_kept(seeded):
+    """A crashed run's staging dirs older than the safe age are removed at the
+    start of a run; a recent one (a concurrent live run) is never touched."""
+    pairs_dir = cache.pairs_results_path().parent
+    pairs_dir.mkdir(parents=True, exist_ok=True)
+    old = time.time() - 2 * 3600
+    stale = [pairs_dir / "spreads.tmp", pairs_dir / "spreads.tmp.crashed"]
+    for d in stale:
+        d.mkdir()
+        (d / "AAA_BBB.parquet").write_bytes(b"partial")
+        os.utime(d / "AAA_BBB.parquet", (old, old))
+        os.utime(d, (old, old))
+    live = pairs_dir / "spreads.tmp.live"
+    live.mkdir()
+    (live / "AAA_BBB.parquet").write_bytes(b"another run")
+
+    pairs_response.compute_and_persist()
+    assert not any(d.exists() for d in stale)
+    assert (live / "AAA_BBB.parquet").read_bytes() == b"another run"
+    assert sorted(p.name for p in cache.pairs_spreads_dir().iterdir()) == OK_SPREADS
 
 
 def test_johansen_refused_pair_stays_ok(seeded, monkeypatch):
