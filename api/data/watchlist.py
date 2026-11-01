@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 import threading
 from pathlib import Path
 
@@ -96,10 +97,28 @@ def _load_raw(path: Path) -> dict:
 
 
 def _save_raw(path: Path, data: dict) -> None:
+    """All-or-nothing write: unique temp in the same directory, fsync,
+    `os.replace`, temp removed on any exception. A crash mid-write leaves
+    the previous file intact (the file is gitignored; there is no backup).
+    Same pattern as `cache._atomic_write_json`, kept local because that
+    helper writes compact JSON and this file must stay `indent=2` + newline
+    so it remains hand-editable and diffs do not change."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-        f.write("\n")
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def read_watchlist(path: Path | None = None) -> list[str]:
