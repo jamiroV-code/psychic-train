@@ -14,15 +14,14 @@ seed category it archives one point per source:
                                    ADR-8 / Stage 0 decision C1)
   coingecko-narrative/{category}   trending count via the CURATED map
                                    (RFC-3 decision D1). The legacy
-                                   `coingecko/{category}` series written by
-                                   trigger.py is never touched here.
+                                   `coingecko/{category}` series (written by
+                                   the removed trigger.py) is never touched.
   exchange/...                     Hyperliquid snapshot via
                                    exchange_attention.run_daily() (already
                                    append-only)
 
-It deliberately does NOT call `trigger.compute_narrative_categories`, so it
-never writes the legacy CoinGecko count or trigger state; `/categories` only
-sees more history on the keyword-keyed series it already reads.
+It never writes the legacy CoinGecko count or any trigger state (the old
+`trigger.py` and `/categories` router were removed in P5).
 
 Idempotency (decision C2, first observation wins): before every write the
 script reads the target series and skips if a row for that date already
@@ -142,8 +141,8 @@ def snapshot_pytrends_sources(categories: list[dict], today: str) -> list[Source
     as_of = res.as_of
 
     # Primary rows: separate unbatched top-up per keyword so pytrends/{kw}
-    # keeps its pre-RFC-3 single-keyword scale (trigger.py / /categories
-    # reads this key). A failed top-up skips the row — never falls back to
+    # keeps its pre-RFC-3 single-keyword scale (the archived series predate
+    # RFC-3 batching). A failed top-up skips the row — never falls back to
     # the batched, anchor-rescaled value.
     for cat in need_prim:
         kw = _keyword(cat)

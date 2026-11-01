@@ -2,7 +2,7 @@
 new-listing counts. Narrative dashboard RFC-2, ADR-6.
 
 DISPLAY-ONLY. Nothing here is imported by `screener_board.py`
-(the old `trigger.py` and `/categories` router are removed); it feeds `/history` only.
+(the old `trigger.py` and `/categories` router were removed in P5); it feeds `/history` only.
 
 Formulas (Stage 0 decisions D1/D3, 2026-09-24):
 - volume share(cat) = Σ 24h quote volume of active non-HIP-3 perps resolved
