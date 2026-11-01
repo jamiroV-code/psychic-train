@@ -24,7 +24,8 @@ Contract (same as the other adapters): typed result, `status` is
 `ok | unavailable | stale`, never raises. Cache-first: the live page is
 requested at most once per UTC day (a failed attempt counts), and each
 successful fetch is merged into `cache/etf_flows/btc_spot.parquet`
-(`date, net_flow_usd_m`, overwrite-merge deduped on date — plan §12b).
+(`date, net_flow_usd_m`, overwrite-merge deduped on date — plan §12b),
+written all-or-nothing through `cache._atomic_to_parquet` (KG5).
 """
 from __future__ import annotations
 
@@ -107,7 +108,7 @@ def merge_into_cache(fetched: pd.DataFrame) -> pd.DataFrame:
     merged = merged.drop_duplicates(subset="date", keep="last").sort_values("date").reset_index(drop=True)
     path = cache_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    merged.to_parquet(path, index=False)
+    cache._atomic_to_parquet(merged, path)
     return merged
 
 
