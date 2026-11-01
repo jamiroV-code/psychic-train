@@ -1,7 +1,9 @@
-"""Daily spot-volume refresh for the Discovery exchange slot (Binance, Coinbase, Kraken), run inside the API process.
+"""Daily attention-store refresh run inside the API process: spot volume for the Discovery exchange slot (Binance,
+Coinbase, Kraken) and DefiLlama fees for the `defillama` source.
 
 Why here and not in GitHub Actions: Binance refuses GitHub's US runners (HTTP 451). The PC already runs the API, so a
-small daemon thread keeps `attention/{binance,coinbase,kraken}_volume/` current on the owner's own connection.
+small daemon thread keeps `attention/{exchange,coinbase,kraken}_volume/` and `attention/defillama/` current on the
+owner's own connection.
 
 * The first pass starts `FIRST_DELAY_SECONDS` after start; later passes run at `RUN_AT_UTC` each day (a completed UTC
   day is only final after midnight) and again after `RETRY_SECONDS` while any venue had a provider failure.
@@ -24,7 +26,7 @@ from typing import Callable
 import httpx
 
 from api.data import refresh_worker
-from api.data.attention import spot_volume, store
+from api.data.attention import defillama, spot_volume, store
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +35,12 @@ FIRST_DELAY_SECONDS = 45.0
 RUN_AT_UTC = dtime(0, 40)
 RETRY_SECONDS = 3600.0
 # A reason that is a fact about the coin or the venue's contract, not a failure worth an early retry.
-_FACT_REASONS = ("not listed", "empty response")
+_FACT_REASONS = ("not listed", "no protocol", "empty response")
+# name -> (fetch(symbol, client, today), store, seconds between requests)
+SOURCES = {
+    **{v: (f, spot_volume.STORES[v], spot_volume.PACE_SECONDS[v]) for v, f in spot_volume.FETCHERS.items()},
+    "defillama": (defillama.fetch_series, defillama.SOURCE, 0.3),
+}
 
 
 def _utc_now() -> datetime:
@@ -61,8 +68,7 @@ def refresh_once(symbols: list[str], *, today: date, client: httpx.Client, sleep
     """One pass over every venue and coin: `{venue: {"written": n, "ok": n, "skipped": n, "fact": n, "failed": n}}`."""
     stop = stopping or threading.Event()
     out: dict[str, dict[str, int]] = {}
-    for venue, fetch in spot_volume.FETCHERS.items():
-        store_name = spot_volume.STORES[venue]
+    for venue, (fetch, store_name, pace) in SOURCES.items():
         counts = out[venue] = {"written": 0, "ok": 0, "skipped": 0, "fact": 0, "failed": 0}
         for sym in symbols:
             if stop.is_set():
@@ -72,7 +78,7 @@ def refresh_once(symbols: list[str], *, today: date, client: httpx.Client, sleep
                 counts["skipped"] += 1
                 continue
             series = fetch(sym, client, today)
-            sleep(spot_volume.PACE_SECONDS[venue])
+            sleep(pace)
             if series.state in ("ok", "insufficient-history"):
                 try:
                     counts["written"] += store.write_series(series, today=today)

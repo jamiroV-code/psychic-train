@@ -29,10 +29,11 @@ SOURCE_IMPLS = {"xsearch": ("xsearch", "xsearch_web"), "reddit": ("reddit", "red
 # step: a stored file is itself the evidence that the worker ran there, so the probe-record gate does not apply.
 PC_STORES = frozenset({"xsearch_web", "reddit_web", "reddit_stream"})
 
-# Spot exchange volume (Binance, Coinbase, Kraken), fetched daily by the PC worker `spot_volume_refresh`: same
-# reasoning, a stored file is the evidence. Unlike PC_STORES these are plain registry series (fetch side `github`).
-SPOT_VOLUME_STORES = frozenset({"exchange_volume", "coinbase_volume", "kraken_volume"})
-PROBE_EXEMPT = PC_STORES | SPOT_VOLUME_STORES
+# Spot exchange volume (Binance, Coinbase, Kraken) and DefiLlama fees, fetched daily by the PC worker
+# `spot_volume_refresh`: same reasoning, a stored file is the evidence. Unlike PC_STORES these are plain registry
+# series (fetch side `github`).
+WORKER_FETCHED_STORES = frozenset({"exchange_volume", "coinbase_volume", "kraken_volume", "defillama"})
+PROBE_EXEMPT = PC_STORES | WORKER_FETCHED_STORES
 
 PROBE_RECORDS_PATH = Path(__file__).with_name("probe_records.json")
 
