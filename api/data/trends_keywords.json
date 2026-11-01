@@ -4,6 +4,7 @@
     "label": "Bitcoin (placeholder anchor)",
     "note": "placeholder: the owner picks the anchor (Bitcoin or Ethereum) from the probe_trends evidence"
   },
+  "_ambiguous": ["TRX", "ONDO", "MORPHO", "ICP", "SHIB", "PEPE", "BNB", "CRO", "HBAR", "LINK", "APT", "SOL", "SKY", "PI", "JST", "NEAR", "GRAM", "RAIN", "M", "CC", "LIT", "NIGHT", "STABLE"],
   "AAVE": {
     "topic": "/g/11w1qyc8h6",
     "label": "Aave",
@@ -31,6 +32,7 @@
   },
   "APT": {
     "term": "aptos crypto",
+    "approved": "aptos crypto",
     "label": "Aptos",
     "note": "qualified term, checker-given (owner checker run, T160)"
   },
@@ -96,6 +98,7 @@
   },
   "CRO": {
     "term": "cronos crypto",
+    "approved": "cronos crypto",
     "label": "Cronos",
     "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
@@ -226,6 +229,7 @@
   },
   "MORPHO": {
     "term": "morpho crypto",
+    "approved": "morpho crypto",
     "label": "Morpho",
     "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
@@ -251,6 +255,7 @@
   },
   "ONDO": {
     "term": "ondo crypto",
+    "approved": "ondo crypto",
     "label": "Ondo",
     "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
@@ -266,6 +271,7 @@
   },
   "PEPE": {
     "term": "Pepe coin",
+    "approved": "Pepe coin",
     "label": "Pepe coin",
     "note": "qualified term kept: already ends in the qualifier 'coin' (T160); not checker-verified"
   },
@@ -346,6 +352,7 @@
   },
   "TRX": {
     "term": "tron crypto",
+    "approved": "tron crypto",
     "label": "TRON",
     "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },

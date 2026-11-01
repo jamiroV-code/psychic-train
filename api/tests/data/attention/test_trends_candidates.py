@@ -10,6 +10,8 @@ from api.data.attention import trends
 from api.data.attention import trends_candidates as c
 from api.data.attention import trends_keywords as tk
 
+AMBIGUOUS = tk.load().ambiguous   # stage 2: the shipped `_ambiguous` list
+
 
 def terms(groups):
     return [list(g.terms) for g in groups]
@@ -42,9 +44,10 @@ def test_no_keyword_coin_has_no_baseline():
 
 
 def test_name_risk_coins_get_qualified_terms_only():
-    for sym in sorted(trends.NAME_RISK_SYMBOLS):
+    for sym in sorted(AMBIGUOUS):
         groups = c.candidate_groups(sym, {"term": f"{sym.lower()} crypto", "label": sym.title()},
-                                    query_name=sym.title(), coingecko_id=sym.lower(), max_groups=c.MAX_GROUPS)
+                                    query_name=sym.title(), coingecko_id=sym.lower(), max_groups=c.MAX_GROUPS,
+                                    ambiguous=AMBIGUOUS)
         for g in groups:
             for t in g.terms:
                 assert tk.is_valid_topic(t) or trends.is_qualified_term(t), (sym, t)

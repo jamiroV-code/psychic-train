@@ -213,9 +213,13 @@ def test_http_429_reason_has_status():
     assert all(f not in s.reason for f in fx.FORBIDDEN_IN_OUTPUT)
 
 
-def test_name_risk_symbols_match_t125_list():
-    assert trends.NAME_RISK_SYMBOLS == frozenset(
-        {"TRX", "ONDO", "MORPHO", "ICP", "SHIB", "PEPE", "BNB", "CRO", "HBAR", "LINK", "APT", "SOL"})
+def test_shipped_ambiguous_list_is_the_23_d7_coins():
+    """Stage 2 (D-30, D7): the ambiguity list lives in the keyword file; the T125 constant is gone."""
+    from api.data.attention import trends_keywords as tk
+    assert tk.load().ambiguous == frozenset(
+        {"TRX", "ONDO", "MORPHO", "ICP", "SHIB", "PEPE", "BNB", "CRO", "HBAR", "LINK", "APT", "SOL",
+         "SKY", "PI", "JST", "NEAR", "GRAM", "RAIN", "M", "CC", "LIT", "NIGHT", "STABLE"})
+    assert not hasattr(trends, "NAME_RISK_SYMBOLS")
 
 
 @pytest.mark.parametrize("term, ok", [

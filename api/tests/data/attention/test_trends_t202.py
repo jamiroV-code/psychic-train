@@ -7,8 +7,10 @@ from datetime import date, timedelta
 from api.data.attention import trends
 from api.data.attention import trends_candidates as c
 from api.data.attention import trends_groups as g
+from api.data.attention import trends_keywords as tk
 
 OK, SURGE, LITTLE = "ok", trends.QUIET_THEN_SURGE, trends.TOO_LITTLE_INTEREST
+AMBIGUOUS = tk.load().ambiguous   # stage 2: the shipped `_ambiguous` list, passed to candidate_groups
 
 
 def rv(verdict, clean=False, zero=0.0, distinct=5, corr=None):
@@ -81,13 +83,13 @@ def test_weak_non_name_risk_gets_four_including_both_bare_candidates():
 
 
 def test_weak_name_risk_gets_four_qualified_never_bare():
-    for sym in sorted(trends.NAME_RISK_SYMBOLS):
+    for sym in sorted(AMBIGUOUS):
         groups = c.candidate_groups(sym, {"term": f"{sym.lower()} crypto", "label": sym.title()},
-                                    query_name=sym.title(), coingecko_id=sym.lower())
+                                    query_name=sym.title(), coingecko_id=sym.lower(), ambiguous=AMBIGUOUS)
         assert 1 <= len(groups) <= 4
         assert not any(x.kind.startswith("bare") for x in groups), sym
     big = c.candidate_groups("SOL", {"term": "solana crypto", "label": "Solana"}, query_name="Solana",
-                             coingecko_id="solana")
+                             coingecko_id="solana", ambiguous=AMBIGUOUS)
     assert len(big) == 4
 
 
@@ -99,16 +101,16 @@ def test_weak_ceiling_is_the_argument_and_missing_baseline_is_weak():
 
 def test_request_total_for_78_coins_stays_under_the_bound():
     names = [a + b + "zz" for a in string.ascii_lowercase for b in string.ascii_lowercase][:78]
-    risky = sorted(trends.NAME_RISK_SYMBOLS)
+    risky = sorted(AMBIGUOUS)
     weak = usable = total = 0
     for i, n in enumerate(names):
         sym = risky[i] if i < len(risky) else n.upper() + "X"
-        nm = (sym.lower() if sym in trends.NAME_RISK_SYMBOLS else n + "one")
+        nm = (sym.lower() if sym in AMBIGUOUS else n + "one")
         is_usable = i % 3 == 0
         groups = c.candidate_groups(sym, {"term": f"{nm} crypto", "label": nm.title()}, query_name=nm.title(),
-                                    coingecko_id=nm, usable=is_usable)
+                                    coingecko_id=nm, usable=is_usable, ambiguous=AMBIGUOUS)
         assert len(groups) <= (2 if is_usable else 4), sym
-        if sym in trends.NAME_RISK_SYMBOLS:
+        if sym in AMBIGUOUS:
             assert not any(x.kind.startswith("bare") for x in groups)
         weak += not is_usable
         usable += is_usable

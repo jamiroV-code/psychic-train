@@ -124,7 +124,8 @@ def test_keyword_health_from_runs_then_stored_series():
     reader = {"AKE": good, "BTW": low, "OKB": []}.get
     h = tc.keyword_health(km, ["AKE", "BTW", "OKB", "NOPE", "GRAM"], {"GRAM": "too-little-interest"},
                           lambda s: reader(s, good))
-    assert h == {"AKE": "ok", "BTW": "weak", "OKB": "empty", "NOPE": "missing", "GRAM": "weak"}
+    # stage 2: GRAM is ambiguous and unapproved, so it has no pulled keyword and reads missing
+    assert h == {"AKE": "ok", "BTW": "weak", "OKB": "empty", "NOPE": "missing", "GRAM": "missing"}
     assert tc.keyword_health(km, ["AKE"], {"AKE": "ok"}, lambda s: low) == {"AKE": "ok"}
 
 

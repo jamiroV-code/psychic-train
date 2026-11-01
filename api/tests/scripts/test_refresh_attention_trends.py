@@ -23,6 +23,7 @@ KEYWORDS = {
     "SOL": {"topic": "/m/0sol", "label": "Solana"},
     "LINK": {"term": "Chainlink", "label": "Chainlink"},
     "USDX": {"no-keyword": True, "label": "USDX", "note": "stablecoin"},
+    "_ambiguous": ["LINK", "SOL"],   # stage 2: owner-kept ambiguity list (SOL is a topic, so still pulled)
 }
 
 
@@ -293,12 +294,13 @@ def test_time_budget_checked_inside_backoff(monkeypatch):
 
 
 @pytest.mark.parametrize("trx, apt, fetched", [
-    ("Tron", "Aptos", []),                                    # bare names: skipped, no request
-    ("tron crypto", "Aptos Crypto", ["tron crypto", "Aptos Crypto"]),   # qualified-term fallback: pulled
+    ({"term": "Tron"}, {"term": "aptos crypto"}, []),       # unapproved (bare or qualified): skipped, no request
+    ({"term": "tron crypto", "approved": "tron crypto"}, {"term": "Aptos Crypto", "approved": "Aptos Crypto"},
+     ["tron crypto", "Aptos Crypto"]),                      # stage 2: an approved term is pulled
 ])
 def test_risky_symbol_bare_term_skipped_qualified_term_fetched(monkeypatch, _env, capsys, trx, apt, fetched):
-    kw = dict(KEYWORDS, TRX={"term": trx, "label": "TRON", "note": "qualified-term fallback"},
-              APT={"term": apt, "label": "Aptos"})
+    kw = dict(KEYWORDS, TRX={**trx, "label": "TRON", "note": "qualified-term fallback"},
+              APT={**apt, "label": "Aptos"}, _ambiguous=["LINK", "SOL", "TRX", "APT"])
     _env.write_text(json.dumps(kw))
     out, client, _, _ = _run(monkeypatch, ["TRX", "APT", "SOL"], today=_day(0, len(fetched) + 1))
     assert client.terms() == fetched + ["/m/0sol"]  # a topic entry is always fetched

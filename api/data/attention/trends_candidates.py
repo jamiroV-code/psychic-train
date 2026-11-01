@@ -2,7 +2,7 @@
 
 Built from repo data only: the coin's keyword entry (topic or term, the baseline) and its names (keyword label,
 attention_queries.json display name, CoinGecko id, ticker). Every generated term passes the loader's safe-term check;
-a name-risk coin (trends.NAME_RISK_SYMBOLS) only ever gets qualified terms. Pure: no network, no store.
+an ambiguous coin (the keyword file's `_ambiguous` list, passed in) only ever gets qualified terms. Pure: no network, no store.
 """
 from __future__ import annotations
 
@@ -65,11 +65,12 @@ def _variants(names: list[str]) -> list[str]:
 
 def candidate_groups(symbol: str, entry: dict | None, *, query_name: str | None = None,
                      coingecko_id: str | None = None, max_groups: int = DEFAULT_MAX_GROUPS,
-                     usable: bool = False, max_usable: int = DEFAULT_MAX_USABLE) -> list[Candidate]:
+                     usable: bool = False, max_usable: int = DEFAULT_MAX_USABLE,
+                     ambiguous: frozenset[str] = frozenset()) -> list[Candidate]:
     """Groups in test order, deduped case-insensitively. A coin whose baseline (the current keyword) is usable gets at
     most max_usable groups: the baseline and the bundle of the current term plus the best variants (the best single
     variant when no bundle exists). Any other coin (weak, missing, empty, unknown) gets up to max_groups: the baseline,
-    the best single variant, then (not for a name-risk coin; marked 'needs qualifier word') the bare name and bare
+    the best single variant, then (not for an ambiguous coin; marked 'needs qualifier word') the bare name and bare
     ticker, then the bundle and further single variants."""
     if not 1 <= max_groups <= MAX_GROUPS or not 1 <= max_usable <= MAX_USABLE:
         raise ValueError(f"max_groups must be 1 to {MAX_GROUPS} and max_usable 1 to {MAX_USABLE}")
@@ -92,7 +93,7 @@ def candidate_groups(symbol: str, entry: dict | None, *, query_name: str | None 
         limit = max_usable
     else:
         bares: list[Candidate] = []
-        if symbol not in trends.NAME_RISK_SYMBOLS:
+        if symbol not in ambiguous:
             bare_name = next((n for n in _names("", entry.get("label"), query_name, coingecko_id)
                               if not trends.is_qualified_term(n)), None)
             if bare_name is not None:

@@ -46,7 +46,16 @@ PINNED_ELIGIBLE = (
     "SHIB", "SKY", "SOL", "SUI", "TAO", "TRX", "UNI", "VET", "VVV", "WBT", "WLD", "WLFI", "XAUT", "XDC", "XLM",
     "XMR", "XRP", "ZEC", "ZRO",
 )
-NO_GAPS = {"no-entry": [], "no-keyword": [], "skipped-unqualified": [], "allowlist-has-keyword": []}
+# Stage 2 (D-30, Q1): the ambiguous coins whose term the owner has not approved stop being pulled. STABLE is listed
+# too but is not in the pinned eligible set.
+UNAPPROVED_PINNED = ["CC", "GRAM", "JST", "LIT", "M", "NIGHT", "RAIN", "SKY"]
+SHIPPED_GAPS = {"no-entry": [], "no-keyword": [], "skipped-unqualified": UNAPPROVED_PINNED,
+                "allowlist-has-keyword": []}
+STAGE2_STOPPED = {"CC", "JST", "RAIN", "SKY", "GRAM", "LIT", "NIGHT", "M", "STABLE"}
+
+
+def _ambiguous_doc(**coins) -> dict:
+    return {**_doc(**coins), "_ambiguous": ["LINK"]}
 
 
 def test_pinned_eligible_set_is_the_reviewed_one():
@@ -55,13 +64,35 @@ def test_pinned_eligible_set_is_the_reviewed_one():
 
 def test_every_pinned_discovery_coin_has_a_trends_keyword():
     gaps = k.guard_gaps(k.load(), PINNED_ELIGIBLE)
-    assert gaps == NO_GAPS, f"eligible Discovery coins without a Google Trends keyword: {gaps}"
+    assert gaps == SHIPPED_GAPS, f"eligible Discovery coins without a Google Trends keyword: {gaps}"
+
+
+def _pulled_before_stage2(km, symbol: str) -> bool:
+    """The pre-stage-2 rule (T125 constant): a listed coin's term was pulled when it held a qualifier word."""
+    from api.data.attention import trends
+    t125 = {"TRX", "ONDO", "MORPHO", "ICP", "SHIB", "PEPE", "BNB", "CRO", "HBAR", "LINK", "APT", "SOL"}
+    e = km.entries.get(symbol) or {}
+    if "topic" in e:
+        return True
+    if "term" not in e:
+        return False
+    return symbol not in t125 or trends.is_qualified_term(e["term"])
+
+
+def test_stage2_exactly_the_nine_unapproved_coins_stop_being_pulled():
+    """E7: read from the shipped file before (old rule) and after (stage-2 rule)."""
+    m = k.load()
+    changed = {s for s in m.entries
+               if _pulled_before_stage2(m, s) != (k.keyword_status(m, s) in ("topic", "term"))}
+    assert changed == STAGE2_STOPPED
+    assert all(k.keyword_status(m, s) == "skipped-unqualified" for s in changed)
 
 
 def test_live_snapshot_gap_is_reported_never_failed():
     """A new live coin without a keyword only shows in the report line; the live set is never asserted gap-free."""
     line = k.gap_report(k.load(), [*PINNED_ELIGIBLE, "NEWCOIN"])
-    assert line == "trends keyword: 78 of 79 eligible coins; no keyword: NEWCOIN (no-entry)"
+    assert line == ("trends keyword: 70 of 79 eligible coins; no keyword: "
+                    + ", ".join(f"{s} (skipped-unqualified)" for s in UNAPPROVED_PINNED) + ", NEWCOIN (no-entry)")
     assert k.gap_report(k.load(), discovery.eligible_discovery_symbols()).startswith("trends keyword: ")
     assert k.gap_report(None, ["A"]) == "trends keyword: 0 of 1 eligible coins; no keyword: A (bad-file)"
     assert k.gap_report(k.load(), ["BTC"]) == "trends keyword: 1 of 1 eligible coins"
@@ -69,7 +100,7 @@ def test_live_snapshot_gap_is_reported_never_failed():
 
 def test_guard_lists_the_exact_missing_symbols(monkeypatch):
     monkeypatch.setattr(k, "UNIDENTIFIED_TICKERS", frozenset({"AKE"}))   # T192: the shipped list is empty
-    m = k.KeywordMap(**k.validate(_doc(
+    m = k.KeywordMap(**k.validate(_ambiguous_doc(
         SOL={"topic": "/m/0sol", "label": "Solana"}, LINK={"term": "Chainlink", "label": "Chainlink"},
         ZZZ=NO_KW, AKE=NO_KW)))
     gaps = k.guard_gaps(m, ["SOL", "NEWCOIN", "LINK", "ZZZ", "AKE"])
@@ -125,7 +156,7 @@ def test_keyword_status_kinds(entry, status):
 
 
 def test_name_risk_term_status():
-    m = k.KeywordMap(**k.validate(_doc(LINK={"term": "Chainlink", "label": "Chainlink"},
+    m = k.KeywordMap(**k.validate(_ambiguous_doc(LINK={"term": "Chainlink", "label": "Chainlink"},
                                        SOL={"term": "solana crypto", "label": "Solana"})))
     assert k.keyword_status(m, "LINK") == "skipped-unqualified"
     assert k.keyword_status(m, "SOL") == "term"
@@ -136,7 +167,7 @@ def test_keyword_status_without_a_map_is_bad_file():
 
 
 def test_coverage_counts_no_keyword_apart_from_topic_and_term():
-    m = k.KeywordMap(**k.validate(_doc(A={"topic": "/m/0a", "label": "A"}, B={"term": "Bcoin", "label": "B"},
+    m = k.KeywordMap(**k.validate(_ambiguous_doc(A={"topic": "/m/0a", "label": "A"}, B={"term": "Bcoin", "label": "B"},
                                        C=NO_KW, LINK={"term": "Chainlink", "label": "L"})))
     cov = k.coverage(m, ["A", "B", "C", "D", "LINK"])
     assert cov.counts == {"topic": 1, "term": 1, "keyword-missing": 3}

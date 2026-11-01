@@ -59,11 +59,8 @@ SURGE_RATIO = 3  # the last-week median must also be at least this many times th
 OUT_OF_RANGE = "out-of-range"
 NOT_CURRENT = "not-current"
 NAME_AMBIGUOUS = "name-ambiguous: needs topic or qualified term"
-# Bare names that collect unrelated searches (T125 review list): fetched by topic id or a qualified term only.
-NAME_RISK_SYMBOLS = frozenset(
-    {"TRX", "ONDO", "MORPHO", "ICP", "SHIB", "PEPE", "BNB", "CRO", "HBAR", "LINK", "APT", "SOL"})
-# A risky symbol's `term` is pulled only when qualified: a qualifier word beside the name ("tron crypto", the checker
-# v3 "qualified-term fallback"). A bare name or ticker is skipped; a `topic` entry is always pulled.
+# Stage 2 (D-30): which coins are ambiguous lives in the keyword file (`_ambiguous`), with per-coin approvals.
+# A qualifier word beside the name ("tron crypto") marks a qualified term (candidate generation, file checks).
 QUALIFIER_WORDS = frozenset({"crypto", "coin", "token", "network", "protocol", "finance", "swap", "chain"})
 
 

@@ -309,7 +309,9 @@ def test_t192_named_tickers_have_exact_qualified_terms():
     m = k.load()
     for sym, (term, label) in T192_TERMS.items():
         assert m.entries[sym] == {"term": term, "label": label, "note": T192_NOTE}, sym
-        assert trends.is_qualified_term(term) and k.keyword_status(m, sym) == "term", sym
+        # stage 2: GRAM, LIT, STABLE and RAIN are on `_ambiguous` without an approval, so they are not pulled
+        want = "skipped-unqualified" if sym in m.ambiguous else "term"
+        assert trends.is_qualified_term(term) and k.keyword_status(m, sym) == want, sym
 
 
 # T195: owner probes 26-10-26 showed the T192 terms for OKB and PEARL return mostly zero days; both go back to the
@@ -354,7 +356,8 @@ def test_t192_no_unidentified_entry_is_left():
 def test_t160_name_risk_symbols_never_have_a_bare_term():
     from api.data.attention import trends
     m = k.load()
-    for sym in trends.NAME_RISK_SYMBOLS:
+    assert m.ambiguous == STAGE2_AMBIGUOUS
+    for sym in m.ambiguous:
         e = m.entries[sym]
         assert "topic" in e or trends.is_qualified_term(e["term"]), sym
         if "term" in e:
@@ -389,3 +392,109 @@ def test_t160_every_eligible_discovery_symbol_has_an_entry_except_unidentified()
 def test_t160_shipped_file_loads_with_safe_load():
     loaded, reason = k.safe_load(placed_symbols=_placed())
     assert loaded is not None and reason == ""
+
+
+# --- Stage 2 (D-30): `_ambiguous` list and per-coin approvals bound to the term ---
+STAGE2_AMBIGUOUS = frozenset({"TRX", "ONDO", "MORPHO", "ICP", "SHIB", "PEPE", "BNB", "CRO", "HBAR", "LINK", "APT",
+                              "SOL", "SKY", "PI", "JST", "NEAR", "GRAM", "RAIN", "M", "CC", "LIT", "NIGHT", "STABLE"})
+STAGE2_APPROVED = {"ONDO": "ondo crypto", "PEPE": "Pepe coin", "TRX": "tron crypto", "APT": "aptos crypto",
+                   "CRO": "cronos crypto", "MORPHO": "morpho crypto"}
+TOPIC = {"topic": "/m/0abc", "label": "X"}
+NOKW = {"no-keyword": True, "label": "X", "note": "n"}
+
+
+def _amb(listed, **coins) -> dict:
+    return {**_doc(**coins), "_ambiguous": listed}
+
+
+def test_stage2_shipped_ambiguous_list_and_exact_approvals():
+    m = k.load()
+    assert m.ambiguous == STAGE2_AMBIGUOUS and len(m.ambiguous) == 23
+    assert {s: e["approved"] for s, e in m.entries.items() if "approved" in e} == STAGE2_APPROVED
+    for sym, term in STAGE2_APPROVED.items():
+        assert m.entries[sym]["term"] == term and k.keyword_status(m, sym) == "term", sym
+
+
+def test_stage2_ambiguous_list_valid_and_missing_key_loads():
+    m = k.KeywordMap(**k.validate(_amb(["SOL"], SOL=TOPIC)))
+    assert m.ambiguous == frozenset({"SOL"})
+    assert k.KeywordMap(**k.validate(_doc(SOL=TOPIC))).ambiguous == frozenset()
+
+
+@pytest.mark.parametrize("listed,needle", [
+    (["SOL", "SOL"], "twice"),
+    (["SOL", 7], "items must be symbols"),
+    (["_anchor"], "items must be symbols"),
+    (["sol"], "items must be symbols"),
+    ("SOL", "must be a list"),
+    (["SOL", "ZZZ"], "without an entry: ZZZ"),
+])
+def test_stage2_bad_ambiguous_list_is_refused(listed, needle):
+    assert needle in _err(_amb(listed, SOL=TOPIC))
+
+
+@pytest.mark.parametrize("entry,needle", [
+    ({**TOPIC, "approved": "x"}, "only on a coin's term entry"),
+    ({**NOKW, "approved": "x"}, "only on a coin's term entry"),
+    ({"term": "sol crypto", "label": "S", "approved": True}, "must equal its term"),
+    ({"term": "sol crypto", "label": "S", "approved": "solana crypto"}, "must equal its term"),
+])
+def test_stage2_bad_approval_is_refused(entry, needle):
+    assert needle in _err(_amb(["SOL"], SOL=entry))
+
+
+def test_stage2_approval_on_anchor_is_refused():
+    doc = _doc()
+    doc["_anchor"] = {"term": "Bitcoin", "label": "Bitcoin", "approved": "Bitcoin"}
+    assert "only on a coin's term entry" in _err(doc)
+
+
+def test_stage2_bad_approval_makes_safe_load_report_bad_file(tmp_path):
+    p = tmp_path / "kw.json"
+    p.write_text(json.dumps(_amb(["SOL"], SOL={"term": "sol crypto", "label": "S", "approved": "other"})))
+    m, reason = k.safe_load(p)
+    assert m is None and reason == k.BAD_FILE_REASON == "bad keyword file"
+    assert k.keyword_status(m, "SOL") == "bad-file"
+
+
+def test_stage2_keyword_status_rule():
+    m = k.KeywordMap(**k.validate(_amb(
+        ["APR", "UNA", "TOP", "NOK"],
+        APR={"term": "apr crypto", "label": "A", "approved": "apr crypto"},
+        UNA={"term": "una crypto", "label": "U"},
+        TOP=TOPIC, NOK=NOKW,
+        FREE={"term": "FREE", "label": "F"})))
+    assert k.keyword_status(m, "APR") == "term"                  # approved term pulled
+    assert k.keyword_status(m, "UNA") == "skipped-unqualified"   # unapproved term (qualified or not) skipped
+    assert k.keyword_status(m, "TOP") == "topic"                 # topic pulled
+    assert k.keyword_status(m, "NOK") == "no-keyword"
+    assert k.keyword_status(m, "FREE") == "term"                 # unlisted bare term pulled
+
+
+def test_stage2_term_edited_without_reapproval_is_skipped():
+    """A term edit with the old approval left is a bad file; with the approval removed the coin is skipped."""
+    assert "must equal its term" in _err(_amb(["APR"], APR={"term": "apr coin", "label": "A",
+                                                             "approved": "apr crypto"}))
+    m = k.KeywordMap(**k.validate(_amb(["APR"], APR={"term": "apr coin", "label": "A"})))
+    assert k.keyword_status(m, "APR") == "skipped-unqualified"
+
+
+def test_stage2_approval_for_another_coin_does_not_count():
+    m = k.KeywordMap(**k.validate(_amb(["AAA", "BBB"],
+                                       AAA={"term": "aaa crypto", "label": "A", "approved": "aaa crypto"},
+                                       BBB={"term": "bbb crypto", "label": "B"})))
+    assert k.keyword_status(m, "BBB") == "skipped-unqualified"
+
+
+def test_stage2_added_coin_takes_effect_from_the_file(tmp_path):
+    doc = json.loads(k.KEYWORDS_PATH.read_text(encoding="utf-8"))
+    assert k.keyword_status(k.load(), "AKE") == "term"
+    doc["_ambiguous"] = [*doc["_ambiguous"], "AKE"]
+    p = tmp_path / "kw.json"
+    p.write_text(json.dumps(doc), encoding="utf-8")
+    assert k.keyword_status(k.load(p), "AKE") == "skipped-unqualified"
+
+
+def test_stage2_keyword_map_positional_construction_still_works():
+    m = k.KeywordMap({"SOL": TOPIC}, {"term": "Bitcoin", "label": "B"}, [], [])
+    assert m.ambiguous == frozenset() and k.keyword_status(m, "SOL") == "topic"
