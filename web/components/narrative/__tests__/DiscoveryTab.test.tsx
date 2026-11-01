@@ -457,6 +457,20 @@ describe("DiscoveryTab", () => {
         "Trends keyword: 2 of 3 eligible coins. No Google Trends keyword yet: AKE");
     });
 
+    it("shows the waking-up watch list under the Trends row and drops a coin that left it (stage 2)", async () => {
+      const trendsRow = { id: "trends", label: "Google Trends", kind: "weighted" as const, weight: 20, state: "ok" as const, newest: "2026-10-17", history_days: 100, coins_with_data: 3, eligible_size: 3, note: "" };
+      const watch = [{ symbol: "QNT", days_held: 5 }, { symbol: "ENA", days_held: 1 }, { symbol: "KAS", days_held: 30 }];
+      const { unmount } = render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp())} fetchSources={() => Promise.resolve(src({ sources: [trendsRow], trends_watch: watch }))} />);
+      expect(await screen.findByTestId("sources-trends-watch")).toHaveTextContent(
+        "Waking up (daily pulls): QNT (5 days), ENA (1 day), KAS (30+ days)");
+      expect(screen.getByTestId("sources-row-trends").querySelector("td:last-child")?.textContent).toBe("");
+      unmount();
+      render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp())} fetchSources={() => Promise.resolve(src({ sources: [trendsRow], trends_watch: [{ symbol: "ENA", days_held: 2 }] }))} />);
+      const next = await screen.findByTestId("sources-trends-watch");
+      expect(next).toHaveTextContent("Waking up (daily pulls): ENA (2 days)");
+      expect(next.textContent).not.toContain("QNT");
+    });
+
     it("shows plain loading and error states without breaking the table", async () => {
       const { unmount } = render(<DiscoveryTab fetchDiscovery={() => Promise.resolve(resp())} fetchSources={() => new Promise(() => undefined)} />);
       expect(screen.getByTestId("sources-loading")).toBeInTheDocument();

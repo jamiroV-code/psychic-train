@@ -19,6 +19,7 @@ from api.data.attention import trends_candidates as tc_
 from api.data.attention import trends_groups as tg
 from api.data.attention import trends_keywords as tk
 from api.data.attention import trends_select as ts
+from api.data.attention.trends_runs import MAX_RUN_FILE_BYTES, RUN_FILE_RE, RUN_OUTCOMES, _latest_run
 
 STATE_VERSION = 1
 TESTER_VERSION = "t201-1"
@@ -138,20 +139,6 @@ def record(state: dict, symbol: str, cand: tc_.Candidate, loader_flags: dict, ou
     ranked = _ranked(coin)
     coin["best_group"] = ranked[0][0] if ranked else None
     coin["verdict"] = ranked[0][1]["metrics"]["verdict"] if ranked else None
-
-
-RUN_FILE_RE = re.compile(r"\d{4}-\d{2}-\d{2}\.json")
-RUN_OUTCOMES = frozenset({"ok", "too-little-interest", "quiet-then-surge", "no-keyword", "skipped-unqualified",
-                          "failed", "capped", "time-budget"})  # the daily run's own outcome strings (T197)
-MAX_RUN_FILE_BYTES = 5_000_000
-
-
-def _latest_run(doc) -> dict | None:
-    """The newest run of one file: a single run is the document itself, a second run on the same UTC day turns the
-    file into {"runs": [...]} (oldest first). None for any other shape."""
-    if isinstance(doc, dict) and isinstance(doc.get("runs"), list):
-        doc = doc["runs"][-1] if doc["runs"] else None
-    return doc if isinstance(doc, dict) and isinstance(doc.get("coins"), dict) else None
 
 
 def read_runs(runs_dir: Path) -> tuple[dict[str, str], str | None]:

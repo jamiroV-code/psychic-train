@@ -174,3 +174,35 @@ def test_trends_keyword_bad_file_counts_every_coin_missing(live, monkeypatch):
     _keywords(live, monkeypatch, "{bad")
     tk = src.build_sources(TODAY).trends_keyword
     assert tk.with_keyword == 0 and [g.detail for g in tk.missing] == ["bad-file"] * 3
+
+
+# --- stage 2 (D-30, S4): the waking-up watch list (shown only, never scored) ---
+
+def _run_file(day, coins):
+    import json as _json
+    from api.data import cache
+    d = cache.CACHE_ROOT / "attention" / "trends_runs"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{day.isoformat()}.json").write_text(_json.dumps({"coins": {s: {"outcome": o} for s, o in coins.items()}}))
+
+
+def test_trends_watch_present_and_empty(live):
+    assert src.build_sources(TODAY).trends_watch == []
+
+
+def test_trends_watch_lists_days_held(live):
+    _run_file(TODAY - timedelta(days=1), {"A": "quiet-then-surge", "B": "ok"})
+    _run_file(TODAY, {"A": "quiet-then-surge", "B": "quiet-then-surge"})
+    watch = src.build_sources(TODAY).trends_watch
+    assert [(w.symbol, w.days_held) for w in watch] == [("A", 2), ("B", 1)]
+    _run_file(TODAY, {"A": "ok", "B": "quiet-then-surge"})     # a coin that stops jumping leaves the list
+    assert [w.symbol for w in src.build_sources(TODAY).trends_watch] == ["B"]
+
+
+def test_sources_model_key_set_without_testclient():
+    from api.models.discovery import DiscoverySourcesResponse, DiscoveryTrendsWatch
+    assert set(DiscoverySourcesResponse.model_fields) == {
+        "as_of", "universe_size", "eligible_size", "live_sources", "total_sources", "live_weight", "newest",
+        "sources", "trends_keyword", "trends_watch"}
+    assert set(DiscoveryTrendsWatch.model_fields) == {"symbol", "days_held"}
+    assert DiscoverySourcesResponse.model_fields["trends_watch"].default is None
