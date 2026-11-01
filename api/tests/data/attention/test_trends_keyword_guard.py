@@ -46,12 +46,12 @@ PINNED_ELIGIBLE = (
     "SHIB", "SKY", "SOL", "SUI", "TAO", "TRX", "UNI", "VET", "VVV", "WBT", "WLD", "WLFI", "XAUT", "XDC", "XLM",
     "XMR", "XRP", "ZEC", "ZRO",
 )
-# Stage 2 (D-30, Q1): the ambiguous coins whose term the owner has not approved stop being pulled. STABLE is listed
-# too but is not in the pinned eligible set.
-UNAPPROVED_PINNED = ["CC", "GRAM", "JST", "LIT", "M", "NIGHT", "RAIN", "SKY"]
+# Stage 2 (D-30, Q1 and the second approval round of 01-11-26): the ambiguous coins whose term the owner has not
+# approved are not pulled. STABLE is listed too but is not in the pinned eligible set.
+UNAPPROVED_PINNED = ["M", "SKY"]
 SHIPPED_GAPS = {"no-entry": [], "no-keyword": [], "skipped-unqualified": UNAPPROVED_PINNED,
                 "allowlist-has-keyword": []}
-STAGE2_STOPPED = {"CC", "JST", "RAIN", "SKY", "GRAM", "LIT", "NIGHT", "M", "STABLE"}
+STAGE2_STOPPED = {"SKY", "M"}
 
 
 def _ambiguous_doc(**coins) -> dict:
@@ -79,7 +79,7 @@ def _pulled_before_stage2(km, symbol: str) -> bool:
     return symbol not in t125 or trends.is_qualified_term(e["term"])
 
 
-def test_stage2_exactly_the_nine_unapproved_coins_stop_being_pulled():
+def test_stage2_exactly_the_three_unapproved_coins_stop_being_pulled():
     """E7: read from the shipped file before (old rule) and after (stage-2 rule)."""
     m = k.load()
     changed = {s for s in m.entries
@@ -91,7 +91,7 @@ def test_stage2_exactly_the_nine_unapproved_coins_stop_being_pulled():
 def test_live_snapshot_gap_is_reported_never_failed():
     """A new live coin without a keyword only shows in the report line; the live set is never asserted gap-free."""
     line = k.gap_report(k.load(), [*PINNED_ELIGIBLE, "NEWCOIN"])
-    assert line == ("trends keyword: 70 of 79 eligible coins; no keyword: "
+    assert line == ("trends keyword: 76 of 79 eligible coins; no keyword: "
                     + ", ".join(f"{s} (skipped-unqualified)" for s in UNAPPROVED_PINNED) + ", NEWCOIN (no-entry)")
     assert k.gap_report(k.load(), discovery.eligible_discovery_symbols()).startswith("trends keyword: ")
     assert k.gap_report(None, ["A"]) == "trends keyword: 0 of 1 eligible coins; no keyword: A (bad-file)"

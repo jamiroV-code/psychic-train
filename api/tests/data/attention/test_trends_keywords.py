@@ -297,20 +297,24 @@ def test_t160_topics_unchanged_and_no_new_topic():
 # "stable chain"; PRL and PEARL are one project (pearl-research / pearl-2) but a term must be unique, so PRL differs.
 T192_TERMS = {
     "AKE": ("akedo crypto", "Akedo"), "BTW": ("bitway crypto", "Bitway"),
-    "GRAM": ("the open network toncoin", "The Open Network"), "LIT": ("lighter crypto", "Lighter"),
+    "GRAM": ("the open network", "The Open Network"), "LIT": ("lighter crypto", "Lighter"),
     "STABLE": ("stable chain", "Stable"), "RAIN": ("rain protocol", "Rain"),
     "PRL": ("pearl ai coin", "Pearl"),   # OKB and PEARL were reverted by T195
 }
 T192_NOTE = "owner-named 26-10-26, qualified-term, not checker PASS"
+T192_NOTE_OVERRIDE = {"GRAM": "term switched 01-11-26 to the campaign-usable name; owner approved"}
 
 
 def test_t192_named_tickers_have_exact_qualified_terms():
     from api.data.attention import trends
     m = k.load()
     for sym, (term, label) in T192_TERMS.items():
-        assert m.entries[sym] == {"term": term, "label": label, "note": T192_NOTE}, sym
-        # stage 2: GRAM, LIT, STABLE and RAIN are on `_ambiguous` without an approval, so they are not pulled
-        want = "skipped-unqualified" if sym in m.ambiguous else "term"
+        want_entry = {"term": term, "label": label, "note": T192_NOTE_OVERRIDE.get(sym, T192_NOTE)}
+        got = {f: v for f, v in m.entries[sym].items() if f != "approved"}
+        assert got == want_entry, sym
+        # stage 2: a listed coin is pulled only when its term is approved (STABLE has no approval)
+        approved = m.entries[sym].get("approved") == term
+        want = "term" if (sym not in m.ambiguous or approved) else "skipped-unqualified"
         assert trends.is_qualified_term(term) and k.keyword_status(m, sym) == want, sym
 
 
@@ -398,7 +402,9 @@ def test_t160_shipped_file_loads_with_safe_load():
 STAGE2_AMBIGUOUS = frozenset({"TRX", "ONDO", "MORPHO", "ICP", "SHIB", "PEPE", "BNB", "CRO", "HBAR", "LINK", "APT",
                               "SOL", "SKY", "PI", "JST", "NEAR", "GRAM", "RAIN", "M", "CC", "LIT", "NIGHT", "STABLE"})
 STAGE2_APPROVED = {"ONDO": "ondo crypto", "PEPE": "Pepe coin", "TRX": "tron crypto", "APT": "aptos crypto",
-                   "CRO": "cronos crypto", "MORPHO": "morpho crypto"}
+                   "CRO": "cronos crypto", "MORPHO": "morpho crypto", "RAIN": "rain protocol",
+                   "CC": "canton coin", "JST": "just crypto", "GRAM": "the open network",
+                   "LIT": "lighter crypto", "NIGHT": "midnight crypto", "STABLE": "stable chain"}
 TOPIC = {"topic": "/m/0abc", "label": "X"}
 NOKW = {"no-keyword": True, "label": "X", "note": "n"}
 
