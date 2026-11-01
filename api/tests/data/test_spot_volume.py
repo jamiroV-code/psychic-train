@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from api.data import spot_volume_refresh
-from api.data.attention import registry, spot_volume, store
+from api.data.attention import defillama, registry, spot_volume, store
 
 TODAY = date(2026, 10, 31)
 DAYS = 100  # completed days returned by the fake venues: above the 90-day Discovery gate
@@ -40,7 +40,40 @@ def _handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, json={"error": ["EQuery:Unknown asset pair"]})
         bars = [[_epoch(d), "1", "1", "1", "1", "4.0", "3.0", 9] for d in _days()]
         return httpx.Response(200, json={"error": [], "result": {"XXBTZUSD": bars, "last": _epoch(TODAY)}})
+    if url.host == "api.llama.fi":
+        return _llama(url)
     return httpx.Response(500)
+
+
+def _fees_chart(per_day: float, n: int = DAYS) -> dict:
+    return {"totalDataChart": [[_epoch(d), per_day] for d in _days(n)]}
+
+
+def _llama(url: httpx.URL) -> httpx.Response:
+    if url.path == "/protocols":
+        return httpx.Response(200, json=[
+            {"slug": "btc-old", "gecko_id": "bitcoin", "tvl": 9},     # fewer fees than btc-main: not chosen
+            {"slug": "btc-main", "gecko_id": "bitcoin", "tvl": 5},
+            {"slug": "dead-proto", "gecko_id": "dead-coin", "tvl": 1},  # paid no fees in 30 days
+            {"slug": "other", "gecko_id": None, "tvl": 1},
+        ])
+    if url.path == "/v2/chains":
+        return httpx.Response(200, json=[{"name": "Ethereum", "gecko_id": "ethereum"}])
+    if url.path == "/summary/fees/btc-old":
+        return httpx.Response(200, json=_fees_chart(1.0))
+    if url.path == "/summary/fees/btc-main":
+        return httpx.Response(200, json=_fees_chart(7.0))
+    if url.path == "/summary/fees/dead-proto":
+        return httpx.Response(200, json=_fees_chart(0.0))
+    if url.path == "/overview/fees/Ethereum":
+        return httpx.Response(200, json=_fees_chart(50.0))
+    return httpx.Response(404, json={"error": "unknown"})
+
+
+@pytest.fixture(autouse=True)
+def _llama_state(monkeypatch):
+    monkeypatch.setattr(defillama, "_directory_cache", None)
+    monkeypatch.setattr(defillama, "_ids_cache", {"BTC": "bitcoin", "ETH": "ethereum", "DEAD": "dead-coin"})
 
 
 @pytest.fixture
@@ -88,20 +121,20 @@ def test_short_history_is_insufficient_not_ok(client):
 def test_pass_writes_every_venue_then_skips_coins_already_current(isolated_cache, client):
     sleeps: list[float] = []
     first = spot_volume_refresh.refresh_once(["BTC", "NOPE"], today=TODAY, client=client, sleep=sleeps.append)
-    for venue in ("binance", "coinbase", "kraken"):
+    for venue in ("binance", "coinbase", "kraken", "defillama"):
         assert first[venue] == {"written": DAYS, "ok": 1, "skipped": 0, "fact": 1, "failed": 0}
-    assert len(sleeps) == 6  # one paced request per venue and coin
+    assert len(sleeps) == 8  # one paced request per source and coin
 
     # The stores now read as ok series without any probe record.
-    for store_name in ("exchange_volume", "coinbase_volume", "kraken_volume"):
+    for store_name in ("exchange_volume", "coinbase_volume", "kraken_volume", "defillama"):
         got = registry.read_series(store_name, "BTC", TODAY, probe_path=isolated_cache / "no-probe.json")
         assert got.state == "ok" and len(got.points) == DAYS
 
     sleeps.clear()
     again = spot_volume_refresh.refresh_once(["BTC", "NOPE"], today=TODAY, client=client, sleep=sleeps.append)
-    for venue in ("binance", "coinbase", "kraken"):
+    for venue in ("binance", "coinbase", "kraken", "defillama"):
         assert again[venue]["skipped"] == 1 and again[venue]["written"] == 0
-    assert len(sleeps) == 3  # only the unlisted coin is asked again
+    assert len(sleeps) == 4  # only the unlisted coin is asked again
 
 
 def test_a_stale_store_is_refetched_and_extended(isolated_cache, client):
@@ -150,3 +183,35 @@ def test_env_switches_turn_the_worker_off():
     assert spot_volume_refresh.enabled_from_env({}) is True
     assert spot_volume_refresh.enabled_from_env({"SPOT_VOLUME_REFRESH": "0"}) is False
     assert spot_volume_refresh.enabled_from_env({"SCREENER_REFRESH_WORKER": "0"}) is False
+
+
+# ------------------------------------------------------------- DefiLlama fees
+
+def test_defillama_picks_the_candidate_with_most_recent_fees_and_remembers_it(isolated_cache, client):
+    s = defillama.fetch_series("BTC", client, TODAY)
+    assert s.state == "ok" and {v for _, v in s.points} == {7.0} and len(s.points) == DAYS
+    assert defillama._read_map()["BTC"] == {"kind": "protocol", "name": "btc-main"}
+
+    # The saved choice is used from now on, even if another candidate would win today.
+    defillama._save_choice("BTC", {"kind": "protocol", "name": "btc-old"})
+    assert {v for _, v in defillama.fetch_series("BTC", client, TODAY).points} == {1.0}
+
+
+def test_defillama_matches_a_chain_on_its_gecko_id(isolated_cache, client):
+    s = defillama.fetch_series("ETH", client, TODAY)
+    assert s.state == "ok" and {v for _, v in s.points} == {50.0}
+    assert defillama._read_map()["ETH"] == {"kind": "chain", "name": "Ethereum"}
+
+
+@pytest.mark.parametrize("sym", ["DEAD", "UNMAPPED"])
+def test_defillama_coin_without_fees_is_no_protocol_not_an_outage(isolated_cache, client, sym):
+    s = defillama.fetch_series(sym, client, TODAY)
+    assert (s.state, s.reason, s.points) == ("unavailable", "no protocol", [])
+    assert sym in defillama._read_map()  # remembered: not looked up again until the map is deleted
+
+
+def test_defillama_outage_is_reported_and_not_remembered(isolated_cache):
+    with httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(503))) as c:
+        s = defillama.fetch_series("BTC", c, TODAY)
+    assert s.state == "unavailable" and s.reason.startswith("fetch-failed: HTTPStatusError HTTP 503")
+    assert "BTC" not in defillama._read_map()
