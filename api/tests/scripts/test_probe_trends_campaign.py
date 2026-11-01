@@ -88,7 +88,7 @@ def test_all_eligible_tests_eligible_coins_only_and_records_state(tmp_path):
     st = tmp_path / "c.json"
     code, text, client = run(["--all-eligible", "--state", str(st), "--max-groups-per-coin", "1"])
     assert code == 0, text
-    assert sent(client) == ["akedo crypto", "bitway crypto", "the open network toncoin"]
+    assert sent(client) == ["akedo crypto", "bitway crypto", "the open network"]
     assert "tether" not in text.lower() and "USDT" not in text
     doc = state_of(st)
     rec = doc["coins"]["AKE"]["groups"]["akedo crypto"]
@@ -112,7 +112,7 @@ def test_priority_weak_missing_empty_first_then_universe_order(tmp_path):
     health = {"AKE": "ok", "BTW": "weak", "GRAM": "missing"}
     _, _, client = run(["--all-eligible", "--state", str(tmp_path / "c.json"), "--max-groups-per-coin", "1"],
                        health=health)
-    assert sent(client) == ["bitway crypto", "the open network toncoin", "akedo crypto", AKE[2]]
+    assert sent(client) == ["bitway crypto", "the open network", "akedo crypto", AKE[2]]
     assert tc.priority_order(["A", "B", "C", "D"], {"A": "ok", "B": "empty", "C": "ok", "D": "weak"}) == \
         ["B", "D", "A", "C"]
 
@@ -124,8 +124,8 @@ def test_keyword_health_from_runs_then_stored_series():
     reader = {"AKE": good, "BTW": low, "OKB": []}.get
     h = tc.keyword_health(km, ["AKE", "BTW", "OKB", "NOPE", "GRAM"], {"GRAM": "too-little-interest"},
                           lambda s: reader(s, good))
-    # stage 2: GRAM is ambiguous and unapproved, so it has no pulled keyword and reads missing
-    assert h == {"AKE": "ok", "BTW": "weak", "OKB": "empty", "NOPE": "missing", "GRAM": "missing"}
+    # GRAM's term is approved (01-11-26), so it is pulled and its latest run outcome reads weak
+    assert h == {"AKE": "ok", "BTW": "weak", "OKB": "empty", "NOPE": "missing", "GRAM": "weak"}
     assert tc.keyword_health(km, ["AKE"], {"AKE": "ok"}, lambda s: low) == {"AKE": "ok"}
 
 
@@ -235,7 +235,7 @@ def test_eligible_set_change_between_runs(tmp_path):
     st = tmp_path / "c.json"
     run(["--all-eligible", "--state", str(st), "--max-groups-per-coin", "1"], eligible=("AKE", "BTW"))
     _, _, c = run(["--all-eligible", "--state", str(st), "--max-groups-per-coin", "1"], eligible=("AKE", "GRAM"))
-    assert sent(c) == ["the open network toncoin"]
+    assert sent(c) == ["the open network"]
     code, text, _ = run(["--report", str(st)], eligible=("AKE", "GRAM"), factory=no_client)
     assert code == 0
     table = text.split("selection (stage 2)")[0]   # stage 2 selection lines follow the campaign table

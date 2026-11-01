@@ -93,6 +93,7 @@
   },
   "CC": {
     "term": "canton coin",
+    "approved": "canton coin",
     "label": "Canton Coin",
     "note": "qualified term, checker-given (owner checker run, T160)"
   },
@@ -143,9 +144,10 @@
     "note": "owner-accepted 22-10-26, not checker PASS"
   },
   "GRAM": {
-    "term": "the open network toncoin",
+    "term": "the open network",
+    "approved": "the open network",
     "label": "The Open Network",
-    "note": "owner-named 26-10-26, qualified-term, not checker PASS"
+    "note": "term switched 01-11-26 to the campaign-usable name; owner approved"
   },
   "GT": {
     "topic": "/g/11n3zc6c3t",
@@ -179,6 +181,7 @@
   },
   "JST": {
     "term": "just crypto",
+    "approved": "just crypto",
     "label": "JUST",
     "note": "qualified term, checker-given (owner checker run, T160)"
   },
@@ -209,6 +212,7 @@
   },
   "LIT": {
     "term": "lighter crypto",
+    "approved": "lighter crypto",
     "label": "Lighter",
     "note": "owner-named 26-10-26, qualified-term, not checker PASS"
   },
@@ -245,6 +249,7 @@
   },
   "NIGHT": {
     "term": "midnight crypto",
+    "approved": "midnight crypto",
     "label": "Midnight",
     "note": "qualified term: '<project name> crypto' (rule, T160); not checker-verified"
   },
@@ -307,6 +312,7 @@
   },
   "RAIN": {
     "term": "rain protocol",
+    "approved": "rain protocol",
     "label": "Rain",
     "note": "owner-named 26-10-26, qualified-term, not checker PASS"
   },
