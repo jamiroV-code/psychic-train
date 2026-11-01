@@ -31,7 +31,9 @@ from pathlib import Path
 from statistics import mean, median
 
 from api.analytics.attention import narratives, universe_classes
+from api.analytics.attention import universe as universe_mod
 from api.analytics.attention.universe import load_universe_rows
+from api.data.attention import onboarding_settings, onboarding_store, universe_store
 from api.data.attention import registry
 from api.models.discovery import (DiscoveryCategory, DiscoveryCoin, DiscoveryExcluded, DiscoveryExcludedCoin,
                                   DiscoveryHiddenNarrative, DiscoveryResponse, DiscoverySource, DiscoveryVenueList)
@@ -389,10 +391,49 @@ def series_names(cfg: dict) -> set[str]:
     return {m for s in weighted for m in impls[s]} | set(EXCHANGE_SERIES.values()) | {FALLBACK_SERIES}
 
 
-def eligibility(cfg: dict, rows: list[dict], venues=None, today: date | None = None) -> universe_classes.Universe:
+def _onboarding_view(use_ledger: bool) -> tuple[dict | None, str, int, int]:
+    """(ledger with the owner's confirmed classes merged, mode, probation days, exit band rank). A refused settings
+    file, or a missing or corrupt ledger, is no ledger: today's behaviour."""
+    if not use_ledger:
+        return None, "shadow", 14, universe_mod.TOP_N
+    settings, _ = onboarding_settings.safe_load()
+    if settings is None:
+        return None, "shadow", 14, universe_mod.TOP_N
+    led, _ = onboarding_store.read_ledger()
+    if led and settings.confirmed_classes:
+        led = {**led, "coins": {cid: ({**e, "class": settings.confirmed_classes[e.get("symbol")],
+                                      "class_source": "confirmed"}
+                                     if e.get("symbol") in settings.confirmed_classes else e)
+                                for cid, e in led["coins"].items()}}
+    return led, settings.mode, settings.probation_days, settings.exit_band_rank
+
+
+def _band_rows(rows: list[dict], led: dict, band: int) -> list[dict]:
+    """Snapshot rows at rank 101..band whose ledger state is `member` and that are not in `rows` (O2: a member in
+    the exit band stays scored under enforce; the percentile reference stays the top 100)."""
+    snap = universe_store.read_latest() or {}
+    have = {str(r.get("symbol", "")).upper() for r in rows}
+    out = []
+    for r in snap.get("coins") or []:
+        rank = r.get("rank") if isinstance(r, dict) else None
+        if (isinstance(rank, int) and not isinstance(rank, bool) and universe_mod.TOP_N < rank <= band
+                and r.get("symbol") and str(r["symbol"]).upper() not in have
+                and (led["coins"].get(r.get("id")) or {}).get("state") == "member"):
+            out.append({**r, "symbol": str(r["symbol"]).upper()})
+    return out
+
+
+def eligibility(cfg: dict, rows: list[dict], venues=None, today: date | None = None, *,
+                use_ledger: bool = True) -> universe_classes.Universe:
     """Class exclusion -> tradeability -> IN over the universe rows; `.eligible` is the IN set in universe order.
-    `venues` None reads the stored venue lists as of `today`."""
-    return universe_classes.build(rows, cfg["universe_rules"], venues, today)
+    `venues` None reads the stored venue lists as of `today`. T223: loads the onboarding settings and ledger itself;
+    under `enforce` the ledger states gate coins and members in the exit band join the rows. `use_ledger=False`
+    (point-in-time history) keeps the pre-onboarding meaning."""
+    led, mode, probation, band = _onboarding_view(use_ledger)
+    if led and mode == "enforce":
+        rows = [*rows, *_band_rows(rows, led, band)]
+    return universe_classes.build(rows, cfg["universe_rules"], venues, today, ledger=led, mode=mode,
+                                  probation_days=probation)
 
 
 def eligible_discovery_symbols(*, config_path: Path | None = None, universe_path: Path | None = None) -> list[str]:
@@ -422,7 +463,8 @@ def _excluded(u: universe_classes.Universe, nm: narratives.Memberships, shown: s
     counts = {k: sum(c.reason == k for c in coins) for k in universe_classes.REASONS}
     legacy = DiscoveryExcluded(
         exclusion_list=sum(counts[k] for k in ("stablecoin", "wrapped-staked", "commodity-backed", "no-market",
-                                               "not-tradeable-config", "not-tradeable")),
+                                               "not-tradeable-config", "not-tradeable",
+                                               *universe_classes.LEDGER_REASONS)),
         below_volume_floor=0, no_category=counts["unassigned"] + counts["hidden-narrative"],
         no_source_data=counts["no-source-data"])
     return {"excluded_coins": coins, "excluded_counts": counts, "excluded": legacy}
@@ -458,7 +500,7 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
     recent, max_lag = int(cfg["recent_days"]), int(cfg["max_source_lag_days"])
     coins = {s: _coin(s, cfg, data, end, recent, window, max_lag) for s in eligible}
     if not any(coins.values()):
-        return _empty(window, as_of, cats_asof, "no-data", "no-attention-data", len(urows), len(eligible), **flags,
+        return _empty(window, as_of, cats_asof, "no-data", "no-attention-data", len(u.rows), len(eligible), **flags,
                       **_excluded(u, nm, set()))
 
     out = []
@@ -478,7 +520,7 @@ def build_discovery(window: int, *, today: date, probe_path: Path | None = None,
             gaining_count=sum(r.trigger for r in rows), ranked=len(rows) >= min_coins, coins=rows))
     out.sort(key=lambda c: (not c.ranked, c.score is None, -(c.score or 0.0)))
     shown = {r.symbol for c in out for r in c.coins}
-    return _empty(window, as_of, cats_asof, "ok", "", len(urows), len(eligible), out, shown_size=len(shown),
+    return _empty(window, as_of, cats_asof, "ok", "", len(u.rows), len(eligible), out, shown_size=len(shown),
                   tradeability_unknown=sum(u.tradeability[s] == "unverified" for s in shown),
                   **_excluded(u, nm, shown),
                   min_category_coins=min_coins, rising_threshold_pct=float(cfg["rising_threshold_pct"]),

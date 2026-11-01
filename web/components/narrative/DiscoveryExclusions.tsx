@@ -14,6 +14,9 @@ export const REASON_LABEL: Record<DiscoveryExclusionReason, string> = {
   unassigned: "unassigned",
   "hidden-narrative": "coins in hidden narratives",
   "no-source-data": "no source data",
+  watching: "new coins in probation",
+  inactive: "coins that left the exit band",
+  unclassified: "coins not classified yet",
 };
 
 /** One plain sentence per reason, for the expanded list. */
@@ -37,6 +40,12 @@ function reasonSentence(reason: string, minCategoryCoins: number): string {
       return `Only in narratives with fewer than ${minCategoryCoins} coins, which are hidden.`;
     case "no-source-data":
       return "In a narrative, but no attention source has data for them yet.";
+    case "watching":
+      return "New in the top 100: they join after the probation days in a row there.";
+    case "inactive":
+      return "Outside the exit band for the set number of days: history and names are kept for a return.";
+    case "unclassified":
+      return "Not classified yet as a normal coin or a pegged or wrapped token: they wait for the owner.";
     default:
       return `Excluded for the reason "${reason}".`;
   }

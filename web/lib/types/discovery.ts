@@ -63,7 +63,10 @@ export type DiscoveryExclusionReason =
   | "not-tradeable"
   | "unassigned"
   | "hidden-narrative"
-  | "no-source-data";
+  | "no-source-data"
+  | "watching"
+  | "inactive"
+  | "unclassified";
 
 /** One tracked venue's stored market list; only "ok" proves or rules out a market. */
 export interface DiscoveryVenueList {

@@ -224,7 +224,8 @@ def test_excluded_counts_sum_to_universe_minus_shown(isolated_cache, tmp_path, m
     res = disc.build_discovery(30, today=TODAY)
     assert res.excluded_counts == {"stablecoin": 1, "wrapped-staked": 1, "commodity-backed": 0, "no-market": 1,
                                    "not-tradeable-config": 1, "not-tradeable": 1, "unassigned": 1,
-                                   "hidden-narrative": 1, "no-source-data": 1}
+                                   "hidden-narrative": 1, "no-source-data": 1, "watching": 0, "inactive": 0,
+                                   "unclassified": 0}
     assert res.shown_size == 2 and res.universe_size == 10
     assert res.shown_size + sum(res.excluded_counts.values()) == res.universe_size
     assert {c.symbol: c.reason for c in res.excluded_coins}["HID"] == "hidden-narrative"
@@ -363,3 +364,124 @@ def test_safety_share_uses_the_checked_coin_count():
     rows = [{"symbol": f"S{i}", "volume_24h": 5e7} for i in range(6)]
     u = shipped(rows, venues(binance={f"S{i}": 1e7 for i in range(4)}, hyperliquid={}))
     assert u.data_suspect is True and u.out == {} and len(u.eligible) == 6
+
+
+# --- T223 O2: the onboarding ledger at the eligibility choke point (shadow default, enforce on request) ---
+
+def entry(state="member", cls="normal", source="auto", count=14, symbol=""):
+    return {"symbol": symbol, "state": state, "first_seen": "2026-10-01", "last_in_top100": "2026-10-15",
+            "last_in_top120": "2026-10-15", "consecutive_top100": count, "consecutive_outside120": 0, "class": cls,
+            "class_evidence": {}, "class_source": source, "seeded": False, "updated": "2026-10-15"}
+
+
+LROWS = [{"id": f"id-{s.lower()}", "symbol": s, "volume_24h": 5e7} for s in ("A", "W", "I", "UQ", "S", "N")]
+LEDGER = {"last_advanced_date": "2026-10-15", "seeded_at": "2026-10-01", "coins": {
+    "id-a": entry(symbol="A"), "id-w": entry("watching", count=3, symbol="W"), "id-i": entry("inactive", symbol="I"),
+    "id-uq": entry(cls="unknown", symbol="UQ"), "id-s": entry(cls="stablecoin", symbol="S"),
+    "id-n": entry(cls="tokenized_fund", symbol="N")}}
+
+
+def rules(**over):
+    return {**disc.load_config()["universe_rules"], **over}
+
+
+def test_enforce_ledger_states_and_auto_classes_are_out_with_reasons():
+    u = uc.build(LROWS, rules(), venues(), ledger=LEDGER, mode="enforce")
+    assert u.eligible == ["A"]
+    assert u.out == {"W": ("watching", "in probation, 3 of 14 days"), "I": ("inactive", "left the exit band"),
+                     "UQ": ("unclassified", "class not known yet"), "S": ("stablecoin", "stablecoin"),
+                     "N": ("no-market", "tokenized fund")}
+    assert {"watching", "inactive", "unclassified"} <= set(uc.REASONS)
+
+
+def test_shadow_and_no_ledger_change_nothing():
+    base = uc.build(LROWS, rules(), venues())
+    assert base.eligible == [r["symbol"] for r in LROWS]
+    for kw in ({"ledger": LEDGER, "mode": "shadow"}, {"ledger": None, "mode": "enforce"}):
+        u = uc.build(LROWS, rules(), venues(), **kw)
+        assert (u.eligible, u.out) == (base.eligible, base.out)
+
+
+def test_force_include_wins_and_owner_lists_beat_the_ledger():
+    r = rules(force_include=["W"], classes={"stablecoin": ["UQ"]}, not_tradeable={"I": "delisted"})
+    u = uc.build(LROWS, r, venues(), ledger=LEDGER, mode="enforce")
+    assert "W" in u.eligible
+    assert u.out["UQ"] == ("stablecoin", "stablecoin") and u.out["I"] == ("not-tradeable-config", "delisted")
+
+
+def test_matching_is_by_id_and_rows_without_id_are_never_gated():
+    rows = [{"symbol": "W", "volume_24h": 5e7}, {"id": "other", "symbol": "UQ", "volume_24h": 5e7}]
+    assert uc.build(rows, rules(), venues(), ledger=LEDGER, mode="enforce").eligible == ["W", "UQ"]
+
+
+def test_ledger_exclusions_do_not_skew_data_suspect():
+    """Six watching coins with no listing would make the no-market rule look like a data fault if counted."""
+    rows = [{"id": f"w{i}", "symbol": f"W{i}", "volume_24h": 5e7} for i in range(6)] + [
+        {"id": "z", "symbol": "Z", "volume_24h": 5e7}] + [
+        {"id": f"b{i}", "symbol": f"B{i}", "volume_24h": 5e7} for i in range(4)]
+    listed = venues(binance={f"B{i}": 1e8 for i in range(4)}, hyperliquid={})
+    led = {"coins": {f"w{i}": entry("watching", count=1) for i in range(6)}}
+    u = uc.build(rows, rules(), listed, ledger=led, mode="enforce")
+    assert u.data_suspect is False and u.out["Z"] == ("not-tradeable", tm.NO_MARKET)
+    assert uc.build(rows, rules(), listed).data_suspect is True     # today's count, ledger not applied
+
+
+def _settings(tmp_path, monkeypatch, **over):
+    from api.data.attention import onboarding_settings
+    s = json.loads(onboarding_settings.SETTINGS_PATH.read_text())
+    p = tmp_path / "s.json"
+    p.write_text(json.dumps({**s, **over}))
+    monkeypatch.setattr(onboarding_settings, "SETTINGS_PATH", p)
+
+
+def test_confirmed_class_wins_over_auto(isolated_cache, tmp_path, monkeypatch):
+    from api.data.attention import onboarding_store
+    _settings(tmp_path, monkeypatch, mode="enforce", confirmed_classes={"UQ": "normal", "A": "wrapped_staked"})
+    onboarding_store.write_ledger(LEDGER)
+    u = disc.eligibility(disc.load_config(), LROWS, venues())
+    assert "UQ" in u.eligible and u.out["A"] == ("wrapped-staked", "wrapped or staked")
+
+
+def test_eligibility_loads_settings_and_ledger_itself(isolated_cache, tmp_path, monkeypatch):
+    from api.data.attention import onboarding_store
+    onboarding_store.write_ledger(LEDGER)
+    assert disc.eligibility(disc.load_config(), LROWS, venues()).eligible == [r["symbol"] for r in LROWS]  # shadow
+    _settings(tmp_path, monkeypatch, mode="enforce")
+    assert disc.eligibility(disc.load_config(), LROWS, venues()).eligible == ["A"]
+    assert len(disc.eligibility(disc.load_config(), LROWS, venues(), use_ledger=False).eligible) == 6
+
+
+def test_corrupt_or_missing_ledger_and_bad_settings_keep_todays_behaviour(isolated_cache, tmp_path, monkeypatch):
+    from api.data.attention import onboarding_settings, onboarding_store
+    _settings(tmp_path, monkeypatch, mode="enforce")
+    assert len(disc.eligibility(disc.load_config(), LROWS, venues()).eligible) == 6        # no ledger
+    onboarding_store.ledger_path().parent.mkdir(parents=True, exist_ok=True)
+    onboarding_store.ledger_path().write_text("{bad")
+    assert len(disc.eligibility(disc.load_config(), LROWS, venues()).eligible) == 6        # corrupt
+    onboarding_store.write_ledger(LEDGER)
+    bad = tmp_path / "bad.json"
+    bad.write_text("{}")
+    monkeypatch.setattr(onboarding_settings, "SETTINGS_PATH", bad)
+    assert len(disc.eligibility(disc.load_config(), LROWS, venues()).eligible) == 6        # settings refused
+
+
+def test_member_at_rank_101_to_120_stays_scored_under_enforce_and_reference_unchanged(
+        isolated_cache, tmp_path, monkeypatch):
+    from api.data.attention import onboarding_store, universe_store
+    rows = [{"id": f"c{i}", "symbol": f"C{i}", "market_cap": 1000 - i, "volume_24h": 5e7, "rank": i}
+            for i in range(1, 121)]
+    universe_store.write_snapshot("2026-10-15", rows)
+    u_path = tmp_path / "attention_universe.json"
+    u_path.write_text(universe_mod.UNIVERSE_PATH.read_text())
+    monkeypatch.setattr(universe_mod, "UNIVERSE_PATH", u_path)
+    led = {"c110": entry(), "c111": entry("watching"), "c5": entry("watching", count=2)}
+    onboarding_store.write_ledger({"last_advanced_date": "2026-10-15", "seeded_at": "2026-10-01", "coins": led})
+    top, _ = universe_mod.load_universe_rows()
+    assert len(top) == 100
+    shadow = disc.eligibility(disc.load_config(), top, venues())
+    assert "C110" not in shadow.eligible and "C5" in shadow.eligible
+    _settings(tmp_path, monkeypatch, mode="enforce")
+    u = disc.eligibility(disc.load_config(), top, venues())
+    assert "C110" in u.eligible and "C111" not in u.eligible and "C5" not in u.eligible
+    assert u.out["C5"] == ("watching", "in probation, 2 of 14 days")
+    assert len(universe_mod.load_reference()) == 100 and "C110" not in universe_mod.load_reference()

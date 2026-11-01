@@ -53,7 +53,7 @@ class DiscoveryExcluded(BaseModel):
 
 class DiscoveryExcludedCoin(BaseModel):
     symbol: str
-    reason: str            # closed list: universe_classes.REASONS
+    reason: str            # closed list: universe_classes.REASONS (T223 adds watching, inactive, unclassified)
     detail: str = ""
 
 
