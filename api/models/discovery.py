@@ -132,7 +132,8 @@ class DiscoverySourceHealth(BaseModel):
     budget_spent: bool | None = None
     mode: Literal["baseline", "degraded"] | None = None
     expected_gap_s: float | None = None  # worker's persisted upper interval; unknown for older state
-    stale: bool | None = None       # no unit for > 2 x expected gap; unknown without timing evidence
+    stale: bool | None = None       # no unit for > 2 x expected gap, counted from the end of a by-design wait
+                                    # (budget spent: next UTC day; timed pause: pause_until); unknown without timing
     completeness: str
     accounts_active: int | None = None
     accounts_total: int | None = None
