@@ -22,8 +22,10 @@ import math
 import os
 import shutil
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -138,6 +140,53 @@ def _coin_snapshot(coins: list[str]) -> tuple[dict, dict]:
     return last, count
 
 
+# Spreads are staged in a per-run dir next to `spreads/` (`spreads.tmp.<hex>`)
+# and swapped in whole, so overlapping runs never share staging files. A crash
+# can leave such a dir behind; a later run removes only ones older than the
+# safe age, so a concurrent live run's staging dir is never touched.
+_STAGING_PREFIX = "spreads.tmp"
+_STALE_STAGING_AGE_S = 3600.0
+_SWAP_ATTEMPTS = 5
+
+
+def _sweep_stale_staging(parent: Path) -> None:
+    cutoff = time.time() - _STALE_STAGING_AGE_S
+    for p in parent.glob(_STAGING_PREFIX + "*"):
+        try:
+            stale = p.is_dir() and p.stat().st_mtime < cutoff
+        except OSError:
+            continue  # removed meanwhile by another run
+        if stale:
+            shutil.rmtree(p, ignore_errors=True)
+
+
+def _swap_into_place(staging: Path, spreads_dir: Path) -> None:
+    """Replace `spreads_dir` with the fully written `staging` dir.
+
+    Not atomic (a directory cannot be replaced in one rename on Windows, nor
+    on POSIX when the target is non-empty): the current dir is renamed aside
+    to a unique staging-prefixed name, `staging` is renamed in, and the old
+    dir is removed. Readers can briefly see no spreads dir, as before. If an
+    overlapping run's dir lands in between, the swap is retried; the last
+    run to swap wins with its complete set.
+    """
+    for attempt in range(_SWAP_ATTEMPTS):
+        old: Path | None = spreads_dir.with_name(f"{_STAGING_PREFIX}.old.{uuid.uuid4().hex}")
+        try:
+            try:
+                os.replace(spreads_dir, old)
+            except FileNotFoundError:
+                old = None
+            os.replace(staging, spreads_dir)
+            return
+        except OSError:
+            if attempt == _SWAP_ATTEMPTS - 1:
+                raise
+        finally:
+            if old is not None:
+                shutil.rmtree(old, ignore_errors=True)
+
+
 def compute_and_persist() -> ComputeSummary:
     """Compute every pair of the current universe and persist the results cache."""
     t0 = time.perf_counter()
@@ -160,16 +209,19 @@ def compute_and_persist() -> ComputeSummary:
     prov_path.unlink(missing_ok=True)
 
     spreads_dir = cache.pairs_spreads_dir()
-    staging = spreads_dir.with_name("spreads.tmp")
-    shutil.rmtree(staging, ignore_errors=True)
-    staging.mkdir(parents=True)
-    for r in results:
-        if r.status == "ok" and r.spread is not None:
-            cache._atomic_to_parquet(
-                _spread_frame(r.spread), staging / cache.pairs_spread_path(r.symbol_a, r.symbol_b).name
-            )
-    shutil.rmtree(spreads_dir, ignore_errors=True)
-    os.replace(staging, spreads_dir)
+    spreads_dir.parent.mkdir(parents=True, exist_ok=True)
+    _sweep_stale_staging(spreads_dir.parent)
+    staging = spreads_dir.with_name(f"{_STAGING_PREFIX}.{uuid.uuid4().hex}")
+    staging.mkdir()
+    try:
+        for r in results:
+            if r.status == "ok" and r.spread is not None:
+                cache._atomic_to_parquet(
+                    _spread_frame(r.spread), staging / cache.pairs_spread_path(r.symbol_a, r.symbol_b).name
+                )
+        _swap_into_place(staging, spreads_dir)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)  # a failed run's partial staging; gone after a swap
 
     table = pd.DataFrame([_row(r, p) for r, p in zip(results, p_bh)])
     cache._atomic_to_parquet(table, cache.pairs_results_path())
