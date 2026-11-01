@@ -30,7 +30,7 @@ from api.tests.scripts.test_refresh_attention_trends import (
 OUTCOMES = {"ok", "too-little-interest", "quiet-then-surge", "no-keyword", "skipped-unqualified", "failed",
             "capped", "time-budget"}
 COIN_KEYS = {"outcome", "reason", "keyword_kind", "median", "zero_share_pct", "last7_vs_prior28_ratio",
-             "attempts", "retried", "retry_skipped"}
+             "attempts", "retried", "retry_skipped", "keyword"}
 
 
 @pytest.fixture(autouse=True)
@@ -74,6 +74,11 @@ def test_run_file_records_every_outcome(monkeypatch):
                    "ZZZ": "no-keyword"}
     assert coins["AAVE"]["keyword_kind"] == "term" and coins["SOL"]["keyword_kind"] == "topic"
     assert coins["USDX"]["keyword_kind"] == "none" and coins["ZZZ"]["keyword_kind"] == "none"
+    # stage 2 (D5): the keyword assigned and attempted that day; null when the coin is not pulled
+    assert coins["AAVE"]["keyword"] == "Aave" and coins["SOL"]["keyword"] == "/m/0sol"
+    assert coins["OP"]["keyword"] == "Optimism" and coins["TIA"]["keyword"] == "Celestia"   # failed, capped
+    assert coins["LINK"]["keyword_kind"] == "term" and coins["LINK"]["keyword"] is None
+    assert coins["USDX"]["keyword"] is None and coins["ZZZ"]["keyword"] is None
     assert coins["OP"]["reason"] == "ResponseError(HTTP 403)" and coins["TIA"]["reason"].endswith("(HTTP 429)")
     assert coins["TIA"]["attempts"] == 4 and coins["TIA"]["retried"] is False
     assert coins["AAVE"]["attempts"] == 1 and coins["AAVE"]["retried"] is False
@@ -112,6 +117,7 @@ def test_run_file_records_time_budget_outcome(monkeypatch):
     assert coins["AAVE"]["outcome"] == "ok" and coins["INJ"]["outcome"] == "ok"  # the budget is checked before a sleep
     assert coins["ARB"]["outcome"] == "time-budget" and coins["ARB"]["attempts"] == 0
     assert coins["ARB"]["reason"] == "time budget reached" and coins["ARB"]["keyword_kind"] == "term"
+    assert coins["ARB"]["keyword"] == "Arbitrum"   # a time-budget coin keeps its assigned keyword
 
 
 def test_second_run_same_day_appends_never_overwrites(monkeypatch):
@@ -192,7 +198,7 @@ def test_file_stays_small_for_a_full_universe(monkeypatch, _env):
     script = {f"coin number {i}": [EMPTY] for i in range(0, 100, 3)}
     _run(monkeypatch, syms, script)
     _run(monkeypatch, syms, script)
-    assert run_file().stat().st_size < 40_000
+    assert run_file().stat().st_size < 48_000   # stage 2 adds `keyword` (a <= 40-character term) per coin record
     assert len(load()["runs"]) == 2
 
 
@@ -212,6 +218,7 @@ def test_coin_record_reason_is_cleaned_and_cut():
     long = SourceSeries("trends", "X", [], "unavailable", "fetch-failed: " + "E" * 500)
     assert len(refresh_attention._run_coin_record(long, {})["reason"]) == 80
     assert rec["keyword_kind"] == "none" and rec["attempts"] == 0 and rec["retried"] is False
+    assert rec["keyword"] is None
     ok = refresh_attention._run_coin_record(SourceSeries("trends", "X", [(fx.TODAY, 5.0)], "ok", ""), {})
     assert ok["outcome"] == "ok" and ok["reason"] is None
 
@@ -510,3 +517,13 @@ def test_run_file_failure_is_last_line_with_block_buffered_stdout(tmp_path):
     assert attention_extra.classify("trends", lines[-1]).status == "failed" and proc.returncode == 1
     _, _, failed = attention_extra.verify({"trends": proc.stdout}, tmp_path / "attention", fx.TODAY)
     assert "trends" in failed
+
+
+def test_a_run_file_without_keyword_still_reads(tmp_path):
+    from api.scripts import trends_campaign as tc
+    d = tmp_path / "trends_runs"
+    d.mkdir()
+    rec = {"outcome": "ok", "reason": None, "keyword_kind": "term", "median": 1, "zero_share_pct": 0,
+           "last7_vs_prior28_ratio": None, "attempts": 1, "retried": False, "retry_skipped": None}
+    (d / "2026-10-26.json").write_text(json.dumps({"coins": {"AAVE": rec}}))
+    assert tc.read_runs(d) == ({"AAVE": "ok"}, None)

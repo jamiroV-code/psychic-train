@@ -58,7 +58,8 @@ SURGE_RATIO = 3  # the last-week median must also be at least this many times th
 # Fail-closed pull checks: a row outside [requested start, yesterday], or a last row that is not yesterday.
 OUT_OF_RANGE = "out-of-range"
 NOT_CURRENT = "not-current"
-NAME_AMBIGUOUS = "name-ambiguous: needs topic or qualified term"
+# Stage 2 (D-30): reason of an ambiguous coin whose term the owner has not approved (outcome skipped-unqualified).
+WAITING_APPROVAL = "waiting for owner approval"
 # Stage 2 (D-30): which coins are ambiguous lives in the keyword file (`_ambiguous`), with per-coin approvals.
 # A qualifier word beside the name ("tron crypto") marks a qualified term (candidate generation, file checks).
 QUALIFIER_WORDS = frozenset({"crypto", "coin", "token", "network", "protocol", "finance", "swap", "chain"})
