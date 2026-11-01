@@ -1,10 +1,10 @@
 # Sources health stale fix report: a source waiting on purpose no longer reads stale
 
 ## 1 Task ID
-Health-line stale false alarm after the daily budget is spent (owner-approved EXECUTE, 01-11-26), found in a real 4-hour X run. SPEC `narrative-baskets-xreddit-collector_SPEC_21-10-26.md` AC39. Branch `claude/health-stale-after-budget`, draft PR (number in 10).
+Health-line stale false alarm after the daily budget is spent (owner-approved EXECUTE, 01-11-26), found in a real 4-hour X run. SPEC `narrative-baskets-xreddit-collector_SPEC_21-10-26.md` AC39. Branch `claude/health-stale-after-budget`, draft PR #205.
 
 ## 2 Outcome
-review. Code and tests are done, and the draft PR is open. CI result: see 6 and 10.
+review. Code and tests are done, and draft PR #205 is open. CI on Linux passed both checks.
 
 ## 3 Summary
 The defect: once X had spent its day budget (used 792 of 800, `spent_day` = today, not paused), the worker correctly waited for the next UTC day. During that wait the Sources health row showed `stale: true` and the completeness text ended "; stale". The cause was `_health` in `api/analytics/attention/sources.py`. It judged stale as `last_unit_at` older than 2 x `expected_gap_s`, and `expected_gap_s` is the in-day pace (360 s degraded) even while the source is waiting on purpose.
@@ -45,7 +45,7 @@ What changed (reader only, no worker change):
   - `test_universe_classes.py::test_discovery_end_to_end_on_fixture` is the known Windows-only failure ("handler must not reach the network").
   - `test_twscrape_reader.py::test_accounts_db_path_outside_repo_required` fails only because of the owner's uncommitted `attention_queries.json` (its account path). With that file stashed, it passes (1 passed).
 - **Replaced tests:** none. Every existing test passed unchanged. `test_stale_after_twice_the_expected_gap` and `test_paused_source_shows_reason_code_and_end` cover states that are not by-design waits, or do not assert stale.
-- **CI on Linux:** see 10.
+- **CI on Linux:** for head `61fca95c` (commits 1-3), both checks passed: `api — pytest` (3m36s) and `web — vitest, tsc, island build` (38s), run 41294452148. The report-only commit that records this result came after that run.
 
 ## 7 Tests NOT run
 - Web vitest and tsc: no web file changed, and the field set is unchanged.
@@ -62,7 +62,7 @@ None.
 
 ## 10 Follow-up
 - **SPEC AC39 wording:** it still reads "more than 2 x the expected gap". A one-line amendment ("counted from the end of a by-design wait: budget spent or timed pause") would match the code. It was not edited here because the SPEC was outside this envelope's file list.
-- **Draft PR and CI:** the PR number and the final `gh pr checks` result are in the worker's hand-off message.
+- **Draft PR:** #205. CI result is in 6. Mark it ready for review when the owner is satisfied.
 
 ## 11 Context and cost
 Single worker pass. I read `sources.py`, `test_sources_health.py`, the pace state code in `pc_pace.py` (roll, spend, warn, pause) and the scheduling lines in `attention_pc_refresh.py`. I also read the `DiscoverySourceHealth` model, the web formatter lines, and one earlier report for the template. Local runs: about 10 s for the health file and about 6.5 minutes for the acceptance set.
