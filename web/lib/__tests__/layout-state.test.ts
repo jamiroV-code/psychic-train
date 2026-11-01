@@ -10,6 +10,7 @@ import {
   moveCoinToGroup,
   moveGroup,
   renameGroup,
+  sortGroup,
   toggleLine,
 } from "@/lib/layout-state";
 import type { LayoutGroup } from "@/lib/types/layout";
@@ -99,5 +100,38 @@ describe("layout-state", () => {
     expect(isFull(30)).toBe(true);
     expect(isFull(31)).toBe(true);
     expect(CAP_MESSAGE).toBe("Screener is full: 30 coins maximum. Remove a coin to add another.");
+  });
+});
+
+describe("sortGroup (AC-8)", () => {
+  const values = new Map<string, number | null>([
+    ["BTC", 2],
+    ["ETH", null],
+    ["SOL", -1.5],
+    ["ARB", 2],
+    ["DOGE", 0],
+  ]);
+  const groups = [g("a", "A", ["SOL", "ETH", "BTC", "DOGE", "ARB"]), g("b", "B", ["XRP"])];
+
+  it("sorts by name A to Z, touching only that group", () => {
+    const next = sortGroup(groups, "a", "name", values);
+    expect(next[0].coins).toEqual(["ARB", "BTC", "DOGE", "ETH", "SOL"]);
+    expect(next[1]).toBe(groups[1]);
+    expect(groups[0].coins).toEqual(["SOL", "ETH", "BTC", "DOGE", "ARB"]);
+  });
+
+  it("sorts a value high to low, ties by symbol, a real 0 kept as 0, missing values last", () => {
+    expect(sortGroup(groups, "a", "change", values)[0].coins).toEqual(["ARB", "BTC", "DOGE", "SOL", "ETH"]);
+  });
+
+  it("puts absent and non-finite values last, by symbol, never as 0", () => {
+    const v = new Map<string, number | null>([["SOL", -3], ["BTC", Number.NaN]]);
+    expect(sortGroup(groups, "a", "rsi", v)[0].coins).toEqual(["SOL", "ARB", "BTC", "DOGE", "ETH"]);
+  });
+
+  it("returns the input when the order is unchanged or the group is unknown", () => {
+    const sorted = [g("a", "A", ["ARB", "BTC"])];
+    expect(sortGroup(sorted, "a", "name", values)).toBe(sorted);
+    expect(sortGroup(groups, "zzz", "name", values)).toBe(groups);
   });
 });

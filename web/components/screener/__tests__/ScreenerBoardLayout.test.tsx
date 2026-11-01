@@ -480,6 +480,49 @@ describe("ScreenerBoard layout (T41 / S5b)", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("sort by RSI saves the new order with unavailable RSI last and announces it", async () => {
+    const server = layoutServer(layout([g("main", "Main", ["BTC", "ETH", "SOL", "ARB"])]));
+    const rsi: Record<string, number | null> = { BTC: 40, ETH: null, SOL: 70, ARB: 40 };
+    const fetchBoard = async (tf: Timeframe) => {
+      const b = board(tf, ["BTC", "ETH", "SOL", "ARB"]);
+      for (const c of b.coins) {
+        const v = rsi[c.symbol];
+        c.rsi = { value: v, length: 14, as_of: null, reason: v === null ? "insufficient-history" : null };
+      }
+      return b;
+    };
+    setup({ fetchBoard, fetchLayout: server.fetchLayout, saveLayout: server.saveLayout });
+    await advance(0);
+    fireEvent.click(screen.getByTestId("sort-group-rsi-main"));
+    await advance(0);
+    expect(server.saveLayout).toHaveBeenCalledWith({ revision: 3, groups: [g("main", "Main", ["SOL", "ARB", "BTC", "ETH"])], hidden_lines: [] });
+    expect(panelOrder()).toEqual(["SOL", "ARB", "BTC", "ETH"]);
+    expect(screen.getByTestId("board-announcer")).toHaveTextContent("Main sorted by RSI, high to low; 1 without a value placed last.");
+  });
+
+  it("sort by name and by % change of the shown timeframe", async () => {
+    const server = layoutServer(layout([g("main", "Main", ["SOL", "BTC", "ETH"])]));
+    const pct: Record<string, number | null> = { SOL: null, BTC: -2, ETH: 0 };
+    const fetchBoard = async (tf: Timeframe) => {
+      const b = board(tf, ["SOL", "BTC", "ETH"]);
+      for (const c of b.coins) {
+        const v = pct[c.symbol];
+        c.gain_by_timeframe = { [tf]: { pct: v, open_ts: null, is_partial: false, stale: false, reason: v === null ? "source-unavailable" : null } } as typeof c.gain_by_timeframe;
+      }
+      return b;
+    };
+    setup({ fetchBoard, fetchLayout: server.fetchLayout, saveLayout: server.saveLayout });
+    await advance(0);
+    fireEvent.click(screen.getByTestId("sort-group-change-main"));
+    await advance(0);
+    expect(panelOrder()).toEqual(["ETH", "BTC", "SOL"]);
+    fireEvent.click(screen.getByTestId("sort-group-name-main"));
+    await advance(0);
+    expect(panelOrder()).toEqual(["BTC", "ETH", "SOL"]);
+    expect(server.get().groups[0].coins).toEqual(["BTC", "ETH", "SOL"]);
+    expect(screen.getByTestId("board-announcer")).toHaveTextContent("Main sorted by name, A to Z.");
+  });
+
   it("the initial hidden lines come from the layout and a toggle saves hidden_lines", async () => {
     const server = layoutServer(layout([g("main", "Main", THREE)], { hidden_lines: ["ETH"] }));
     setup({ fetchBoard: async (tf) => board(tf, THREE), fetchLayout: server.fetchLayout, saveLayout: server.saveLayout });
