@@ -7,6 +7,8 @@ feature: general
 
 # Cache hardening follow-ups left by P1 (backlog note)
 
+**Status 01-11-26 (branch `claude/cache-hardening`):** KG3 and KG4 fixed — every pairs_response write and both JSON archive writers now go through cache.py's unique-temp + fsync + `os.replace` helpers (`_atomic_to_parquet`, `_atomic_write_bytes`). SQ1 still open, re-worded: `watchlist.py` has NO fallback (`_load_raw` returns an empty list when the file is missing); the open question is whether to ADD one (pipeline-completeness PLAN line 345). Not covered by this note but seen: `watchlist._save_raw` writes the user's watchlist in place (non-atomic).
+
 **Priority:** Low-Medium. Both KG items are naturally done together in the T21 `cache.py` refactor.
 
 - **KG3:** `api/analytics/cointegration/pairs_response.py` writes its tmp files without fsync (out of the atomic-writes lane).
