@@ -1,11 +1,16 @@
 import hashlib
+import json
+import socket
 from datetime import timedelta
 from pathlib import Path
 
 import httpx
+import pytest
 
-from api.data.attention import store
+from api.data.attention import onboarding_store as ob
+from api.data.attention import store, universe_store
 from api.scripts import refresh_attention
+from api.scripts import refresh_attention as ra
 from api.tests.data.attention.conftest import TODAY, chart_payload, wiki_payload
 
 MARKETS = [{"id": "bitcoin", "symbol": "btc", "market_cap": 1}, {"id": "ethereum", "symbol": "eth", "market_cap": 2}]
@@ -139,7 +144,7 @@ def test_default_sources_and_runners_are_pinned():
     assert refresh_attention.DEFAULT_SOURCES == ("wikipedia", "coingecko", "universe", "ledger", "signals")
     assert set(refresh_attention.RUNNERS) == {
         "universe", "wikipedia", "coingecko", "exchange_volume", "hyperliquid_volume",
-        "trends", "reddit", "xsearch", "categories", "signals", "ledger"}
+        "trends", "reddit", "xsearch", "categories", "signals", "ledger", "classify", "resolve_wiki", "resolve_trends"}
     for key, fn in refresh_attention.RUNNERS.items():
         assert fn.__name__ == "_run_" + key
 
@@ -372,3 +377,333 @@ def test_coingecko_result_line_keeps_n_of_m_ok_prefix(isolated_cache, capsys):
         m = re.match(rf"{src}: (\d+)/(\d+) ok", line)
         assert m and int(m.group(1)) > 0, line
         assert " error " not in line + " "
+
+
+# --- T223 O1: the `ledger` step (seeding, advance, symbol cap, exit code, fixed-token stdout) and O3 `classify` ---
+# No network: every client is a MockTransport; `no_net` also blocks the default transport and sockets.
+
+@pytest.fixture
+def no_net(monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("an onboarding step must not reach the network")
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", boom)
+    monkeypatch.setattr(socket.socket, "connect", boom)
+
+
+def led_rows(placed: dict[str, int] | None = None, n: int = 120) -> list[dict]:
+    order = [f"fill-{i}" for i in range(1, n + 1)]
+    for cid, rank in (placed or {}).items():
+        order.insert(rank - 1, cid)
+    order = order[:n]
+    return [{"id": c, "symbol": c.upper().replace("-", "_"), "name": c, "market_cap": 10_000 - i,
+             "volume_24h": 1, "rank": i + 1} for i, c in enumerate(order)]
+
+
+def _fail_net(r):
+    raise AssertionError("no network")
+
+
+def led_run(argv, day=TODAY, handler=_fail_net):
+    c = httpx.Client(transport=httpx.MockTransport(handler))
+    return ra.main(argv, client=c, today=day, sleep=lambda x: None)
+
+
+def led_write(day, placed=None, n=120):
+    universe_store.write_snapshot(day.isoformat(), led_rows(placed, n))
+
+
+@pytest.mark.usefixtures("no_net")
+class TestLedgerStep:
+    def test_first_run_seeds_rank_1_to_100_only(self, isolated_cache, capsys):
+        led_write(TODAY, {"edge": 110})
+        assert led_run(["--sources", "ledger"]) == 0
+        led, st = ob.read_ledger()
+        assert st == "ok" and len(led["coins"]) == 100 and "edge" not in led["coins"]
+        assert {(e["state"], e["class"], e["class_source"]) for e in led["coins"].values()} == {
+            ("member", "normal", "owner")}
+        assert "ledger: ok seeded 100" in capsys.readouterr().out
+        assert ob.read_log(TODAY.isoformat())["entries"][0]["action"] == "seeded"
+
+    def test_present_ledger_is_advanced_not_reseeded(self, isolated_cache, capsys):
+        led_write(TODAY - timedelta(days=1))
+        led_run(["--sources", "ledger"], TODAY - timedelta(days=1))
+        capsys.readouterr()
+        led_write(TODAY, {"newc": 30})
+        assert led_run(["--sources", "ledger"]) == 0
+        led, _ = ob.read_ledger()
+        assert led["coins"]["newc"]["state"] == "watching" and led["last_advanced_date"] == TODAY.isoformat()
+        out = capsys.readouterr()
+        assert "ledger: ok advanced, entered 1" in out.out
+        assert "newc" not in out.out.lower() + out.err.lower()
+
+    def test_same_day_rerun_counts_once(self, isolated_cache):
+        led_write(TODAY - timedelta(days=1))
+        led_run(["--sources", "ledger"], TODAY - timedelta(days=1))
+        led_write(TODAY, {"newc": 30})
+        led_run(["--sources", "ledger"])
+        before = ob.ledger_path().read_bytes()
+        led_run(["--sources", "ledger"])
+        assert ob.ledger_path().read_bytes() == before
+
+    def test_corrupt_ledger_is_refused_and_kept(self, isolated_cache, capsys):
+        led_write(TODAY)
+        ob.ledger_path().parent.mkdir(parents=True, exist_ok=True)
+        ob.ledger_path().write_text("{broken")
+        assert led_run(["--sources", "ledger"]) == 0
+        assert ob.ledger_path().read_text() == "{broken"
+        assert "ledger: unavailable corrupt ledger" in capsys.readouterr().out
+
+    def test_lost_ledger_reseeds_once_with_a_loud_line(self, isolated_cache, capsys):
+        led_write(TODAY - timedelta(days=1))
+        led_run(["--sources", "ledger"], TODAY - timedelta(days=1))
+        ob.ledger_path().unlink()
+        led_write(TODAY)
+        led_run(["--sources", "ledger"])
+        assert "ledger: warning re-seeded, probation progress lost" in capsys.readouterr().err
+        assert ob.read_ledger()[1] == "ok"
+
+    def test_stale_snapshot_is_skipped(self, isolated_cache, capsys):
+        led_write(TODAY - timedelta(days=1))
+        assert led_run(["--sources", "ledger"]) == 0
+        assert ob.read_ledger() == (None, "absent")
+        assert "ledger: skipped, stale snapshot" in capsys.readouterr().out
+
+    def test_short_snapshot_is_unavailable(self, isolated_cache, capsys):
+        led_write(TODAY, n=100)
+        led_run(["--sources", "ledger"])
+        assert ob.read_ledger() == (None, "absent")
+        assert "ledger: unavailable short snapshot" in capsys.readouterr().out
+
+    def test_no_snapshot_is_unavailable(self, isolated_cache, capsys):
+        led_run(["--sources", "ledger"])
+        assert "ledger: unavailable no snapshot" in capsys.readouterr().out
+
+    def test_bad_settings_skip_the_step(self, isolated_cache, capsys, tmp_path, monkeypatch):
+        from api.data.attention import onboarding_settings
+        bad = tmp_path / "s.json"
+        bad.write_text("{}")
+        monkeypatch.setattr(onboarding_settings, "SETTINGS_PATH", bad)
+        led_write(TODAY)
+        led_run(["--sources", "ledger"])
+        assert ob.read_ledger() == (None, "absent")
+        assert "ledger: unavailable settings" in capsys.readouterr().out
+
+    def test_ledger_never_decides_the_exit_code(self, isolated_cache, monkeypatch):
+        def boom(*a, **k):
+            raise RuntimeError("ledger broke")
+        monkeypatch.setitem(ra.RUNNERS, "ledger", boom)
+        assert led_run(["--sources", "ledger"]) == 0
+        led_write(TODAY)
+        assert led_run(["--sources", "ledger,universe"]) == 1   # universe errors (no network); ledger adds nothing
+
+    def test_failed_universe_step_skips_the_ledger(self, isolated_cache, capsys):
+        led_write(TODAY - timedelta(days=1))
+        assert led_run(["--sources", "universe,ledger"]) == 1
+        assert ob.read_ledger() == (None, "absent")
+        assert "ledger: skipped, universe step failed" in capsys.readouterr().out
+
+    def test_ledger_runs_after_universe_and_before_signals(self):
+        d = ra.DEFAULT_SOURCES
+        assert d.index("universe") < d.index("ledger") < d.index("signals")
+
+    def test_dry_run_writes_no_ledger(self, isolated_cache, capsys):
+        led_write(TODAY)
+        assert led_run(["--dry-run", "--sources", "ledger"]) == 0
+        assert ob.read_ledger() == (None, "absent")
+        assert "ledger: dry run" in capsys.readouterr().out
+
+    def test_runner_symbols_are_capped_at_top_100_plus_band_members(self, isolated_cache):
+        led_write(TODAY - timedelta(days=1), {"bandm": 50})
+        led_run(["--sources", "ledger"], TODAY - timedelta(days=1))      # seeds bandm as a member
+        led_write(TODAY, {"bandm": 115})
+        led_run(["--sources", "ledger"])
+        syms = ra._symbols(None)
+        assert len(syms) == 101 and "BANDM" in syms
+        assert len(ra._universe_rows()) == 101
+
+    def test_runner_symbols_without_a_ledger_are_the_top_100(self, isolated_cache):
+        led_write(TODAY)
+        assert len(ra._symbols(None)) == 100
+
+    def test_old_rankless_snapshot_keeps_every_row(self, isolated_cache):
+        universe_store.write_snapshot(TODAY.isoformat(), [{"id": "a", "symbol": "A", "market_cap": 1}])
+        assert ra._symbols(None) == ["A"]
+
+
+def cls_entry(symbol, state="watching", cls="unknown", source="auto"):
+    return {"symbol": symbol, "state": state, "first_seen": "2026-10-10", "last_in_top100": "2026-10-15",
+            "last_in_top120": "2026-10-15", "consecutive_top100": 3, "consecutive_outside120": 0, "class": cls,
+            "class_evidence": {}, "class_source": source, "seeded": False, "updated": "2026-10-15"}
+
+
+def cls_handler(calls, detail_status=200, cats=("Layer 1 (L1)",)):
+    def h(r: httpx.Request):
+        path = r.url.raw_path.decode()
+        calls.append(path.split("?")[0])
+        if path.split("?")[0].endswith("/market_chart"):
+            return httpx.Response(200, json={"prices": [[i * 86_400_000, 1.0 + i] for i in range(30)]})
+        if detail_status != 200:
+            return httpx.Response(detail_status)
+        return httpx.Response(200, json={"categories": list(cats), "name": "Some Name", "asset_platform_id": None})
+    return h
+
+
+def cls_settings(tmp_path, monkeypatch, **over):
+    from api.data.attention import onboarding_settings
+    s = json.loads(onboarding_settings.SETTINGS_PATH.read_text())
+    p = tmp_path / "onb.json"
+    p.write_text(json.dumps({**s, **over}))
+    monkeypatch.setattr(onboarding_settings, "SETTINGS_PATH", p)
+
+
+@pytest.mark.usefixtures("no_net")
+class TestClassifyStep:
+    def ledger(self, **coins):
+        ob.write_ledger({"last_advanced_date": TODAY.isoformat(), "seeded_at": "2026-10-01", "coins": coins})
+
+    def test_watching_unknown_first_and_capped_per_run(self, isolated_cache, tmp_path, monkeypatch, capsys):
+        cls_settings(tmp_path, monkeypatch, classify_max_coins_per_run=2)
+        self.ledger(**{"m-1": cls_entry("MONE", "member"), "w-1": cls_entry("WONE"), "w-2": cls_entry("WTWO"),
+                       "n-1": cls_entry("NORM", "member", "normal", "owner"), "i-1": cls_entry("GONE", "inactive")})
+        calls = []
+        assert led_run(["--sources", "classify"], handler=cls_handler(calls)) == 0
+        coins = ob.read_ledger()[0]["coins"]
+        assert (coins["w-1"]["class"], coins["w-2"]["class"], coins["m-1"]["class"]) == ("normal", "normal", "unknown")
+        assert coins["w-1"]["class_source"] == "auto" and coins["w-1"]["class_evidence"]["n_days"] == 30
+        assert "prices" not in json.dumps(coins["w-1"]["class_evidence"])
+        assert len(calls) == 4 and all("/coins/" in c for c in calls)
+        out = capsys.readouterr()
+        assert "classify: ok 2/2" in out.out
+        assert not any(s in (out.out + out.err).lower() for s in ("wone", "wtwo", "w-1", "some name"))
+
+    def test_429_stops_the_step_and_leaves_the_rest_unknown(self, isolated_cache, capsys):
+        self.ledger(**{"w-1": cls_entry("WONE"), "w-2": cls_entry("WTWO")})
+        calls = []
+        led_run(["--sources", "classify"], handler=cls_handler(calls, detail_status=429))
+        coins = ob.read_ledger()[0]["coins"]
+        assert {c["class"] for c in coins.values()} == {"unknown"}
+        assert len({c for c in calls}) == 1
+        assert "classify: ok 0/0, stopped on HTTP 429" in capsys.readouterr().out
+
+    def test_failed_fetch_stays_unknown_with_a_reason(self, isolated_cache, capsys):
+        self.ledger(**{"w-1": cls_entry("WONE")})
+        led_run(["--sources", "classify"], handler=cls_handler([], detail_status=503))
+        e = ob.read_ledger()[0]["coins"]["w-1"]
+        assert e["class"] == "unknown" and e["class_evidence"]["reason"] == "unavailable"
+        assert "classify: ok 0/1" in capsys.readouterr().out
+
+    def test_owner_list_and_confirmed_class_win_without_a_fetch(self, isolated_cache, tmp_path, monkeypatch):
+        cls_settings(tmp_path, monkeypatch, confirmed_classes={"CONF": "normal"})
+        self.ledger(**{"tether": cls_entry("USDT"), "c-1": cls_entry("CONF")})
+        led_run(["--sources", "classify"])                           # any request would fail the test
+        coins = ob.read_ledger()[0]["coins"]
+        assert (coins["tether"]["class"], coins["tether"]["class_source"]) == ("stablecoin", "owner")
+        assert (coins["c-1"]["class"], coins["c-1"]["class_source"]) == ("normal", "confirmed")
+
+    def test_no_ledger_is_unavailable_and_never_decides_the_exit_code(self, isolated_cache, capsys):
+        assert led_run(["--sources", "classify"]) == 0
+        assert "classify: unavailable no ledger" in capsys.readouterr().out
+
+    def test_classify_is_not_a_default_source(self):
+        assert "classify" not in ra.DEFAULT_SOURCES and "classify" in ra.RUNNERS
+
+
+@pytest.mark.usefixtures("no_net")
+class TestResolveStep:
+    def setup_coin(self, symbol="ZZNEW", name="New Coin"):
+        ob.write_ledger({"last_advanced_date": TODAY.isoformat(), "seeded_at": TODAY.isoformat(),
+                         "coins": {"new": cls_entry(symbol)}})
+        universe_store.write_snapshot(TODAY.isoformat(), [{"id": "new", "symbol": symbol, "name": name}])
+
+    def test_wiki_and_queries_apply_and_log_through_refresh(self, isolated_cache, capsys):
+        self.setup_coin()
+        def handler(request):
+            if "wikimedia" in str(request.url):
+                return httpx.Response(200, json=wiki_payload(100))
+            return httpx.Response(200, json={"title": "New Coin", "type": "standard",
+                                           "extract": "New Coin is a cryptocurrency."})
+        assert led_run(["--sources", "resolve_wiki"], handler=handler) == 0
+        assert ob.read_json("wiki_articles_auto.json")["entries"]["ZZNEW"]["title"] == "New Coin"
+        assert ob.read_json("attention_queries_auto.json")["entries"]["ZZNEW"]["cashtag_only"] is True
+        assert {e["source"] for e in ob.read_log(TODAY.isoformat())["entries"]} == {"wikipedia", "reddit_x"}
+        assert "New Coin" not in capsys.readouterr().out
+
+    def test_wiki_redirect_waits_without_overlay(self, isolated_cache):
+        self.setup_coin()
+        def handler(request):
+            if "wikimedia" in str(request.url):
+                return httpx.Response(200, json=wiki_payload(100))
+            return httpx.Response(200, json={"title": "Other Coin", "type": "standard",
+                                           "extract": "New Coin is a cryptocurrency."})
+        led_run(["--sources", "resolve_wiki"], handler=handler)
+        assert "ZZNEW" not in ob.read_json("wiki_articles_auto.json")["entries"]
+        assert ob.read_json("pending.json")["coins"]["ZZNEW"]["wikipedia"]["reason"] == "redirect to another title"
+
+    def test_strict_trends_applies_with_stored_volume_and_logs(self, isolated_cache, monkeypatch):
+        from api.data.attention import onboarding_sources as src
+        from api.data.attention.types import SourceSeries
+        self.setup_coin()
+        points = [(TODAY - timedelta(days=100-i), float(10+i+i % 3)) for i in range(100)]
+        volumes = [(day, 1000.0*(10+i)) for i, (day, _) in enumerate(points)]
+        store.write_series(SourceSeries("coingecko", "ZZNEW", volumes, "ok", ""), today=TODAY)
+        class Fake:
+            def suggestions(self, name):
+                return [{"mid": "/g/new_coin", "title": name, "type": "Cryptocurrency"}]
+        monkeypatch.setattr(ra, "TRENDREQ_FACTORY", Fake)
+        monkeypatch.setattr(src, "fetch_topic_series", lambda *a, **k: (points, "ok"))
+        led_run(["--sources", "resolve_trends"])
+        assert ob.read_json("trends_keywords_auto.json")["entries"]["ZZNEW"]["topic"] == "/g/new_coin"
+        event = ob.read_log(TODAY.isoformat())["entries"][-1]
+        assert event["action"] == "applied" and event["evidence"]["volume_days"] >= 60
+        assert event["previous"] is None
+
+    def test_short_volume_waits_and_rechecks_on_next_run(self, isolated_cache, monkeypatch):
+        from api.data.attention import onboarding_sources as src
+        self.setup_coin()
+        class Fake:
+            def suggestions(self, name):
+                return [{"mid": "/g/new_coin", "title": name, "type": "Cryptocurrency"}]
+        monkeypatch.setattr(ra, "TRENDREQ_FACTORY", Fake)
+        points = [(TODAY-timedelta(days=i+1), float(i+10)) for i in range(90)]
+        monkeypatch.setattr(src, "fetch_topic_series", lambda *a, **k: (points, "ok"))
+        led_run(["--sources", "resolve_trends"])
+        assert ob.read_json("pending.json")["coins"]["ZZNEW"]["trends"]["reason"].startswith("volume history")
+        assert ob.read_json("trends_keywords_auto.json")["entries"] == {}
+        before = len(ob.read_log(TODAY.isoformat())["entries"])
+        led_run(["--sources", "resolve_trends"])
+        assert len(ob.read_log(TODAY.isoformat())["entries"]) == before + 1
+
+    def test_first_429_stops_following_network_sources(self, isolated_cache, monkeypatch, capsys):
+        self.setup_coin()
+        calls = []
+        def handler(request):
+            calls.append(request)
+            return httpx.Response(429)
+        def forbidden():
+            raise AssertionError("following provider must not be called after 429")
+        monkeypatch.setattr(ra, "TRENDREQ_FACTORY", forbidden)
+        led_run(["--sources", "resolve_wiki,resolve_trends"], handler=handler)
+        assert len(calls) == 1
+        assert "resolve_trends: unavailable rate-limit" in capsys.readouterr().out
+        assert ob.read_json("pending.json")["coins"]["ZZNEW"]["wikipedia"]["reason"] == "rate limited; retry next run"
+
+    def test_bad_snapshot_name_never_enters_stdout(self, isolated_cache, capsys):
+        self.setup_coin(name="::warning::\u202esecret")
+        led_run(["--sources", "resolve_wiki"], handler=lambda r: httpx.Response(404))
+        text = capsys.readouterr().out
+        assert "::" not in text and "secret" not in text
+
+    def test_colliding_overlay_entry_is_quarantined_to_pending_and_logged(self, isolated_cache, monkeypatch):
+        from api.data.attention import trends_keywords as tk
+        self.setup_coin()
+        owner_topic = next(e["topic"] for e in tk.load().entries.values() if "topic" in e)
+        ob.write_json("trends_keywords_auto.json", {"entries": {"ZZNEW": {"topic": owner_topic, "label": "Dup"}}})
+        class Fake:
+            def suggestions(self, name):
+                return []
+        monkeypatch.setattr(ra, "TRENDREQ_FACTORY", Fake)
+        led_run(["--sources", "resolve_trends"])
+        assert ob.read_json("trends_keywords_auto.json")["entries"] == {}
+        assert ob.read_json("pending.json")["coins"]["ZZNEW"]["trends"]["reason"] == "collides with another keyword"
+        assert any(e.get("previous") == {"topic": owner_topic, "label": "Dup"}
+                   for e in ob.read_log(TODAY.isoformat())["entries"])

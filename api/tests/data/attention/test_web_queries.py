@@ -81,8 +81,9 @@ def test_config_change_is_read(doc, tmp_path):
 
 def test_coin_set_is_narrative_placed_symbols_minus_ambiguous():
     placed = wq.placed_symbols()
-    assert len(placed) == 75 and "SOL" in placed
-    q = wq.load(placed_symbols=placed)
+    assert len(placed) == len(set(placed)) and "SOL" in placed
+    q = wq.load_merged(placed_symbols=placed)
+    assert set(placed) <= set(q.coins)
     for source in wq.SOURCES:
         coins = wq.coin_set(q, source, placed)
         assert set(coins) == set(placed) - q.ambiguous[source]

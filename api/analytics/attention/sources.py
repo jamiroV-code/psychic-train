@@ -293,7 +293,7 @@ def _narratives_row() -> DiscoverySourceRow:
 
 def _trends_keyword(eligible: list[str]) -> DiscoveryTrendsKeyword:
     """Read from the keyword file with the runner's own rule (`keyword_status`), so the two cannot disagree."""
-    km, _ = trends_keywords.safe_load()
+    km, _ = trends_keywords.safe_load_merged()
     cov = trends_keywords.coverage(km, eligible)
     return DiscoveryTrendsKeyword(eligible_size=cov.eligible, with_keyword=cov.with_keyword,
                                   missing=[DiscoveryKeywordGap(symbol=s, detail=st) for s, st in cov.missing])

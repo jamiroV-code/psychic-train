@@ -314,11 +314,66 @@ def load(path: Path | None = None, placed_symbols=None) -> Queries:
     return validate(json.loads(text, object_pairs_hook=_no_duplicate_keys), placed_symbols)
 
 
+# --- T223 O4: the resolver's overlay (bot-written, under the cache root). The owner file always wins. ---
+OVERLAY_NAME = "attention_queries_auto.json"
+OVERLAY_EXTRA_KEYS = ("source", "resolved_at")
+
+
+def overlay_path() -> Path:
+    from api.data import cache
+    return cache.CACHE_ROOT / "attention" / "onboarding" / OVERLAY_NAME
+
+
+def overlay_entry_ok(sym, entry) -> bool:
+    """An automatic Reddit/X entry: a valid symbol, a safe name, `cashtag_only` true, nothing else."""
+    return (isinstance(sym, str) and bool(SYMBOL_RE.fullmatch(sym)) and isinstance(entry, dict)
+            and set(entry) == {"name", "cashtag_only"} and entry["cashtag_only"] is True
+            and isinstance(entry["name"], str) and bool(NAME_RE.fullmatch(entry["name"])))
+
+
+def merge_overlay(q: Queries, overlay, placed) -> tuple[Queries, list[tuple[str, str]]]:
+    """Owner queries plus each valid overlay entry for a PLACED symbol the owner file lacks; never raises.
+    Unplaced overlay entries stay out of `coins` (stream matching and `placed` checks iterate it)."""
+    entries = overlay.get("entries") if isinstance(overlay, dict) else None
+    if not isinstance(entries, dict):
+        return q, []
+    placed, coins, dropped = set(placed or ()), dict(q.coins), []
+    for sym, raw in entries.items():
+        e = {k: v for k, v in raw.items() if k not in OVERLAY_EXTRA_KEYS} if isinstance(raw, dict) else raw
+        if not overlay_entry_ok(sym, e):
+            dropped.append((str(sym)[:24], "invalid entry"))
+        elif sym in coins:
+            dropped.append((sym, "owner entry wins"))
+        elif sym in placed:
+            coins[sym] = dict(e)
+    return Queries(q.config, q.subreddits, q.ambiguous, coins), dropped
+
+
+def load_merged(path: Path | None = None, placed_symbols=None) -> Queries:
+    """The owner file plus the overlay for placed coins; an explicit `path` never merges; `load` stays owner-only.
+    A placed coin with neither an owner nor an overlay entry raises, like `load`."""
+    if path is not None:
+        return load(path, placed_symbols)
+    q = load(None)
+    from api.data.attention import onboarding_store
+    overlay = onboarding_store.read_json(OVERLAY_NAME)
+    q, _ = merge_overlay(q, overlay, placed_symbols if placed_symbols is not None else _current_placed())
+    if placed_symbols is not None:
+        missing = sorted(set(placed_symbols) - set(q.coins))
+        if missing:
+            raise QueriesError(f"coins: {len(missing)} placed coin(s) have no entry: {', '.join(missing[:5])}")
+    return q
+
+
 def placed_symbols(path: Path | None = None) -> list[str]:
     """Every symbol placed in a narrative (read here so api.data never imports api.analytics)."""
     doc = json.loads((path or NARRATIVES_PATH).read_text(encoding="utf-8"))
     syms = {_symbol(c.get("symbol"), "narratives") for n in doc.get("narratives", []) for c in n.get("coins", [])}
     return sorted(syms)
+
+
+def _current_placed() -> list[str]:
+    return placed_symbols()
 
 
 def coin_set(q: Queries, source: str, placed) -> list[str]:

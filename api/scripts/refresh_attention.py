@@ -198,11 +198,18 @@ def _symbols(arg: str | None) -> list[str]:
         return list(DEFAULT_SYMBOLS)
 
 
-def _run_wikipedia(symbols, client, today, sleep):
+def _wiki_articles() -> dict:
+    """T223: the owner's wiki_articles.json plus the resolver overlay (the owner entry always wins); never raises."""
+    from api.data.attention import onboarding_resolver
     try:
-        articles = json.loads(WIKI_ARTICLES_PATH.read_text())
+        owner = json.loads(WIKI_ARTICLES_PATH.read_text())
     except (OSError, ValueError):
-        articles = {}
+        owner = {}
+    return onboarding_resolver.merge_wiki(owner, onboarding_store.read_json(WIKI_OVERLAY))[0]
+
+
+def _run_wikipedia(symbols, client, today, sleep):
+    articles = _wiki_articles()
     return _collect(symbols, lambda s: wikipedia.fetch_series(
         s, articles.get(s), client=client, today=today, sleep=sleep))
 
@@ -361,7 +368,7 @@ def _run_trends(symbols, client, today, sleep):
     from api.data.attention.types import SourceSeries
     trends_run_error = None
     started = _utcnow()
-    km, bad = trends_keywords.safe_load()
+    km, bad = trends_keywords.safe_load_merged()
     out: dict[str, SourceSeries] = {}
     metas: dict[str, dict] = {}
     todo: list[tuple[str, str]] = []
@@ -466,6 +473,10 @@ def _run_categories(symbols, client, today, sleep):
         raise RuntimeError(f"categories unavailable: {coingecko_attention.LAST_FAILURE}")
     categories_store.write_snapshot(today.isoformat(), [
         {"id": k, "name": names.get(k, k), "symbols": v} for k, v in got.items()])
+    led, _ = onboarding_store.read_ledger()
+    if led is not None:
+        from api.data.attention import narrative_proposals
+        narrative_proposals.refresh(led)
     return []
 
 
@@ -498,6 +509,8 @@ def _run_ledger(symbols, client, today, sleep) -> str:
         onboarding_store.write_ledger(res.ledger)
         onboarding_store.append_log(day, [{"source": "ledger", "action": "seeded", "coins": len(res.ledger["coins"]),
                                            "lost_progress": lost}])
+        from api.data.attention import narrative_proposals
+        narrative_proposals.refresh(res.ledger)
         if lost:
             print("ledger: warning re-seeded, probation progress lost", file=sys.stderr)
         return f"ok seeded {len(res.ledger['coins'])}"
@@ -509,14 +522,288 @@ def _run_ledger(symbols, client, today, sleep) -> str:
     onboarding_store.append_log(day, [
         {"source": "ledger", "action": ev, "coin_id": cid,
          "symbol": coins.get(cid, led["coins"].get(cid, {})).get("symbol")} for ev, cid in res.events])
+    from api.data.attention import narrative_proposals
+    narrative_proposals.refresh(res.ledger)
     counts = {k: sum(1 for ev, _ in res.events if ev == k) for k in LEDGER_EVENTS}
     return "ok advanced" + "".join(f", {k} {n}" for k, n in counts.items() if n)
+
+
+def _owner_rules() -> dict:
+    from api.analytics.attention import discovery
+    return discovery.load_config()["universe_rules"]
+
+
+def _run_classify(symbols, client, today, sleep) -> str:
+    """T223 O3: class for ledger coins whose class is unknown (watching first), at most classify_max_coins_per_run,
+    paced like every CoinGecko call; stops at the first HTTP 429. Owner lists and confirmed classes are applied
+    without a request. Only derived numbers are stored; stdout carries counts only."""
+    from api.data.attention import coin_class
+    settings, _ = onboarding_settings.safe_load()
+    if settings is None:
+        return "unavailable settings"
+    led, state = onboarding_store.read_ledger()
+    if led is None:
+        return f"unavailable {'corrupt' if state == 'corrupt' else 'no'} ledger"
+    rules = _owner_rules()
+    day, log, coins = today.isoformat(), [], led["coins"]
+    for cid, e in coins.items():
+        cls, src = coin_class.resolve(e["symbol"], e["class"], rules, settings)
+        if src != "auto" and (cls, src) != (e["class"], e["class_source"]):
+            e.update({"class": cls, "class_source": src, "updated": day})
+            log.append({"source": "classify", "action": "applied", "coin_id": cid, "symbol": e["symbol"],
+                        "class": cls, "class_source": src})
+    todo = sorted((cid for cid, e in coins.items() if e["class"] == "unknown" and e["class_source"] == "auto"
+                   and e["state"] in ("watching", "member")), key=lambda c: (coins[c]["state"] != "watching", c))
+    tried = known = 0
+    stopped = False
+    deadline = _clock() + ONBOARDING_TIME_BUDGET_S
+    budget_stop = False
+    for cid in todo[:settings.classify_max_coins_per_run]:
+        if _clock() >= deadline:
+            budget_stop = True
+            break
+        detail, st = coingecko_attention.fetch_coin_detail(cid, client=client, sleep=sleep)
+        prices, pst = (None, "skipped") if detail is None else coingecko_attention.fetch_price_stats(
+            cid, client=client, sleep=sleep)
+        if "capped" in (st, pst):
+            stopped = True
+            break
+        tried += 1
+        evidence = ({**detail, "prices": prices} if detail and pst == "ok"
+                    else {"categories": None, "error": st if detail is None else pst})
+        cls, summary = coin_class.classify(coins[cid]["symbol"], evidence, settings)
+        known += cls != "unknown"
+        coins[cid].update({"class": cls, "class_evidence": {**summary, "checked": day}, "class_source": "auto",
+                           "updated": day})
+        log.append({"source": "classify", "action": "applied" if cls != "unknown" else "pending", "coin_id": cid,
+                    "symbol": coins[cid]["symbol"], "class": cls})
+    if log:
+        onboarding_store.write_ledger(led)
+        onboarding_store.append_log(day, log)
+        from api.data.attention import narrative_proposals
+        narrative_proposals.refresh(led)
+    return f"ok {known}/{tried}" + (", stopped on HTTP 429" if stopped else ", time budget reached" if budget_stop else "")
+
+
+WIKI_OVERLAY, QUERIES_OVERLAY, PENDING_FILE = "wiki_articles_auto.json", "attention_queries_auto.json", "pending.json"
+ONBOARDING_TIME_BUDGET_S = 180  # per network step; three steps fit the owner-applied 12-minute workflow step
+
+
+def _onboarding_document(name: str, key: str) -> dict:
+    doc = onboarding_store.read_json(name) or {}
+    return doc if isinstance(doc.get(key), dict) else {key: {}}
+
+
+def _drop_overlay_entries(doc, dropped, source, led, pending, log, day) -> set[str]:
+    """Only the refresh writer quarantines collisions. Read-only loaders never write. Returns the quarantined
+    symbols so the same run does not resolve them again and overwrite their pending evidence."""
+    from api.data.attention.onboarding_resolver import Verdict
+    ids = {entry["symbol"]: cid for cid, entry in led["coins"].items()}
+    for symbol, reason in dropped:
+        previous = doc["entries"].pop(symbol, None)
+        verdict = Verdict("pending", reason=reason)
+        if symbol in ids:
+            _record(led, pending, log, ids[symbol], source, verdict, day, previous)
+        else:
+            pending.setdefault("coins", {}).setdefault(symbol, {})[source] = {"reason": reason, "at": day}
+            log.append({"symbol": symbol, "source": source, "action": "pending", "reason": reason,
+                        "previous": previous})
+    return {symbol for symbol, _ in dropped}
+
+
+def _resolver_context(source: str):
+    """(settings, ledger, {coin id: snapshot name}, candidate coin ids) or a fixed-token reason string."""
+    settings, _ = onboarding_settings.safe_load()
+    if settings is None:
+        return "unavailable settings"
+    led, state = onboarding_store.read_ledger()
+    if led is None:
+        return f"unavailable {'corrupt' if state == 'corrupt' else 'no'} ledger"
+    snap = universe_store.read_latest() or {}
+    names = {r.get("id"): r.get("name") for r in snap.get("coins") or [] if isinstance(r, dict)}
+    coins = led["coins"]
+    todo = sorted((cid for cid, e in coins.items() if e["state"] in ("watching", "member")
+                   and e["class"] in ("normal", "unknown") and not settings.blocked(e["symbol"], source)),
+                  key=lambda c: (coins[c]["state"] != "watching", c))
+    return settings, led, names, todo
+
+
+def _record(led, pending, log, cid, source, verdict, day, previous=None) -> None:
+    """One resolver outcome: the ledger keeps the state and reason (missing is never 0), pending keeps the evidence,
+    the log keeps everything (sanitized and capped by the store)."""
+    e = led["coins"][cid]
+    e.setdefault("resolver", {})[source] = {"state": verdict.action, "reason": verdict.reason, "at": day}
+    if verdict.action == "pending":
+        pending.setdefault("coins", {}).setdefault(e["symbol"], {})[source] = {
+            "reason": verdict.reason, "evidence": verdict.evidence, "at": day}
+    else:
+        pending.setdefault("coins", {}).get(e["symbol"], {}).pop(source, None)
+    log.append({"source": source, "action": verdict.action, "coin_id": cid, "symbol": e["symbol"],
+                "value": verdict.value, "reason": verdict.reason, "evidence": verdict.evidence,
+                "previous": previous})
+
+
+def _overlay_put(doc: dict, symbol: str, value: dict, day: str) -> None:
+    doc.setdefault("entries", {})[symbol] = {**value, "source": "auto", "resolved_at": day}
+
+
+def _resolver_save(led, pending, overlays: dict, log, day) -> None:
+    for name, doc in overlays.items():
+        onboarding_store.write_json(name, doc)
+    onboarding_store.write_json(PENDING_FILE, pending)
+    onboarding_store.write_ledger(led)
+    onboarding_store.append_log(day, log)
+
+
+def _run_resolve_wiki(symbols, client, today, sleep) -> str:
+    """T223 O4: Wikipedia title (strict checks) and the Reddit/X cashtag-only entry for unnamed ledger coins, at most
+    resolver_max_coins_per_run, stopping at the first HTTP 429. Writes only the bot overlays, pending and the log."""
+    from api.data.attention import onboarding_resolver as res, onboarding_sources as osrc, web_queries
+    ctx = _resolver_context("wikipedia")
+    if isinstance(ctx, str):
+        return ctx
+    settings, led, names, todo = ctx
+    day, log = today.isoformat(), []
+    pending = _onboarding_document(PENDING_FILE, "coins")
+    wiki_doc = _onboarding_document(WIKI_OVERLAY, "entries")
+    q_doc = _onboarding_document(QUERIES_OVERLAY, "entries")
+    try:
+        owner_wiki = json.loads(WIKI_ARTICLES_PATH.read_text())
+    except (OSError, ValueError):
+        return "unavailable wiki file"
+    try:
+        owner_q = web_queries.load().coins
+    except Exception:  # noqa: BLE001 - a bad owner file means no Reddit/X entries this run
+        owner_q = None
+    merged, dropped = res.merge_wiki(owner_wiki, wiki_doc)
+    held = _drop_overlay_entries(wiki_doc, dropped, "wikipedia", led, pending, log, day)
+    if owner_q is not None:
+        q_owner = web_queries.load()
+        _, q_dropped = web_queries.merge_overlay(q_owner, q_doc, [])
+        held |= _drop_overlay_entries(q_doc, q_dropped, "reddit_x", led, pending, log, day)
+    taken = {str(t).casefold(): s for s, t in merged.items() if t}
+    todo = [cid for cid in todo if led["coins"][cid]["symbol"] not in held
+            and (led["coins"][cid]["symbol"] not in merged
+                 or (owner_q is not None and led["coins"][cid]["symbol"] not in owner_q
+                     and led["coins"][cid]["symbol"] not in q_doc["entries"]))]
+    deadline = _clock() + ONBOARDING_TIME_BUDGET_S
+    budget_stop = False
+    counts = {"applied": 0, "pending": 0, "none": 0}
+    stopped = False
+    for cid in todo[:settings.resolver_max_coins_per_run]:
+        if _clock() >= deadline:
+            budget_stop = True
+            break
+        e = led["coins"][cid]
+        sym, name = e["symbol"], names.get(cid)
+        if owner_q is not None and sym not in owner_q and sym not in q_doc["entries"] and not settings.blocked(
+                sym, "reddit_x"):
+            v = res.reddit_x_verdict(sym, name)
+            if v.action == "applied":
+                _overlay_put(q_doc, sym, v.value, day)
+            _record(led, pending, log, cid, "reddit_x", v, day)
+        if sym in merged:
+            continue
+        page, st = osrc.fetch_wiki_page(name, client=client) if name else (None, "none")
+        days, pst = (0, "ok")
+        if page is not None and st == "ok":
+            days, pst = osrc.fetch_pageview_days(sym, page["canonical"], client=client, today=today, sleep=sleep)
+        if "capped" in (st, pst):
+            stopped = True
+            _record(led, pending, log, cid, "wikipedia",
+                    res.Verdict("pending", reason="rate limited; retry next run"), day)
+            break
+        v = res.wiki_verdict(sym, name, page, taken=taken, pageview_days=days, min_days=settings.wiki_min_days)
+        if v.action == "none" and st == "unavailable":
+            v.reason = "request failed"
+        if v.action == "applied":
+            _overlay_put(wiki_doc, sym, v.value, day)
+            taken[v.value["title"].casefold()] = sym
+        counts[v.action] += 1
+        _record(led, pending, log, cid, "wikipedia", v, day)
+    _resolver_save(led, pending, {WIKI_OVERLAY: wiki_doc, QUERIES_OVERLAY: q_doc}, log, day)
+    return (f"ok applied {counts['applied']}, pending {counts['pending']}, none {counts['none']}"
+            + (", stopped on HTTP 429" if stopped else ", time budget reached" if budget_stop else ""))
+
+
+def _run_resolve_trends(symbols, client, today, sleep) -> str:
+    """T223 O4: Google Trends topic for unnamed ledger coins under the strict rule only (suggestions, the topic's own
+    series, and the identity check against the stored CoinGecko volume), at most resolver_max_coins_per_run, one
+    request every TRENDS_INTERVAL_S, stopping at the first HTTP 429."""
+    from api.data.attention import onboarding_resolver as res, onboarding_sources as osrc
+    ctx = _resolver_context("trends")
+    if isinstance(ctx, str):
+        return ctx
+    settings, led, names, todo = ctx
+    km, _ = trends_keywords.safe_load_merged()
+    if km is None:
+        return "unavailable keyword file"
+    try:
+        trendreq = TRENDREQ_FACTORY()
+    except PytrendsMissing:
+        return "unavailable pytrends not installed"
+    except Exception as exc:  # noqa: BLE001 - class only
+        return f"unavailable session {trends.error_class(exc)}"
+    day, log = today.isoformat(), []
+    pending = _onboarding_document(PENDING_FILE, "coins")
+    doc = _onboarding_document(trends_keywords.OVERLAY_NAME, "entries")
+    owner = trends_keywords.load()
+    km, dropped = trends_keywords.merge_overlay(owner, doc)
+    held = _drop_overlay_entries(doc, dropped, "trends", led, pending, log, day)
+    taken = {e["topic"] for e in km.entries.values() if "topic" in e} | (
+        {km.anchor["topic"]} if "topic" in km.anchor else set())
+    counts = {"applied": 0, "pending": 0, "none": 0}
+    stopped, sent = False, False
+    todo = [cid for cid in todo if led["coins"][cid]["symbol"] not in set(km.entries) | held]
+    deadline = _clock() + ONBOARDING_TIME_BUDGET_S
+    budget_stop = False
+    for cid in todo[:settings.resolver_max_coins_per_run]:
+        if _clock() >= deadline:
+            budget_stop = True
+            break
+        e = led["coins"][cid]
+        sym, name = e["symbol"], names.get(cid)
+        if sym in km.entries:
+            continue
+        if sent:
+            sleep(TRENDS_INTERVAL_S)
+        cands, st = osrc.fetch_suggestions(trendreq, name) if name else (None, "ok")
+        sent = sent or bool(name)
+        if st == "capped":
+            stopped = True
+            _record(led, pending, log, cid, "trends",
+                    res.Verdict("pending", reason="rate limited; retry next run"), day)
+            break
+        v = res.trends_pick(sym, name, cands, taken_topics=taken)
+        if st == "unavailable":
+            v = res.Verdict("none", reason="request failed")
+        if v.action == "candidate":
+            sleep(TRENDS_INTERVAL_S)
+            points, sst = osrc.fetch_topic_series(sym, v.value["topic"], trendreq, today=today)
+            if sst == "capped":
+                stopped = True
+                _record(led, pending, log, cid, "trends",
+                        res.Verdict("pending", reason="rate limited; retry next run"), day)
+                break
+            corr, overlap = osrc.identity(points, store.read_points("coingecko", sym), min_days=settings.identity_min_days)
+            v = res.trends_confirm(v, series_state=sst, corr=corr, overlap_days=overlap, settings=settings)
+        if v.action == "applied":
+            _overlay_put(doc, sym, v.value, day)
+            taken.add(v.value["topic"])
+        counts[v.action] += 1
+        _record(led, pending, log, cid, "trends", v, day)
+    _resolver_save(led, pending, {trends_keywords.OVERLAY_NAME: doc}, log, day)
+    return (f"ok applied {counts['applied']}, pending {counts['pending']}, none {counts['none']}"
+            + (", stopped on HTTP 429" if stopped else ", time budget reached" if budget_stop else ""))
 
 
 RUNNERS = {"universe": _run_universe, "wikipedia": _run_wikipedia, "coingecko": _run_coingecko,
            "exchange_volume": _run_exchange_volume, "hyperliquid_volume": _run_hyperliquid_volume,
            "trends": _run_trends, "reddit": _run_reddit, "xsearch": _run_xsearch,
-           "categories": _run_categories, "signals": _run_signals, "ledger": _run_ledger}
+           "categories": _run_categories, "signals": _run_signals, "ledger": _run_ledger, "classify": _run_classify,
+           "resolve_wiki": _run_resolve_wiki, "resolve_trends": _run_resolve_trends}
+# T223: onboarding steps print one fixed-token line each and never decide the exit code.
+ONBOARDING_STEPS = ("ledger", "classify", "resolve_wiki", "resolve_trends")
 
 
 def _snapshot_signals(run, symbols, client, today, sleep) -> None:
@@ -555,8 +842,8 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
     symbols = _symbols(args.symbols)
     if args.dry_run:
         for name in names:
-            if name == "ledger":
-                print("ledger: dry run, would advance the onboarding ledger (no network call, nothing written)")
+            if name in ONBOARDING_STEPS:
+                print(f"{name}: dry run, nothing fetched or written")
                 continue
             if name == "signals":
                 print("signals: dry run, would snapshot windows 7,30,90 (no network call, nothing written)")
@@ -566,16 +853,22 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None,
     own = client is None
     client = client or httpx.Client(follow_redirects=True)
     results: dict[str, str] = {}
+    onboarding_rate_limited = False
     try:
         for name in names:
-            if name == "ledger":   # never decides the exit code; one explicit fixed-token line
-                if results.get("universe") == "error":
+            if name in ONBOARDING_STEPS:   # never decides the exit code; one explicit fixed-token line
+                if name != "ledger" and onboarding_rate_limited:
+                    print(f"{name}: unavailable rate-limit")
+                    continue
+                if name == "ledger" and results.get("universe") == "error":
                     print("ledger: skipped, universe step failed")
                     continue
                 try:
-                    print(f"ledger: {RUNNERS[name](symbols, client, today, sleep)}")
+                    status = RUNNERS[name](symbols, client, today, sleep)
+                    onboarding_rate_limited = onboarding_rate_limited or "HTTP 429" in status
+                    print(f"{name}: {status}")
                 except Exception as exc:  # noqa: BLE001 - class only, never the message
-                    print(f"ledger: unavailable error {type(exc).__name__}")
+                    print(f"{name}: unavailable error {type(exc).__name__}")
                 continue
             if name == "signals":
                 _snapshot_signals(RUNNERS[name], symbols, client, today, sleep)
