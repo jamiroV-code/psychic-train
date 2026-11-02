@@ -1,0 +1,116 @@
+{
+  "step": "pinned_reopen",
+  "started": "2026-11-02T14:02:47.699+00:00",
+  "python": "3.12.14",
+  "camoufox": "0.5.9",
+  "playwright": "1.62.0",
+  "free_ram_mb_start": 1783,
+  "disk_free_gib_start": 27.85,
+  "ram_checks": [
+    {
+      "t": "2026-11-02T14:02:47.748+00:00",
+      "before": "launch P",
+      "available_mb": 1784
+    }
+  ],
+  "launches": [
+    {
+      "label": "P-reopen",
+      "t": "2026-11-02T14:03:07.293+00:00",
+      "launch_s": 19.44,
+      "first_page_s": 0.11
+    }
+  ],
+  "cookies": {
+    "names": [
+      "acct",
+      "auth_token",
+      "ct0"
+    ],
+    "acct": "P",
+    "auth_token_is_FAKE": true,
+    "session_cookie_present": false
+  },
+  "storage": {
+    "probe_acct": "P"
+  },
+  "identity": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:158.0) Gecko/20100101 Firefox/158.0",
+    "platform": "Win32",
+    "oscpu": "Windows NT 10.0; Win64; x64",
+    "hardwareConcurrency": 8,
+    "languages": [
+      "en-US",
+      "en"
+    ],
+    "timezone": "HOST_TZ_REDACTED",
+    "screen": {
+      "width": 1920,
+      "height": 1200,
+      "availWidth": 1920,
+      "availHeight": 1152,
+      "colorDepth": 24
+    },
+    "outer": [
+      1920,
+      1152
+    ],
+    "inner": [
+      1920,
+      1026
+    ],
+    "dpr": 1,
+    "webgl": {
+      "vendor": "Google Inc. (Intel)",
+      "renderer": "ANGLE (Intel, Intel(R) HD Graphics 400 Direct3D11 vs_5_0 ps_5_0), or similar"
+    },
+    "voices": 0,
+    "fonts": [
+      [
+        "Segoe UI",
+        true
+      ],
+      [
+        "Calibri",
+        true
+      ],
+      [
+        "Helvetica Neue",
+        true
+      ],
+      [
+        "Ubuntu",
+        true
+      ],
+      [
+        "DejaVu Sans",
+        true
+      ],
+      [
+        "Arial",
+        true
+      ]
+    ],
+    "canvas_sha256": "959a30e90d8369f5968333fd31bdd33fe402609c440d68d66f637f4234509132"
+  },
+  "memory_peak": {
+    "rss_mb": 792.7,
+    "private_mb": 708.8,
+    "procs": 11
+  },
+  "closes": [
+    {
+      "label": "P graceful",
+      "close_call_s": 0.56,
+      "all_children_gone_s_after_close": 0.02,
+      "survivors": [],
+      "error": null
+    }
+  ],
+  "external_connections_seen": [],
+  "free_ram_mb_end": 1760,
+  "finished": "2026-11-02T14:03:08.678+00:00",
+  "survivors_at_end": [],
+  "sink_requests": [],
+  "sink_hosts": []
+}

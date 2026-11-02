@@ -1,0 +1,104 @@
+{
+  "step": "canvas_stability",
+  "started": "2026-11-02T14:04:46.420+00:00",
+  "python": "3.12.14",
+  "camoufox": "0.5.9",
+  "playwright": "1.62.0",
+  "free_ram_mb_start": 1322,
+  "disk_free_gib_start": 27.7,
+  "ram_checks": [
+    {
+      "t": "2026-11-02T14:04:46.476+00:00",
+      "before": "launch P-canvas",
+      "available_mb": 1323
+    }
+  ],
+  "launches": [
+    {
+      "label": "P-canvas",
+      "t": "2026-11-02T14:05:09.340+00:00",
+      "launch_s": 22.67,
+      "first_page_s": 0.19
+    }
+  ],
+  "canvas_hashes_same_session": [
+    "6cd375b17c0a9e412b5b11ebc25c83adbe40e52f5d24e5ce5ad9a48bb336f2f5",
+    "6cd375b17c0a9e412b5b11ebc25c83adbe40e52f5d24e5ce5ad9a48bb336f2f5",
+    "6cd375b17c0a9e412b5b11ebc25c83adbe40e52f5d24e5ce5ad9a48bb336f2f5",
+    "6cd375b17c0a9e412b5b11ebc25c83adbe40e52f5d24e5ce5ad9a48bb336f2f5"
+  ],
+  "identity": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:158.0) Gecko/20100101 Firefox/158.0",
+    "platform": "Win32",
+    "oscpu": "Windows NT 10.0; Win64; x64",
+    "hardwareConcurrency": 8,
+    "languages": [
+      "en-US",
+      "en"
+    ],
+    "timezone": "HOST_TZ_REDACTED",
+    "screen": {
+      "width": 1920,
+      "height": 1200,
+      "availWidth": 1920,
+      "availHeight": 1152,
+      "colorDepth": 24
+    },
+    "outer": [
+      1920,
+      1152
+    ],
+    "inner": [
+      1920,
+      1067
+    ],
+    "dpr": 1,
+    "webgl": {
+      "vendor": "Google Inc. (Intel)",
+      "renderer": "ANGLE (Intel, Intel(R) HD Graphics 400 Direct3D11 vs_5_0 ps_5_0), or similar"
+    },
+    "voices": 5,
+    "fonts": [
+      [
+        "Segoe UI",
+        true
+      ],
+      [
+        "Calibri",
+        true
+      ],
+      [
+        "Helvetica Neue",
+        true
+      ],
+      [
+        "Ubuntu",
+        true
+      ],
+      [
+        "DejaVu Sans",
+        true
+      ],
+      [
+        "Arial",
+        true
+      ]
+    ],
+    "canvas_sha256": "6cd375b17c0a9e412b5b11ebc25c83adbe40e52f5d24e5ce5ad9a48bb336f2f5"
+  },
+  "closes": [
+    {
+      "label": "P-canvas graceful",
+      "close_call_s": 0.5,
+      "all_children_gone_s_after_close": 0.02,
+      "survivors": [],
+      "error": null
+    }
+  ],
+  "external_connections_seen": [],
+  "free_ram_mb_end": 1521,
+  "finished": "2026-11-02T14:05:11.724+00:00",
+  "survivors_at_end": [],
+  "sink_requests": [],
+  "sink_hosts": []
+}
