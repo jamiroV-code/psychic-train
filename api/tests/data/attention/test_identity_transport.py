@@ -68,6 +68,8 @@ def test_both_factory_paths_send_account_identity(echo, style):
         for observed, label in ((a_graph, "alpha"), (a_boot, "alpha"), (b_graph, "beta"), (b_boot, "beta")):
             assert observed["accept-language"] == identities[label]["accept_language"]
             assert observed["user-agent"]
+        assert a_graph["x-twitter-client-language"] == "en"
+        assert b_graph["x-twitter-client-language"] == "en"
         assert a_graph["user-agent"] == a_boot["user-agent"]
         assert b_graph["user-agent"] == b_boot["user-agent"]
         assert a_graph["user-agent"] != b_graph["user-agent"]
@@ -150,3 +152,10 @@ def test_refresh_preserves_account_state_and_reconciles_identity(tmp_path):
     assert refreshed.stats == {"SearchTimeline": 7}
     assert refreshed.user_agent == identity["user_agent"]
     assert refreshed.headers["accept-language"] == identity["accept_language"]
+
+
+def test_incompatible_upstream_factory_is_refused(monkeypatch):
+    monkeypatch.setattr(account, "_make_http_client", lambda unexpected: None)
+    adapter = tr.IdentityAdapter("plain", {})
+    with pytest.raises(tr.XStartRefused):
+        adapter.install()
