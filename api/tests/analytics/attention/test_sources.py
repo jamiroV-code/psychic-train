@@ -288,8 +288,10 @@ def test_collector_unknown_when_heartbeat_unreadable(live):
     assert (c.state, c.reason, c.age_s, c.last_beat) == ("unknown", "unreadable", None, None)
 
 
-def test_collector_sources_reuse_the_health_fields(live, other_alive):
+def test_collector_sources_reuse_the_health_fields(live, other_alive, monkeypatch):
     from api.data.attention import pc_pace
+    world(live, monkeypatch, COINS, cats={"ai": list(COINS)}, source_impl={"xsearch": "xsearch_web",
+                                                                         "reddit": "reddit_web"})
     _beat()
     reddit = pc_pace.PcSource("reddit_web", configured_budget=250, floor=1, adaptive=False, clock=lambda: NOW)
     reddit.spend(3)
