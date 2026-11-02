@@ -73,6 +73,18 @@ def unit(pool, readers, src, config=None, symbol="SOL"):
                        policy=xf.FilterPolicy(), rng=random.Random(1), sleep=lambda s: None)
 
 
+def test_parse_drop_restarts_on_another_account_and_charges_both():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock, cap=1000), source(clock)
+    pool.set_canary_passed(labels=LABELS)
+    broken = day_pages(1)[0]
+    broken.body["entries"] = [{**entry, "broken": True} for entry in broken.body["entries"]]
+    outcome = unit(pool, {"acct_a": reader("acct_a", [broken]), "acct_b": reader("acct_b", day_pages())}, src)
+    assert outcome.result is not None
+    assert outcome.restarts == 1 and outcome.reads == 60 and outcome.pages == 3
+    assert pool.stopped_reason() is None
+    assert pool.health()["accounts"][0]["parse_strikes"] == 1
+
 def state_file():
     return cache.CACHE_ROOT / "attention" / "_pc_state" / "x_pool.json"
 
