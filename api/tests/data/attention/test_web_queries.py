@@ -211,3 +211,25 @@ def test_budget_share_accepts_one_and_fractions(doc, good):
 def test_budget_share_absent_key_uses_default(doc):
     doc["collector"].pop("reddit_stream_budget_share", None)
     assert wq.validate(doc).config.reddit_stream_budget_share == 0.45
+
+
+# --- collector identity pool, Part A: optional per-account cap and rest days (defaults live in code) ---
+
+def test_account_cap_and_rest_optional_off_by_default(doc):
+    assert "x_account_daily_cap" not in wq.X_DEFAULTS and "x_account_rest_days" not in wq.X_DEFAULTS
+    c = wq.validate(doc).config
+    assert c.x_account_daily_cap is None and c.x_account_rest_days == 0
+    doc["collector"]["x_account_daily_cap"] = 300
+    doc["collector"]["x_account_rest_days"] = 3
+    c = wq.validate(doc).config
+    assert (c.x_account_daily_cap, c.x_account_rest_days) == (300, 3)
+
+
+@pytest.mark.parametrize("key,bad", [("x_account_daily_cap", 0), ("x_account_daily_cap", True),
+                                     ("x_account_daily_cap", 1.5), ("x_account_daily_cap", "300"),
+                                     ("x_account_rest_days", -1), ("x_account_rest_days", None),
+                                     ("x_account_rest_days", False)])
+def test_account_cap_and_rest_rejected_when_invalid(doc, key, bad):
+    doc["collector"][key] = bad
+    with pytest.raises(wq.QueriesError, match=key):
+        wq.validate(doc)
