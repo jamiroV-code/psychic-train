@@ -622,6 +622,7 @@ def test_curl_fallback_runs_in_separate_process_with_backend_env_only_there(tmp_
     base = datetime(2026, 10, 26, 22, 0, tzinfo=UTC)
     ids = [snowflake(base - timedelta(minutes=i * 70)) for i in range(15)] + [snowflake(base - timedelta(days=1))]
     child = Child(ok_reply(ids))
+    curl_loaded_before = "curl_cffi" in sys.modules  # other B1 tests load it in-process; the fallback must not
     monkeypatch.delenv("TWS_HTTP_BACKEND", raising=False)
     s, d, config = curl_start(tmp_path, lib, child)
     lib.scripts[str(d / "acct1.db")] = [AbortReqError("Blocked by Cloudflare: 403 - r")]
@@ -631,7 +632,7 @@ def test_curl_fallback_runs_in_separate_process_with_backend_env_only_there(tmp_
     assert env["TWS_HTTP_BACKEND"] == "curl" and tr.env_guard(env, fallback=True) == []
     assert request["db"] == str(d / "acct1.db") and request["label"] == "acct1" and request["query"] == QUERY
     assert "TWS_HTTP_BACKEND" not in os.environ  # the main process keeps the default backend
-    assert "curl_cffi" not in sys.modules
+    assert ("curl_cffi" in sys.modules) == curl_loaded_before
     s.close()
 
 

@@ -5,7 +5,8 @@ at module level touches the network. The pure decisions (reason mapping, pool, c
 drop, raw archive) stay in `x_reader`, `x_pool` and `x_raw`; this module maps the library onto them.
 
 - Design A: ONE accounts file and ONE `API` per account (`<x_accounts_db_path>/<label>.db`), built with
-  `raise_when_no_account=True, wait_timeout=0` and nothing else (never `debug`, never a proxy, never a user agent).
+  `raise_when_no_account=True, wait_timeout=0` and nothing else (never `debug`, never a proxy argument; B1 identity is
+  applied by the lazily installed `IdentityAdapter` at the two client factories, not by `API` options).
   A unit therefore never spans two accounts; failover is `x_pool`'s.
 - Start (`start`) refuses with reason codes, never values: the environment guard (`x_reader.env_problems`), the
   configured pin equal to the code pin, the installed package's `direct_url.json` commit id equal to the pinned
@@ -22,6 +23,12 @@ drop, raw archive) stay in `x_reader`, `x_pool` and `x_raw`; this module maps th
   entry, which equals the hash `uv.lock` makes uv check at install). The retry runs in a SEPARATE process
   (`python -m api.data.attention.twscrape_reader --curl-fallback`) whose environment alone has
   `TWS_HTTP_BACKEND=curl`; it reads one page from the cursor the default backend stopped at.
+- B1 transport identity (02-11-26 superseding decision): `x_connection_style` (plain|curl) selects the backend for
+  the whole process; the selected backend is verified BEFORE the library loads (installed binaries are not re-hashed)
+  and bound for every client; selected curl that does not verify refuses startup and never falls back to curl.
+  With `x_identity_enabled` each account gets one fixed identity (literal UA under plain, exact impersonation target
+  under curl) on the GraphQL client AND the signature bootstrap, with the bootstrap cache scoped by identity revision.
+  The plain-mode fallback child uses the target-derived UA (bounded limitation: one retry per UTC day pool-wide).
 
 Owner procedures (exact commands in the W8d2 report):
 - Install on the 24/7 host: `uv sync --project api --frozen --group xreader`, then

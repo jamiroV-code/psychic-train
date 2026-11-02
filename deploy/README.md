@@ -296,6 +296,27 @@ sources (two threads, same pacing, budgets and evidence as before) and writes th
 - **Code updates.** The collector does not pull. After a pull that changes the collector, restart
   it (the box shows the commit it runs as `code <sha>`).
 
+### Transport identity (B1, 02-11-26; both switches default off, nothing here has been run live)
+
+Two optional keys in the `collector` block of `api\data\attention_queries.json` (absent means the defaults):
+
+- `x_connection_style`: `plain` (default, httpx, one bounded curl fallback per UTC day pool-wide) or `curl`
+  (normal browser-like transport for every X client). Changing it needs a collector restart.
+  `deploy\start-collector.ps1` reads it, refuses any other value, and sets `TWS_HTTP_BACKEND` to `httpx` or `curl`
+  for the collector process only. Global `TWS_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` are still removed
+  and still refused by the reader.
+- `x_identity_enabled` (default false) with `x_account_identities`: per account label `accept_language`, `region`,
+  `timezone`, an exact `impersonation_target` (for example `chrome131`, never an alias) and, for style `plain`, a
+  literal `user_agent` of the same browser family. Unknown labels, invalid values and duplicate identities refuse
+  startup. Under `curl` the wire user agent is the target's own (the curl backend ignores a supplied one).
+- Before the library loads, the selected backend is verified (platform, distribution name and version, wheel tag,
+  lock and allowlist hash, install record; the installed binaries are NOT re-hashed). Selected `curl` that does not verify
+  refuses startup; there is no curl-on-curl fallback.
+- Limitation: in `plain` style the daily curl fallback child sends the target-derived user agent, which may differ in
+  version text from the account's literal one; it is used at most once per UTC day for the whole pool.
+- Rollback: set `x_identity_enabled` false and `x_connection_style` `plain` (or remove both keys) and restart.
+  Proxies and the real-account comparison are not part of B1 and were not run.
+
 ### Switchover steps (UNRUN: none of these commands has been run; run them in order)
 
 | Step | Do | Expect |
