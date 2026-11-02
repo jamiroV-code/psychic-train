@@ -161,6 +161,8 @@ export interface DiscoveryAccountHealth {
   cap?: number | null;
   rest_until?: string | null;
   ready?: boolean | null;
+  parse_strikes?: number | null;
+  parse_strike_last_at?: string | null;
 }
 
 /** W8e2 health line, computed by the API; the web only formats it. */

@@ -113,11 +113,13 @@ class DiscoveryAccountHealth(BaseModel):
     cap: int | None = None
     rest_until: str | None = None
     ready: bool | None = None      # None: grandfathered/no ready gate
+    parse_strikes: int | None = None
+    parse_strike_last_at: str | None = None
 
     @model_serializer(mode="wrap")
     def serialize_account(self, handler):
         row = handler(self)
-        for key in ("reads_today", "cap", "rest_until", "ready"):
+        for key in ("reads_today", "cap", "rest_until", "ready", "parse_strikes", "parse_strike_last_at"):
             if row[key] is None:
                 row.pop(key)
         return row

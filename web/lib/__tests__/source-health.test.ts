@@ -60,7 +60,7 @@ describe("sourceHealthLines", () => {
       "Completeness 2026-10-28: 45 of 50 coin-days fetched. Attempted 50, fetched 45, missing 5 (timeout 3, rate-limited 2), capped 4, newest 2.5 h old",
     );
     expect(t.mode).toBe("Mode: baseline");
-    expect(t.accounts).toBe("X accounts: 2 of 3 active. acct-1 active, cookie 6 days old, reads today unknown / no limit, rest until unknown, ready unknown, last used 2026-10-29 13:00 UTC; acct-2 locked (login-wall), cookie age unknown, reads today unknown / no limit, rest until unknown, ready unknown, last used unknown");
+    expect(t.accounts).toBe("X accounts: 2 of 3 active. acct-1 active, cookie 6 days old, reads today unknown / no limit, rest until unknown, ready unknown, last used 2026-10-29 13:00 UTC, parse strikes unknown, last strike unknown; acct-2 locked (login-wall), cookie age unknown, reads today unknown / no limit, rest until unknown, ready unknown, last used unknown, parse strikes unknown, last strike unknown");
     expect(t.coverage).toBe("Coverage 2026-10-28: eligible 50, stored 45, exact 41, estimated 4, missing 5 (timeout 3, rate-limited 2)");
     expect(t.late).toBe("One day late: completeness covers 2026-10-28, the last full day; today's counts are still in progress.");
     expect(t.disk).toBe("Free disk: 50.0 GB");
@@ -75,6 +75,16 @@ describe("sourceHealthLines", () => {
       .toBe("Paused: rate-limit, until 2026-10-29 18:00 UTC");
     expect(text(row(health({ paused: true, pause_reason: null, pause_until: null }))).paused)
       .toBe("Paused: reason unknown, owner action needed");
+  });
+
+  it("shows a stopped collector and suspect account with strikes", () => {
+    const t = text(row(health({ paused: true, pause_reason: "layout_changed", pause_until: null, accounts: [
+      { label: "acct-1", state: "suspect", reason: "x_account_suspect", last_used: null,
+        cookie_age_days: null, parse_strikes: 2, parse_strike_last_at: "2026-10-29T14:00:00Z" },
+    ] })));
+    expect(t.paused).toBe("Stopped: layout_changed, owner action needed");
+    expect(t.accounts).toContain("acct-1 suspect");
+    expect(t.accounts).toContain("parse strikes 2, last strike 2026-10-29 14:00 UTC");
   });
 
   it("flags stale and spent budget and degraded mode", () => {

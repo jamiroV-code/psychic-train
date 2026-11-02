@@ -73,6 +73,126 @@ def unit(pool, readers, src, config=None, symbol="SOL"):
                        policy=xf.FilterPolicy(), rng=random.Random(1), sleep=lambda s: None)
 
 
+def test_parse_drop_restarts_on_another_account_and_charges_both():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock, cap=1000), source(clock)
+    pool.set_canary_passed(labels=LABELS)
+    broken = day_pages(1)[0]
+    broken.body["entries"] = [{**entry, "broken": True} for entry in broken.body["entries"]]
+    outcome = unit(pool, {"acct_a": reader("acct_a", [broken]), "acct_b": reader("acct_b", day_pages())}, src)
+    assert outcome.result is not None
+    assert outcome.restarts == 1 and outcome.reads == 60 and outcome.pages == 3
+    assert pool.stopped_reason() is None
+    assert pool.health()["accounts"][0]["parse_strikes"] == 1
+
+def stripped_page():
+    ids = tuple(f"tweet-{next(_ids)}" for _ in range(20))
+    entries = [{"entryId": entry_id, "content": {"itemContent": {"tweet_results": {}}}}
+               for entry_id in ids]
+    return xrd.RawPage({"data": {"search_by_raw_query": {"search_timeline": {
+        "timeline": {"instructions": [{"type": "TimelineAddEntries", "entries": entries}]}}}}},
+        ids, 40, 50)
+
+
+class StrippedReader(xrd.FakeXReader):
+    def parse_tweets(self, body):
+        if "data" in body:
+            return []
+        return super().parse_tweets(body)
+
+
+def test_incident_shape_is_retried_and_classified():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock), source(clock)
+    pool.set_canary_passed(labels=LABELS)
+    out = unit(pool, {"acct_a": StrippedReader("acct_a", [stripped_page()]),
+                      "acct_b": reader("acct_b", day_pages())}, src)
+    assert out.result is not None and out.reads == 60 and out.pages == 3
+    assert any("content_stripped" in line for line in pool.log)
+    assert pool.health()["accounts"][0]["parse_strikes"] == 1
+
+
+def test_strikes_expire_reset_and_make_account_suspect():
+    clock = Clock()
+    pool = xp.XPool(LABELS, clock=clock)
+    pool.note_parse_drop("acct_a", "unparseable")
+    clock.advance(hours=25)
+    pool.note_parse_drop("acct_a", "unparseable")
+    assert pool.health()["accounts"][0]["parse_strikes"] == 1
+    pool.clear_parse_strikes("acct_a")
+    assert pool.health()["accounts"][0]["parse_strikes"] == 0
+    pool.note_parse_drop("acct_a", "unparseable")
+    pool.note_parse_drop("acct_a", "unparseable")
+    assert pool.account_state("acct_a")[0] == "suspect"
+    assert pool.alerts()[0]["reason"] == xp.SUSPECT_REASON
+    assert pool.usable() == ["acct_b"]
+
+
+def test_second_stripped_attempt_flags_account_and_other_account_continues():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock), source(clock)
+    pool.set_canary_passed(labels=LABELS)
+    for _ in range(2):
+        pool.begin_pass()
+        out = unit(pool, {"acct_a": StrippedReader("acct_a", [stripped_page()]),
+                          "acct_b": reader("acct_b", day_pages())}, src)
+        assert out.result is not None and out.reads == 60
+        clock.advance(hours=1)
+    assert pool.account_state("acct_a")[0] == "suspect"
+    assert pool.alerts()[0]["reason"] == xp.SUSPECT_REASON
+    assert pool.stopped_reason() is None and pool.usable() == ["acct_b"]
+
+
+def test_clean_page_resets_account_streak():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock), source(clock)
+    pool.set_canary_passed(labels=LABELS)
+    pool.note_parse_drop("acct_a", "unparseable")
+    out = unit(pool, {"acct_a": reader("acct_a", day_pages()), "acct_b": reader("acct_b")}, src)
+    assert out.result is not None
+    assert pool.health()["accounts"][0]["parse_strikes"] == 0
+
+
+def test_two_accounts_with_same_parse_failure_stop_pool():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock), source(clock)
+    pool.set_canary_passed(labels=LABELS)
+    readers = {label: StrippedReader(label, [stripped_page()]) for label in LABELS}
+    out = unit(pool, readers, src)
+    assert out.reason == "layout_changed" and pool.stopped_reason() == "layout_changed"
+    assert out.reads == 40 and out.pages == 2
+
+
+def test_same_failure_on_different_units_in_pass_stops():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock), source(clock)
+    pool.set_canary_passed(labels=LABELS)
+    pool.begin_pass()
+    readers = {label: StrippedReader(label, [stripped_page()]) for label in LABELS}
+    config = cfg(x_unit_max_restarts=0)
+    assert unit(pool, readers, src, config).reason == "account_failed"
+    clock.advance(hours=1)
+    out = unit(pool, readers, src, config, symbol="OTHER")
+    assert out.reason == "layout_changed" and pool.stopped_reason() == "layout_changed"
+
+
+def test_single_account_second_strike_stops():
+    clock = Clock()
+    pool, src = xp.XPool(["acct_a"], clock=clock), source(clock)
+    pool.set_canary_passed(labels=["acct_a"])
+    config = cfg(x_unit_max_restarts=0)
+    first = unit(pool, {"acct_a": StrippedReader("acct_a", [stripped_page()])}, src, config)
+    assert first.reason != "layout_changed" and pool.stopped_reason() is None
+    clock.advance(hours=1)
+    second = unit(pool, {"acct_a": StrippedReader("acct_a", [stripped_page()])}, src, config)
+    assert second.reason == "layout_changed" and pool.stopped_reason() == "layout_changed"
+
+
+def test_old_state_has_unknown_strikes():
+    write_old_state()
+    health = xp.XPool(["acct_a"], clock=Clock()).health()["accounts"][0]
+    assert health["parse_strikes"] is None and health["parse_strike_last_at"] is None
+
 def state_file():
     return cache.CACHE_ROOT / "attention" / "_pc_state" / "x_pool.json"
 

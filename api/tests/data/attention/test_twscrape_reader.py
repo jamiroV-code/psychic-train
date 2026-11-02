@@ -500,15 +500,17 @@ def test_epoch_window_query_is_explicit_start_end(tmp_path):
     assert wq.load().config.x_window_syntax == "since_time"  # P-X9: the epoch form is the one X honours
 
 
-def test_read_accounting_uses_search_raw_entries_and_parse_drop_stops(tmp_path, lib):
+def test_read_accounting_uses_search_raw_entries_and_parse_drop_retries(tmp_path, lib):
     s, d = start(tmp_path, lib)
     base = datetime(2026, 10, 26, 23, 0, tzinfo=UTC)
     ids = [snowflake(base - timedelta(minutes=i)) for i in range(20)]
     lib.dropped = set(ids[:10])
     lib.scripts[str(d / "acct1.db")] = [FakeResponse(page_body(ids), {"x-rate-limit-remaining": "40"})]
+    other_ids = [snowflake(base - timedelta(minutes=i + 30)) for i in range(20)]
+    lib.scripts[str(d / "acct2.db")] = [FakeResponse(page_body(other_ids), {"x-rate-limit-remaining": "40"})]
     out, pool = _unit(s, cfg(d))
-    assert out.result is None and pool.stopped_reason() == "layout_changed"
-    assert out.reads == 20  # raw entries read, not the 10 parsed
+    assert out.result is not None and pool.stopped_reason() is None
+    assert out.reads == 40  # both accounts' raw entries count, including the discarded attempt
     s.close()
 
 
@@ -815,7 +817,8 @@ def test_health_active_over_total_with_label_last_used_state_cookie_age_no_secre
     assert (h["active"], h["total"]) == (1, 2)
     assert h["accounts"][0] == {"label": "acct1", "state": "active", "reason": None, "last_used": T0.isoformat(),
                                 "cookie_age_days": None, "reads_today": None, "cap": None,
-                                "rest_until": None, "ready": None}
+                                "rest_until": None, "ready": None, "parse_strikes": None,
+                                "parse_strike_last_at": None}
     assert h["accounts"][1]["state"] == "inactive" and h["accounts"][1]["reason"] == "x_login_required"
     assert h["commit_match"] is True and h["env_ok"] is False and h["env_bad"] == ["HTTPS_PROXY"]
     assert h["accounts_path"] == "ok" and h["curl_fallback"] == "flag_false"
