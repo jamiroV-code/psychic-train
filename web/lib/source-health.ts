@@ -19,8 +19,8 @@ const REASON_TEXT: Record<DiscoverySourceReason, string> = {
   invalid_file: "invalid file",
 };
 
-/** ISO timestamp as "YYYY-MM-DD HH:MM UTC"; unknown when null or unparseable. */
-function utc(iso: string | null): string {
+/** ISO timestamp as "YYYY-MM-DD HH:MM UTC"; unknown when null or unparseable. Shared with the collector box. */
+export function utc(iso: string | null): string {
   const ms = iso === null ? NaN : Date.parse(iso);
   if (Number.isNaN(ms)) return UNKNOWN;
   return `${new Date(ms).toISOString().slice(0, 16).replace("T", " ")} UTC`;

@@ -12,6 +12,9 @@ data, else the first); X in rotation mode is gated by `x_rotation_points` stored
 W8e2: optional worker health is read from atomic state/completeness snapshots only. Collection-day counts
 are distinct coin-days, excluding canaries, pages and account retries. The text separately labels the target
 UTC day. Older files without attempt or scheduling evidence report unknown, never inferred zero.
+
+Standalone collector: `collector` reads the collector's heartbeat file (`collector_heartbeat.status`) and repeats
+each PC stream's health fields (X search, Reddit), also for a parked source; no worker state stays unknown.
 """
 from __future__ import annotations
 
@@ -31,13 +34,13 @@ from api.analytics.attention.discovery import (EXCHANGE_SERIES, FALLBACK_SERIES,
 from api.analytics.attention import narratives
 from api.analytics.attention.universe import load_universe_rows
 from api.data import cache
-from api.data.attention import (pc_pace, registry, store, trends_keywords, trends_runs, universe_store, web_queries,
-                                x_pool)
+from api.data.attention import (collector_heartbeat, pc_pace, registry, store, trends_keywords, trends_runs,
+                                universe_store, web_queries, x_pool)
 from api.data.attention import pc_adapter as pa
 from api.data.attention.types import MIN_HISTORY_DAYS
-from api.models.discovery import (DiscoveryAccountHealth, DiscoveryKeywordGap, DiscoverySourceHealth,
-                                  DiscoverySourceRow, DiscoverySourcesResponse, DiscoveryTrendsKeyword,
-                                  DiscoveryTrendsWatch)
+from api.models.discovery import (DiscoveryAccountHealth, DiscoveryCollectorSource, DiscoveryCollectorStatus,
+                                  DiscoveryKeywordGap, DiscoverySourceHealth, DiscoverySourceRow,
+                                  DiscoverySourcesResponse, DiscoveryTrendsKeyword, DiscoveryTrendsWatch)
 
 LABELS = {
     "wikipedia": "Wikipedia pageviews", "trends": "Google Trends", "reddit": "Reddit", "xsearch": "X search",
@@ -56,6 +59,7 @@ def clear_cache() -> None:
 
 
 PC_STORES = frozenset({"xsearch_web", "reddit_web"})
+COLLECTOR_SOURCES = (("xsearch", "xsearch_web"), ("reddit", "reddit_web"))   # (Discovery id, PC stream store)
 
 
 def _json_file(path: Path) -> dict | None:
@@ -216,6 +220,23 @@ def _health(store_id: str, day: date, now: datetime) -> DiscoverySourceHealth | 
     except OSError:
         pass
     return h
+
+
+def _collector_status(rows: list[DiscoverySourceRow], day: date, now: datetime) -> DiscoveryCollectorStatus:
+    """The collector box: the heartbeat's state and each PC stream's health (reused from its row when computed)."""
+    beat = collector_heartbeat.status(now)
+    known = {r.impl: r.health for r in rows if r.impl in PC_STORES}
+    sources = []
+    for sid, store_id in COLLECTOR_SOURCES:
+        h = known[store_id] if store_id in known else _health(store_id, day, now)
+        fields = {} if h is None else {
+            "last_unit_at": h.last_unit_at, "paused": h.paused, "pause_reason": h.pause_reason,
+            "pause_until": h.pause_until, "stale": h.stale, "budget_used": h.budget_used,
+            "effective_budget": h.effective_budget}
+        sources.append(DiscoveryCollectorSource(id=sid, label=LABELS[sid], has_state=h is not None, **fields))
+    return DiscoveryCollectorStatus(state=beat["state"], reason=beat["reason"], started_at=beat["started_at"],
+                                    last_beat=beat["last_beat"], age_s=beat["age_s"], mode=beat["mode"],
+                                    version=beat["version"], running_sources=beat["sources"], sources=sources)
 
 
 def _scan(source: str, symbol: str) -> tuple[int, date | None]:
@@ -379,4 +400,5 @@ def build_sources(today: date, *, probe_path: Path | None = None, universe_path:
         total_sources=len(weighted), live_weight=sum(r.weight or 0 for r in live),
         newest=max((r.newest for r in live if r.newest), default=None), sources=out,
         trends_keyword=_trends_keyword(eligible),
-        trends_watch=[DiscoveryTrendsWatch(**w) for w in trends_runs.watch_list(today)])
+        trends_watch=[DiscoveryTrendsWatch(**w) for w in trends_runs.watch_list(today)],
+        collector=_collector_status(out, end, now))

@@ -75,8 +75,15 @@ def test_sources_route_shape_and_no_network(wired):
     assert r.status_code == 200
     b = r.json()
     assert set(b) == {"as_of", "universe_size", "eligible_size", "live_sources", "total_sources", "live_weight",
-                      "newest", "sources", "trends_keyword", "trends_watch"}
+                      "newest", "sources", "trends_keyword", "trends_watch", "collector"}
     assert set(b["trends_keyword"]) == {"eligible_size", "with_keyword", "missing"}
+    assert set(b["collector"]) == {"state", "reason", "started_at", "last_beat", "age_s", "mode", "version",
+                                   "running_sources", "sources"}
+    assert (b["collector"]["state"], b["collector"]["reason"]) == ("never_started", "no_heartbeat")
+    assert [s["id"] for s in b["collector"]["sources"]] == ["xsearch", "reddit"]
+    assert set(b["collector"]["sources"][0]) == {"id", "label", "has_state", "last_unit_at", "paused",
+                                                 "pause_reason", "pause_until", "stale", "budget_used",
+                                                 "effective_budget"}
     assert set(b["sources"][0]) == {"id", "label", "kind", "weight", "state", "newest", "history_days",
                                     "coins_with_data", "eligible_size", "note", "reason", "impl"}
     assert b["total_sources"] == 7 and b["eligible_size"] == 2
