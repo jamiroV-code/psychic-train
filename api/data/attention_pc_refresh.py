@@ -838,7 +838,7 @@ class AttentionPcWorker:
                 or ledger_retention_days < 1:
             raise ValueError("ledger retention must be at least one day")
         self._wait = wait or _default_wait
-        self.queries = queries or web_queries.load
+        self.queries = queries or web_queries.load_merged
         self.symbols = symbols or _default_symbols
         self.x_start = x_start or _default_x_start
         self.x_cleanup = x_cleanup or _default_x_cleanup

@@ -5,6 +5,7 @@ import type {
   DiscoveryResponse,
   DiscoverySourcesResponse,
   DiscoveryWindow,
+  OnboardingResponse,
 } from "@/lib/types/discovery";
 
 // Same getJson pattern as the other lib/api clients.
@@ -56,4 +57,9 @@ export function fetchDiscoveryPrice(symbol: string, window: DiscoveryWindow = 30
 /** GET /api/narrative/sources: what each Discovery input has stored. */
 export function fetchDiscoverySources(): Promise<DiscoverySourcesResponse> {
   return getJson<DiscoverySourcesResponse>("/api/narrative/sources");
+}
+
+/** GET /api/narrative/onboarding: local onboarding evidence only. */
+export function fetchOnboarding(): Promise<OnboardingResponse> {
+  return getJson<OnboardingResponse>("/api/narrative/onboarding");
 }

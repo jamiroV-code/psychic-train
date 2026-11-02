@@ -36,3 +36,11 @@ def test_fifteenth_drops_oldest(isolated_cache):
     snaps = json.loads((isolated_cache / "attention" / "universe.json").read_text())["snapshots"]
     assert [s["date"] for s in snaps] == [f"2026-10-{d:02d}" for d in range(2, 16)]
     assert us.read_latest()["date"] == "2026-10-15"
+
+
+def test_rank_and_name_round_trip_and_stay_optional(isolated_cache):
+    us.write_snapshot("2026-10-01", [{"id": "a", "symbol": "A", "market_cap": 2, "volume_24h": 1, "rank": 1,
+                                      "name": "Alpha"}])
+    assert us.read_latest()["coins"][0]["rank"] == 1 and us.read_latest()["coins"][0]["name"] == "Alpha"
+    us.write_snapshot("2026-10-02", _rows(3))   # an older-shape row (no rank, no name) still loads
+    assert us.read_latest()["coins"] == _rows(3)

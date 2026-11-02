@@ -3,6 +3,7 @@
 Run from the repo root: uv run --project api python -m api.scripts.check_wiki_titles
 Reads a symbol -> title JSON map, prints one line per coin and a paste-ready JSON of PASS entries.
 Writes nothing to the repo. Exit code 0 unless the file is unreadable.
+T223: the title the endpoint returns is compared with the candidate; a redirect to another page never PASSes.
 """
 from __future__ import annotations
 
@@ -35,6 +36,12 @@ class Result:
     extract: str = ""
     verdict: str = "FAIL"
     reason: str = ""
+    returned_title: str = ""
+
+
+def _norm_title(t: str) -> str:
+    t = " ".join(t.replace("_", " ").split())
+    return t[:1].upper() + t[1:]
 
 
 def check_title(client: httpx.Client, symbol: str, title: str) -> Result:
@@ -55,6 +62,8 @@ def check_title(client: httpx.Client, symbol: str, title: str) -> Result:
         res.page_type = str(body.get("type") or "other")
         res.description = str(body.get("description") or "")
         res.extract = str(body.get("extract") or "")
+        titles = body.get("titles") if isinstance(body.get("titles"), dict) else {}
+        res.returned_title = str(titles.get("normalized") or titles.get("canonical") or body.get("title") or "")
     except Exception as exc:
         res.reason = f"bad JSON: {type(exc).__name__}"
         return res
@@ -63,6 +72,10 @@ def check_title(client: httpx.Client, symbol: str, title: str) -> Result:
     elif res.page_type != "standard":
         res.page_type = "other"
         res.reason = "type other"
+    elif not res.returned_title:
+        res.reason = "missing canonical title"
+    elif _norm_title(res.returned_title) != _norm_title(title):
+        res.reason = "redirected to another title"
     else:
         text = f"{res.description} {res.extract}".lower()
         if any(w in text for w in CRYPTO_WORDS):

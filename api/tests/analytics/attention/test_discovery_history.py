@@ -355,3 +355,25 @@ def test_history_payload_carries_membership_as_of(isolated_cache, tmp_path, monk
     assert hist.category_history("ai", 30, today=TODAY).membership_as_of == "2026-10-14"
     monkeypatch.setattr(narr_mod, "NARRATIVES_PATH", write_narratives(tmp_path, {"ai": ["A"]}, as_of="2026-10-15"))
     assert hist.category_history("ai", 30, today=TODAY).membership_as_of == "2026-10-15"  # cache invalidated
+
+
+def test_history_keeps_todays_meaning_under_enforce(isolated_cache, tmp_path, monkeypatch):
+    """T223 O2: past-day charts read eligibility with use_ledger=False, so a watching coin keeps its history."""
+    import json
+    from api.data.attention import onboarding_settings, onboarding_store
+    world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7}, cats={"ai": ["A", "B"]})
+    seed_coin("A"), seed_coin("B")
+    before_coin = hist.coin_history("A", 30, today=TODAY).model_dump()
+    before_cat = hist.category_history("ai", 30, today=TODAY).model_dump()
+    s = json.loads(onboarding_settings.SETTINGS_PATH.read_text())
+    p = tmp_path / "s.json"
+    p.write_text(json.dumps({**s, "mode": "enforce"}))
+    monkeypatch.setattr(onboarding_settings, "SETTINGS_PATH", p)
+    entry = {"symbol": "A", "state": "watching", "first_seen": "2026-10-14", "last_in_top100": "2026-10-15",
+             "last_in_top120": "2026-10-15", "consecutive_top100": 2, "consecutive_outside120": 0, "class": "unknown",
+             "class_evidence": {}, "class_source": "auto", "seeded": False, "updated": "2026-10-15"}
+    onboarding_store.write_ledger({"last_advanced_date": "2026-10-15", "seeded_at": None, "coins": {"a": entry}})
+    assert "A" not in disc.eligibility(disc.load_config(), [{"id": "a", "symbol": "A", "volume_24h": 5e7}]).eligible
+    hist.clear_cache()
+    assert hist.coin_history("A", 30, today=TODAY).model_dump() == before_coin
+    assert hist.category_history("ai", 30, today=TODAY).model_dump() == before_cat

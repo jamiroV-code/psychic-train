@@ -87,9 +87,9 @@ test.describe("narrative: My baskets", () => {
     }
   });
 
-  test("two tabs, 30d default, a row per basket, window switch, coin expand", async ({ page }) => {
+  test("three tabs, 30d default, a row per basket, window switch, coin expand", async ({ page }) => {
     await page.goto("/narrative");
-    await expect(page.getByRole("tab")).toHaveText(["My baskets", "Discovery"]);
+    await expect(page.getByRole("tab")).toHaveText(["My baskets", "Discovery", "New coins"]);
     await expect(page.getByTestId("attention-window-30")).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("attention-row-majors")).toBeVisible();
     await expect(page.getByTestId("attention-row-layer2")).toBeVisible();

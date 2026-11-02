@@ -192,6 +192,76 @@ def safe_load(path: Path | None = None, placed_symbols=None) -> tuple[KeywordMap
         return None, BAD_FILE_REASON
 
 
+# --- T223 O4: the resolver's overlay (bot-written, under the cache root). The owner file always wins. ---
+OVERLAY_NAME = "trends_keywords_auto.json"
+OVERLAY_EXTRA_KEYS = ("source", "resolved_at")
+
+
+def overlay_path() -> Path:
+    from api.data import cache
+    return cache.CACHE_ROOT / "attention" / "onboarding" / OVERLAY_NAME
+
+
+def merge_overlay(km: KeywordMap, overlay) -> tuple[KeywordMap, list[tuple[str, str]]]:
+    """Owner map plus every overlay entry that passes the owner checks alone and collides with nothing; never
+    raises. Returns (merged map, [(symbol, why dropped)]). An overlay entry may carry no `approved`, no
+    `no-keyword`, and no term for a symbol on the `_ambiguous` list; `_anchor` and `_ambiguous` keys are refused."""
+    entries = overlay.get("entries") if isinstance(overlay, dict) else None
+    if not isinstance(entries, dict):
+        return km, []
+    merged = dict(km.entries)
+    topics = {e["topic"] for e in merged.values() if "topic" in e} | ({km.anchor["topic"]} if "topic" in km.anchor
+                                                                       else set())
+    terms = {e["term"].casefold() for e in merged.values() if "term" in e} | (
+        {km.anchor["term"].casefold()} if "term" in km.anchor else set())
+    dropped: list[tuple[str, str]] = []
+    for sym, raw in entries.items():
+        if not isinstance(sym, str) or sym in (ANCHOR_KEY, AMBIGUOUS_KEY) or not SYMBOL_RE.fullmatch(sym):
+            dropped.append((str(sym)[:24], "bad symbol"))
+            continue
+        if sym in merged:
+            dropped.append((sym, "owner entry wins"))
+            continue
+        e = {k: v for k, v in raw.items() if k not in OVERLAY_EXTRA_KEYS} if isinstance(raw, dict) else raw
+        if isinstance(e, dict) and ("approved" in e or "no-keyword" in e):
+            dropped.append((sym, "approved or no-keyword not allowed"))
+            continue
+        try:
+            e = _check_entry(sym, e, anchor=False)
+        except KeywordFileError:
+            dropped.append((sym, "invalid entry"))
+            continue
+        if "term" in e and sym in km.ambiguous:
+            dropped.append((sym, "ambiguous symbol: no automatic term"))
+            continue
+        if "topic" in e and e["topic"] in topics or "term" in e and e["term"].casefold() in terms:
+            dropped.append((sym, "collides with another keyword"))
+            continue
+        topics.update([e["topic"]] if "topic" in e else [])
+        terms.update([e["term"].casefold()] if "term" in e else [])
+        merged[sym] = e
+    return KeywordMap(merged, km.anchor, list(km.warnings), list(km.not_placed), km.ambiguous), dropped
+
+
+def _read_overlay():
+    from api.data.attention import onboarding_store
+    return onboarding_store.read_json(OVERLAY_NAME)
+
+
+def load_merged(path: Path | None = None) -> KeywordMap:
+    """The owner file plus the overlay. An explicit `path` never merges (tests and owner tools read that file
+    alone); `load` and `safe_load` stay owner-only. Raises only when the OWNER file is bad, like `load`."""
+    km = load(path)
+    return km if path is not None else merge_overlay(km, _read_overlay())[0]
+
+
+def safe_load_merged(path: Path | None = None) -> tuple[KeywordMap | None, str]:
+    try:
+        return load_merged(path), ""
+    except Exception:  # noqa: BLE001 - any failure is the same fixed reason
+        return None, BAD_FILE_REASON
+
+
 def keyword_status(km: KeywordMap | None, symbol: str) -> str:
     """"topic" or "term" when the runner pulls the coin, else one of MISSING_STATUSES. A symbol on the file's
     `_ambiguous` list has its term pulled only when `approved` equals that term exactly (stage 2, D-30)."""

@@ -977,3 +977,23 @@ def test_kill_at_every_tick_never_pauses_a_utc_day(tick, day_locks, tmp_path, mo
     h = source_health(tmp_path, monkeypatch, clock, q, "xsearch")
     assert h.completeness_attempted == h.completeness_fetched == len(COINS) and h.missing == 0
     assert x_state(clock, q).used == reader.returned  # only what reached us, each page once
+
+
+def test_default_collector_uses_placed_overlay_query(monkeypatch, tmp_path):
+    from api.data.attention import onboarding_store
+    document = {"narratives": [{"id": "defi", "coins": [{"symbol": "ZZNEW"}]}]}
+    placement = tmp_path / "narratives.json"
+    placement.write_text(json.dumps(document))
+    monkeypatch.setattr(wq, "NARRATIVES_PATH", placement)
+    onboarding_store.write_json("attention_queries_auto.json", {"entries": {
+        "ZZNEW": {"name": "New Coin", "cashtag_only": True},
+        "ZZOFF": {"name": "Not Placed", "cashtag_only": True}}})
+    clock = Clock()
+    kwargs, _, _ = fakes(clock)
+    kwargs.pop("queries")
+    kwargs.pop("symbols")
+    worker = apr.AttentionPcWorker(**kwargs)
+    loaded = worker.queries()
+    assert "ZZNEW" in worker.symbols(loaded, X)
+    assert "ZZOFF" not in loaded.coins
+    assert wq.x_query(loaded, "ZZNEW").startswith('"$ZZNEW"')

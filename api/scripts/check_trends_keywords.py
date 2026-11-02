@@ -54,6 +54,10 @@ from urllib.parse import quote
 from api.analytics.attention import discovery, narratives
 from api.analytics.attention.universe import load_universe_rows
 from api.data.attention import trends_keywords as tk
+# T223: the pure verdict functions live in the library (api.data never imports api.analytics); used here unchanged.
+from api.data.attention.onboarding_sources import (  # noqa: F401 - CRYPTO_TYPE_WORDS is part of this tool's surface
+    BRACKET_QUALIFIERS, CRYPTO_TYPE_WORDS, _bracket_match, _contained_match, _exact_match, _norm, _prefix_match,
+    _ticker_match, _usable, is_crypto_type)
 from api.scripts.trends_cli_common import (
     error_class,
     make_trendreq,
@@ -67,24 +71,6 @@ MAX_PACING_SECONDS = 3600.0
 PAUSE_EVERY = 40
 PAUSE_SECONDS = 20.0
 STOPPED_EXIT = 4
-# Google `type` strings seen in the owner's run of 21-10-26 (T134): Currency, Coin, Chain, Blockchain,
-# Blockchain platform, Distributed ledger, Payment network, Cryptocurrency, Cryptocurrency exchange company.
-# Generic types (Topic, Software, Company, Website, Computer program) stay out: a hit there needs the owner.
-# CRYPTO_SUBSTRINGS may sit anywhere in the type, CRYPTO_WORDS only as whole words ("Tokenization company" is
-# out), and CRYPTO_PHRASES only as the whole type ("Chain" is in, "Restaurant chain" and "Internet protocol" out).
-CRYPTO_SUBSTRINGS = ("cryptocurrency", "blockchain")
-CRYPTO_WORDS = ("token", "coin", "digital currency", "virtual currency")
-CRYPTO_PHRASES = ("currency", "chain", "distributed ledger", "payment network", "decentralized finance",
-                  "decentralized finance protocol", "decentralized exchange", "defi protocol")
-CRYPTO_TYPE_WORDS = CRYPTO_SUBSTRINGS + CRYPTO_WORDS + CRYPTO_PHRASES + (
-    "blockchain platform", "cryptocurrency exchange company")
-PREFIX_MIN = 4
-# What may follow a prefix title in the name: "World" -> Worldcoin, "NEAR" -> NEAR Protocol; never "Bitcoin" ->
-# Bitcoin Cash or "Ethereum" -> Ethereum Classic.
-PREFIX_SUFFIXES = ("coin", "protocol", "network", "token", "chain", "blockchain", "finance")
-# What may follow the name in a longer title: "Kaspa Network"; never "Ethereum Classic", "Bitcoin SV",
-# "Sky Mavis", "Sky Protocol" or "Polygon zkEVM" (other coins or companies).
-CONTAINED_SUFFIXES = ("coin", "token", "network", "blockchain", "cryptocurrency")
 VERIFY_URL = "https://trends.google.com/trends/explore?q={}"
 PASTE_HEADER = "--- paste-ready JSON (PASS entries) ---"
 DECISION_HEADER = "--- needs a decision ---"
@@ -96,7 +82,6 @@ INTERRUPTED_EXIT = 130
 VARIANT_TEMPLATES = ("{name} crypto", "{name} coin", "{ticker} crypto")
 MAX_QUERIES_PER_COIN = 4
 QUALIFIER_WORDS = ("crypto", "coin", "token")
-BRACKET_QUALIFIERS = ("crypto", "cryptocurrency", "coin", "token", "blockchain")
 QUALIFIED_HEADER = "--- qualified term proposals (lower confidence than topics) ---"
 OUTSIDE_HEADER = "--- outside the narrative-placed set ---"
 LEAD_RULES = ("ticker-title", "bracket")
@@ -141,51 +126,6 @@ class Result:
     @property
     def complete(self) -> bool:
         return not self.failed and self.done == self.queries
-
-
-def _usable(raw) -> list[dict]:
-    out = []
-    for c in raw if isinstance(raw, list) else []:
-        if not isinstance(c, dict):
-            continue
-        mid, title, type_ = c.get("mid"), c.get("title"), c.get("type")
-        if tk.is_valid_topic(mid) and isinstance(title, str) and title.strip() and isinstance(type_, str) and type_.strip():
-            out.append({"mid": mid, "title": title[:80], "type": type_[:80]})
-    return out
-
-
-def _norm(text: str) -> str:
-    return " ".join(re.sub(r"[^0-9a-z]+", " ", text.casefold()).split())
-
-
-def is_crypto_type(type_: str) -> bool:
-    t = _norm(type_)
-    return (t in CRYPTO_PHRASES or any(w in t for w in CRYPTO_SUBSTRINGS)
-            or any(f" {w} " in f" {t} " for w in CRYPTO_WORDS))
-
-
-def _exact_match(title: str, name: str) -> bool:
-    n = _norm(name)
-    return bool(n) and _norm(title) == n
-
-
-def _contained_match(title: str, name: str) -> bool:
-    t, n = _norm(title), _norm(name)
-    return bool(n) and t.startswith(n + " ") and t[len(n):].strip() in CONTAINED_SUFFIXES
-
-
-def _prefix_match(title: str, name: str) -> bool:
-    t, n = _norm(title), _norm(name)
-    return len(t) >= PREFIX_MIN and n.startswith(t) and n[len(t):].strip() in PREFIX_SUFFIXES
-
-
-def _bracket_match(title: str, name: str) -> bool:
-    m = re.fullmatch(r"(.+?)\s*\(([^()]+)\)", title.strip())
-    return bool(m) and _exact_match(m.group(1), name) and _norm(m.group(2)) in BRACKET_QUALIFIERS
-
-
-def _ticker_match(title: str, symbol: str) -> bool:
-    return title.strip().casefold() == symbol.casefold()
 
 
 def queries_for(symbol: str, name: str) -> list[str]:
@@ -369,7 +309,7 @@ def _cand_via(r: Result, c: dict, variants: bool) -> str:
 
 
 def _print_qualified(results: list[Result], stamp: str, out, derived: dict) -> dict:
-    entries = tk.load().entries
+    entries = tk.load_merged().entries
     taken = {e["term"].casefold(): s for s, e in entries.items() if "term" in e}
     block: dict[str, dict] = {}
     skipped: list[str] = []
@@ -400,7 +340,7 @@ def _print_scope(proposed: set[str], eligible: list[str], results: list[Result],
     """Symbols the blocks propose that no narrative places, and where every eligible coin stands after the run.
     A coin this run did not check and with no keyword is 'not checked', never 'nothing'; one whose request failed is
     'request failed', never 'nothing'."""
-    keywords = tk.load().entries
+    keywords = tk.load_merged().entries
     placed = {c["symbol"] for n in narratives.load_narratives()["narratives"] for c in n["coins"]}
     outside = sorted(proposed - placed)
     print(f"\n{OUTSIDE_HEADER}\n{', '.join(outside) or '-'}", file=out)
@@ -509,7 +449,7 @@ def eligible_coins(rows: list[dict]) -> tuple[list[str], dict[str, str]]:
 
 def _default_mapping(eligible: list[str], names: dict[str, str]) -> tuple[dict, dict]:
     """(keyword-file labels then eligible coins without an entry, the names derived for those coins)."""
-    mapping = {sym: e["label"] for sym, e in tk.load().entries.items()}
+    mapping = {sym: e["label"] for sym, e in tk.load_merged().entries.items()}
     derived = {s: names[s] for s in eligible if s not in mapping}
     return {**mapping, **derived}, derived
 
@@ -565,7 +505,7 @@ def main(argv: list[str] | None = None, *, trendreq_factory=make_trendreq, sleep
             return 2
         mapping = {s: mapping[s] for s in wanted if s in mapping}
     if args.only_unresolved:
-        keep = set(unresolved_symbols(tk.load(), mapping))
+        keep = set(unresolved_symbols(tk.load_merged(), mapping))
         mapping = {s: n for s, n in mapping.items() if s in keep}
     client, code = start_client(trendreq_factory, "check_trends_keywords", err)
     if client is None:

@@ -106,8 +106,9 @@ def test_payload_is_backward_compatible_with_a_not_tradeable_coin(isolated_cache
     body = TestClient(app).get(URL, params={"window": 30}).json()
     assert OLD_TOP <= set(body) and set(body) - OLD_TOP == {"tradeability_unknown", "venue_lists",
                                                              "tradeability_data_suspect"}
-    assert set(body["excluded_counts"]) == OLD_REASONS | {"not-tradeable", "commodity-backed"}
-    assert all(body["excluded_counts"][k] == 0 for k in OLD_REASONS | {"commodity-backed"})
+    new = {"not-tradeable", "commodity-backed", "watching", "inactive", "unclassified"}
+    assert set(body["excluded_counts"]) == OLD_REASONS | new
+    assert all(body["excluded_counts"][k] == 0 for k in OLD_REASONS | new - {"not-tradeable"})
     assert body["excluded_counts"]["not-tradeable"] == 1
     assert body["excluded_coins"] == [{"symbol": "JAAA", "reason": "not-tradeable", "detail": "zero 24h volume"}]
     assert body["excluded"] == {"exclusion_list": 1, "below_volume_floor": 0, "no_category": 0, "no_source_data": 0}
@@ -123,3 +124,29 @@ def test_no_data_payload_carries_the_new_fields_with_defaults(isolated_cache, tm
     world(tmp_path, monkeypatch, {"A": 5e7}, cats={"ai": ["A"]})
     body = TestClient(app).get(URL, params={"window": 30}).json()
     assert body["status"] == "no-data" and body["tradeability_unknown"] == 0
+
+
+def test_onboarding_route_reads_fixture_without_network(isolated_cache, monkeypatch):
+    from api.data.attention import coin_ledger, onboarding_store
+    import ipaddress
+    real_connect = socket.socket.connect
+    def boom(*args, **kwargs):
+        raise AssertionError("onboarding route must not reach the network")
+    def local_only(sock, address, *args, **kwargs):
+        if isinstance(address, tuple) and ipaddress.ip_address(address[0]).is_loopback:
+            return real_connect(sock, address, *args, **kwargs)
+        return boom()
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", boom)
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", boom)
+    monkeypatch.setattr(socket.socket, "connect", local_only)
+    ledger = coin_ledger.empty()
+    ledger["coins"]["new"] = coin_ledger._entry({"symbol": "ZZNEW"}, "2026-11-01", state="watching", count=4)
+    onboarding_store.write_ledger(ledger)
+    before = onboarding_store.ledger_path().read_bytes()
+    response = TestClient(app).get("/api/narrative/onboarding")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["mode"] == "shadow" and payload["status"] == "ok"
+    assert payload["coins"][0]["days_in_top100"] == 4
+    assert payload["coins"][0]["class"] == "unknown"
+    assert onboarding_store.ledger_path().read_bytes() == before

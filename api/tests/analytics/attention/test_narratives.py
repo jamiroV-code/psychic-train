@@ -39,8 +39,10 @@ def test_loads_reviewed_file():
 
 def test_shipped_file_places_every_snapshot_coin_once_as_primary():
     m = narr.memberships(SNAPSHOT_2026_10_18, 3)
-    assert set(m.unassigned) == NOT_PLACED and "M" in m.unassigned
-    assert len(m.primary) == 75 and set(m.primary) == set(SNAPSHOT_2026_10_18) - NOT_PLACED
+    from api.data.attention import web_queries
+    assert set(m.unassigned) >= NOT_PLACED
+    assert set(SNAPSHOT_2026_10_18) - NOT_PLACED <= set(m.primary)
+    assert set(m.primary) <= set(web_queries.load_merged(placed_symbols=m.primary).coins)
     assert m.hidden == []
 
 
