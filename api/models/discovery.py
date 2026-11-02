@@ -109,6 +109,18 @@ class DiscoveryAccountHealth(BaseModel):
     reason: str | None = None
     last_used: str | None = None
     cookie_age_days: int | None = None   # None: never refreshed through `--refresh-cookies`
+    reads_today: int | None = None  # unknown until accounting has begun; missing cap means unlimited
+    cap: int | None = None
+    rest_until: str | None = None
+    ready: bool | None = None      # None: grandfathered/no ready gate
+
+    @model_serializer(mode="wrap")
+    def serialize_account(self, handler):
+        row = handler(self)
+        for key in ("reads_today", "cap", "rest_until", "ready"):
+            if row[key] is None:
+                row.pop(key)
+        return row
 
 
 class DiscoverySourceHealth(BaseModel):
@@ -204,6 +216,19 @@ class DiscoveryCollectorSource(BaseModel):
     stale: bool | None = None
     budget_used: int | None = None
     effective_budget: int | None = None
+    sizing_day: str | None = None
+    capacity_reads: int | None = None
+    need_reads: int | None = None
+    shortfall_reads: int | None = None
+    backlog_reads: int | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_source(self, handler):
+        row = handler(self)
+        for key in ("sizing_day", "capacity_reads", "need_reads", "shortfall_reads", "backlog_reads"):
+            if row[key] is None:
+                row.pop(key)
+        return row
 
 
 class DiscoveryCollectorStatus(BaseModel):

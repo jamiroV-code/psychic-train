@@ -90,9 +90,11 @@ REDDIT_STREAM_DEFAULTS = {
     # W8c2w (owner Q1 option b): the stream's share of the day's Reddit request budget, a fraction in (0, 1]
     "reddit_stream_budget_share": 0.45,
 }
+# Optional Stage 0 settings; the committed query file need not contain them.
+X_POOL_OPTIONAL_DEFAULTS = {"x_account_daily_cap": None, "x_account_rest_days": 0}
 REDDIT_METHODS = ("reddit_stream", "reddit_web")
 _INT_KEYS = tuple(DEFAULTS)
-DEFAULTS = {**DEFAULTS, **X_DEFAULTS, **REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS}
+DEFAULTS = {**DEFAULTS, **X_DEFAULTS, **REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **X_POOL_OPTIONAL_DEFAULTS}
 X_WINDOW_SYNTAXES = ("since_time", "date")
 LANG_RE = re.compile(r"[a-z]{2,3}")
 X_LABEL_RE = re.compile(r"[a-z0-9_]{1,24}")  # the same opaque labels as `x_pool.LABEL_RE`
@@ -158,6 +160,8 @@ class CollectorConfig:
     reddit_stream_poll_retention_days: int = REDDIT_STREAM_DEFAULTS["reddit_stream_poll_retention_days"]
     reddit_stream_max_pages_per_poll: int = REDDIT_STREAM_DEFAULTS["reddit_stream_max_pages_per_poll"]
     reddit_stream_budget_share: float = REDDIT_STREAM_DEFAULTS["reddit_stream_budget_share"]
+    x_account_daily_cap: int | None = None
+    x_account_rest_days: int = 0
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -225,7 +229,13 @@ def validate_config(block) -> CollectorConfig:
     for key in X_DEFAULTS:
         if key not in block or not _x_value(key, block[key]):
             raise QueriesError(f"collector: {key} is missing or not a valid value")
-    block = {**REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **block}
+    block = {**REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **X_POOL_OPTIONAL_DEFAULTS, **block}
+    for key, floor in (("x_account_daily_cap", 1), ("x_account_rest_days", 0)):
+        value = block[key]
+        if key == "x_account_daily_cap" and value is None:
+            continue
+        if type(value) is not int or value < floor:
+            raise QueriesError(f"collector: {key} is not a valid value")
     for key in REDDIT_STREAM_DEFAULTS:
         if not _stream_value(key, block[key]):
             raise QueriesError(f"collector: {key} is not a valid value")

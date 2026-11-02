@@ -224,7 +224,11 @@ def test_sources_model_key_set_without_testclient():
         "state", "reason", "started_at", "last_beat", "age_s", "mode", "version", "running_sources", "sources"}
     assert set(DiscoveryCollectorSource.model_fields) == {
         "id", "label", "has_state", "last_unit_at", "paused", "pause_reason", "pause_until", "stale", "budget_used",
-        "effective_budget"}
+        "effective_budget", "sizing_day", "capacity_reads", "need_reads", "shortfall_reads", "backlog_reads"}
+    # Stage 0 fields are optional/trailing and must not alter an older serialized response.
+    assert set(DiscoveryCollectorSource(id="xsearch", label="X search", has_state=False).model_dump()) == {
+        "id", "label", "has_state", "last_unit_at", "paused", "pause_reason", "pause_until", "stale",
+        "budget_used", "effective_budget"}
 
 
 # --- standalone collector (C): the heartbeat read as a `collector` object, files only ------------------------------

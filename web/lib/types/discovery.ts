@@ -156,6 +156,11 @@ export interface DiscoveryAccountHealth {
   last_used: string | null;
   /** null: never refreshed through `--refresh-cookies`. */
   cookie_age_days: number | null;
+  reads_today?: number | null;
+  /** Absent/null means no per-account limit. */
+  cap?: number | null;
+  rest_until?: string | null;
+  ready?: boolean | null;
 }
 
 /** W8e2 health line, computed by the API; the web only formats it. */
@@ -225,6 +230,11 @@ export interface DiscoveryCollectorSource {
   stale: boolean | null;
   budget_used: number | null;
   effective_budget: number | null;
+  sizing_day?: string | null;
+  capacity_reads?: number | null;
+  need_reads?: number | null;
+  shortfall_reads?: number | null;
+  backlog_reads?: number | null;
 }
 
 /** The attention collector process, read by the API from its heartbeat file; the web only formats it. */

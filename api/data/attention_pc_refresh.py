@@ -267,7 +267,10 @@ class Stream:
         path = pc_pace.state_path(self.source).with_name(f"{self.source}_health.json")
         path.parent.mkdir(parents=True, exist_ok=True)
         cache._atomic_write_json({"mode": self.worker.mode(now), "expected_gap_s": gap,
-                                  "observed_at": now.isoformat()}, path)
+                                  "observed_at": now.isoformat(), **self._sizing(q, src, syms)}, path)
+
+    def _sizing(self, q, src, syms) -> dict:
+        return {}
 
     def _completeness(self, syms, day, *, symbol=None, reason="not_reached", attempted=False, result=None):
         """Reddit-compatible target-day evidence; one latest record per coin-day, never canary or page counts.
@@ -429,7 +432,27 @@ class XStream(Stream):
         return pc_pace.Trickle.for_source(q.config, X_SOURCE, self.rng)
 
     def _pool(self, config) -> x_pool.XPool:
-        return x_pool.XPool(list(config.x_accounts), clock=self.worker.clock)
+        return x_pool.from_config(config, clock=self.worker.clock)
+
+    def _sizing(self, q, src, syms) -> dict:
+        from api.data.attention import x_capacity
+
+        if not q.config.x_accounts:
+            return {}
+        try:
+            pool = self._pool(q.config)
+        except x_pool.XPoolStateError:
+            return {}
+        target = _utc(self.worker.clock()).date() - timedelta(days=1)
+        queued = self.queue(q, syms)
+        target_count = sum(day == target for _, day in queued)
+        per_unit = x_capacity.per_unit_reads(sample_n=q.config.x_sample_n,
+                                             page_cap=q.config.x_page_cap, page_size=xr.PAGE_ENTRIES)
+        return {"sizing_day": target.isoformat(), **x_capacity.sizing(
+            global_room=0 if src.budget_spent() else src.remaining(), remaining_caps=pool.remaining_caps(),
+            queued_target=target_count, backlog=len(queued) - target_count, per_unit=per_unit,
+            canary_pages=0 if pool.canary_passed_today() else len(pool.canary_accounts()),
+            page_size=xr.PAGE_ENTRIES)}
 
     def _held(self, q):
         if not q.config.x_accounts:
@@ -484,6 +507,7 @@ class XStream(Stream):
             return "not_configured"
         try:
             pool = self._pool(c)
+            pool.begin_pass()
         except x_pool.XPoolStateError:
             log.warning("attention pc %s pool state unreadable: source paused, file kept", X_SOURCE)
             return "state_error"

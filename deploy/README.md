@@ -399,3 +399,42 @@ Get-Process uvicorn,node -ErrorAction SilentlyContinue | Stop-Process
 ```
 
 Optionally sign out of Tailscale. Your caches and watchlist are untouched by all of this.
+
+## X account caps, rest and ready (Stage 0)
+
+These optional collector settings default **off** in code; existing query files need no change:
+
+- `x_account_daily_cap`: `null` (no per-account limit), or an integer >= 1. Counts loaded entries per
+  account per UTC day, including canaries, curl pages and abandoned attempts. The global read budget remains
+  the ceiling. A coin-day already started may cross the account cap; it finishes on that account, and the
+  next selection skips that account. If no account is selectable because of caps, X waits for the next UTC
+  day as `budget_spent`; an in-flight lock wait takes precedence.
+- `x_account_rest_days`: integer >= 0, default `0`. When enabled, a label newly added to an **existing**
+  pool state rests from the first collector pass that registers it. Existing labels and first-ever pool
+  files are grandfathered. Merely viewing status does not register an account or write state.
+
+After adding a configured label and giving it normal manual use, mark it ready:
+
+```powershell
+uv run --project api python -m api.data.attention.twscrape_reader --mark-ready acct_new
+```
+
+The command accepts a configured label only and writes an ISO UTC timestamp to `account_ready.json`
+in the configured accounts folder, atomically. It does not read cookies, open account databases or
+contact X. The file is separate from `attention/_pc_state/x_pool.json`, so a running collector cannot
+overwrite the mark. Both gates apply: rest must have elapsed **and** the ready mark must be from a
+previous UTC day. The account then joins the next day's canary. Re-marking delays activation until
+the next UTC day again; no collector restart is required to read the mark.
+
+The status box reuses the X source's account health list: loaded reads today / cap, state and reason,
+rest deadline, ready gate, last use and cookie age. Unknown reads stay unknown until accounting starts;
+no cap means **no limit**, not zero. Capacity is a file snapshot of remaining selectable caps versus
+global room, queued yesterday coin-days and pending canary pages; older backlog is separate. A
+shortfall is in reads, not a promise of coverage: losses and restarts can consume extra reads.
+Yesterday's coverage uses the existing completeness evidence: eligible = stored + missing,
+exact = stored - capped, estimated = capped. Missing evidence is unknown, never fabricated zero.
+
+Rollback: older versions reject the three added per-account state keys. Before rolling back, with
+the collector stopped by the owner, back up the pool file and remove `reads_day`, `reads_used` and
+`rest_until` from each account object. Keep the ready marks separately. This change does not deploy,
+restart anything, renew cookies, add proxies or enable a browser.

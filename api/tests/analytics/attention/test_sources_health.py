@@ -292,3 +292,32 @@ def test_rows_without_worker_state_unchanged(live):
     assert row(res, "reddit").health is None and "health" not in row(res, "reddit").model_dump()
     assert ([r.model_dump() for r in res.sources if r.id != "xsearch"]
             == [r for r in baseline if r["id"] != "xsearch"])
+
+
+def test_stage0_accounts_and_sizing_are_file_only_and_unknown_stays_unknown(live, monkeypatch):
+    from api.data.attention import x_pool
+
+    path = put_state("xsearch_web")
+    config = dataclasses.replace(web_queries.validate_config(dict(web_queries.DEFAULTS)),
+                                 x_accounts=("a1", "a2"), x_account_daily_cap=40,
+                                 x_accounts_db_path=str(live))
+    pool = x_pool.from_config(config, clock=lambda: NOW)
+    pool.charge("a1", 40)
+    monkeypatch.setattr(src, "_collector", lambda: config)
+    before = pool.path.read_bytes()
+    schedule_path = path.with_name("xsearch_web_health.json")
+    schedule = {"observed_at": NOW.isoformat(), "sizing_day": (NOW.date() - timedelta(days=1)).isoformat(),
+                "capacity_reads": 40, "need_reads": 120, "shortfall_reads": 80, "backlog_reads": 240}
+    schedule_path.write_text(json.dumps(schedule))
+    put_completeness({"A": coin("fetched"), "B": coin("fetched", capped=True),
+                      "C": coin("account_failed")}, "xsearch_web")
+    h = src._health("xsearch_web", END, NOW)
+    assert h.accounts[0].reason == "account_cap" and h.accounts[0].reads_today == 40
+    assert h.accounts[1].reads_today is None
+    assert (h.completeness_fetched, h.capped, h.missing, h.missing_reasons) == (2, 1, 1, {"account_failed": 1})
+    box = src._collector_status([], END, NOW).sources[0]
+    assert (box.capacity_reads, box.need_reads, box.shortfall_reads, box.backlog_reads) == (40, 120, 80, 240)
+    assert pool.path.read_bytes() == before
+    schedule["observed_at"] = (NOW - timedelta(days=1)).isoformat()
+    schedule_path.write_text(json.dumps(schedule))
+    assert "capacity_reads" not in src._collector_status([], END, NOW).sources[0].model_dump()

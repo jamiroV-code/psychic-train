@@ -197,7 +197,7 @@ def test_no_machine_state_committed():
 # --- W8d1: the X pure core for the X library (SPEC rules 17-20, AC41, AC53, AC55) --------------------------------
 
 X_MODULES = [API_DIR / "data" / "attention" / f for f in
-             ("x_window.py", "x_filters.py", "x_density.py", "x_raw.py", "x_reader.py", "x_pool.py")]
+             ("x_window.py", "x_filters.py", "x_density.py", "x_raw.py", "x_reader.py", "x_pool.py", "x_capacity.py")]
 # The X library, its optional HTTP backend and every network client stay out of the pure core (W8d2 wraps them).
 X_LIBRARY_ROOTS = ("twscrape", "curl_cffi")
 

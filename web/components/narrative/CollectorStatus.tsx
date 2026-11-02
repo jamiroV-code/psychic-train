@@ -1,9 +1,11 @@
-import { utc } from "@/lib/source-health";
-import type { DiscoveryCollectorSource, DiscoveryCollectorStatus } from "@/lib/types/discovery";
+import { accountText, coverageText, utc } from "@/lib/source-health";
+import type { DiscoveryCollectorSource, DiscoveryCollectorStatus, DiscoverySourceHealth } from "@/lib/types/discovery";
 
 export interface CollectorStatusProps {
   /** null or undefined: an older API that does not report the collector (shown as unknown, never as running). */
   collector: DiscoveryCollectorStatus | null | undefined;
+  /** Reuse sources[xsearch].health; never create another per-account wire list. */
+  xHealth?: DiscoverySourceHealth | null;
 }
 
 const UNKNOWN = "unknown";
@@ -57,8 +59,14 @@ function sourceText(s: DiscoveryCollectorSource): string {
   return `${s.label}: last unit ${utc(s.last_unit_at)}; ${paused}; ${stale}; budget used ${s.budget_used ?? UNKNOWN} of ${s.effective_budget ?? UNKNOWN}`;
 }
 
+function sizingText(s: DiscoveryCollectorSource): string {
+  return `Capacity for ${s.sizing_day ?? UNKNOWN}: ${s.capacity_reads ?? UNKNOWN} reads available, ` +
+    `${s.need_reads ?? UNKNOWN} needed; shortfall ${s.shortfall_reads ?? UNKNOWN} reads; ` +
+    `older backlog ${s.backlog_reads ?? UNKNOWN} reads`;
+}
+
 /** Whether the attention collector (X and Reddit) is running, in plain visible text. */
-export function CollectorStatus({ collector }: CollectorStatusProps) {
+export function CollectorStatus({ collector, xHealth }: CollectorStatusProps) {
   const sources = collector?.sources ?? [];
   return (
     <div
@@ -77,6 +85,18 @@ export function CollectorStatus({ collector }: CollectorStatusProps) {
           ))}
         </ul>
       )}
+      {sources.filter((s) => s.id === "xsearch" && s.has_state).map((s) => (
+        <p key={s.id} data-testid="collector-capacity" style={{ margin: 0 }}>{sizingText(s)}</p>
+      ))}
+      {xHealth ? (
+        <>
+          <ul style={{ margin: 0, paddingLeft: "1.25em" }}>
+            {xHealth.accounts.length === 0 && <li>X accounts: unknown</li>}
+            {xHealth.accounts.map((a) => <li key={a.label}>{accountText(a)}</li>)}
+          </ul>
+          <p style={{ margin: 0 }}>{coverageText(xHealth)}</p>
+        </>
+      ) : <p style={{ margin: 0 }}>X accounts and coverage: unknown</p>}
     </div>
   );
 }

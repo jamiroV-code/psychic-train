@@ -753,9 +753,8 @@ def reader_status(config: CollectorConfig, *, env: Mapping[str, str], now: datet
     labels = list(config.x_accounts)
     ages = cookie_ages(config, now=now) if labels else {}
     if labels:
-        pool = x_pool.XPool(labels, clock=lambda: now).health()
-        accts = [{"label": a["label"], "state": a["state"], "reason": a["reason"], "last_used": a["last_used"],
-                  "cookie_age_days": ages.get(a["label"])} for a in pool["accounts"]]
+        pool = x_pool.from_config(config, clock=lambda: now).health()
+        accts = [{**a, "cookie_age_days": ages.get(a["label"])} for a in pool["accounts"]]
     else:
         pool, accts = {"active": 0, "curl_uses": 0, "curl_last_use": None, "canary_note": None}, []
     return {"active": pool["active"], "total": len(labels), "accounts": accts,
@@ -791,7 +790,9 @@ def status_lines(h: dict) -> list[str]:
               f" curl_uses={h['curl_uses']} curl_last_use={_word(h['curl_last_use'])}")]
     for a in h["accounts"]:
         lines.append(f"account label={_word(a['label'])} state={_word(a['state'])} reason={_word(a['reason'])}"
-                     f" last_used={_word(a['last_used'])} cookie_age_days={_word(a['cookie_age_days'])}")
+                     f" last_used={_word(a['last_used'])} cookie_age_days={_word(a['cookie_age_days'])}"
+                     f" reads_today={_word(a['reads_today'])} cap={_word(a['cap'])}"
+                     f" rest_until={_word(a['rest_until'])} ready={_word(a['ready'])}")
     return lines
 
 
@@ -865,6 +866,7 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--curl-fallback", action="store_true", help="internal: the curl fallback child")
     g.add_argument("--write-curl-record", action="store_true", help="record the curl_cffi wheel for this platform")
     g.add_argument("--refresh-cookies", metavar="LABEL", help="cookie upsert; cookies from X_REFRESH_COOKIES")
+    g.add_argument("--mark-ready", metavar="LABEL", help="mark a configured account ready for the next UTC day")
     args = p.parse_args(argv)
     if args.curl_fallback:
         print(json.dumps(_child(sys.stdin.read(), os.environ)))
@@ -883,6 +885,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"curl_record status={status} platform={key}")
         return 0 if status == "ok" else 2
     from api.data.attention import web_queries
+
+    if args.mark_ready:
+        try:
+            config = web_queries.load().config
+            x_pool.write_ready(config.x_accounts_db_path, args.mark_ready, datetime.now(UTC),
+                               labels=config.x_accounts)
+        except (OSError, ValueError):
+            print("ready status=refused")
+            return 2
+        print(f"ready status=ok label={_word(args.mark_ready)}")
+        return 0
 
     cookies = os.environ.get("X_REFRESH_COOKIES", "")
     if not cookies:

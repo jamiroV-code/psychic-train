@@ -95,7 +95,7 @@ def _accounts(now: datetime, health: DiscoverySourceHealth) -> None:
     if not path.exists():
         return
     try:
-        pool = x_pool.XPool(list(cfg.x_accounts), clock=lambda: now)
+        pool = x_pool.from_config(cfg, clock=lambda: now)
         snapshot = pool.health()
     except x_pool.XPoolStateError:
         health.paused, health.pause_reason, health.pause_until = True, "state_error", None
@@ -233,6 +233,16 @@ def _collector_status(rows: list[DiscoverySourceRow], day: date, now: datetime) 
             "last_unit_at": h.last_unit_at, "paused": h.paused, "pause_reason": h.pause_reason,
             "pause_until": h.pause_until, "stale": h.stale, "budget_used": h.budget_used,
             "effective_budget": h.effective_budget}
+        if sid == "xsearch":
+            schedule = _json_file(pc_pace.state_path(store_id).with_name(f"{store_id}_health.json")) or {}
+            keys = ("capacity_reads", "need_reads", "shortfall_reads", "backlog_reads")
+            # Only today's scheduling evidence describes today's capacity; stale/malformed is unknown.
+            observed = _timestamp(schedule.get("observed_at"))
+            target = (now.date() - timedelta(days=1)).isoformat()
+            if (observed and observed.date() == now.date() and schedule.get("sizing_day") == target
+                    and all(type(schedule.get(k)) is int and schedule[k] >= 0 for k in keys)):
+                fields.update({k: schedule[k] for k in keys})
+                fields["sizing_day"] = target
         sources.append(DiscoveryCollectorSource(id=sid, label=LABELS[sid], has_state=h is not None, **fields))
     return DiscoveryCollectorStatus(state=beat["state"], reason=beat["reason"], started_at=beat["started_at"],
                                     last_beat=beat["last_beat"], age_s=beat["age_s"], mode=beat["mode"],

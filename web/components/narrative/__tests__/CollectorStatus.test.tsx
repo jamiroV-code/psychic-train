@@ -3,6 +3,19 @@ import { describe, expect, it } from "vitest";
 import { CollectorStatus } from "@/components/narrative/CollectorStatus";
 import { DiscoverySourcesPanel } from "@/components/narrative/DiscoverySourcesPanel";
 import type { DiscoveryCollectorSource, DiscoveryCollectorStatus, DiscoverySourcesResponse } from "@/lib/types/discovery";
+import type { DiscoverySourceHealth } from "@/lib/types/discovery";
+
+const poolHealth: DiscoverySourceHealth = {
+  last_unit_at: null, paused: false, pause_reason: null, pause_until: null,
+  collection_day: "2026-11-02", attempted: 4, fetched: 3, completeness_day: "2026-11-01",
+  completeness_attempted: 4, completeness_fetched: 3, missing: 2, missing_reasons: { account_failed: 2 },
+  capped: 1, newest_age_hours: null, budget_used: 100, effective_budget: 800, budget_spent: false,
+  mode: "degraded", expected_gap_s: 300, stale: false, completeness: "",
+  accounts_active: 0, accounts_total: 1, accounts: [{
+    label: "acct_a", state: "locked", reason: "account_cap", last_used: null, cookie_age_days: null,
+    reads_today: 40, cap: 30, rest_until: null, ready: null,
+  }], free_disk_bytes: null, clock_sync_age_seconds: null,
+};
 
 const noState = (id: string, label: string): DiscoveryCollectorSource => ({
   id, label, has_state: false, last_unit_at: null, paused: null, pause_reason: null, pause_until: null, stale: null,
@@ -115,5 +128,46 @@ describe("DiscoverySourcesPanel collector box", () => {
     const { collector: _omit, ...older } = resp;
     render(<DiscoverySourcesPanel fetchSources={() => Promise.resolve(older)} />);
     expect(await screen.findByTestId("collector-status-head")).toHaveTextContent("Collector: Status unknown (not reported by the API)");
+  });
+});
+
+describe("Stage 0 account and coverage evidence", () => {
+  it.each(["account_cap", "resting", "rate_limited", "x_login_required", "x_account_suspect"])(
+    "shows per-account reads/cap/rest/ready and reason %s", (reason) => {
+      const account = { ...poolHealth.accounts[0], reason,
+        state: reason === "x_login_required" ? "inactive" as const :
+          reason === "x_account_suspect" ? "suspect" as const : "locked" as const,
+        rest_until: "2026-11-03T10:00:00Z", ready: false };
+      render(<CollectorStatus collector={base} xHealth={{ ...poolHealth, accounts: [account] }} />);
+      const box = screen.getByTestId("collector-status");
+      expect(box).toHaveTextContent(`acct_a ${account.state} (${reason})`);
+      expect(box).toHaveTextContent("reads today 40 / 30");
+      expect(box).toHaveTextContent("ready no");
+      expect(box).toHaveTextContent("rest until 2026-11-03 10:00 UTC");
+      expect(box).toHaveTextContent("cookie age unknown");
+    });
+
+  it("reuses target-day completeness, distinguishing eligible/stored/exact/estimated/missing", () => {
+    render(<CollectorStatus collector={base} xHealth={poolHealth} />);
+    expect(screen.getByTestId("collector-status")).toHaveTextContent(
+      "Coverage 2026-11-01: eligible 5, stored 3, exact 2, estimated 1, missing 2 (account_failed 2)");
+  });
+
+  it("never invents reads or coverage from absent evidence; absent cap means no limit", () => {
+    const h = { ...poolHealth, completeness_fetched: null, capped: null, missing: null,
+      missing_reasons: null, accounts: [{ ...poolHealth.accounts[0], reads_today: undefined, cap: undefined }] };
+    render(<CollectorStatus collector={base} xHealth={h} />);
+    const box = screen.getByTestId("collector-status");
+    expect(box).toHaveTextContent("reads today unknown / no limit");
+    expect(box).toHaveTextContent("eligible unknown, stored unknown, exact unknown, estimated unknown, missing unknown");
+  });
+
+  it("reports capacity shortfall and backlog separately, without saying the day is guaranteed", () => {
+    render(<CollectorStatus collector={{ ...base, sources: [{
+      ...reddit, id: "xsearch", label: "X search", sizing_day: "2026-11-01",
+      capacity_reads: 100, need_reads: 240, shortfall_reads: 140, backlog_reads: 280,
+    }] }} />);
+    expect(screen.getByTestId("collector-status")).toHaveTextContent(
+      "Capacity for 2026-11-01: 100 reads available, 240 needed; shortfall 140 reads; older backlog 280 reads");
   });
 });
