@@ -670,6 +670,14 @@ def _fetch_one(
 # 20, MEXC 16, KuCoin 10). Set `SCREENER_FALLBACK_PROVIDERS` (comma list, empty for none) to override.
 # --------------------------------------------------------------------------
 DEFAULT_FALLBACK_PROVIDERS = ("gate", "mexc", "kucoin")
+# Coins the default providers serve badly, tried BEFORE them: ticker -> (provider, exact spot market). Verified
+# 2026-11-02 against the real exchanges: Gate lists LEO/USDT but 165 of its last 200 15m bars have no volume (Bitfinex's
+# own USD market is live), and Gate's PEARL history starts 2026-10-23 (11 daily bars; BigONE's starts 2026-06-25).
+# The market is pinned, never guessed: other exchanges' "PRL"/"PEARL" tickers are different assets.
+COIN_PROVIDERS: dict[str, tuple[str, str]] = {
+    "LEO": ("bitfinex", "LEO/USD"),
+    "PEARL": ("bigone", "PEARL/USDT"),
+}
 ENV_FALLBACK_PROVIDERS = "SCREENER_FALLBACK_PROVIDERS"
 FALLBACK_RETRY_SECONDS = 300.0
 
@@ -722,13 +730,34 @@ def _spot_usdt_symbol(ticker: str, exchange) -> str | None:
     return None
 
 
+def _pinned_symbol(market: str):
+    """A resolver for one exact spot market, or None when the provider no longer lists it as active spot."""
+    def resolve(_ticker: str, exchange) -> str | None:
+        info = (getattr(exchange, "markets", None) or {}).get(market)
+        return market if info and info.get("spot") and info.get("active") is not False else None
+    return resolve
+
+
+def _fallback_plan(symbol: str) -> list[tuple[str, object]]:
+    """(provider, resolver) in order: the coin's pinned provider first, then the configured defaults."""
+    configured = fallback_providers()
+    if not configured:
+        return []
+    plan: list[tuple[str, object]] = []
+    pinned = COIN_PROVIDERS.get(symbol.upper())
+    if pinned is not None:
+        plan.append((pinned[0], _pinned_symbol(pinned[1])))
+    plan.extend((name, _spot_usdt_symbol) for name in configured if pinned is None or name != pinned[0])
+    return plan
+
+
 def _fetch_fallback(symbol: str, timeframe: Timeframe, primary: OhlcvResult) -> OhlcvResult:
-    for name in fallback_providers():
+    for name, resolver in _fallback_plan(symbol):
         exchange = _CachedOnlyExchange(name) if _cached_reads_only.get() else _fallback_exchange(name)
         if exchange is None:
             continue
         result = _fetch_one(
-            symbol, timeframe, exchange=exchange, cache_key=f"{symbol.upper()}@{name}", resolver=_spot_usdt_symbol
+            symbol, timeframe, exchange=exchange, cache_key=f"{symbol.upper()}@{name}", resolver=resolver
         )
         if not result.df.empty:
             return dataclasses.replace(result, source=name)

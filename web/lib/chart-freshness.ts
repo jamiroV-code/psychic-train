@@ -22,6 +22,8 @@ const SOURCE_LABELS: Record<string, string> = {
   gate: "Source: Gate.io spot (Hyperliquid does not list this coin)",
   mexc: "Source: MEXC spot (Hyperliquid does not list this coin)",
   kucoin: "Source: KuCoin spot (Hyperliquid does not list this coin)",
+  bitfinex: "Source: Bitfinex spot, USD quote (Hyperliquid does not list this coin)",
+  bigone: "Source: BigONE spot (Hyperliquid does not list this coin)",
 };
 
 /** The caption naming a fallback provider, or null for the page's usual source. */
