@@ -60,6 +60,8 @@ T35 / S8 (04-10-26) — background refresh worker (B9):
 """
 from __future__ import annotations
 
+import dataclasses
+import os
 import threading
 import time
 from contextlib import contextmanager
@@ -105,6 +107,8 @@ class OhlcvResult:
     # that pass the first five fields keep working.
     fetched_at: pd.Timestamp | None = None
     note: str | None = None
+    # Set only when a fallback provider (not Hyperliquid) supplied the bars: "gate", "mexc" or "kucoin".
+    source: str | None = None
 
 
 def _now() -> pd.Timestamp:
@@ -229,6 +233,9 @@ def reset_exchange_cache() -> None:
     with _exchange_lock:
         _exchange_instance = None
         _markets_unavailable = False
+    with _fallback_lock:
+        _fallback_exchanges.clear()
+        _fallback_failed_at.clear()
 
 
 def retry_markets_if_latched() -> bool:
@@ -284,7 +291,9 @@ def set_refresh_hook(hook: Callable[[str, str], object] | None) -> None:
 _known_bad_symbols: set[str] = set()
 
 
-def _mark_symbol(symbol: str, bad: bool) -> None:
+def _mark_symbol(symbol: str | None, bad: bool) -> None:
+    if symbol is None:  # a fallback provider's miss says nothing about Hyperliquid
+        return
     if bad:
         _known_bad_symbols.add(symbol)
     else:
@@ -506,43 +515,51 @@ def _result(symbol, timeframe, df, status: Status, fetched_at=None, note=None) -
     )
 
 
-def fetch_ohlcv(
+def _fetch_one(
     symbol: str,
     timeframe: Timeframe,
     since: int | None = None,
     limit: int | None = None,
     exchange=None,
+    cache_key: str | None = None,
+    resolver=None,
 ) -> OhlcvResult:
     """Fetch (or derive) OHLCV bars for one (symbol, timeframe), cache-first.
+
+    `cache_key` stores the bars under another cache symbol (a fallback provider's own series, never mixed with
+    Hyperliquid's) and `resolver(ticker, exchange)` replaces the Hyperliquid market lookup.
 
     `symbol` is a bare watchlist ticker ("BTC"); it is resolved to a ccxt
     unified market symbol internally. Returns a typed `OhlcvResult` — never
     raises.
     """
     cache.bootstrap_cache_dirs()
+    key = cache_key or symbol
 
     # `1w` is derived from daily, never fetched. Recurse BEFORE taking any
     # lock (gap G2) — the inner call does its own locking — and before any
     # exchange work, since the derivation itself needs no market list.
     if timeframe == "1w":
-        daily = fetch_ohlcv(symbol, "1d", since=since, limit=limit, exchange=exchange)
+        daily = _fetch_one(
+            symbol, "1d", since=since, limit=limit, exchange=exchange, cache_key=cache_key, resolver=resolver
+        )
         if daily.status == "bad_symbol":
-            return _result(symbol, "1w", cache.read_ohlcv(symbol, "1w"), "bad_symbol", daily.fetched_at)
+            return _result(symbol, "1w", cache.read_ohlcv(key, "1w"), "bad_symbol", daily.fetched_at)
         weekly_df = _derive_weekly_from_daily(daily.df, source=_source_label(exchange, daily.df))
         if _cached_reads_only.get():
             # S8: a read never writes; the worker derives and stores `1w`.
             if weekly_df.empty:
-                weekly_df = cache.read_ohlcv(symbol, "1w")
+                weekly_df = cache.read_ohlcv(key, "1w")
             return _result(symbol, "1w", weekly_df, daily.status, daily.fetched_at, daily.note)
         if not weekly_df.empty:
             # `1w` stores its daily leg's fetch time (B1).
-            cache.write_ohlcv(symbol, "1w", weekly_df, fetched_at=daily.fetched_at)
+            cache.write_ohlcv(key, "1w", weekly_df, fetched_at=daily.fetched_at)
         return _result(
-            symbol, "1w", cache.read_ohlcv(symbol, "1w"), daily.status, daily.fetched_at, daily.note
+            symbol, "1w", cache.read_ohlcv(key, "1w"), daily.status, daily.fetched_at, daily.note
         )
 
-    cached = cache.read_ohlcv(symbol, timeframe)
-    fetched_at = cache.read_fetched_at(symbol, timeframe) if not cached.empty else None
+    cached = cache.read_ohlcv(key, timeframe)
+    fetched_at = cache.read_fetched_at(key, timeframe) if not cached.empty else None
 
     if _cached_reads_only.get():
         # Worker running (S8): never touch the exchange from a read.
@@ -574,13 +591,13 @@ def fetch_ohlcv(
             return _result(symbol, timeframe, cached, "unavailable", fetched_at)
         refresh_clock_skew(exchange)
 
-    market_symbol = resolve_market_symbol(symbol, exchange)
+    market_symbol = (resolver or resolve_market_symbol)(symbol, exchange)
     if market_symbol is None:
         # Ticker matches no listed market. This is a configuration fact, not
         # an outage — say so (gap G3).
-        _mark_symbol(symbol, True)
+        _mark_symbol(None if cache_key else symbol, True)
         return _result(symbol, timeframe, cached, "bad_symbol", fetched_at)
-    _mark_symbol(symbol, False)
+    _mark_symbol(None if cache_key else symbol, False)
 
     if tail:
         effective_since = _tail_since(timeframe, _now())
@@ -599,7 +616,7 @@ def fetch_ohlcv(
         # pretending to be fresh, and never an outage label on a config error.
         # Cache and fetch time stay as they were.
         if failure == "bad_symbol":
-            _mark_symbol(symbol, True)
+            _mark_symbol(None if cache_key else symbol, True)
         return _result(symbol, timeframe, cached, failure, fetched_at)
 
     try:
@@ -613,8 +630,8 @@ def fetch_ohlcv(
         # Explicit `since` (backfill): today's merge, never `stale`.
         merged = pd.concat([cached, fetched], ignore_index=True) if not cached.empty else fetched
         stamp = _now()
-        cache.write_ohlcv(symbol, timeframe, merged, retain_bars=retain, fetched_at=stamp)
-        return _result(symbol, timeframe, cache.read_ohlcv(symbol, timeframe), "ok", stamp)
+        cache.write_ohlcv(key, timeframe, merged, retain_bars=retain, fetched_at=stamp)
+        return _result(symbol, timeframe, cache.read_ohlcv(key, timeframe), "ok", stamp)
 
     if fetched.empty:
         # A successful empty response writes nothing (D5).
@@ -638,6 +655,100 @@ def fetch_ohlcv(
             note = "gap-replaced"
 
     stamp = _now()
-    cache.write_ohlcv(symbol, timeframe, merged, retain_bars=retain, fetched_at=stamp)
-    stored = cache.read_ohlcv(symbol, timeframe)
+    cache.write_ohlcv(key, timeframe, merged, retain_bars=retain, fetched_at=stamp)
+    stored = cache.read_ohlcv(key, timeframe)
     return _result(symbol, timeframe, stored, _tail_status(stored, timeframe), stamp, note)
+
+
+# --------------------------------------------------------------------------
+# Fallback providers for coins Hyperliquid cannot serve.
+#
+# When Hyperliquid has no market for a ticker (or fails with nothing cached), the bars come from the first public,
+# keyless spot exchange below that lists `<TICKER>/USDT`. Each provider keeps its own cache series
+# (`ohlcv/<TICKER>@<provider>/`), never mixed with Hyperliquid's, and the result carries `source=<provider>` so the
+# page can label the chart. Order: widest coverage of the coins Hyperliquid lacks (measured 2026-11-02: Gate.io 17 of
+# 20, MEXC 16, KuCoin 10). Set `SCREENER_FALLBACK_PROVIDERS` (comma list, empty for none) to override.
+# --------------------------------------------------------------------------
+DEFAULT_FALLBACK_PROVIDERS = ("gate", "mexc", "kucoin")
+ENV_FALLBACK_PROVIDERS = "SCREENER_FALLBACK_PROVIDERS"
+FALLBACK_RETRY_SECONDS = 300.0
+
+_fallback_lock = threading.Lock()
+_fallback_exchanges: dict[str, object] = {}
+_fallback_failed_at: dict[str, float] = {}
+
+
+def fallback_providers() -> tuple[str, ...]:
+    raw = os.environ.get(ENV_FALLBACK_PROVIDERS)
+    if raw is None:
+        return DEFAULT_FALLBACK_PROVIDERS
+    return tuple(p.strip() for p in raw.split(",") if p.strip())
+
+
+def _fallback_exchange(name: str):
+    """The provider's exchange with its market list loaded, or None (retried after `FALLBACK_RETRY_SECONDS`)."""
+    with _fallback_lock:
+        ex = _fallback_exchanges.get(name)
+        if ex is not None:
+            return ex
+        failed = _fallback_failed_at.get(name)
+        if failed is not None and time.monotonic() - failed < FALLBACK_RETRY_SECONDS:
+            return None
+        try:
+            ex = getattr(ccxt, name)({"enableRateLimit": True})
+            ex.load_markets()
+        except Exception:
+            _fallback_failed_at[name] = time.monotonic()
+            return None
+        _fallback_exchanges[name] = ex
+        return ex
+
+
+class _CachedOnlyExchange:
+    """Stands in for a provider on cache-only reads, which never touch the exchange."""
+
+    markets: dict = {}
+
+    def __init__(self, name: str):
+        self.id = name
+
+
+def _spot_usdt_symbol(ticker: str, exchange) -> str | None:
+    """`<TICKER>/USDT` when the provider lists it as an active spot market (never its perpetual)."""
+    symbol = f"{ticker}/USDT"
+    market = (getattr(exchange, "markets", None) or {}).get(symbol)
+    if market and market.get("spot") and market.get("active") is not False:
+        return symbol
+    return None
+
+
+def _fetch_fallback(symbol: str, timeframe: Timeframe, primary: OhlcvResult) -> OhlcvResult:
+    for name in fallback_providers():
+        exchange = _CachedOnlyExchange(name) if _cached_reads_only.get() else _fallback_exchange(name)
+        if exchange is None:
+            continue
+        result = _fetch_one(
+            symbol, timeframe, exchange=exchange, cache_key=f"{symbol.upper()}@{name}", resolver=_spot_usdt_symbol
+        )
+        if not result.df.empty:
+            return dataclasses.replace(result, source=name)
+    return primary
+
+
+def fetch_ohlcv(
+    symbol: str,
+    timeframe: Timeframe,
+    since: int | None = None,
+    limit: int | None = None,
+    exchange=None,
+) -> OhlcvResult:
+    """`_fetch_one` against Hyperliquid, then the fallback providers when Hyperliquid has nothing for the ticker.
+
+    A caller that injects an exchange or asks for an explicit `since` (a backfill) gets Hyperliquid only.
+    """
+    result = _fetch_one(symbol, timeframe, since=since, limit=limit, exchange=exchange)
+    if exchange is not None or since is not None or not result.df.empty:
+        return result
+    if result.status not in ("bad_symbol", "unavailable"):
+        return result
+    return _fetch_fallback(symbol, timeframe, result)
