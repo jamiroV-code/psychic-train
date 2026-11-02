@@ -13,7 +13,18 @@ import type { ChartSeries } from "@/lib/types/screener";
  * Age is measured from the bar's open in both cases.
  */
 
-export type ChartFreshnessFields = Pick<ChartSeries, "last_bar_ts" | "is_partial" | "server_time" | "stale">;
+export type ChartFreshnessFields = Pick<ChartSeries, "last_bar_ts" | "is_partial" | "server_time" | "stale"> & {
+  source?: ChartSeries["source"];
+};
+
+const SOURCE_LABELS: Record<string, string> = {
+  hyperliquid: "Source: Hyperliquid perp, not the stock's own price",
+};
+
+/** The caption naming a fallback provider, or null for the page's usual source. */
+export function sourceLabel(source: string | null | undefined): string | null {
+  return source ? (SOURCE_LABELS[source] ?? `Source: ${source}`) : null;
+}
 
 /** `<1 min`, `N min` (under 120 min), `N h` (under 48 h), else `N d`. */
 export function formatAge(seconds: number): string {

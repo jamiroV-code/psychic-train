@@ -69,6 +69,9 @@ class ChartSeries(BaseModel):
     is_partial: bool | None = None
     server_time: str | None = None
     stale: bool = False
+    # Equities only (additive, defaulted): the provider when it is not the primary one, e.g. "hyperliquid" for a
+    # perp used while LSE cannot serve the ticker. None means the page's usual source.
+    source: str | None = None
     # T40 / S5a (additive, defaulted): the RSI series, filled only by the
     # drill-down chart view; board charts keep `[]`. Timestamps end in `Z`.
     rsi: list[RsiPoint] = []

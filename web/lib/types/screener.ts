@@ -47,6 +47,8 @@ export interface ChartSeries {
   is_partial: boolean | null;
   server_time: string | null;
   stale: boolean;
+  // Equities only: the provider when it is not the primary one ("hyperliquid"); null/absent otherwise.
+  source?: string | null;
   // T40 / S5a: filled only by the drill-down chart view; board charts carry [].
   rsi: RsiPoint[];
 }

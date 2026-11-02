@@ -38,7 +38,7 @@ from typing import Callable
 
 import pandas as pd
 
-from api.data import equities_calendar, equities_store, lse_adapter, refresh_worker
+from api.data import equities_calendar, equities_fallback, equities_store, lse_adapter, refresh_worker
 from api.data.freshness import iso_z
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,13 @@ _idle.set()
 
 
 def _default_fetch(ticker: str):
-    return lse_adapter.refresh_equity(ticker)
+    """LSE first; Hyperliquid (`equities_fallback`) when LSE cannot serve the ticker or its bars are stale.
+    The fallback counts as the result only when it fetched bars, so a failure still reports LSE's reason."""
+    result = lse_adapter.refresh_equity(ticker)
+    if not equities_fallback.needs_fallback(result):
+        return result
+    fallback = equities_fallback.refresh_equity_hl(ticker)
+    return fallback if fallback.status == "ok" else result
 
 
 def refresh_ticker(ticker: str, fetch: Callable[[str], object] | None = None):
@@ -131,14 +137,14 @@ def wait_until_idle(timeout: float = 5.0) -> bool:
 
 
 def _ticker_bar_date(ticker: str, now) -> date | None:
-    result, _fetched = lse_adapter.read_cached_equity(ticker, "1d", now=now)
+    result, _fetched = equities_fallback.read_cached(ticker, "1d", now=now)
     if result.df is None or result.df.empty:
         return None
     return result.df["timestamp"].max().date()
 
 
 def _ticker_fetched_at(ticker: str, now) -> pd.Timestamp | None:
-    return lse_adapter.cached_fetched_at(ticker, "1d")
+    return equities_fallback.read_cached(ticker, "1d", now=now)[1]
 
 
 def _fetched_at_unknown(ticker: str, now) -> pd.Timestamp | None:

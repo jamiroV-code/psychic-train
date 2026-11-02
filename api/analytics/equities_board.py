@@ -29,7 +29,7 @@ import pandas as pd
 
 from api.analytics.indicators import rsi as rsi_mod
 from api.analytics.indicators import sma as sma_mod
-from api.data import equities_calendar, equities_store, lse_adapter
+from api.data import equities_calendar, equities_fallback, equities_store, lse_adapter
 from api.data.freshness import as_utc, iso_z
 from api.models.screener import (
     ChartBar,
@@ -66,7 +66,7 @@ def _reason(df: pd.DataFrame, status: str | None) -> str:
 
 
 def _read(ticker: str, timeframe: str, now: pd.Timestamp):
-    result, fetched_at = lse_adapter.read_cached_equity(ticker, timeframe, now=now)
+    result, fetched_at = equities_fallback.read_cached(ticker, timeframe, now=now)
     df = result.df
     if df is not None and not df.empty:
         df = df.sort_values("timestamp").reset_index(drop=True)
@@ -95,7 +95,7 @@ def _available(df: pd.DataFrame | None) -> bool:
     return df is not None and len(df) >= sma_mod.SMA_LENGTH
 
 
-def _chart_series(df, status, timeframe, fetched_at, daily_df, now) -> ChartSeries:
+def _chart_series(df, status, timeframe, fetched_at, daily_df, now, source=None) -> ChartSeries:
     if not _available(df):
         return ChartSeries(price=[], sma=[], available=False, reason=_reason(df, status))
     daily_last = _last_ts(daily_df)
@@ -108,6 +108,7 @@ def _chart_series(df, status, timeframe, fetched_at, daily_df, now) -> ChartSeri
         is_partial=equities_calendar.bar_is_partial(daily_last, now, timeframe),
         server_time=iso_z(now),
         stale=equities_calendar.bar_is_stale(daily_last, now),
+        source=None if source == lse_adapter.SOURCE else source,
     )
 
 
@@ -180,7 +181,7 @@ def build_panel(ticker: str, timeframe: str, now) -> CoinPanel:
     chips = gain_chips(daily_df, daily_result.status, now)
     return CoinPanel(
         symbol=result.symbol or ticker,
-        chart=_chart_series(df, result.status, timeframe, fetched_at, daily_df, now),
+        chart=_chart_series(df, result.status, timeframe, fetched_at, daily_df, now, result.source),
         percent_change_by_timeframe={tf: chip.pct for tf, chip in chips.items()},
         gain_by_timeframe=chips,
         rsi=_rsi_reading(df, result.status),
@@ -203,7 +204,7 @@ def build_chart_view(ticker: str, timeframe: str = "1d", now=None) -> ChartView:
     now = _now(now)
     result, df, fetched_at = _read(ticker, timeframe, now)
     daily_df = df if timeframe == "1d" else _read(ticker, "1d", now)[1]
-    chart = _chart_series(df, result.status, timeframe, fetched_at, daily_df, now)
+    chart = _chart_series(df, result.status, timeframe, fetched_at, daily_df, now, result.source)
     if chart.available:
         chart.rsi = _rsi_series(df)
     return ChartView(symbol=result.symbol or ticker, timeframe=timeframe, chart=chart)

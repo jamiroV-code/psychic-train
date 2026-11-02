@@ -19,6 +19,14 @@ describe("ChartFreshness", () => {
     expect(screen.getByTestId("stale-marker").textContent).toBe("stale");
   });
 
+  it("names a fallback provider next to the caption, and nothing for the primary source", () => {
+    const { rerender } = render(<ChartFreshness chart={{ ...BASE, source: "hyperliquid" }} />);
+    expect(screen.getByTestId("chart-source").textContent).toBe("Source: Hyperliquid perp, not the stock's own price");
+    expect(screen.getByTestId("chart-freshness-caption")).toBeTruthy();
+    rerender(<ChartFreshness chart={{ ...BASE, source: null }} />);
+    expect(screen.queryByTestId("chart-source")).toBeNull();
+  });
+
   it("renders nothing without a last bar and without staleness", () => {
     const { container } = render(<ChartFreshness chart={{ last_bar_ts: null, is_partial: null, server_time: null, stale: false }} />);
     expect(container.innerHTML).toBe("");
