@@ -13,6 +13,11 @@ from twscrape import account, xclid
 from api.data.attention import twscrape_reader as tr
 
 
+@pytest.fixture(autouse=True)
+def isolated_cache(attention_cache):
+    return attention_cache
+
+
 @pytest.fixture
 def echo():
     class Handler(BaseHTTPRequestHandler):

@@ -29,10 +29,16 @@ $env:DO_NOT_TRACK = '1'
 $env:TWS_LOG_LEVEL = 'WARNING'
 $env:TWS_RAISE_WHEN_NO_ACCOUNT = '1'
 
-# No proxy and no forced HTTP backend reach the collector (X refuses to start with one set).
-foreach ($name in @('TWS_PROXY', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'TWS_HTTP_BACKEND')) {
+# Keep global proxy variables out. Bind only a recognized configured backend; Python verifies curl before loading it.
+foreach ($name in @('TWS_PROXY', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY')) {
     Remove-Item -Path "Env:$name" -ErrorAction SilentlyContinue
 }
+$queriesPath = Join-Path $config.RepoRoot 'api\data\attention_queries.json'
+$queries = Get-Content -Raw -LiteralPath $queriesPath | ConvertFrom-Json
+$styleProperty = $queries.collector.PSObject.Properties['x_connection_style']
+$style = if ($null -eq $styleProperty) { 'plain' } else { $styleProperty.Value }
+if ($style -cnotin @('plain', 'curl')) { throw 'Invalid x_connection_style; expected plain or curl.' }
+$env:TWS_HTTP_BACKEND = if ($style -eq 'curl') { 'curl' } else { 'httpx' }
 
 # SCREENER_ATTENTION_REDDIT_STREAM is inherited as the owner sets it (exactly 1 turns the Reddit stream on).
 $stream = if ($env:SCREENER_ATTENTION_REDDIT_STREAM) { $env:SCREENER_ATTENTION_REDDIT_STREAM } else { '(not set: stream off)' }
