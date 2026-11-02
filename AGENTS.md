@@ -53,6 +53,14 @@ This block is byte-identical in CLAUDE.md and AGENTS.md. It decides what a sessi
 - When unsure, stop and report instead of guessing.
 <!-- ENTRY-SET:END -->
 
+## Owner standing permissions (given 02-11-26)
+
+These override the "owner merges" and ".github" restrictions in the ENTRY-SET block and in task envelopes unless an envelope explicitly withholds them:
+
+- Changes under `.github/` are allowed when the task needs them. Keep them minimal and covered by a guard test.
+- Merging a PR is allowed once the state is clean: the PR is not a draft, CI is green, the task gates show no failure beyond the saved baseline, an independent review is done with its findings fixed, and no other open PR touches the same files. Never merge on a red or unreviewed state.
+- Still forbidden: pushing to `main` directly, force pushes, secrets in any file, and live provider calls from tests.
+
 ## RIPER-5 Spec-Driven Development System
 
 This project uses RIPER-5: strict, mode-based phases that prevent premature implementation. Shared workflow rules live in [process/development-protocols/all-development-protocols.md](process/development-protocols/all-development-protocols.md) (router), read on demand:
