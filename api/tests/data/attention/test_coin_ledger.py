@@ -83,10 +83,15 @@ def test_short_or_broken_snapshot_is_unavailable(bad):
     assert res.status == "unavailable" and res.ledger is led
 
 
-def test_rank_gap_is_unavailable():
-    s = snap(1)
-    s["coins"] = [c for c in s["coins"] if c["rank"] != 60]
-    assert cl.advance(cl.empty(), s, S).status == "unavailable"
+def test_a_few_unusable_ranks_are_tolerated_but_many_or_a_cut_end_are_not():
+    def gapped(*ranks):
+        s = snap(1)
+        s["coins"] = [c for c in s["coins"] if c["rank"] not in ranks]
+        return s
+    ok = cl.advance(cl.empty(), gapped(60, 102), S)
+    assert ok.status == "advanced" and "id-60" not in ok.ledger["coins"] and len(ok.ledger["coins"]) == 99
+    assert cl.advance(cl.empty(), gapped(1, 2, 3, 4, 5, 6), S).status == "unavailable"
+    assert cl.advance(cl.empty(), gapped(120), S).status == "unavailable"
 
 
 def member_ledger() -> dict:
