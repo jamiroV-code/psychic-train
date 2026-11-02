@@ -21,7 +21,7 @@ describe("ChartFreshness", () => {
 
   it("names a fallback provider next to the caption, and nothing for the primary source", () => {
     const { rerender } = render(<ChartFreshness chart={{ ...BASE, source: "hyperliquid" }} />);
-    expect(screen.getByTestId("chart-source").textContent).toBe("Source: Hyperliquid perp, not the stock's own price");
+    expect(screen.getByTestId("chart-source").textContent).toBe("Source: Hyperliquid perp (tracks the price, trades 24/7)");
     expect(screen.getByTestId("chart-freshness-caption")).toBeTruthy();
     rerender(<ChartFreshness chart={{ ...BASE, source: null }} />);
     expect(screen.queryByTestId("chart-source")).toBeNull();

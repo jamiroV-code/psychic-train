@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from api.data import ccxt_adapter, lse_adapter
+from api.data import ccxt_adapter, equities_dxy, lse_adapter
 from api.data.equities_store import TICKER_RE
 from api.data.freshness import as_utc
 from api.data.lse_adapter import EquityOhlcvResult, OHLCV_COLUMNS
@@ -28,6 +28,11 @@ HISTORY_DAYS = 2500
 FETCH_LIMIT = 5000
 CAVEATS = ("perp-not-spot", "trades-24-7", "bars-on-nyse-sessions-only")
 PARQUET_ATTRS = {"source": SOURCE}
+
+# Tickers no exchange lists but that can be rebuilt from public data: ticker -> (source label, cache root, builder).
+SYNTHETIC_ROOT = "equities_ecb"
+SYNTHETIC_CAVEATS = ("reconstructed-from-ecb-reference-rates", "close-only", "differs-from-ice-close-by-time-of-day")
+SYNTHETIC = {"DXY": equities_dxy.SOURCE}
 
 
 def market_symbol(ticker: str, exchange) -> str | None:
@@ -77,17 +82,54 @@ def refresh_equity_hl(symbol: str, exchange=None, now=None) -> EquityOhlcvResult
         return _result(ticker, "1d", empty, "unavailable", "network-error")
 
 
-def read_hl_cached(symbol: str, timeframe: str, now=None) -> tuple[EquityOhlcvResult, pd.Timestamp | None]:
-    """The cached Hyperliquid bars and their fetch time; `unavailable/no-data` when none."""
+def _read_root(symbol: str, timeframe: str, now, root: str, source: str, caveats) -> tuple[EquityOhlcvResult, pd.Timestamp | None]:
     ticker = symbol.strip().upper() if isinstance(symbol, str) else ""
     empty = pd.DataFrame(columns=OHLCV_COLUMNS)
-    df = lse_adapter._read_cache(ticker, timeframe, CACHE_DIR) if TICKER_RE.match(ticker) else None
+    df = lse_adapter._read_cache(ticker, timeframe, root) if TICKER_RE.match(ticker) else None
     if df is None or df.empty:
-        return _result(ticker, timeframe, empty, "unavailable", "no-data"), None
+        return EquityOhlcvResult(ticker, timeframe, empty, "unavailable", "no-data", source=source, caveats=list(caveats)), None
     now = as_utc(lse_adapter._now() if now is None else now)
     result = lse_adapter._finish(ticker, timeframe, df, now, "fresh-cache")
-    return (_result(ticker, timeframe, result.df, result.status, result.reason),
-            lse_adapter._fetched_at(ticker, timeframe, CACHE_DIR))
+    return (EquityOhlcvResult(ticker, timeframe, result.df, result.status, result.reason, source=source, caveats=list(caveats)),
+            lse_adapter._fetched_at(ticker, timeframe, root))
+
+
+def read_hl_cached(symbol: str, timeframe: str, now=None) -> tuple[EquityOhlcvResult, pd.Timestamp | None]:
+    """The cached Hyperliquid bars and their fetch time; `unavailable/no-data` when none."""
+    return _read_root(symbol, timeframe, now, CACHE_DIR, SOURCE, CAVEATS)
+
+
+def read_synthetic_cached(symbol: str, timeframe: str, now=None) -> tuple[EquityOhlcvResult, pd.Timestamp | None]:
+    """The cached reconstructed series (DXY) and its fetch time; `unavailable/no-data` when none."""
+    ticker = symbol.strip().upper() if isinstance(symbol, str) else ""
+    return _read_root(ticker, timeframe, now, SYNTHETIC_ROOT, SYNTHETIC.get(ticker, equities_dxy.SOURCE), SYNTHETIC_CAVEATS)
+
+
+def refresh_synthetic(symbol: str, now=None, client=None) -> EquityOhlcvResult:
+    """Rebuild a reconstructed ticker (DXY) and write `1d` and the derived `1w`. Never raises."""
+    ticker = symbol.strip().upper() if isinstance(symbol, str) else ""
+    empty = pd.DataFrame(columns=OHLCV_COLUMNS)
+    caveats = list(SYNTHETIC_CAVEATS)
+    if ticker not in SYNTHETIC:
+        return EquityOhlcvResult(ticker, "1d", empty, "bad_symbol", "unknown-ticker", source="ecb", caveats=caveats)
+    try:
+        now = as_utc(lse_adapter._now() if now is None else now)
+        daily = equities_dxy.fetch_dxy_daily(now, client)
+        weekly = ccxt_adapter._derive_weekly_from_daily(daily, SYNTHETIC[ticker])
+        lse_adapter._write_cache(ticker, "1d", daily, now, SYNTHETIC_ROOT, {"source": SYNTHETIC[ticker]})
+        lse_adapter._write_cache(ticker, "1w", weekly, now, SYNTHETIC_ROOT, {"source": SYNTHETIC[ticker]})
+        return EquityOhlcvResult(ticker, "1d", daily, "ok", "fetched", source=SYNTHETIC[ticker], caveats=caveats)
+    except Exception:  # noqa: BLE001 - the contract is never to raise
+        return EquityOhlcvResult(ticker, "1d", empty, "unavailable", "network-error", source=SYNTHETIC[ticker], caveats=caveats)
+
+
+def refresh_equity_fallback(symbol: str) -> EquityOhlcvResult:
+    """Hyperliquid first; a ticker it cannot serve but that can be reconstructed (DXY) is rebuilt instead."""
+    result = refresh_equity_hl(symbol)
+    if result.status == "ok" or result.reason != "unknown-ticker":
+        return result
+    ticker = symbol.strip().upper() if isinstance(symbol, str) else ""
+    return refresh_synthetic(ticker) if ticker in SYNTHETIC else result
 
 
 def read_cached(symbol: str, timeframe: str, now=None) -> tuple[EquityOhlcvResult, pd.Timestamp | None]:
@@ -100,12 +142,18 @@ def read_cached(symbol: str, timeframe: str, now=None) -> tuple[EquityOhlcvResul
     lse_empty = lse_result.df is None or lse_result.df.empty
     if not lse_empty and lse_result.status != "stale":
         return lse_result, lse_fetched
-    hl_result, hl_fetched = read_hl_cached(symbol, timeframe, now=now)
-    if hl_result.df.empty:
+    best_result, best_fetched = None, None
+    for read in (read_hl_cached, read_synthetic_cached):
+        alt, alt_fetched = read(symbol, timeframe, now=now)
+        if alt.df.empty:
+            continue
+        if best_result is None or alt.df["timestamp"].max() > best_result.df["timestamp"].max():
+            best_result, best_fetched = alt, alt_fetched
+    if best_result is None:
         return lse_result, lse_fetched
-    if not lse_empty and hl_result.df["timestamp"].max() <= lse_result.df["timestamp"].max():
+    if not lse_empty and best_result.df["timestamp"].max() <= lse_result.df["timestamp"].max():
         return lse_result, lse_fetched
-    return hl_result, hl_fetched
+    return best_result, best_fetched
 
 
 def needs_fallback(result: EquityOhlcvResult) -> bool:
