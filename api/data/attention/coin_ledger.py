@@ -33,6 +33,7 @@ def valid_date(value) -> bool:
         return False
 
 TOP = 100
+MAX_UNUSABLE = 5   # ranks the snapshot may lack because the coin's symbol or id was refused at write time
 STATES = ("watching", "member", "inactive")
 ENTRY_KEYS = ("symbol", "state", "first_seen", "last_in_top100", "last_in_top120", "consecutive_top100",
               "consecutive_outside120", "class", "class_evidence", "class_source", "seeded", "updated")
@@ -51,7 +52,10 @@ def empty() -> dict:
 
 
 def band_rows(snapshot, band: int) -> dict[str, dict] | None:
-    """{coin id: row} when the snapshot has contiguous ranks 1..band, else None."""
+    """{coin id: row} when the snapshot reaches rank `band` and at most MAX_UNUSABLE ranks below it are missing, else None.
+
+    The live markets answer can hold a coin whose symbol the snapshot refuses (non-ASCII, P-O0); that rank stays
+    unused. A truncated snapshot (no row at rank `band`) or many gaps is still `unavailable`."""
     if not isinstance(snapshot, dict) or not valid_date(snapshot.get("date")):
         return None
     rows = snapshot.get("coins")
@@ -69,7 +73,8 @@ def band_rows(snapshot, band: int) -> dict[str, dict] | None:
             return None
         by_rank[rank] = r
         ids.add(cid)
-    if any(k not in by_rank for k in range(1, band + 1)):
+    missing = sum(1 for k in range(1, band + 1) if k not in by_rank)
+    if band not in by_rank or missing > MAX_UNUSABLE:
         return None
     return {by_rank[k]["id"]: by_rank[k] for k in sorted(by_rank)}
 
