@@ -84,7 +84,7 @@ export function DiscoverySourcesPanel({ fetchSources = fetchDefault }: Discovery
   return (
     <>
     {/* Outside the collapsed table: whether the collector runs is visible at a glance. */}
-    <CollectorStatus collector={data.collector} />
+    <CollectorStatus collector={data.collector} xHealth={data.sources.find((r) => r.id === "xsearch")?.health} />
     <details data-testid="sources-panel" className="discovery-sources">
       <summary data-testid="sources-summary">
         <span className={`discovery-dot discovery-dot--${tone}`} data-testid="sources-dot" data-tone={tone} aria-hidden="true" />

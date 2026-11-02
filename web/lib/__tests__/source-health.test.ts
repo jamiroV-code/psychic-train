@@ -60,7 +60,8 @@ describe("sourceHealthLines", () => {
       "Completeness 2026-10-28: 45 of 50 coin-days fetched. Attempted 50, fetched 45, missing 5 (timeout 3, rate-limited 2), capped 4, newest 2.5 h old",
     );
     expect(t.mode).toBe("Mode: baseline");
-    expect(t.accounts).toBe("X accounts: 2 of 3 active. acct-1 active, cookie 6 days old; acct-2 locked (login-wall), cookie age unknown");
+    expect(t.accounts).toBe("X accounts: 2 of 3 active. acct-1 active, cookie 6 days old, reads today unknown / no limit, rest until unknown, ready unknown, last used 2026-10-29 13:00 UTC; acct-2 locked (login-wall), cookie age unknown, reads today unknown / no limit, rest until unknown, ready unknown, last used unknown");
+    expect(t.coverage).toBe("Coverage 2026-10-28: eligible 50, stored 45, exact 41, estimated 4, missing 5 (timeout 3, rate-limited 2)");
     expect(t.late).toBe("One day late: completeness covers 2026-10-28, the last full day; today's counts are still in progress.");
     expect(t.disk).toBe("Free disk: 50.0 GB");
   });
