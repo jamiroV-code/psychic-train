@@ -47,7 +47,7 @@ def test_both_factory_paths_send_account_identity(echo, style):
     identities = {
         "alpha": {"accept_language": "en-US,en;q=0.9", "region": "US", "timezone": "America/New_York",
                   "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36", "impersonation_target": "chrome131"},
-        "beta": {"accept_language": "en-GB,en;q=0.8", "region": "GB", "timezone": "Europe/London",
+        "beta": {"accept_language": "fr-FR,fr;q=0.8", "region": "FR", "timezone": "Europe/Paris",
                  "user_agent": "Mozilla/5.0 Firefox/133.0", "impersonation_target": "firefox133"},
     }
     adapter = tr.IdentityAdapter(style, identities)
@@ -74,7 +74,7 @@ def test_both_factory_paths_send_account_identity(echo, style):
             assert observed["accept-language"] == identities[label]["accept_language"]
             assert observed["user-agent"]
         assert a_graph["x-twitter-client-language"] == "en"
-        assert b_graph["x-twitter-client-language"] == "en"
+        assert b_graph["x-twitter-client-language"] == "fr"
         assert a_graph["user-agent"] == a_boot["user-agent"]
         assert b_graph["user-agent"] == b_boot["user-agent"]
         assert a_graph["user-agent"] != b_graph["user-agent"]
