@@ -29,6 +29,30 @@ def test_committed_file_loads_with_locked_defaults():
     assert {k: wq.DEFAULTS[k] for k in LOCKED} == LOCKED
     assert set(wq.DEFAULTS) == set(q.config.as_dict())
 
+def test_transport_identity_defaults_are_off(doc):
+    config = wq.validate(doc).config
+    assert config.x_connection_style == "plain"
+    assert config.x_identity_enabled is False
+    assert config.x_account_identities == {}
+
+
+def test_plain_identity_requires_compatible_fallback_target(doc):
+    block = doc["collector"]
+    block["x_accounts"] = ["alpha"]
+    block["x_identity_enabled"] = True
+    block["x_account_identities"] = {"alpha": {
+        "accept_language": "en-US,en;q=0.9", "region": "US", "timezone": "America/New_York",
+        "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36",
+        "impersonation_target": "chrome131",
+    }}
+    assert wq.validate(doc).config.x_account_identities["alpha"]["impersonation_target"] == "chrome131"
+    del block["x_account_identities"]["alpha"]["impersonation_target"]
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+    block["x_account_identities"]["alpha"]["impersonation_target"] = "firefox133"
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+
 
 def test_reddit_baseline_250_and_separate_degraded_150_budget():
     assert wq.DEFAULTS["reddit_daily_request_budget"] == 250
