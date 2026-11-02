@@ -153,6 +153,21 @@ Today the X collector reads about 19 coins a day from two throwaway accounts who
 - Reddit: its public feeds are reportedly ending on 13-11-26 (press reports; Reddit's own post could not be read) and public API access in March 2027 (Reddit's registration page). A Reddit browser reader is a later, separate method.
 - All shared work happens in separate worktrees with separate caches and ports; the live API, site and collector are not restarted by tests.
 
+## Build Order: build only what evidence calls for (owner instruction 02-11-26)
+
+The owner's rule: be clever, build only what is needed to avoid account bans as much as possible. The acceptance criteria above are the full target; they are built in stages, and a later stage starts only when its trigger is observed in real data. Behaviour that is not yet needed stays switched off.
+
+| Stage | What is built | Why it comes first | Trigger to move on |
+|---|---|---|---|
+| 0. Calm and per-account | Per-account daily limit, sequential handoff, jittered spacing, one-week rest for new accounts, per-account status, loss failover (AC4, AC6, AC7, AC12, AC13, AC14, AC18) | Behaviour is the strongest ban signal and costs almost nothing; most of it already exists | Always built |
+| 1. Cookie renewal | Automatic cookie renewal from a saved browser session (AC1, AC2, AC3, AC8, AC17) | Fewer logins means fewer challenges; but only worth it if cookies actually expire often | Cookies expire or force a login more than once every two weeks, measured from the cookie-age records |
+| 2. Connection style | Measured comparison of the standard client and the browser-imitating backend (AC11) | Cheap test, answers the biggest known mismatch | Any login challenge, shrinking canary, or X flag that appears while on Stage 0 |
+| 3. Fixed IPs | Optional per-account IP with health checks and failover (AC9, AC10) | Costs effort and reputation risk; use only when the shared home IP is shown to be the problem | Accounts behind the home IP are challenged or limited while behaviour is calm, or the number of accounts grows past what one address plausibly carries |
+| 4. Proxy gateway | V2Ray gateway (AC16) | Only if the built-in list cannot cope | The Stage 3 trigger for (a) or (b) in Constraints, with measured evidence |
+| 5. Reddit browser method | Separate method with its own rules (AC15) | Depends on Reddit's access decision, not on accounts | Reddit's public feeds end, or the owner decides to proceed |
+
+Rules for every stage: each measure is added with an on/off setting and a health measure; a measure that shows no benefit after a trial period is removed; nothing in a later stage is built "just in case". The status box records the signals that act as triggers (challenges, shrinking results, cookie age, limits hit), so the decision to move on is made from data, not guesses.
+
 ## Open Questions
 
 - Q1 (owner, after the lifecycle test): the per-account daily limit. Default proposal 800 reads, decided from the measured health signals.
