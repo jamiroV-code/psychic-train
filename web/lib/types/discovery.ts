@@ -277,3 +277,31 @@ export interface DiscoveryPrice {
 
 /** What the table selected for the chart. */
 export type DiscoverySelection = { kind: "coin"; symbol: string } | { kind: "category"; id: string; name: string };
+
+export interface OnboardingSource {
+  state: "name" | "pending" | "missing" | "none";
+  value: string | null;
+  reason: string;
+}
+
+export interface OnboardingCoin {
+  symbol: string;
+  state: "watching" | "member" | "inactive";
+  days_in_top100: number;
+  class: string;
+  class_source: "owner" | "auto" | "confirmed";
+  class_evidence: Record<string, unknown>;
+  sources: Record<"wikipedia" | "trends" | "reddit_x", OnboardingSource>;
+  pending: { source: string; reason: string; evidence?: Record<string, unknown> }[];
+  proposal: { narrative: string; category: string; as_of?: string | null }[];
+}
+
+export interface OnboardingResponse {
+  mode: "shadow" | "enforce";
+  as_of: string | null;
+  status: "ok" | "no-ledger" | "corrupt";
+  probation_days: number;
+  exit_band_rank: number;
+  exit_days: number;
+  coins: OnboardingCoin[];
+}

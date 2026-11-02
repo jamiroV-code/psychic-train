@@ -10,11 +10,17 @@ from api.analytics.attention import discovery_history, sources
 from api.analytics.attention.discovery import build_discovery
 from api.data import cache
 from api.models.discovery import (DiscoveryCategoryHistory, DiscoveryCoinHistory, DiscoveryPrice,
-                                  DiscoveryPriceDay, DiscoveryResponse, DiscoverySourcesResponse)
+                                  DiscoveryPriceDay, DiscoveryResponse, DiscoverySourcesResponse, OnboardingResponse)
 
 WINDOWS = (7, 30, 90)
 
 router = APIRouter(prefix="/api/narrative", tags=["discovery"])
+
+
+@router.get("/onboarding", response_model=OnboardingResponse)
+def get_onboarding() -> OnboardingResponse:
+    from api.analytics.attention import onboarding
+    return onboarding.build()
 
 
 def utc_today() -> date:

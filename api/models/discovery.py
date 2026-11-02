@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, model_serializer
+from pydantic import BaseModel, Field, model_serializer
 
 DiscoveryStatus = Literal["ok", "no-data"]
 
@@ -256,3 +256,31 @@ class DiscoveryPrice(BaseModel):
     status: DiscoveryStatus
     last_date: str | None  # newest cached day on or before as_of, even when it is older than the window
     days: list[DiscoveryPriceDay]
+
+
+class OnboardingSource(BaseModel):
+    state: Literal["name", "pending", "missing", "none"]
+    value: str | None = None
+    reason: str = ""
+
+
+class OnboardingCoin(BaseModel):
+    symbol: str
+    state: Literal["watching", "member", "inactive"]
+    days_in_top100: int
+    coin_class: str = Field(alias="class")
+    class_source: Literal["owner", "auto", "confirmed"]
+    class_evidence: dict = {}
+    sources: dict[str, OnboardingSource]
+    pending: list[dict] = []
+    proposal: list[dict] = []
+
+
+class OnboardingResponse(BaseModel):
+    mode: Literal["shadow", "enforce"]
+    as_of: str | None = None
+    status: Literal["ok", "no-ledger", "corrupt"]
+    probation_days: int
+    exit_band_rank: int
+    exit_days: int
+    coins: list[OnboardingCoin] = []

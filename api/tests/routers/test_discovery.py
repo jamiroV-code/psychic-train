@@ -124,3 +124,29 @@ def test_no_data_payload_carries_the_new_fields_with_defaults(isolated_cache, tm
     world(tmp_path, monkeypatch, {"A": 5e7}, cats={"ai": ["A"]})
     body = TestClient(app).get(URL, params={"window": 30}).json()
     assert body["status"] == "no-data" and body["tradeability_unknown"] == 0
+
+
+def test_onboarding_route_reads_fixture_without_network(isolated_cache, monkeypatch):
+    from api.data.attention import coin_ledger, onboarding_store
+    import ipaddress
+    real_connect = socket.socket.connect
+    def boom(*args, **kwargs):
+        raise AssertionError("onboarding route must not reach the network")
+    def local_only(sock, address, *args, **kwargs):
+        if isinstance(address, tuple) and ipaddress.ip_address(address[0]).is_loopback:
+            return real_connect(sock, address, *args, **kwargs)
+        return boom()
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", boom)
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", boom)
+    monkeypatch.setattr(socket.socket, "connect", local_only)
+    ledger = coin_ledger.empty()
+    ledger["coins"]["new"] = coin_ledger._entry({"symbol": "ZZNEW"}, "2026-11-01", state="watching", count=4)
+    onboarding_store.write_ledger(ledger)
+    before = onboarding_store.ledger_path().read_bytes()
+    response = TestClient(app).get("/api/narrative/onboarding")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["mode"] == "shadow" and payload["status"] == "ok"
+    assert payload["coins"][0]["days_in_top100"] == 4
+    assert payload["coins"][0]["class"] == "unknown"
+    assert onboarding_store.ledger_path().read_bytes() == before
