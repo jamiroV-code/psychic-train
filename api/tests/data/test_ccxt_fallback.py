@@ -110,3 +110,46 @@ def test_no_providers_configured_means_no_fallback(_env, monkeypatch):
     monkeypatch.setenv("SCREENER_FALLBACK_PROVIDERS", "")
     assert ccxt_adapter.fetch_ohlcv("SHIB", "1d").status == "bad_symbol" and _env["gate"].calls == []
 
+
+
+# ------------------------------------------------------------- pinned providers (LEO, PEARL)
+
+class PinnedProvider(FakeProvider):
+    def __init__(self, name, market, thin=False):
+        super().__init__(name, listed=())
+        self.markets[market] = {"spot": True, "active": True}
+        self.markets["LEO/USDT"] = {"spot": True, "active": True}  # a USDT market that must not be used
+        self.thin = thin
+
+
+def test_pinned_provider_is_tried_first_with_its_exact_market(_env, monkeypatch):
+    bitfinex = PinnedProvider("bitfinex", "LEO/USD")
+    providers = {**_env, "bitfinex": bitfinex, "gate": FakeProvider("gate", listed=("LEO",))}
+    monkeypatch.setattr(ccxt_adapter, "_fallback_exchange", lambda name: providers.get(name))
+    monkeypatch.setenv("SCREENER_FALLBACK_PROVIDERS", "gate,mexc")
+    r = ccxt_adapter.fetch_ohlcv("LEO", "1d")
+    assert r.source == "bitfinex" and bitfinex.calls == [("LEO/USD", "1d")] and providers["gate"].calls == []
+    assert not cache.read_ohlcv("LEO@bitfinex", "1d").empty and cache.read_ohlcv("LEO@gate", "1d").empty
+
+
+def test_pinned_provider_missing_the_market_falls_through_to_the_defaults(_env, monkeypatch):
+    bigone = FakeProvider("bigone", listed=())  # PEARL-USDT delisted there
+    providers = {**_env, "bigone": bigone, "gate": FakeProvider("gate", listed=("PEARL",))}
+    monkeypatch.setattr(ccxt_adapter, "_fallback_exchange", lambda name: providers.get(name))
+    r = ccxt_adapter.fetch_ohlcv("PEARL", "1d")
+    assert r.source == "gate" and bigone.calls == []
+
+
+def test_empty_provider_list_disables_pinned_providers_too(_env, monkeypatch):
+    monkeypatch.setenv("SCREENER_FALLBACK_PROVIDERS", "")
+    monkeypatch.setattr(ccxt_adapter, "_fallback_exchange", lambda name: pytest.fail("network"))
+    assert ccxt_adapter.fetch_ohlcv("LEO", "1d").status == "bad_symbol"
+
+
+def test_pinned_coin_is_served_from_cache_only_reads(_env, monkeypatch):
+    providers = {**_env, "bitfinex": PinnedProvider("bitfinex", "LEO/USD")}
+    monkeypatch.setattr(ccxt_adapter, "_fallback_exchange", lambda name: providers.get(name))
+    ccxt_adapter.fetch_ohlcv("LEO", "1d")
+    monkeypatch.setattr(ccxt_adapter, "_fallback_exchange", lambda name: pytest.fail("network"))
+    with ccxt_adapter.cached_reads_only():
+        assert ccxt_adapter.fetch_ohlcv("LEO", "1d").source == "bitfinex"
