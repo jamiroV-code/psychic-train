@@ -176,14 +176,17 @@ Rules for every stage: each measure has an on/off setting and a health measure; 
 
 ## Open Questions
 
-- Q1 (owner, after the lifecycle test): the per-account daily limit. Default proposal 800 reads, decided from the measured health signals.
-- Q2 (owner): even load across accounts (proposed) or fill one account then the next?
-- Q3 (owner, after the lifecycle test): is one browser at a time, run in turn, acceptable on this PC, or should an external alternative be considered?
-- Q4 (owner): which free proxy list or other source, if any, goes into the disposable-account experiment.
+Answered by the owner on 02-11-26:
+- Q2: accounts share the load evenly (least recently used).
+- Q7: the proxy list lives in a private file outside the repository, one proxy per line; the owner supplies the list; credentials never enter the repository.
+- Q8: the browser-like connection style becomes the default for all accounts if the recorded comparison shows no extra challenges.
+
+Still open:
+- Q1 (owner): the per-account daily limit. Default proposal 800 reads, chosen from the measured health signals after Part A has run.
+- Q3 (owner): confirmed by the lifecycle test that only one browser fits at a time; relevant only if Stage 2 is triggered.
+- Q4 (owner): which free proxy list, if any, goes into the disposable-account experiment.
 - Q5 (owner): the first Reddit step: apply for official access now, or wait for the data samples?
-- Q6 (research, after the connection-style comparison): the default connection style for daily reads.
-- Q7 (owner): where the proxy list comes from and how it is stored (a private file outside the repository, one line per proxy, no credentials in the repository).
-- Q8 (owner): may the browser-like connection style become the default for all accounts once the comparison is recorded?
+- Q6 (research): the default connection style for daily reads, decided by the comparison and Q8's rule.
 
 ## Background / Research Findings
 
