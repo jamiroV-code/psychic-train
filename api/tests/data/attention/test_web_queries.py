@@ -72,6 +72,17 @@ def test_identity_rejects_unknown_duplicate_and_missing_labels(doc, style):
         wq.validate(doc)
 
 
+def test_plain_identities_cannot_share_fallback_target(doc):
+    block = doc["collector"]
+    block.update(x_accounts=["alpha", "beta"], x_identity_enabled=True)
+    one = {"accept_language": "en-US", "region": "US", "timezone": "America/New_York",
+           "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36", "impersonation_target": "chrome131"}
+    two = {**one, "user_agent": "Mozilla/5.0 Chrome/131.0.1.0 Safari/537.36"}
+    block["x_account_identities"] = {"alpha": one, "beta": two}
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+
+
 @pytest.mark.parametrize("key,value", [
     ("x_connection_style", "browser"), ("x_identity_enabled", 1),
     ("x_account_identities", []),
