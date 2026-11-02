@@ -184,12 +184,12 @@ Rules for every stage: each measure has an on/off setting and a health measure; 
 
 Answered by the owner on 02-11-26:
 - Q5: no application for official Reddit access; Reddit uses the identity and evasion route (Stage 4).
+- Q9: Reddit zero rule: a zero may be stored when the canary passed, the search feed was clearly complete (short) and the coin has some history (option B of 02-11-26). To be applied to the existing feed method too, as its own small change.
 - Q2: accounts share the load evenly (least recently used).
 - Q7: the proxy list lives in a private file outside the repository, one proxy per line; the owner supplies the list; credentials never enter the repository.
 - Q8: the browser-like connection style becomes the default for all accounts if the recorded comparison shows no extra challenges.
 
 Still open:
-- Q9 (owner): the Reddit zero rule. Options are being written up: keep strict; allow a stored zero when the canary passed and the feed is short and the coin has some history; allow it for coins with no history too.
 - Q1 (owner): the per-account daily limit. Default proposal 800 reads, chosen from the measured health signals after Part A has run.
 - Q3 (owner): confirmed by the lifecycle test that only one browser fits at a time; relevant only if Stage 2 is triggered.
 - Q4 (owner): which free proxy list, if any, goes into the disposable-account experiment.
