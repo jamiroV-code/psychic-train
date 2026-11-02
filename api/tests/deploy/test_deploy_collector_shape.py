@@ -40,9 +40,13 @@ def test_start_collector_sets_the_x_library_environment_and_clears_proxies():
     text = _read("start-collector.ps1")
     for name, value in twscrape_reader.REQUIRED_ENV.items():
         assert f"$env:{name} = '{value}'" in text, name
-    for name in {v.upper() for v in x_reader.PROXY_VARS} | {"TWS_HTTP_BACKEND"}:
+    for name in {v.upper() for v in x_reader.PROXY_VARS}:
         assert f"'{name}'" in text, name
     assert "Remove-Item -Path \"Env:$name\"" in text
+    # B1 (deliberate): the backend is no longer cleared; the launcher binds the validated configured style.
+    assert "'TWS_HTTP_BACKEND'" not in text and "x_connection_style" in text
+    assert "$env:TWS_HTTP_BACKEND = if ($style -eq 'curl') { 'curl' } else { 'httpx' }" in text
+    assert "cnotin @('plain', 'curl')" in text
 
 
 def test_start_collector_never_pulls_reads_keys_or_holds_secrets():
