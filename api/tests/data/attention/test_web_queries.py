@@ -54,6 +54,34 @@ def test_plain_identity_requires_compatible_fallback_target(doc):
         wq.validate(doc)
 
 
+@pytest.mark.parametrize("style", ["plain", "curl"])
+def test_identity_rejects_unknown_duplicate_and_missing_labels(doc, style):
+    block = doc["collector"]
+    block.update(x_accounts=["alpha", "beta"], x_identity_enabled=True, x_connection_style=style)
+    identity = {"accept_language": "en-US,en;q=0.9", "region": "US", "timezone": "America/New_York",
+                "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36",
+                "impersonation_target": "chrome131"}
+    block["x_account_identities"] = {"alpha": identity.copy(), "beta": identity.copy()}
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+    block["x_account_identities"] = {"alpha": identity.copy()}
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+    block["x_account_identities"] = {"alpha": identity.copy(), "unknown": identity.copy()}
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+
+
+@pytest.mark.parametrize("key,value", [
+    ("x_connection_style", "browser"), ("x_identity_enabled", 1),
+    ("x_account_identities", []),
+])
+def test_identity_settings_reject_invalid_types(doc, key, value):
+    doc["collector"][key] = value
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+
+
 def test_reddit_baseline_250_and_separate_degraded_150_budget():
     assert wq.DEFAULTS["reddit_daily_request_budget"] == 250
     assert wq.REDDIT_DEFAULTS["reddit_degraded_request_budget"] == wq.REDDIT_DEGRADED_BUDGET == 150

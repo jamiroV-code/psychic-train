@@ -248,6 +248,31 @@ def test_reader_options_wait_timeout_zero_raise_when_no_account_true_and_env_swi
     s.close()
 
 
+def test_selected_curl_is_verified_before_library_load_and_api(tmp_path, lib):
+    d = accounts(tmp_path)
+    config = cfg(d, x_connection_style="curl")
+    calls = []
+    def load():
+        calls.append("load")
+        return tr.load_library()
+    with pytest.raises(tr.XStartRefused):
+        tr.start(config, env=GOOD_ENV, repo_root=tmp_path / "repo", dist_lookup=lookup(),
+                 load=load, platform="manylinux_x86_64", dump_roots=[])
+    assert calls == []
+    assert lib.apis == []
+
+
+def test_normal_curl_never_installs_curl_fallback(tmp_path, lib):
+    d = accounts(tmp_path)
+    config = cfg(d, x_connection_style="curl", x_allow_curl_backend=True)
+    started = tr.start(config, env=GOOD_ENV, repo_root=tmp_path / "repo", dist_lookup=lookup(curl=curl_dist()),
+                       load=tr.load_library, platform="manylinux_x86_64", dump_roots=[], curl_record=record())
+    try:
+        assert started.fallback is None
+    finally:
+        started.close()
+
+
 def test_one_sqlite_file_and_one_api_per_account(tmp_path, lib):
     s, d = start(tmp_path, lib)
     assert sorted(s.readers) == ["acct1", "acct2"]
