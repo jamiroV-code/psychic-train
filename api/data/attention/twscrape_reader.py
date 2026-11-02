@@ -294,13 +294,18 @@ def curl_status(record: dict | None, key: str | None, dist: DistInfo | None) -> 
     wheel, sha = CURL_WHEELS[key]
     if record.get("sha256") != sha or record.get("wheel") != wheel or record.get("version") != CURL_VERSION:
         return "hash_mismatch"
+    try:
+        if lock_curl_hashes(lock_text()).get(wheel) != "sha256:" + sha:
+            return "lock_hash_mismatch"
+    except (OSError, ValueError):
+        return "lock_hash_mismatch"
     return "ok"
 
 
 # --- environment, temporary files, accounts directory ------------------------------------------------------------
 
-def env_guard(env: Mapping[str, str], *, fallback: bool = False) -> list[str]:
-    return xr.env_problems(env, fallback_process=fallback)
+def env_guard(env: Mapping[str, str], *, fallback: bool = False, selected_backend: str | None = None) -> list[str]:
+    return xr.env_problems(env, fallback_process=fallback, selected_backend=selected_backend)
 
 
 def service_env(base: Mapping[str, str], *, private_tmp: Path, fallback: bool = False) -> dict:
@@ -715,7 +720,8 @@ def start(config: CollectorConfig, *, env: Mapping[str, str] = os.environ, repo_
           run_child: Callable = run_child, account_names: Mapping[str, tuple[str, ...]] | None = None) -> XStart:
     """One reader per configured account, or `XStartRefused` with every reason (nothing imported before the
     environment passed; no library call is made here other than building each account's `API`)."""
-    bad = env_guard(env)
+    selected_backend = "curl" if config.x_connection_style == "curl" else "httpx"
+    bad = env_guard(env, selected_backend=selected_backend)
     reasons = [f"env:{name}" for name in bad]
     if config.x_pinned_commit != PINNED_COMMIT:
         reasons.append("pin_mismatch")
@@ -724,6 +730,14 @@ def start(config: CollectorConfig, *, env: Mapping[str, str] = os.environ, repo_
     if ident:
         reasons.append(ident)
     reasons += accounts_problems(config, repo_root=repo_root)
+    record = curl_record if curl_record is not None else read_install_record()
+    platform = platform if platform is not None else platform_key()
+    if config.x_connection_style == "curl":
+        curl = curl_status(record, platform, dist_lookup("curl_cffi"))
+        if curl != "ok":
+            reasons.append(f"curl:{curl}")
+    else:
+        curl = _curl(config, platform, dist_lookup, record)
     if reasons:
         raise XStartRefused(reasons)
     clean_dumps([LIBRARY_DUMP_ROOT, private_tmp()] if dump_roots is None else dump_roots)
@@ -733,13 +747,11 @@ def start(config: CollectorConfig, *, env: Mapping[str, str] = os.environ, repo_
     readers = {x: TwscrapeReader(x, d / f"{x}.db", lib, max_entries=config.x_page_cap * xr.PAGE_ENTRIES,
                                  version=dist.version, account_names=tuple(names.get(x, ())))
                for x in config.x_accounts}
-    record = curl_record if curl_record is not None else read_install_record()
-    curl = _curl(config, platform, dist_lookup, record)
     notes = [n for n in (permission_note(),) if n]
     fallback = None
-    if curl == "ok":
+    if curl == "ok" and config.x_connection_style == "plain":
         fallback = CurlFallback(readers, d, env, run_child)
-    else:
+    elif config.x_connection_style == "plain":
         notes.append(f"curl_fallback_off:{curl}")
     return XStart(readers, fallback, curl, notes)
 

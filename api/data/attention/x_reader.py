@@ -191,7 +191,8 @@ def small_page_drop(*, entries: int, parsed: int) -> bool:
     return parsed < entries < PARSE_DROP_RATE_MIN_ENTRIES and not (parsed == 0 and entries >= PARSE_DROP_MIN_ENTRIES)
 
 
-def env_problems(env: Mapping[str, str], *, fallback_process: bool = False) -> list[str]:
+def env_problems(env: Mapping[str, str], *, fallback_process: bool = False,
+                 selected_backend: str | None = None) -> list[str]:
     """Names of the variables that stop the X process from starting (values are never reported)."""
     bad = []
     if env.get("TWS_TELEMETRY") != "0":
@@ -204,7 +205,7 @@ def env_problems(env: Mapping[str, str], *, fallback_process: bool = False) -> l
         bad.append("TWS_RAISE_WHEN_NO_ACCOUNT")
     bad += [name for name in PROXY_VARS if env.get(name)]
     backend = env.get("TWS_HTTP_BACKEND")
-    if (backend != "curl") if fallback_process else (backend is not None):
+    if (backend != "curl") if fallback_process else (backend is not None and backend != selected_backend):
         bad.append("TWS_HTTP_BACKEND")
     return bad
 
