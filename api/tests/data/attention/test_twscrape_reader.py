@@ -745,6 +745,7 @@ def test_installer_picks_wheel_by_platform_and_records_hash():
 def test_startup_verifies_installed_wheel_hash_against_matching_entry():
     rec = record()
     assert tr.curl_status(rec, "manylinux_x86_64", curl_dist()) == "ok"
+    assert tr.curl_status({**rec, "package": "other"}, "manylinux_x86_64", curl_dist()) == "record_package_mismatch"
     assert tr.curl_status({**rec, "sha256": "0" * 64}, "manylinux_x86_64", curl_dist()) == "hash_mismatch"
     assert tr.curl_status(rec, "win_amd64", curl_dist()) == "record_platform_mismatch"
     assert tr.curl_status(None, "manylinux_x86_64", curl_dist()) == "record_missing"
