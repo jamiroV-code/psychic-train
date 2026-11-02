@@ -187,6 +187,40 @@ class DiscoveryTrendsWatch(BaseModel):
     days_held: int         # consecutive quiet-then-surge days; at the 30-file cap the panel shows "30+"
 
 
+CollectorState = Literal["running", "stopped", "never_started", "unknown"]
+# Why the collector is in its state, a closed list ("" while running).
+CollectorReason = Literal["", "stopped_cleanly", "heartbeat_stale", "process_gone", "no_heartbeat", "unreadable"]
+
+
+class DiscoveryCollectorSource(BaseModel):
+    """One PC stream in the collector box: the Sources health fields reused; None (unknown) without worker state."""
+    id: str                 # Discovery source id: xsearch | reddit
+    label: str
+    has_state: bool         # False: the worker never wrote this source's state file
+    last_unit_at: str | None = None
+    paused: bool | None = None
+    pause_reason: str | None = None
+    pause_until: str | None = None
+    stale: bool | None = None
+    budget_used: int | None = None
+    effective_budget: int | None = None
+
+
+class DiscoveryCollectorStatus(BaseModel):
+    """The attention collector process (standalone-collector): read from its heartbeat file only, no network.
+    running = heartbeat younger than 90 s and its process alive; stopped = stopped cleanly, stale or process gone;
+    never_started = no heartbeat file; unknown = the file is unreadable."""
+    state: CollectorState
+    reason: CollectorReason = ""
+    started_at: str | None = None
+    last_beat: str | None = None
+    age_s: float | None = None          # seconds since last_beat, computed by the API
+    mode: Literal["standalone", "in_api"] | None = None
+    version: str | None = None          # the commit the collector runs, when readable
+    running_sources: list[str] = []     # streams the process runs (xsearch_web, reddit_web)
+    sources: list[DiscoveryCollectorSource] = []
+
+
 class DiscoverySourcesResponse(BaseModel):
     as_of: str
     universe_size: int
@@ -198,6 +232,7 @@ class DiscoverySourcesResponse(BaseModel):
     sources: list[DiscoverySourceRow]
     trends_keyword: DiscoveryTrendsKeyword | None = None   # additive (T180)
     trends_watch: list[DiscoveryTrendsWatch] | None = None  # additive (stage 2): waking-up watch list, not scored
+    collector: DiscoveryCollectorStatus | None = None       # additive (standalone-collector): collector heartbeat
 
 
 class DiscoveryHistoryDay(BaseModel):

@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
+import { CollectorStatus } from "@/components/narrative/CollectorStatus";
 import { fetchDiscoverySources as fetchDefault } from "@/lib/api/discovery";
 import { formatNarrativeReason } from "@/lib/format-unavailable-reason";
 import { sourceHealthLines } from "@/lib/source-health";
@@ -81,6 +82,9 @@ export function DiscoverySourcesPanel({ fetchSources = fetchDefault }: Discovery
   }
   const { text, tone } = summary(data);
   return (
+    <>
+    {/* Outside the collapsed table: whether the collector runs is visible at a glance. */}
+    <CollectorStatus collector={data.collector} />
     <details data-testid="sources-panel" className="discovery-sources">
       <summary data-testid="sources-summary">
         <span className={`discovery-dot discovery-dot--${tone}`} data-testid="sources-dot" data-tone={tone} aria-hidden="true" />
@@ -140,5 +144,6 @@ export function DiscoverySourcesPanel({ fetchSources = fetchDefault }: Discovery
         </table>
       </div>
     </details>
+    </>
   );
 }

@@ -211,6 +211,36 @@ export interface DiscoveryTrendsWatch {
   days_held: number;
 }
 
+/** One PC stream in the collector box (API `DiscoveryCollectorSource`): null values are unknown, never 0. */
+export interface DiscoveryCollectorSource {
+  /** Discovery source id: xsearch | reddit */
+  id: string;
+  label: string;
+  /** false: the worker never wrote this source's state file */
+  has_state: boolean;
+  last_unit_at: string | null;
+  paused: boolean | null;
+  pause_reason: string | null;
+  pause_until: string | null;
+  stale: boolean | null;
+  budget_used: number | null;
+  effective_budget: number | null;
+}
+
+/** The attention collector process, read by the API from its heartbeat file; the web only formats it. */
+export interface DiscoveryCollectorStatus {
+  state: "running" | "stopped" | "never_started" | "unknown";
+  reason: "" | "stopped_cleanly" | "heartbeat_stale" | "process_gone" | "no_heartbeat" | "unreadable";
+  started_at: string | null;
+  last_beat: string | null;
+  /** seconds since last_beat, computed by the API */
+  age_s: number | null;
+  mode: "standalone" | "in_api" | null;
+  version: string | null;
+  running_sources: string[];
+  sources: DiscoveryCollectorSource[];
+}
+
 export interface DiscoverySourcesResponse {
   as_of: string;
   universe_size: number;
@@ -222,6 +252,8 @@ export interface DiscoverySourcesResponse {
   sources: DiscoverySourceRow[];
   trends_keyword?: DiscoveryTrendsKeyword | null;
   trends_watch?: DiscoveryTrendsWatch[] | null;
+  /** standalone collector: absent from an older API, then shown as unknown */
+  collector?: DiscoveryCollectorStatus | null;
 }
 
 /** GET /api/narrative/discovery/history: shared by the coin and category payloads. */
