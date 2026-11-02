@@ -98,6 +98,7 @@ def _chart_series(
     fetched_at=None,
     stale_ref_df: pd.DataFrame | None = None,
     now: pd.Timestamp | None = None,
+    source: str | None = None,
 ) -> ChartSeries:
     """`stale_ref_df` is the series whose last bar decides `stale` (the daily
     bars for `1w`, B5); it defaults to `df` itself. `stale` is computed from
@@ -124,6 +125,7 @@ def _chart_series(
         price=_series_to_chart_bars(df["timestamp"], df["close"]),
         sma=_series_to_chart_bars(df["timestamp"], sma),
         available=True,
+        source=source,
         **freshness_fields,
     )
 
@@ -169,11 +171,13 @@ def build_coin_panel(
     dfs_by_tf: dict[Timeframe, pd.DataFrame] = {}
     statuses_by_tf: dict[Timeframe, str] = {}
     fetched_by_tf = {}
+    source_by_tf = {}
     for tf in ("1d", "1w", *(t for t in TIMEFRAMES if t not in ("1d", "1w"))):
         result = ccxt_adapter.fetch_ohlcv(symbol, tf)
         dfs_by_tf[tf] = result.df
         statuses_by_tf[tf] = result.status
         fetched_by_tf[tf] = result.fetched_at
+        source_by_tf[tf] = result.source
     now = ccxt_adapter._now() if now is None else now
     # T34 / S2: current-candle chips (open to latest), judged against the
     # same skew-corrected reference time as the chart's freshness fields.
@@ -193,6 +197,7 @@ def build_coin_panel(
             # 1w staleness is judged on its daily bar (B5).
             stale_ref_df=dfs_by_tf["1d"] if timeframe == "1w" else None,
             now=now,
+            source=source_by_tf.get(timeframe),
         ),
         percent_change_by_timeframe={tf: chip.pct for tf, chip in chips_by_tf.items()},
         gain_by_timeframe=chips_by_tf,
@@ -223,7 +228,7 @@ def build_chart_view(symbol: str, timeframe: Timeframe = DEFAULT_CHART_TIMEFRAME
     display_available = len(display.df) >= sma_mod.SMA_LENGTH
     chart = _chart_series(
         display.df, display_available, display.status,
-        timeframe=timeframe, fetched_at=display.fetched_at, stale_ref_df=daily_ref,
+        timeframe=timeframe, fetched_at=display.fetched_at, stale_ref_df=daily_ref, source=display.source,
     )
     if chart.available:
         chart.rsi = _rsi_series(display.df)

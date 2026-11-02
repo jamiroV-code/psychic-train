@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import os
 os.environ.setdefault("SCREENER_REFRESH_WORKER", "0")
+# No fallback provider unless a test sets one: the suite must never reach Gate.io, MEXC or KuCoin.
+os.environ.setdefault("SCREENER_FALLBACK_PROVIDERS", "")
 import pytest
 
 from api.data import cache
