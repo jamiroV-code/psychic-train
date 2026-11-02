@@ -48,6 +48,12 @@ Today the X collector reads about 19 coins a day from two throwaway accounts who
 14. Reddit browser reading, when built, is its own method with its own completeness rules and a hard daily request ceiling. It is never combined with values from the old feed method.
 15. A proxy-gateway program (V2Ray) is optional and off by default. It is used only when the criteria in Constraints are met.
 16. Cookies, profiles and proxy login details live outside the repository with restricted access and never appear in logs, the status box or reports.
+17. Each account has its own daily rhythm: its own reading windows and quiet hours, so accounts do not all read at the same times.
+18. A real session is not only searches: the reader also makes a small share of ordinary requests (a timeline, a profile, a single post), within the same budget and never counted as coin data.
+19. Query shape varies a little (page size, pause lengths, order of coins) so the pattern is not a fixed script.
+20. When an account shows a warning sign (content stripped from results, shrinking results, a login challenge, rate-limit counters near zero) it cools down automatically and its coin-days move to the other accounts, with a note in the status box.
+21. A new account's daily reads start low and rise step by step toward its limit (a warm-up ladder), after its rest week.
+22. Before a proxy is used for an account it passes an admission check: HTTPS works with a verified certificate and no proxy certificate is accepted, the exit address matches what was assigned and differs from the other accounts', the exit address is not on a cached blocklist and passes a free reputation check where one is configured, nothing is injected into a plain test page. A proxy that fails is quarantined; a replacement is recorded as an IP change.
 
 ## Flow / State Diagram
 
@@ -98,8 +104,8 @@ Today the X collector reads about 19 coins a day from two throwaway accounts who
 - AC8. At most one browser runs at a time, and a browser start is refused when free memory is below the configured floor.
   proven by: single-browser scenario; low-memory-refusal scenario.
   strategy: Fully-Automated
-- AC9. With fixed IPs configured, each account keeps its own; a dead IP moves the account to the next healthy one after the cooldown with an alert; it never silently uses the home connection.
-  proven by: sticky-ip scenario; dead-ip-failover scenario; no-silent-home-fallback scenario.
+- AC9. With fixed IPs configured, each account keeps its own; a proxy must pass the admission check before use; a dead or failing IP moves the account to the next admitted one after the cooldown with an alert and an IP-change record; it never silently uses the home connection.
+  proven by: sticky-ip scenario; proxy-admission-check scenario; dead-ip-failover scenario; no-silent-home-fallback scenario.
   strategy: Fully-Automated
 - AC10. With a fixed IP, the account's language and time-zone headers and its user agent agree with that IP's region; a mismatch blocks that account's start with a reason.
   proven by: identity-ip-coherence scenario.
@@ -107,8 +113,8 @@ Today the X collector reads about 19 coins a day from two throwaway accounts who
 - AC11. The comparison of the standard client and the browser-imitating backend runs on real accounts, records challenge and result counts, and the chosen default is written down with its evidence.
   proven by: transport-comparison probe output.
   strategy: Agent-Probe (justified: needs live accounts and the owner's PC; no automatable substitute)
-- AC12. Every anti-ban measure has an on/off setting and a health measure; with all optional measures off the collector still runs with the current behaviour.
-  proven by: measure-switch scenario; all-off-baseline scenario.
+- AC12. Every anti-ban measure (daily rhythm, mixed traffic, query variety, adaptive cool-down, warm-up ladder, fixed IP, connection style) has an on/off setting and a health measure; the adaptive cool-down moves a warned account's coin-days to the others; with all optional measures off the collector runs with the current behaviour.
+  proven by: measure-switch scenario; warning-cooldown-handoff scenario; warm-up-ladder scenario; all-off-baseline scenario.
   strategy: Fully-Automated
 - AC13. The status box shows per account: state, reads against limit, last login, cookie age, challenge or shrinkage signals and proxy health; unknown values read "unknown", never healthy or zero.
   proven by: status-box-states scenario; unknown-never-ok scenario.
@@ -167,16 +173,18 @@ The big goal is daily data on every eligible coin. The owner's rules: be clever 
 | Stage | What is built | Why | Trigger |
 |---|---|---|---|
 | 0. Calm and per-account | Per-account daily limit, sequential handoff, rest period for new accounts, per-account status, loss failover, coverage report (AC4, AC5, AC6, AC7, AC12, AC13, AC14, AC18) | Behaviour is the strongest ban signal; most of the pool exists; it also measures how many accounts the universe needs | Always |
-| 1. Identity per account | Fixed proxy per account with health checks and failover, fixed user agent per account, browser-like connection style with a measured comparison (AC9, AC10, AC11, AC19, AC20) | Owner decision: each account must have its own IP and identity. This needs no browser: the reader of each account already accepts its own proxy and user agent, and the library has a browser-imitating backend | Owner decision 02-11-26 (built now, right after Stage 0) |
-| 2. Cookie renewal | Automatic cookie renewal from a saved browser session (AC1, AC2, AC3, AC8, AC17) | The browser probe found Camoufox heavy and its fingerprint unstable; worth it only if cookies expire often | Cookies expire or force a login more than once every two weeks |
+| 1. Identity per account | Fixed proxy per account with an admission check, health checks and failover, fixed user agent per account, browser-like connection style with a measured comparison, plus the switchable behaviour measures: daily rhythm, mixed traffic, query variety, adaptive cool-down, warm-up ladder (AC9, AC10, AC11, AC12, AC19, AC20) | Owner decision: each account must have its own IP and identity. This needs no browser: the reader of each account already accepts its own proxy and user agent, and the library has a browser-imitating backend | Owner decision 02-11-26 (built now, right after Stage 0) |
+| 2. Cookie renewal | Automatic cookie renewal from a saved browser session (AC1, AC2, AC3, AC8, AC17) | The browser probe found Camoufox heavy (about 630 MB, slow start, unstable canvas fingerprint, hangs on a double-open); worth it for X only if cookies expire often. The browser it needs is also what Stage 4 uses | Cookies expire or force a login more than once every two weeks, or Stage 4 starts |
 | 3. Proxy gateway | V2Ray gateway (AC16) | Only if the built-in proxy list cannot cope | Stage 1 shows the built-in list cannot manage the accounts' routes, with measured evidence |
-| 4. Reddit browser method | Separate method with its own rules (AC15) | Depends on Reddit's access decision, not on accounts | Reddit's public feeds end, or the owner decides to proceed |
+| 4. Reddit browser method | Separate method with its own rules, using the same identity layer and a browser, one at a time (AC15) | Owner decision 02-11-26: no application for official Reddit access; the identity and evasion route is chosen, because the public feeds are reportedly ending about 13-11-26 | Owner decision made; built after Stage 1; needs its own design addendum (reader, paging, completeness rules) before the PLAN |
 
 Rules for every stage: each measure has an on/off setting and a health measure; a measure that shows no benefit after a trial is removed; nothing in a later stage is built "just in case". The status box records the trigger signals (challenges, shrinking results, cookie age, limits hit, proxy health) so the next step is decided from data.
 
 ## Open Questions
 
 Answered by the owner on 02-11-26:
+- Q5: no application for official Reddit access; Reddit uses the identity and evasion route (Stage 4).
+- Q9: Reddit zero rule: a zero may be stored when the canary passed, the search feed was clearly complete (short) and the coin has some history (option B of 02-11-26). To be applied to the existing feed method too, as its own small change.
 - Q2: accounts share the load evenly (least recently used).
 - Q7: the proxy list lives in a private file outside the repository, one proxy per line; the owner supplies the list; credentials never enter the repository.
 - Q8: the browser-like connection style becomes the default for all accounts if the recorded comparison shows no extra challenges.
@@ -185,7 +193,6 @@ Still open:
 - Q1 (owner): the per-account daily limit. Default proposal 800 reads, chosen from the measured health signals after Part A has run.
 - Q3 (owner): confirmed by the lifecycle test that only one browser fits at a time; relevant only if Stage 2 is triggered.
 - Q4 (owner): which free proxy list, if any, goes into the disposable-account experiment.
-- Q5 (owner): the first Reddit step: apply for official access now, or wait for the data samples?
 - Q6 (research): the default connection style for daily reads, decided by the comparison and Q8's rule.
 
 ## Background / Research Findings
