@@ -1,8 +1,9 @@
 """T106 D: the read-only sources status. Store and config only; every path redirected to tmp_path."""
 from __future__ import annotations
 
+import json
 import time
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -211,9 +212,112 @@ def test_trends_watch_lists_days_held(live):
 
 
 def test_sources_model_key_set_without_testclient():
-    from api.models.discovery import DiscoverySourcesResponse, DiscoveryTrendsWatch
+    from api.models.discovery import (DiscoveryCollectorSource, DiscoveryCollectorStatus, DiscoverySourcesResponse,
+                                      DiscoveryTrendsWatch)
     assert set(DiscoverySourcesResponse.model_fields) == {
         "as_of", "universe_size", "eligible_size", "live_sources", "total_sources", "live_weight", "newest",
-        "sources", "trends_keyword", "trends_watch"}
+        "sources", "trends_keyword", "trends_watch", "collector"}
     assert set(DiscoveryTrendsWatch.model_fields) == {"symbol", "days_held"}
     assert DiscoverySourcesResponse.model_fields["trends_watch"].default is None
+    assert DiscoverySourcesResponse.model_fields["collector"].default is None
+    assert set(DiscoveryCollectorStatus.model_fields) == {
+        "state", "reason", "started_at", "last_beat", "age_s", "mode", "version", "running_sources", "sources"}
+    assert set(DiscoveryCollectorSource.model_fields) == {
+        "id", "label", "has_state", "last_unit_at", "paused", "pause_reason", "pause_until", "stale", "budget_used",
+        "effective_budget"}
+
+
+# --- standalone collector (C): the heartbeat read as a `collector` object, files only ------------------------------
+
+NOW = datetime(2026, 10, 16, 12, 0, tzinfo=UTC)
+OTHER_PID = 424242
+
+
+def _beat(*, age_s=10.0, stopped=False, pid=OTHER_PID, mode="standalone"):
+    from api.data.attention import collector_heartbeat as hb
+    beat = NOW - timedelta(seconds=age_s)
+    hb.path().parent.mkdir(parents=True, exist_ok=True)
+    hb.path().write_text(json.dumps({
+        "pid": pid, "started_at": (beat - timedelta(hours=3)).isoformat(), "last_beat": beat.isoformat(),
+        "mode": mode, "sources": ["xsearch_web", "reddit_web"], "version": "abc1234", "stopped": stopped,
+        "stopped_at": beat.isoformat() if stopped else None}), encoding="utf-8")
+
+
+@pytest.fixture
+def other_alive(monkeypatch):
+    from api.data.attention import collector_heartbeat as hb
+    state = {"alive": True}
+    monkeypatch.setattr(hb, "pid_alive", lambda pid: state["alive"] if pid == OTHER_PID else False)
+    return state
+
+
+def test_collector_never_started_reports_no_values(live):
+    c = src.build_sources(TODAY, now=NOW).collector
+    assert (c.state, c.reason, c.started_at, c.last_beat, c.age_s, c.mode, c.version) == (
+        "never_started", "no_heartbeat", None, None, None, None, None)
+    assert c.running_sources == []
+    assert [(s.id, s.label) for s in c.sources] == [("xsearch", "X search"), ("reddit", "Reddit")]
+    for s in c.sources:   # no worker state: unknown, never 0 or "not paused"
+        assert (s.has_state, s.last_unit_at, s.paused, s.pause_reason, s.stale, s.budget_used,
+                s.effective_budget) == (False, None, None, None, None, None, None)
+
+
+def test_collector_running_when_heartbeat_fresh_and_process_alive(live, other_alive):
+    _beat(age_s=12.5, mode="in_api")
+    c = src.build_sources(TODAY, now=NOW).collector
+    assert (c.state, c.reason, c.age_s, c.mode, c.version) == ("running", "", 12.5, "in_api", "abc1234")
+    assert c.last_beat == (NOW - timedelta(seconds=12.5)).isoformat()
+    assert c.started_at == (NOW - timedelta(seconds=12.5, hours=3)).isoformat()
+    assert c.running_sources == ["xsearch_web", "reddit_web"]
+
+
+@pytest.mark.parametrize("age_s,stopped,alive,reason", [
+    (91.0, False, True, "heartbeat_stale"), (5.0, True, True, "stopped_cleanly"), (5.0, False, False, "process_gone")])
+def test_collector_stopped(live, other_alive, age_s, stopped, alive, reason):
+    other_alive["alive"] = alive
+    _beat(age_s=age_s, stopped=stopped)
+    c = src.build_sources(TODAY, now=NOW).collector
+    assert (c.state, c.reason, c.age_s) == ("stopped", reason, age_s)
+
+
+def test_collector_unknown_when_heartbeat_unreadable(live):
+    from api.data.attention import collector_heartbeat as hb
+    hb.path().parent.mkdir(parents=True, exist_ok=True)
+    hb.path().write_text("{broken", encoding="utf-8")
+    c = src.build_sources(TODAY, now=NOW).collector
+    assert (c.state, c.reason, c.age_s, c.last_beat) == ("unknown", "unreadable", None, None)
+
+
+def test_collector_sources_reuse_the_health_fields(live, other_alive):
+    from api.data.attention import pc_pace
+    _beat()
+    reddit = pc_pace.PcSource("reddit_web", configured_budget=250, floor=1, adaptive=False, clock=lambda: NOW)
+    reddit.spend(3)
+    reddit.record_unit()
+    res = src.build_sources(TODAY, now=NOW)
+    health = row(res, "reddit").health
+    s = next(s for s in res.collector.sources if s.id == "reddit")
+    assert health is not None and s.has_state is True
+    assert (s.last_unit_at, s.paused, s.pause_reason, s.pause_until, s.stale, s.budget_used, s.effective_budget) == (
+        health.last_unit_at, health.paused, health.pause_reason, health.pause_until, health.stale,
+        health.budget_used, health.effective_budget)
+    assert s.last_unit_at == NOW.isoformat() and s.budget_used == 3 and s.effective_budget == 250
+    x = next(s for s in res.collector.sources if s.id == "xsearch")
+    assert x.has_state is False and x.budget_used is None
+
+
+def test_collector_summary_kept_for_a_parked_source(live, monkeypatch):
+    """A PC source with weight 0 has no row health; the collector box still reads its worker state."""
+    from api.data.attention import pc_pace
+    real = src.load_config
+
+    def parked(path=None):
+        cfg = real(path)
+        return {**cfg, "source_weights": {**cfg["source_weights"], "xsearch": 0}}
+
+    monkeypatch.setattr(src, "load_config", parked)
+    pc_pace.PcSource("xsearch_web", configured_budget=400, floor=40, adaptive=True, clock=lambda: NOW).record_unit()
+    res = src.build_sources(TODAY, now=NOW)
+    assert row(res, "xsearch").health is None
+    x = next(s for s in res.collector.sources if s.id == "xsearch")
+    assert x.has_state is True and x.last_unit_at == NOW.isoformat()
