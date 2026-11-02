@@ -86,6 +86,7 @@ def test_identity_settings_reject_invalid_types(doc, key, value):
     ("accept_language", ""), ("accept_language", "en\r\nX-Injected: yes"),
     ("region", ""), ("timezone", "not/a/timezone"), ("user_agent", ""),
     ("impersonation_target", "chrome"), ("impersonation_target", "chrome999999"),
+    ("user_agent", "@chrome"), ("accept_language", "not a language"),
 ])
 def test_enabled_identity_rejects_invalid_fields(doc, key, value):
     block = doc["collector"]

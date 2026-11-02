@@ -210,3 +210,42 @@ def test_candidate_target_wire_headers(echo):
         assert values["user-agent"]
         assert values["accept-language"] == "en-US,en;q=0.9"
         print("B1_WIRE", json.dumps({"target": target, "headers": headers}, ensure_ascii=True))
+
+
+def test_fallback_child_uses_configured_target_on_both_paths(tmp_path, monkeypatch, echo):
+    from types import SimpleNamespace
+    from api.data.attention import web_queries as wq
+
+    identity = {"accept_language": "en-US,en;q=0.9", "region": "US", "timezone": "America/New_York",
+                "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36", "impersonation_target": "chrome131"}
+    config = wq.CollectorConfig(**{**wq.load().config.as_dict(), "x_accounts": ("alpha",),
+                                  "x_accounts_db_path": str(tmp_path), "x_identity_enabled": True,
+                                  "x_account_identities": {"alpha": identity}})
+    monkeypatch.setattr(wq, "load", lambda: SimpleNamespace(config=config))
+    monkeypatch.setattr(tr, "find_dist", lambda name: None)
+    monkeypatch.setattr(tr, "identity_problem", lambda *args: None)
+    monkeypatch.setattr(tr, "curl_status", lambda *args: "ok")
+    monkeypatch.setattr(tr, "read_install_record", lambda: {})
+    seen = []
+
+    def resume(reader, query, kv, cursor):
+        async def probe():
+            acc = account.Account("alpha", "_", "_", "_", "old", True, cookies={"ct0": "fake"})
+            for client in (acc.make_client(), xclid._make_client()):
+                try:
+                    reply = await client.get(echo)
+                    seen.append({key.lower(): value for key, value in reply.json()})
+                finally:
+                    await client.aclose()
+        reader._run(probe())
+        return reader.page_from({}, {})
+
+    monkeypatch.setattr(tr.TwscrapeReader, "resume", resume)
+    req = tr.fallback_request("alpha", tmp_path / "alpha.db", "fake", {"product": "Latest"}, cursor=None)
+    req["identity_revision"] = tr.identity_revision(identity)
+    env = tr.service_env({}, private_tmp=tmp_path, fallback=True)
+    assert tr._child(json.dumps(req), env)["status"] == "ok"
+    assert len(seen) == 2
+    assert all("Chrome/131.0.0.0" in headers["user-agent"] for headers in seen)
+    assert all(headers["accept-language"] == identity["accept_language"] for headers in seen)
+    assert "auth_token" not in json.dumps(req) and "auth_token" not in json.dumps(env)
