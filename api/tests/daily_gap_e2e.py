@@ -21,13 +21,19 @@ def root():
 
 def seed(action):
     import pandas as pd
-    from api.data import cache
+    from api.data import cache, fred_adapter
     from api.scripts.seed_e2e_cache import _bars, seed_regime
     target = root()
     target.mkdir(parents=True, exist_ok=True)
     if action == "seed":
         cache.bootstrap_cache_dirs()
         seed_regime()
+        # The legacy BTC-leg consumer uses weekly-average WTREGEN, while
+        # the dashboard fixture seeds Wednesday-level WDTGAL. Both are
+        # synthetic fixture series; materialize the legacy key as well.
+        cache.write_liquidity_series(
+            fred_adapter.TGA, cache.read_liquidity_series(fred_adapter.TGA_WEDNESDAY),
+        )
         for symbol in ("BTC", "ETH", "THIN", "HYPE"):
             for tf in ("15m", "1h", "4h", "1d"):
                 frame = _bars(tf, 20 if symbol == "THIN" else 500 if tf == "1d" else 120, 100.)
@@ -60,12 +66,14 @@ def serve():
             raise RuntimeError("D18 offline proof blocked provider access: " + kind)
         return blocked
     ccxt.Exchange.__init__ = fail("exchange-construction")
-    httpx.Client.__init__ = fail("http-provider-construction")
-    httpx.AsyncClient.__init__ = fail("async-http-provider-construction")
-    requests.Session.__init__ = fail("requests-provider-construction")
-    # Windows asyncio creates a real loopback socketpair for its self-pipe.
-    # Permit that local OS transport, never an external connection. Provider
-    # construction above still fails even if a provider targets loopback.
+    # Some cache-first aggregate adapters allocate an unused generic client
+    # before reading cached inputs. That allocation is not provider traffic.
+    # Fail before every actual HTTP send instead; never return fake data.
+    httpx.Client.send = fail("http-provider-request")
+    httpx.AsyncClient.send = fail("async-http-provider-request")
+    requests.Session.request = fail("requests-provider-request")
+    # Windows asyncio needs its loopback socketpair. Provider requests above
+    # remain blocked even when a provider URL happens to target loopback.
     original_connect = socket.socket.connect
     def connect(sock, address):
         if isinstance(address, tuple) and address[0] in ("127.0.0.1", "::1"):

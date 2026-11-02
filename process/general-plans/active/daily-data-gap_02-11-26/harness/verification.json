@@ -25,10 +25,16 @@
       "notes": "evidence/offline-api-smoke.json; provider attempts0, parquet bytes unchanged."
     },
     {
-      "step": "Final real seeded browser",
+      "step": "Initial real seeded browser attempt (historical)",
       "command": "pnpm exec playwright test e2e/daily-data-gap.spec.ts --project=chromium --workers=1",
       "result": "FAIL",
-      "notes": "Final navigation timed out180s; AC7 and integrated browser gate not accepted."
+      "notes": "Initial navigation timed out180s; acceptance was rejected at that point. See subsequent owner-authorized passing run."
+    },
+    {
+      "step": "Owner-authorized fully seeded real API/Next/Edge browser acceptance",
+      "command": "pnpm exec playwright test e2e/daily-data-gap.spec.ts --project=chromium --workers=1 --output=C:/Users/jamir/AppData/Local/Temp/d18-e2e-20261102-resume-08-browser",
+      "result": "PASS",
+      "notes": "1 passed, 19.1s scenario; evidence recorded2026-11-02T01:01:25Z. Gap/cache/reload/timeframe/repair/restore and unchanged intraday chart data passed. Four screenshots retained and inspected. Empty browser-provider-attempts.jsonl proves zero actual provider attempts. Owner approved allowing unused generic HTTP allocations while retaining ccxt construction, actual HTTP sends and external socket guards."
     }
   ]
 }

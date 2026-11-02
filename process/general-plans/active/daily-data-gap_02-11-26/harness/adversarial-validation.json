@@ -18,7 +18,7 @@
     {
       "scenario": "Incomplete browser evidence incorrectly accepted",
       "ruled_out": true,
-      "rationale": "Review decision REJECT and report explicitly hold AC7/integrated browser gate open."
+      "rationale": "Initial rejection was retained historically. Approval now requires and cites the passing resumed real API/Next/Edge gate, zero-request ledger and retained three-width/repaired screenshots; owner merge authority is unchanged."
     }
   ]
 }
