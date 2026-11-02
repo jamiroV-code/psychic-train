@@ -113,3 +113,40 @@ def test_bootstrap_cache_isolated_by_label_and_fresh(monkeypatch):
         assert len(calls) == 3
     finally:
         adapter.close()
+
+
+def test_refresh_preserves_account_state_and_reconciles_identity(tmp_path):
+    from datetime import UTC, datetime, timedelta
+    from api.data.attention import web_queries as wq
+
+    directory = tmp_path / "accounts"
+    directory.mkdir(mode=0o700)
+    db = directory / "alpha.db"
+    api = twscrape.API(str(db), raise_when_no_account=True, wait_timeout=0)
+    identity = {"accept_language": "en-US", "region": "US", "timezone": "America/New_York",
+                "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36", "impersonation_target": "chrome131"}
+    locked_until = datetime.now(UTC) + timedelta(hours=1)
+
+    async def seed():
+        await api.pool.add_account_cookies("alpha", "auth_token=old; ct0=old")
+        acc = await api.pool.get("alpha")
+        acc.active = False
+        acc.locks = {"SearchTimeline": locked_until}
+        acc.stats = {"SearchTimeline": 7}
+        await api.pool.save(acc)
+
+    asyncio.run(seed())
+    config = wq.CollectorConfig(**{**wq.load().config.as_dict(), "x_accounts": ("alpha",),
+                                 "x_accounts_db_path": str(directory), "x_identity_enabled": True,
+                                 "x_account_identities": {"alpha": identity}})
+    env = {"TWS_TELEMETRY": "0", "DO_NOT_TRACK": "1", "TWS_LOG_LEVEL": "WARNING",
+           "TWS_RAISE_WHEN_NO_ACCOUNT": "1"}
+    tr.refresh_cookies("alpha", "auth_token=new; ct0=new", config=config, env=env,
+                       now=datetime.now(UTC), repo_root=tmp_path / "repo")
+    refreshed = asyncio.run(api.pool.get("alpha"))
+    assert refreshed.cookies["auth_token"] == "new"
+    assert refreshed.active is False
+    assert refreshed.locks == {"SearchTimeline": locked_until}
+    assert refreshed.stats == {"SearchTimeline": 7}
+    assert refreshed.user_agent == identity["user_agent"]
+    assert refreshed.headers["accept-language"] == identity["accept_language"]
