@@ -82,6 +82,23 @@ def test_identity_settings_reject_invalid_types(doc, key, value):
         wq.validate(doc)
 
 
+@pytest.mark.parametrize("key,value", [
+    ("accept_language", ""), ("accept_language", "en\r\nX-Injected: yes"),
+    ("region", ""), ("timezone", "not/a/timezone"), ("user_agent", ""),
+    ("impersonation_target", "chrome"), ("impersonation_target", "chrome999999"),
+])
+def test_enabled_identity_rejects_invalid_fields(doc, key, value):
+    block = doc["collector"]
+    block.update(x_accounts=["alpha"], x_identity_enabled=True)
+    identity = {"accept_language": "en-US,en;q=0.9", "region": "US", "timezone": "America/New_York",
+                "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36",
+                "impersonation_target": "chrome131"}
+    identity[key] = value
+    block["x_account_identities"] = {"alpha": identity}
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+
+
 def test_reddit_baseline_250_and_separate_degraded_150_budget():
     assert wq.DEFAULTS["reddit_daily_request_budget"] == 250
     assert wq.REDDIT_DEFAULTS["reddit_degraded_request_budget"] == wq.REDDIT_DEGRADED_BUDGET == 150
