@@ -79,6 +79,14 @@ def test_a_failed_build_keeps_the_index_empty_and_unready(monkeypatch, isolated_
     assert symbol_index._indexes["coin"].ready is False
 
 
+def test_curated_index_entries_are_searchable_by_name():
+    rows = [{"symbol": s, "name": n, "venues": [], "rank": -1} for s, n in symbol_index.CURATED.items()]
+    symbol_index._indexes["ticker"] = symbol_index.Index(rows=rows, ready=True)
+    assert _symbols("ticker", "s&p")[0] == "SP500" and "SPY" in _symbols("ticker", "s&p")
+    assert _symbols("ticker", "dollar index")[0] == "DXY" or "DXY" in _symbols("ticker", "dollar index")
+    assert _symbols("ticker", "dxy") == ["DXY"]
+
+
 def test_exchange_leveraged_tokens_are_never_listed(monkeypatch):
     class Gate:
         markets = {

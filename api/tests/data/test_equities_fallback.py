@@ -15,6 +15,7 @@ MON = date(2026, 10, 12)
 NOW = pd.Timestamp("2026-10-12T21:30:00Z")
 MARKETS = {
     "XYZ-NVDA/USDC:USDC": {"active": True},
+    "XYZ-SP500/USDC:USDC": {"active": True},  # an index perp, not a stock
     "XYZ-DXY/USDC:USDC": {"active": False},  # delisted
     "SPX/USDC:USDC": {"active": True},       # the SPX6900 memecoin, not the S&P 500
 }
@@ -122,7 +123,7 @@ def test_default_fetch_uses_fallback_result_only_when_it_fetched(monkeypatch):
     assert equities_refresh._default_fetch("NVDA").source == "hyperliquid"
     monkeypatch.setattr(equities_fallback, "refresh_equity_hl",
                         lambda t: equities_fallback._result(t, "1d", lse.df, "bad_symbol", "unknown-ticker"))
-    assert equities_refresh._default_fetch("DXY") is lse  # a failed fallback reports LSE's own reason
+    assert equities_refresh._default_fetch("ZZZ") is lse  # a failed fallback reports LSE's own reason
 
 
 def test_default_fetch_never_calls_the_fallback_when_lse_is_fine(monkeypatch):
@@ -141,3 +142,59 @@ def test_board_labels_a_fallback_chart_and_leaves_lse_charts_unlabelled(tmp_path
     panels = {p.symbol: p for p in equities_board.build_board("1d", now=NOW).coins}
     assert panels["NVDA"].chart.available and panels["NVDA"].chart.source == "hyperliquid"
     assert panels["AAPL"].chart.available and panels["AAPL"].chart.source is None
+
+
+# ------------------------------------------------------------- S&P 500 via Hyperliquid, DXY via ECB rates
+
+def test_sp500_index_perp_is_served_like_a_stock():
+    result = equities_fallback.refresh_equity_hl("SP500", exchange=FakeExchange(), now=NOW)
+    assert (result.status, result.source) == ("ok", "hyperliquid")
+    assert equities_fallback.read_cached("SP500", "1d", now=NOW)[0].source == "hyperliquid"
+
+
+def _rates_payload(days: int = 120):
+    out = {}
+    for i in range(days):
+        day = (pd.Timestamp("2026-06-01") + pd.Timedelta(days=i))
+        if day.weekday() < 5:
+            out[day.date().isoformat()] = {"EUR": 0.9 + i * 1e-4, "JPY": 150.0, "GBP": 0.75, "CAD": 1.4, "SEK": 9.5, "CHF": 0.82}
+    return {"rates": out}
+
+
+def _frankfurter(payload, status=200):
+    import httpx
+    return httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(status, json=payload)))
+
+
+def test_dxy_formula_matches_the_published_weights():
+    from api.data import equities_dxy
+    # With every pair at parity (EURUSD = GBPUSD = 1 and the dollar pairs at 1) the index is its constant.
+    parity = {c: 1.0 for c in equities_dxy.CURRENCIES}
+    assert equities_dxy.dxy_from_rates(parity) == pytest.approx(50.14348112)
+    # Real-world level: late-2026 style rates give an index near 100.
+    rates = {"EUR": 0.895, "JPY": 157.25, "GBP": 0.7463, "CAD": 1.3969, "SEK": 9.8264, "CHF": 0.82295}
+    assert 100 < equities_dxy.dxy_from_rates(rates) < 104
+
+
+def test_dxy_is_rebuilt_from_ecb_rates_as_close_only_bars_and_read_back_labelled():
+    result = equities_fallback.refresh_synthetic("DXY", now=NOW, client=_frankfurter(_rates_payload()))
+    assert (result.status, result.source) == ("ok", "ecb")
+    assert (result.df["open"] == result.df["close"]).all() and (result.df["volume"] == 0).all()
+    read, fetched = equities_fallback.read_cached("DXY", "1d", now=NOW)
+    assert read.source == "ecb" and len(read.df) == len(result.df) and fetched is not None
+    assert not equities_fallback.read_cached("DXY", "1w", now=NOW)[0].df.empty
+
+
+def test_only_dxy_can_be_reconstructed_and_an_outage_is_reported_not_raised():
+    assert equities_fallback.refresh_synthetic("AAPL", now=NOW).status == "bad_symbol"
+    down = equities_fallback.refresh_synthetic("DXY", now=NOW, client=_frankfurter({}, status=503))
+    assert (down.status, down.reason) == ("unavailable", "network-error")
+
+
+def test_refresh_chain_tries_hyperliquid_then_reconstruction(monkeypatch):
+    seen = []
+    monkeypatch.setattr(equities_fallback, "refresh_equity_hl",
+                        lambda t: equities_fallback._result(t, "1d", pd.DataFrame(columns=lse_adapter.OHLCV_COLUMNS), "bad_symbol", "unknown-ticker"))
+    monkeypatch.setattr(equities_fallback, "refresh_synthetic", lambda t: seen.append(t) or "rebuilt")
+    assert equities_fallback.refresh_equity_fallback("DXY") == "rebuilt" and seen == ["DXY"]
+    assert equities_fallback.refresh_equity_fallback("ZZZ").status == "bad_symbol" and seen == ["DXY"]

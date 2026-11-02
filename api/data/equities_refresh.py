@@ -63,12 +63,12 @@ _idle.set()
 
 
 def _default_fetch(ticker: str):
-    """LSE first; Hyperliquid (`equities_fallback`) when LSE cannot serve the ticker or its bars are stale.
+    """LSE first; Hyperliquid, then a reconstruction such as DXY (`equities_fallback`), when LSE cannot serve the ticker or its bars are stale.
     The fallback counts as the result only when it fetched bars, so a failure still reports LSE's reason."""
     result = lse_adapter.refresh_equity(ticker)
     if not equities_fallback.needs_fallback(result):
         return result
-    fallback = equities_fallback.refresh_equity_hl(ticker)
+    fallback = equities_fallback.refresh_equity_fallback(ticker)
     return fallback if fallback.status == "ok" else result
 
 

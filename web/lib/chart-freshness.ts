@@ -18,7 +18,8 @@ export type ChartFreshnessFields = Pick<ChartSeries, "last_bar_ts" | "is_partial
 };
 
 const SOURCE_LABELS: Record<string, string> = {
-  hyperliquid: "Source: Hyperliquid perp, not the stock's own price",
+  hyperliquid: "Source: Hyperliquid perp (tracks the price, trades 24/7)",
+  ecb: "Source: reconstructed from ECB reference rates (close only, differs from the ICE close by about 0.4%)",
   gate: "Source: Gate.io spot (Hyperliquid does not list this coin)",
   mexc: "Source: MEXC spot (Hyperliquid does not list this coin)",
   kucoin: "Source: KuCoin spot (Hyperliquid does not list this coin)",

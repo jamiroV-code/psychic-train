@@ -123,6 +123,31 @@ def build_coins(client: httpx.Client) -> list[dict]:
     return rows
 
 
+# Not in the SEC stock list but wanted on the Equities page. Indices come from Hyperliquid's `XYZ-` perps (SP500,
+# XYZ100, JP225, KR200) or are rebuilt (DXY); ETFs are plain LSE tickers (SPY is verified in the LSE study, the rest are
+# the usual US index/dollar/gold/bond funds and read as an unknown symbol if LSE lacks them).
+CURATED = {
+    "SP500": "S&P 500 index (Hyperliquid perp)",
+    "SPY": "SPDR S&P 500 ETF Trust",
+    "DXY": "US Dollar Index (reconstructed from ECB rates)",
+    "XYZ100": "Nasdaq-100 style index (Hyperliquid perp)",
+    "QQQ": "Invesco QQQ Trust (Nasdaq-100 ETF)",
+    "DIA": "SPDR Dow Jones Industrial Average ETF",
+    "IWM": "iShares Russell 2000 ETF",
+    "UUP": "Invesco DB US Dollar Index Bullish Fund",
+    "GLD": "SPDR Gold Shares",
+    "TLT": "iShares 20+ Year Treasury Bond ETF",
+    "JP225": "Nikkei 225 index (Hyperliquid perp)",
+    "KR200": "KOSPI 200 index (Hyperliquid perp)",
+    "GOLD": "Gold (Hyperliquid perp)",
+    "BRENTOIL": "Brent crude oil (Hyperliquid perp)",
+    "COPPER": "Copper (Hyperliquid perp)",
+    "EUR": "Euro vs US dollar (Hyperliquid perp)",
+    "GBP": "British pound vs US dollar (Hyperliquid perp)",
+    "JPY": "Japanese yen vs US dollar (Hyperliquid perp)",
+}
+
+
 def build_tickers(client: httpx.Client) -> list[dict]:
     resp = client.get(SEC_TICKERS, timeout=30, headers={"User-Agent": USER_AGENT_FMT.format(contact=os.environ.get("SEC_CONTACT_EMAIL", "owner@example.com"))})
     resp.raise_for_status()
@@ -130,6 +155,12 @@ def build_tickers(client: httpx.Client) -> list[dict]:
     on_hl = {m.split("/")[0][4:] for m in (hl.markets if hl is not None else {}) if m.startswith("XYZ-")}
     seen: set[str] = set()
     rows = []
+    for sym, name in CURATED.items():
+        seen.add(sym)
+        rows.append({"symbol": sym, "name": name, "venues": ["Hyperliquid"] if sym in on_hl else [], "rank": -1})
+    for sym in sorted(on_hl - seen):  # every other active XYZ market has no SEC name; list it so it can be found
+        seen.add(sym)
+        rows.append({"symbol": sym, "name": "Hyperliquid perp", "venues": ["Hyperliquid"], "rank": 20_000})
     for i, item in enumerate(resp.json().values()):  # the SEC file is ordered by market cap
         sym = str(item.get("ticker", "")).upper()
         if sym and sym not in seen:
