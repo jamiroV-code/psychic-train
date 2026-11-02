@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DATA_DIR = Path(__file__).resolve().parents[1]
 QUERIES_PATH = DATA_DIR / "attention_queries.json"
@@ -90,8 +91,10 @@ REDDIT_STREAM_DEFAULTS = {
     # W8c2w (owner Q1 option b): the stream's share of the day's Reddit request budget, a fraction in (0, 1]
     "reddit_stream_budget_share": 0.45,
 }
-# Optional Stage 0 settings; the committed query file need not contain them.
-X_POOL_OPTIONAL_DEFAULTS = {"x_account_daily_cap": None, "x_account_rest_days": 0}
+# Optional pool and transport settings; the committed query file need not contain them.
+X_POOL_OPTIONAL_DEFAULTS = {"x_account_daily_cap": None, "x_account_rest_days": 0,
+                            "x_connection_style": "plain", "x_identity_enabled": False,
+                            "x_account_identities": {}}
 REDDIT_METHODS = ("reddit_stream", "reddit_web")
 _INT_KEYS = tuple(DEFAULTS)
 DEFAULTS = {**DEFAULTS, **X_DEFAULTS, **REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **X_POOL_OPTIONAL_DEFAULTS}
@@ -162,6 +165,9 @@ class CollectorConfig:
     reddit_stream_budget_share: float = REDDIT_STREAM_DEFAULTS["reddit_stream_budget_share"]
     x_account_daily_cap: int | None = None
     x_account_rest_days: int = 0
+    x_connection_style: str = "plain"
+    x_identity_enabled: bool = False
+    x_account_identities: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -220,6 +226,63 @@ def _stream_value(key: str, v) -> bool:
     return isinstance(v, int) and not isinstance(v, bool) and v >= 1
 
 
+# Exact, non-alias profiles in the locked curl_cffi 0.16.3 distribution. Startup also checks the installed library.
+_IDENTITY_TARGETS = frozenset({
+    "edge99", "edge101", "chrome99", "chrome100", "chrome101", "chrome104", "chrome107", "chrome110",
+    "chrome116", "chrome119", "chrome120", "chrome123", "chrome124", "chrome131", "chrome133a",
+    "chrome136", "chrome142", "chrome145", "chrome146", "chrome150", "chrome99_android", "chrome131_android",
+    "safari153", "safari155", "safari170", "safari172_ios", "safari180", "safari180_ios", "safari184",
+    "safari184_ios", "safari260", "safari2601", "safari260_ios", "firefox133", "firefox135",
+    "firefox144", "firefox147",
+})
+
+
+def _browser_family(value: str) -> str | None:
+    lower = value.lower()
+    if "edg/" in lower or lower.startswith("edge"):
+        return "edge"
+    if "firefox" in lower:
+        return "firefox"
+    if "chrome" in lower or "chromium" in lower:
+        return "chrome"
+    if "safari" in lower:
+        return "safari"
+    return None
+
+
+def _validate_identity_settings(block: dict) -> None:
+    style, enabled, identities = (block["x_connection_style"], block["x_identity_enabled"],
+                                  block["x_account_identities"])
+    if style not in ("plain", "curl") or not isinstance(enabled, bool) or not isinstance(identities, dict):
+        raise QueriesError("collector: invalid identity settings")
+    if not enabled:
+        return
+    if set(identities) != set(block["x_accounts"]):
+        raise QueriesError("collector: identity labels must match x_accounts")
+    effective = set()
+    for value in identities.values():
+        required = {"accept_language", "region", "timezone", "impersonation_target"}
+        if style == "plain":
+            required.add("user_agent")
+        if not isinstance(value, dict) or not required <= set(value) or set(value) - (required | {"user_agent"}):
+            raise QueriesError("collector: invalid identity fields")
+        if any(not isinstance(v, str) or not v or v != v.strip() or not v.isprintable() for v in value.values()):
+            raise QueriesError("collector: invalid identity value")
+        target = value["impersonation_target"]
+        if target not in _IDENTITY_TARGETS:
+            raise QueriesError("collector: invalid impersonation target")
+        if style == "plain" and _browser_family(value["user_agent"]) != _browser_family(target):
+            raise QueriesError("collector: identity browser family mismatch")
+        try:
+            ZoneInfo(value["timezone"])
+        except (ZoneInfoNotFoundError, ValueError):
+            raise QueriesError("collector: invalid identity timezone") from None
+        current = value["user_agent"] if style == "plain" else target
+        if current in effective:
+            raise QueriesError("collector: duplicate effective identity")
+        effective.add(current)
+
+
 def validate_config(block) -> CollectorConfig:
     if not isinstance(block, dict):
         raise QueriesError("collector: must be an object")
@@ -230,6 +293,7 @@ def validate_config(block) -> CollectorConfig:
         if key not in block or not _x_value(key, block[key]):
             raise QueriesError(f"collector: {key} is missing or not a valid value")
     block = {**REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **X_POOL_OPTIONAL_DEFAULTS, **block}
+    _validate_identity_settings(block)
     for key, floor in (("x_account_daily_cap", 1), ("x_account_rest_days", 0)):
         value = block[key]
         if key == "x_account_daily_cap" and value is None:
