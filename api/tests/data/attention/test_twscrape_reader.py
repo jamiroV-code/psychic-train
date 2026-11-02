@@ -358,6 +358,23 @@ def test_no_ua_override_or_proxy_with_curl(tmp_path):
         tr.fallback_request("acct1", Path("/srv/x/acct1.db"), QUERY, {"product": "Latest", "proxy": "h"}, cursor=None)
 
 
+def test_fallback_child_refuses_enabled_identity_without_target_before_library_load(tmp_path, lib, monkeypatch):
+    d = accounts(tmp_path, labels=("acct1",))
+    identity = {"accept_language": "en-US", "region": "US", "timezone": "America/New_York",
+                "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36"}
+    config = cfg(d, labels=("acct1",), x_identity_enabled=True, x_account_identities={"acct1": identity})
+    monkeypatch.setattr(wq, "load", lambda: types.SimpleNamespace(config=config))
+    monkeypatch.setattr(tr, "find_dist", lookup(curl=curl_dist()))
+    monkeypatch.setattr(tr, "curl_status", lambda *args: "ok")
+    monkeypatch.setattr(tr, "read_install_record", lambda: record())
+    loaded = []
+    monkeypatch.setattr(tr, "load_library", lambda: loaded.append(True))
+    req = tr.fallback_request("acct1", d / "acct1.db", QUERY, {"product": "Latest"}, cursor=None)
+    env = tr.service_env(GOOD_ENV, private_tmp=tmp_path / "tmp", fallback=True)
+    assert tr._child(json.dumps(req), env)["status"] == "refused"
+    assert loaded == []
+
+
 # --- AC46: exceptions to reasons ----------------------------------------------------------------------------------
 
 def test_api_error_abort_req_no_account_mapped_to_reasons(lib):
