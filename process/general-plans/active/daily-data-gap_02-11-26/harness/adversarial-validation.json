@@ -1,0 +1,24 @@
+{
+  "scenarios": [
+    {
+      "scenario": "Gap detection accidentally calls provider or mutates storage",
+      "ruled_out": true,
+      "rationale": "Pure helper; board reuses daily frame; intraday local read; real guarded smoke recorded zero attempts and identical parquet bytes before repair."
+    },
+    {
+      "scenario": "Equity trading-calendar weekends labeled crypto gaps",
+      "ruled_out": true,
+      "rationale": "Only crypto assembly invokes summary; shared fields defaultnull; seeded equities board/chart regression passed."
+    },
+    {
+      "scenario": "Fixture overwrites shared/live data",
+      "ruled_out": true,
+      "rationale": "Test helper requires a uniquely named d18-e2e-* root directly beneath temp; no deletion; all cache and config paths isolated; repair restored in smoke finally."
+    },
+    {
+      "scenario": "Incomplete browser evidence incorrectly accepted",
+      "ruled_out": true,
+      "rationale": "Review decision REJECT and report explicitly hold AC7/integrated browser gate open."
+    }
+  ]
+}

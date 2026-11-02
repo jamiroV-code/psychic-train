@@ -63,6 +63,17 @@ export interface GainChip {
   reason: UnavailableReason | null;
 }
 
+export interface DailyDataGapRange {
+  /** Inclusive UTC date-only values; never convert to local datetimes. */
+  start: string;
+  end: string;
+}
+
+export interface DailyDataGap {
+  missing_days: number;
+  ranges: DailyDataGapRange[];
+}
+
 export interface CoinPanel {
   symbol: string;
   chart: ChartSeries;
@@ -70,6 +81,7 @@ export interface CoinPanel {
   percent_change_by_timeframe: Record<Timeframe, number | null>;
   gain_by_timeframe: Record<Timeframe, GainChip>;
   rsi: RsiReading;
+  daily_data_gap?: DailyDataGap | null;
 }
 
 export interface ScreenerBoardResponse {
@@ -88,6 +100,7 @@ export interface ChartView {
   symbol: string;
   timeframe: Timeframe;
   chart: ChartSeries;
+  daily_data_gap?: DailyDataGap | null;
 }
 
 // T37 / S6 (mirrors api/models/screener.py::SpaghettiLine/SpaghettiResponse;

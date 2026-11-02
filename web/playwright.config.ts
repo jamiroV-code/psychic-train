@@ -8,7 +8,8 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 // API serves from. `seed_e2e_cache.py` refuses to run if this is unset or
 // equal to the real cache root — the E2E must never be able to overwrite live
 // market data (three live-data incidents in two days made that explicit).
-const E2E_CACHE_ROOT = path.join(os.tmpdir(), "screener-e2e-cache");
+const D18 = process.env.D18_E2E === "1";
+const E2E_CACHE_ROOT = process.env.E2E_CACHE_ROOT ?? path.join(os.tmpdir(), "screener-e2e-cache");
 const E2E_WATCHLIST = path.join(E2E_CACHE_ROOT, "watchlist.json");
 // Pair-screener fixture universe (RFC-005). The seeder writes it and refuses
 // to run if this resolves to the real api/data/pairs_universe.json.
@@ -23,11 +24,22 @@ const E2E_EQUITIES = path.join(E2E_CACHE_ROOT, "equities.json");
 
 const CHROMIUM_PATH = process.env["PLAYWRIGHT_CHROMIUM_PATH"] || undefined;
 
-const API_PORT = 8001; // NOT 8000 — see the port note below
-const WEB_PORT = 3100; // NOT 3000 — ditto
+const API_PORT = Number(process.env.E2E_API_PORT ?? 8001);
+const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 3100);
 const API_BASE_URL = `http://127.0.0.1:${API_PORT}`;
 
 const apiEnv = {
+  UV_FROZEN: "1",
+  OPENBLAS_NUM_THREADS: "1",
+  OMP_NUM_THREADS: "1",
+  MKL_NUM_THREADS: "1",
+  NUMEXPR_NUM_THREADS: "1",
+  SCREENER_REFRESH_WORKER: "0",
+  SCREENER_ATTENTION_PC_WORKER: "0",
+  SCREENER_ATTENTION_REDDIT_STREAM: "0",
+  SPOT_VOLUME_REFRESH: "0",
+  D18_API_PORT: String(API_PORT),
+  SCREENER_LAYOUT_PATH: path.join(E2E_CACHE_ROOT, "layout.json"),
   SCREENER_CACHE_ROOT: E2E_CACHE_ROOT,
   SCREENER_WATCHLIST_PATH: E2E_WATCHLIST,
   PAIRS_UNIVERSE_PATH: E2E_PAIRS_UNIVERSE,
@@ -73,7 +85,10 @@ export default defineConfig({
       name: "chromium",
       use: {
         ...devices["Desktop Chrome"],
-        ...(CHROMIUM_PATH ? { launchOptions: { executablePath: CHROMIUM_PATH } } : {}),
+        launchOptions: {
+          ...(CHROMIUM_PATH ? { executablePath: CHROMIUM_PATH } : {}),
+          ...(D18 ? { args: ["--renderer-process-limit=1", "--disable-gpu"] } : {}),
+        },
       },
     },
   ],
@@ -89,9 +104,11 @@ export default defineConfig({
       // Playwright's ordering of globalSetup vs. webServer has changed between
       // versions; chaining makes the dependency explicit and version-proof.
       command:
-        `uv run --project api python api/scripts/seed_e2e_cache.py && ` +
-        `uv run --project api python api/scripts/seed_e2e_equities.py && ` +
-        `uv run --project api uvicorn api.main:app --host 127.0.0.1 --port ${API_PORT}`,
+        D18
+          ? `uv run --project api python -m api.tests.daily_gap_e2e seed && uv run --project api python -m api.tests.daily_gap_e2e serve`
+          : `uv run --project api python api/scripts/seed_e2e_cache.py && ` +
+            `uv run --project api python api/scripts/seed_e2e_equities.py && ` +
+            `uv run --project api uvicorn api.main:app --host 127.0.0.1 --port ${API_PORT}`,
       cwd: REPO_ROOT,
       url: `${API_BASE_URL}/api/health`,
       env: apiEnv,

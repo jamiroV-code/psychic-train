@@ -217,6 +217,25 @@ describe("ScreenerBoard live", () => {
     expect(island.mounts).toHaveLength(mountsBefore);
   });
 
+  it("a summary-only repair updates the notice without updating chart islands", async () => {
+    let repaired = false;
+    setup({ fetchBoard: async (tf) => {
+      const result = board(tf);
+      result.coins[0].daily_data_gap = repaired ? { missing_days: 0, ranges: [] } : {
+        missing_days: 2, ranges: [{ start: "2026-01-02", end: "2026-01-03" }],
+      };
+      return result;
+    } });
+    await advance(0);
+    expect(screen.getByText("Daily data gap: 2 missing days")).toBeVisible();
+    const [chart] = mountsIn("coin-panel-BTC");
+    const updates = chart.update.mock.calls.length;
+    repaired = true;
+    await advance(60_000);
+    expect(screen.queryByText(/Daily data gap:/)).not.toBeInTheDocument();
+    expect(chart.update).toHaveBeenCalledTimes(updates);
+  });
+
   it("one changed coin makes one update, the others none", async () => {
     let n = 0;
     setup({

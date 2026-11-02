@@ -1,0 +1,57 @@
+[WebServer] INFO:     Started server process [31224]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:18001 (Press CTRL+C to quit)
+[WebServer] INFO:     127.0.0.1:58142 - "GET /api/health HTTP/1.1" 200 OK
+[WebServer] $ vite build --config vite.islands.config.mjs
+[WebServer] (node:34336) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 
+[WebServer] (!) The public directory feature may not work correctly. outDir C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\web\public\islands and publicDir C:/Users/jamir/.herdr/worktrees/my_site/wt-daily-data-gap/web/public are not separate folders.
+[WebServer] 
+[WebServer] $ next dev --port 13100
+[WebServer] (node:28936) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:32568) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:5316) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] INFO:     127.0.0.1:58244 - "GET /api/screener/board?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58244 - "GET /api/screener/BTC/chart?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58244 - "GET /api/screener/board?timeframe=4h HTTP/1.1" 200 OK
+  x  1 [chromium] › e2e\daily-data-gap.spec.ts:18:5 › stored daily gaps persist across cache/reload, all widths, and disappear on repair offline (3.2m)
+
+
+  1) [chromium] › e2e\daily-data-gap.spec.ts:18:5 › stored daily gaps persist across cache/reload, all widths, and disappear on repair offline 
+
+    Test timeout of 180000ms exceeded.
+
+    Error: page.goto: Test timeout of 180000ms exceeded.
+    Call log:
+      - navigating to "http://localhost:13100/screener", waiting until "load"
+
+
+      44 |   expect(beforeChart.daily_data_gap).toEqual(gap);
+      45 |   expect((await getBoard()).coins.find(c => c.symbol === "BTC")?.daily_data_gap).toEqual(gap);
+    > 46 |   await page.goto("/screener");
+         |              ^
+      47 |   const btc = page.getByTestId("coin-panel-BTC");
+      48 |   await expect(btc.getByText("Daily data gap: 3 missing days")).toBeVisible();
+      49 |   await expect(page.getByTestId("coin-panel-ETH").getByRole("region", { name: "Daily data gap" })).toHaveCount(0);
+        at C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\web\e2e\daily-data-gap.spec.ts:46:14
+
+    Error Context: test-results\daily-data-gap-stored-dail-531d1-disappear-on-repair-offline-chromium\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\daily-data-gap-stored-dail-531d1-disappear-on-repair-offline-chromium\trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results\daily-data-gap-stored-dail-531d1-disappear-on-repair-offline-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium] › e2e\daily-data-gap.spec.ts:18:5 › stored daily gaps persist across cache/reload, all widths, and disappear on repair offline 
