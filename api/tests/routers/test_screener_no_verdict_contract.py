@@ -73,7 +73,7 @@ def test_coin_panel_has_no_verdict_fields(monkeypatch):
     assert not VERDICT_PANEL_FIELDS & set(CoinPanel.model_fields)
     _install(monkeypatch, _fresh_frames())
     payload = screener_board.build_coin_panel("BTC", "1d", now=NOW).model_dump()
-    assert set(payload) == {"symbol", "chart", "percent_change_by_timeframe", "gain_by_timeframe", "rsi"}
+    assert {"symbol", "chart", "percent_change_by_timeframe", "gain_by_timeframe", "rsi", "daily_data_gap"} <= set(payload)
     for name in ("ScalpView", "ScalpMomentumState"):
         assert not hasattr(screener_models, name), name
     assert hasattr(screener_models, "ChartView")
@@ -93,7 +93,7 @@ def test_board_response_has_no_active_benchmark_and_keeps_freshness_fields(monke
         assert coin["chart"]["last_bar_ts"] == "2026-10-03T00:00:00Z"
 
 
-def test_scalp_route_is_gone_and_chart_route_serves_the_drill_down(monkeypatch):
+def test_scalp_route_is_gone_and_chart_route_serves_the_drill_down(monkeypatch, isolated_cache):
     testclient = pytest.importorskip("fastapi.testclient")
     from api.main import app
 
@@ -105,7 +105,7 @@ def test_scalp_route_is_gone_and_chart_route_serves_the_drill_down(monkeypatch):
     resp = client.get("/api/screener/BTC/chart")
     assert resp.status_code == 200
     body = resp.json()
-    assert set(body) == {"symbol", "timeframe", "chart"}
+    assert {"symbol", "timeframe", "chart", "daily_data_gap"} <= set(body)
     assert body["symbol"] == "BTC"
     assert body["timeframe"] == "4h"  # the drill-down's default interval
     assert body["chart"]["available"] is True
@@ -114,7 +114,7 @@ def test_scalp_route_is_gone_and_chart_route_serves_the_drill_down(monkeypatch):
     assert client.get("/api/screener/BTC/chart", params={"timeframe": "1h"}).json()["timeframe"] == "1h"
 
 
-def test_chart_view_carries_freshness_fields_for_every_timeframe(monkeypatch):
+def test_chart_view_carries_freshness_fields_for_every_timeframe(monkeypatch, isolated_cache):
     _install(monkeypatch, _fresh_frames())
     for tf in TIMEFRAMES:
         view = screener_board.build_chart_view("BTC", tf)

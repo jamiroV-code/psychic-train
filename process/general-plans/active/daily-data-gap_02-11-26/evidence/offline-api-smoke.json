@@ -1,0 +1,30 @@
+{
+  "utc": "2026-11-02T00:28:58.202Z",
+  "root": "C:/Users/jamir/AppData/Local/Temp/d18-e2e-20261102-smoke-05",
+  "api": "http://127.0.0.1:18001",
+  "results": [
+    "real storage -> board exact count/ranges",
+    "intraday drill-down exact daily count/ranges",
+    "display timeframe independence",
+    "cache/re-request persistence",
+    "gap requests leave stored parquet bytes unchanged",
+    "real cache writer repair removes summary on both API responses",
+    "summary-only repair preserves intraday price/SMA/RSI",
+    "zero exchange/provider construction or external socket attempts"
+  ],
+  "expected": {
+    "missing_days": 3,
+    "ranges": [
+      {
+        "start": "2025-09-29",
+        "end": "2025-09-30"
+      },
+      {
+        "start": "2026-04-17",
+        "end": "2026-04-17"
+      }
+    ]
+  },
+  "providerAttempts": 0,
+  "browserGate": "NOT PASSED: latest focused Playwright run timed out navigating; see report"
+}

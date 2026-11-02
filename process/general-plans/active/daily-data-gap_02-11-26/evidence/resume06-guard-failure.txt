@@ -1,0 +1,302 @@
+[WebServer] INFO:     Started server process [10732]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:18001 (Press CTRL+C to quit)
+[WebServer] INFO:     127.0.0.1:57530 - "GET /api/health HTTP/1.1" 200 OK
+[WebServer] $ vite build --config vite.islands.config.mjs
+[WebServer] (node:15404) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 
+[WebServer] (!) The public directory feature may not work correctly. outDir C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\web\public\islands and publicDir C:/Users/jamir/.herdr/worktrees/my_site/wt-daily-data-gap/web/public are not separate folders.
+[WebServer] 
+[WebServer] $ next dev --port 13100
+[WebServer] (node:28344) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:17704) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:33812) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] INFO:     127.0.0.1:57641 - "GET /api/screener/board?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57641 - "GET /api/screener/BTC/chart?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57641 - "GET /api/screener/board?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57690 - "GET /api/refresh/status HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57691 - "GET /api/layout/crypto HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57688 - "GET /api/regime/btc-legs HTTP/1.1" 500 Internal Server Error
+[WebServer] ERROR:    Exception in ASGI application
+[WebServer] Traceback (most recent call last):
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 422, in run_asgi
+[WebServer]     result = await app(  # type: ignore[func-returns-value]
+[WebServer]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 63, in __call__
+[WebServer]     return await self.app(scope, receive, send)
+[WebServer]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+[WebServer]     await super().__call__(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+[WebServer]     await self.middleware_stack(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+[WebServer]     raise exc
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+[WebServer]     await self.app(scope, receive, _send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\gzip.py", line 78, in __call__
+[WebServer]     await responder(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\gzip.py", line 103, in __call__
+[WebServer]     await self.app(scope, receive, self.send_with_compression)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\cors.py", line 96, in __call__
+[WebServer]     await self.simple_response(scope, receive, send, request_headers=headers)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\cors.py", line 154, in simple_response
+[WebServer]     await self.app(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+[WebServer]     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+[WebServer]     raise exc
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+[WebServer]     await app(scope, receive, sender)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+[WebServer]     await self.app(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\routing.py", line 670, in __call__
+[WebServer]     await self.middleware_stack(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+[WebServer]     await route.handle(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 1780, in handle
+[WebServer]     await self.original_router.handle(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 2789, in handle
+[WebServer]     await included_router._handle_selected(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 1800, in _handle_selected
+[WebServer]     await original_route.handle(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 1279, in handle
+[WebServer]     await app(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 158, in app
+[WebServer]     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+[WebServer]     raise exc
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+[WebServer]     await app(scope, receive, sender)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 144, in app
+[WebServer]     response = await f(request)
+[WebServer]                ^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 706, in app
+[WebServer]     raw_response = await run_endpoint_function(
+[WebServer]                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 354, in run_endpoint_function
+[WebServer]     return await run_in_threadpool(dependant.call, **values)
+[WebServer]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\concurrency.py", line 34, in run_in_threadpool
+[WebServer]     return await anyio.to_thread.run_sync(func)
+[WebServer]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\anyio\to_thread.py", line 65, in run_sync
+[WebServer]     return await get_async_backend().run_sync_in_worker_thread(
+[WebServer]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 2706, in run_sync_in_worker_thread
+[WebServer]     return await future
+[WebServer]            ^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 1100, in run
+[WebServer]     result = context.run(func, *args)
+[WebServer]              ^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\routers\regime.py", line 43, in get_btc_legs
+[WebServer]     return btc_legs.build_btc_leg_chart()
+[WebServer]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\analytics\regime\btc_legs.py", line 254, in build_btc_leg_chart
+[WebServer]     return assemble_btc_leg_chart(leg_boundary._leg_inputs(now, always_read_btc=True), now)
+[WebServer]                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\analytics\regime\leg_boundary.py", line 173, in _leg_inputs
+[WebServer]     else liquidity_composite.build_reduced_composite()
+[WebServer]          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\analytics\regime\liquidity_composite.py", line 138, in build_reduced_composite
+[WebServer]     net_liq = fred_adapter.fetch_net_liquidity()
+[WebServer]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\data\fred_adapter.py", line 167, in fetch_net_liquidity
+[WebServer]     client = client or httpx.Client()
+[WebServer]                        ^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\tests\daily_gap_e2e.py", line 60, in blocked
+[WebServer]     raise RuntimeError("D18 offline proof blocked provider access: " + kind)
+[WebServer] RuntimeError: D18 offline proof blocked provider access: http-provider-construction
+[WebServer] INFO:     127.0.0.1:57689 - "GET /api/screener/board?timeframe=1d HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57689 - "GET /api/screener/spaghetti?timeframe=1d HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57691 - "GET /api/screener/spaghetti?timeframe=1d HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57690 - "GET /api/refresh/status HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57713 - "GET /api/layout/crypto HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57691 - "GET /api/regime/btc-legs HTTP/1.1" 500 Internal Server Error
+[WebServer] ERROR:    Exception in ASGI application
+[WebServer] Traceback (most recent call last):
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 422, in run_asgi
+[WebServer]     result = await app(  # type: ignore[func-returns-value]
+[WebServer]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 63, in __call__
+[WebServer]     return await self.app(scope, receive, send)
+[WebServer]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+[WebServer]     await super().__call__(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+[WebServer]     await self.middleware_stack(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+[WebServer]     raise exc
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+[WebServer]     await self.app(scope, receive, _send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\gzip.py", line 78, in __call__
+[WebServer]     await responder(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\gzip.py", line 103, in __call__
+[WebServer]     await self.app(scope, receive, self.send_with_compression)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\cors.py", line 96, in __call__
+[WebServer]     await self.simple_response(scope, receive, send, request_headers=headers)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\cors.py", line 154, in simple_response
+[WebServer]     await self.app(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+[WebServer]     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+[WebServer]     raise exc
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+[WebServer]     await app(scope, receive, sender)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+[WebServer]     await self.app(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\routing.py", line 670, in __call__
+[WebServer]     await self.middleware_stack(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+[WebServer]     await route.handle(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 1780, in handle
+[WebServer]     await self.original_router.handle(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 2789, in handle
+[WebServer]     await included_router._handle_selected(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 1800, in _handle_selected
+[WebServer]     await original_route.handle(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 1279, in handle
+[WebServer]     await app(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 158, in app
+[WebServer]     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+[WebServer]     raise exc
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+[WebServer]     await app(scope, receive, sender)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 144, in app
+[WebServer]     response = await f(request)
+[WebServer]                ^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 706, in app
+[WebServer]     raw_response = await run_endpoint_function(
+[WebServer]                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 354, in run_endpoint_function
+[WebServer]     return await run_in_threadpool(dependant.call, **values)
+[WebServer]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\concurrency.py", line 34, in run_in_threadpool
+[WebServer]     return await anyio.to_thread.run_sync(func)
+[WebServer]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\anyio\to_thread.py", line 65, in run_sync
+[WebServer]     return await get_async_backend().run_sync_in_worker_thread(
+[WebServer]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 2706, in run_sync_in_worker_thread
+[WebServer]     return await future
+[WebServer]            ^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 1100, in run
+[WebServer]     result = context.run(func, *args)
+[WebServer]              ^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\routers\regime.py", line 43, in get_btc_legs
+[WebServer]     return btc_legs.build_btc_leg_chart()
+[WebServer]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\analytics\regime\btc_legs.py", line 254, in build_btc_leg_chart
+[WebServer]     return assemble_btc_leg_chart(leg_boundary._leg_inputs(now, always_read_btc=True), now)
+[WebServer]                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\analytics\regime\leg_boundary.py", line 173, in _leg_inputs
+[WebServer]     else liquidity_composite.build_reduced_composite()
+[WebServer]          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\analytics\regime\liquidity_composite.py", line 138, in build_reduced_composite
+[WebServer]     net_liq = fred_adapter.fetch_net_liquidity()
+[WebServer]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\data\fred_adapter.py", line 167, in fetch_net_liquidity
+[WebServer]     client = client or httpx.Client()
+[WebServer]                        ^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\tests\daily_gap_e2e.py", line 60, in blocked
+[WebServer]     raise RuntimeError("D18 offline proof blocked provider access: " + kind)
+[WebServer] RuntimeError: D18 offline proof blocked provider access: http-provider-construction
+[WebServer] INFO:     127.0.0.1:57689 - "GET /api/screener/board?timeframe=1d HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57689 - "GET /api/screener/spaghetti?timeframe=1d HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57713 - "GET /api/screener/spaghetti?timeframe=1d HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57690 - "GET /api/screener/BTC/chart?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57718 - "GET /api/screener/BTC/chart?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57713 - "GET /api/screener/spaghetti?timeframe=15m HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57689 - "GET /api/screener/board?timeframe=15m HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57751 - "GET /api/screener/BTC/chart?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57751 - "GET /api/screener/board?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57762 - "GET /api/refresh/status HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57763 - "GET /api/layout/crypto HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:57760 - "GET /api/regime/btc-legs HTTP/1.1" 500 Internal Server Error
+[WebServer] ERROR:    Exception in ASGI application
+[WebServer] Traceback (most recent call last):
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 422, in run_asgi
+[WebServer]     result = await app(  # type: ignore[func-returns-value]
+[WebServer]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 63, in __call__
+[WebServer]     return await self.app(scope, receive, send)
+[WebServer]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+[WebServer]     await super().__call__(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+[WebServer]     await self.middleware_stack(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+[WebServer]     raise exc
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+[WebServer]     await self.app(scope, receive, _send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\gzip.py", line 78, in __call__
+[WebServer]     await responder(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\gzip.py", line 103, in __call__
+[WebServer]     await self.app(scope, receive, self.send_with_compression)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\cors.py", line 96, in __call__
+[WebServer]     await self.simple_response(scope, receive, send, request_headers=headers)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\cors.py", line 154, in simple_response
+[WebServer]     await self.app(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+[WebServer]     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+[WebServer]     raise exc
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+[WebServer]     await app(scope, receive, sender)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+[WebServer]     await self.app(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\routing.py", line 670, in __call__
+[WebServer]     await self.middleware_stack(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+[WebServer]     await route.handle(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 1780, in handle
+[WebServer]     await self.original_router.handle(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 2789, in handle
+[WebServer]     await included_router._handle_selected(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 1800, in _handle_selected
+[WebServer]     await original_route.handle(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 1279, in handle
+[WebServer]     await app(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 158, in app
+[WebServer]     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+[WebServer]     raise exc
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+[WebServer]     await app(scope, receive, sender)
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 144, in app
+[WebServer]     response = await f(request)
+[WebServer]                ^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 706, in app
+[WebServer]     raw_response = await run_endpoint_function(
+[WebServer]                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\fastapi\routing.py", line 354, in run_endpoint_function
+[WebServer]     return await run_in_threadpool(dependant.call, **values)
+[WebServer]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\starlette\concurrency.py", line 34, in run_in_threadpool
+[WebServer]     return await anyio.to_thread.run_sync(func)
+[WebServer]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\anyio\to_thread.py", line 65, in run_sync
+[WebServer]     return await get_async_backend().run_sync_in_worker_thread(
+[WebServer]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 2706, in run_sync_in_worker_thread
+[WebServer]     return await future
+[WebServer]            ^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 1100, in run
+[WebServer]     result = context.run(func, *args)
+[WebServer]              ^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\routers\regime.py", line 43, in get_btc_legs
+[WebServer]     return btc_legs.build_btc_leg_chart()
+[WebServer]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[WebServer]   File "C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\api\analytics\regime\btc_legs.py", line 254, in build_btc_leg_chart
+[WebServer]     return assemble_btc_leg_chart(leg_boundary._leg_inputs(now, always_read_btc=True), now)
+[WebServer]                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[Showing lines 1-300 of 355. Use :301 to continue]

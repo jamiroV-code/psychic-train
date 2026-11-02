@@ -1,6 +1,7 @@
 import { memo, type ReactNode } from "react";
 import { ChartFreshness } from "@/components/chart/ChartFreshness";
 import { MiniChart } from "@/components/chart/MiniChart";
+import { DailyDataGapNotice } from "@/components/screener/DailyDataGapNotice";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
 import { useVariant } from "@/components/screener/VariantProvider";
 import { formatDateTimeZone } from "@/lib/brussels-time";
@@ -67,6 +68,8 @@ export const CoinPanel = memo(function CoinPanel({
         )}
         {actions}
       </div>
+
+      <DailyDataGapNotice gap={panel.daily_data_gap} />
 
       {panel.chart.available ? (
         <>

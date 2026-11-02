@@ -1,0 +1,119 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: daily-data-gap.spec.ts >> stored daily gaps persist across cache/reload, all widths, and disappear on repair offline
+- Location: e2e\daily-data-gap.spec.ts:18:5
+
+# Error details
+
+```
+Test timeout of 180000ms exceeded.
+```
+
+```
+Error: page.goto: Test timeout of 180000ms exceeded.
+Call log:
+  - navigating to "http://localhost:13100/screener", waiting until "load"
+
+```
+
+# Test source
+
+```ts
+  1  | import { test, expect } from "@playwright/test";
+  2  | import { execFileSync } from "node:child_process";
+  3  | import fs from "node:fs";
+  4  | import path from "node:path";
+  5  | import { API_BASE_URL, E2E_CACHE_ROOT } from "../playwright.config";
+  6  | import type { ScreenerBoardResponse, ChartView, DailyDataGap } from "../lib/types/screener";
+  7  | 
+  8  | const repo = path.resolve(__dirname, "../..");
+  9  | function fixture(action: "repair" | "restore") {
+  10 |   execFileSync("uv", ["run", "--project", "api", "python", "-m", "api.tests.daily_gap_e2e", action], {
+  11 |     cwd: repo, env: {
+  12 |       ...process.env, UV_FROZEN: "1", SCREENER_CACHE_ROOT: E2E_CACHE_ROOT,
+  13 |       OPENBLAS_NUM_THREADS: "1", OMP_NUM_THREADS: "1", MKL_NUM_THREADS: "1", NUMEXPR_NUM_THREADS: "1",
+  14 |     }, stdio: "pipe",
+  15 |   });
+  16 | }
+  17 | 
+  18 | test("stored daily gaps persist across cache/reload, all widths, and disappear on repair offline", async ({ page, request }, testInfo) => {
+  19 |   test.setTimeout(180_000);
+  20 |   const gap: DailyDataGap = JSON.parse(fs.readFileSync(path.join(E2E_CACHE_ROOT, "manifest.json"), "utf8"));
+  21 |   const attempts = path.join(E2E_CACHE_ROOT, "attempts.jsonl");
+  22 |   const localOnly: string[] = [];
+  23 |   await page.route("**/*", route => {
+  24 |     const hostname = new URL(route.request().url()).hostname;
+  25 |     if (!["localhost", "127.0.0.1", ""].includes(hostname)) {
+  26 |       localOnly.push(route.request().url());
+  27 |       return route.abort();
+  28 |     }
+  29 |     return route.continue();
+  30 |   });
+  31 |   const getBoard = async () => {
+  32 |     const response = await request.get(`${API_BASE_URL}/api/screener/board?timeframe=4h`);
+  33 |     expect(response.ok()).toBeTruthy();
+  34 |     return await response.json() as ScreenerBoardResponse;
+  35 |   };
+  36 |   const getChart = async () => {
+  37 |     const response = await request.get(`${API_BASE_URL}/api/screener/BTC/chart?timeframe=4h`);
+  38 |     expect(response.ok()).toBeTruthy();
+  39 |     return await response.json() as ChartView;
+  40 |   };
+  41 |   const original = await getBoard();
+  42 |   const beforeChart = await getChart();
+  43 |   expect(original.coins.find(c => c.symbol === "BTC")?.daily_data_gap).toEqual(gap);
+  44 |   expect(beforeChart.daily_data_gap).toEqual(gap);
+  45 |   expect((await getBoard()).coins.find(c => c.symbol === "BTC")?.daily_data_gap).toEqual(gap);
+> 46 |   await page.goto("/screener");
+     |              ^ Error: page.goto: Test timeout of 180000ms exceeded.
+  47 |   const btc = page.getByTestId("coin-panel-BTC");
+  48 |   await expect(btc.getByText("Daily data gap: 3 missing days")).toBeVisible();
+  49 |   await expect(page.getByTestId("coin-panel-ETH").getByRole("region", { name: "Daily data gap" })).toHaveCount(0);
+  50 |   await page.reload();
+  51 |   await expect(btc.getByText("Daily data gap: 3 missing days")).toBeVisible();
+  52 |   await page.getByTestId("timeframe-button-15m").click();
+  53 |   await expect(btc.getByText("Daily data gap: 3 missing days")).toBeVisible();
+  54 |   await page.getByTestId("open-drilldown-BTC").click();
+  55 |   const drill = page.getByRole("dialog", { name: "BTC drill-down" });
+  56 |   await expect(drill.getByText("Daily data gap: 3 missing days")).toBeVisible();
+  57 |   for (const width of [375, 768, 1280]) {
+  58 |     await page.setViewportSize({ width, height: 1000 });
+  59 |     for (const range of gap.ranges) {
+  60 |       await expect(drill.getByText(range.start, { exact: true }).first()).toBeVisible();
+  61 |       if (range.start !== range.end) await expect(drill.getByText(range.end, { exact: true })).toBeVisible();
+  62 |     }
+  63 |     await expect(drill.getByText("Missing date ranges (UTC, inclusive):")).toBeVisible();
+  64 |     const notice = drill.getByRole("region", { name: "Daily data gap" });
+  65 |     expect(await notice.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  66 |     await page.screenshot({ path: testInfo.outputPath(`daily-gap-${width}.png`), fullPage: true });
+  67 |   }
+  68 |   try {
+  69 |     fixture("repair");
+  70 |     const repaired = await getChart();
+  71 |     expect(repaired.daily_data_gap).toEqual({ missing_days: 0, ranges: [] });
+  72 |     expect((await getBoard()).coins.find(c => c.symbol === "BTC")?.daily_data_gap?.missing_days).toBe(0);
+  73 |     await page.reload();
+  74 |     await expect(btc).toBeVisible();
+  75 |     await expect(btc.getByText(/Daily data gap:/)).toHaveCount(0);
+  76 |     expect(repaired.chart.price).toEqual(beforeChart.chart.price);
+  77 |     expect(repaired.chart.sma).toEqual(beforeChart.chart.sma);
+  78 |     expect(repaired.chart.rsi).toEqual(beforeChart.chart.rsi);
+  79 |     await page.getByTestId("open-drilldown-BTC").click();
+  80 |     await expect(drill).toBeVisible();
+  81 |     await expect(drill.getByText(/Daily data gap:/)).toHaveCount(0);
+  82 |     await page.screenshot({ path: testInfo.outputPath("daily-gap-repaired.png"), fullPage: true });
+  83 |   } finally {
+  84 |     fixture("restore");
+  85 |   }
+  86 |   expect(fs.readFileSync(attempts, "utf8")).toBe("");
+  87 |   expect(localOnly).toEqual([]);
+  88 |   await testInfo.attach("offline-provider-attempts", { body: fs.readFileSync(attempts), contentType: "text/plain" });
+  89 | });
+  90 | 
+```

@@ -19,10 +19,11 @@ import math
 
 import pandas as pd
 
+from api.analytics.daily_data_gap import summarize_daily_data_gap
 from api.analytics.indicators import gain as gain_mod
 from api.analytics.indicators import rsi as rsi_mod
 from api.analytics.indicators import sma as sma_mod
-from api.data import ccxt_adapter, freshness
+from api.data import cache, ccxt_adapter, freshness
 from api.data import watchlist as watchlist_store
 from api.models.screener import (
     TIMEFRAMES,
@@ -190,6 +191,7 @@ def build_coin_panel(
 
     return CoinPanel(
         symbol=symbol,
+        daily_data_gap=summarize_daily_data_gap(dfs_by_tf["1d"]),
         chart=_chart_series(
             display_df, display_available, display_status,
             timeframe=timeframe,
@@ -233,7 +235,11 @@ def build_chart_view(symbol: str, timeframe: Timeframe = DEFAULT_CHART_TIMEFRAME
     if chart.available:
         chart.rsi = _rsi_series(display.df)
 
-    return ChartView(symbol=symbol, timeframe=timeframe, chart=chart)
+    daily = display.df if timeframe == "1d" else daily_ref if timeframe == "1w" else cache.read_ohlcv(symbol, "1d")
+    return ChartView(
+        symbol=symbol, timeframe=timeframe, chart=chart,
+        daily_data_gap=summarize_daily_data_gap(daily),
+    )
 
 
 def _spaghetti_line(symbol: str, timeframe: Timeframe, ref_now: pd.Timestamp) -> SpaghettiLine:

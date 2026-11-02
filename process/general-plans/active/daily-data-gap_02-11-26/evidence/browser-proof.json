@@ -1,0 +1,23 @@
+{
+  "recordedUtc": "2026-11-02T01:01:25.804Z",
+  "result": "PASS",
+  "root": "C:/Users/jamir/AppData/Local/Temp/d18-e2e-20261102-resume-08",
+  "command": "pnpm exec playwright test e2e/daily-data-gap.spec.ts --project=chromium --workers=1 --output=C:/Users/jamir/AppData/Local/Temp/d18-e2e-20261102-resume-08-browser",
+  "providerAttempts": 0,
+  "viewports": [
+    375,
+    768,
+    1280
+  ],
+  "checks": [
+    "real stored daily history -> real API -> rendered warning/count and UTC ranges",
+    "cached response and browser reload retain warning",
+    "board display timeframe changes do not change daily gap summary",
+    "real fixture repair removes API and rendered notices",
+    "repair preserves intraday price/SMA/RSI",
+    "actual provider requests and ccxt construction fail fast; zero attempts",
+    "fixture restore completed in finally",
+    "all four screenshots copied outside auto-cleaned test output"
+  ],
+  "guardClarification": "Owner approved allowing unused generic HTTP client allocations; ccxt construction, sync/async httpx send, requests Session.request and external socket connect remain fail-fast. WTREGEN synthetic fixture seeded alongside dashboard WDTGAL for legacy BTC-leg cache reader."
+}
