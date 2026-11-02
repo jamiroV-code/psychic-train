@@ -531,6 +531,56 @@
   font-size: var(--fs-sm);
   color: var(--ink-2);
 }
+.add-coin__search {
+  position: relative;
+}
+.add-coin__suggestions {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 0;
+  min-width: 22rem;
+  max-width: 32rem;
+  margin: 2px 0 0;
+  padding: 2px;
+  list-style: none;
+  background: var(--sh-2);
+  border: 1px solid var(--sh-rule);
+  border-radius: var(--radius-sm);
+}
+.add-coin__option {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: baseline;
+  padding: 4px 8px;
+  font-size: var(--fs-sm);
+  color: var(--ink-1);
+  cursor: pointer;
+}
+.add-coin__option--active,
+.add-coin__option:hover {
+  background: var(--sh-rule);
+}
+.add-coin__option--empty {
+  color: var(--ink-2);
+  cursor: default;
+}
+.add-coin__option-symbol {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  min-width: 4.5rem;
+}
+.add-coin__option-name {
+  flex: 1;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.add-coin__option-venues {
+  font-size: var(--fs-xs, 0.75rem);
+  color: var(--ink-2);
+}
 .add-coin__count {
   font-family: var(--font-mono);
   font-size: var(--fs-sm);

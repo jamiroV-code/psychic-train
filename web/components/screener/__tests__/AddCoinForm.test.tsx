@@ -123,3 +123,115 @@ describe("AddCoinForm", () => {
     expect(screen.getByRole("button", { name: "Add coin" })).not.toHaveAttribute("aria-disabled", "true");
   });
 });
+
+describe("AddCoinForm suggestions", () => {
+  const result = (...symbols: string[]) =>
+    Promise.resolve({
+      ready: true,
+      suggestions: symbols.map((symbol) => ({ symbol, name: `${symbol} name`, venues: ["Hyperliquid"] })),
+    });
+
+  it("asks again on every letter typed and lists name, symbol and venue", async () => {
+    const suggest = vi.fn((_kind: string, q: string) => result(q.toUpperCase()));
+    setup({ suggest });
+    for (const text of ["s", "sh", "shi"]) {
+      await act(async () => {
+        type(text);
+      });
+    }
+    expect(suggest.mock.calls.map((c) => [c[0], c[1]])).toEqual([
+      ["coin", "s"],
+      ["coin", "sh"],
+      ["coin", "shi"],
+    ]);
+    const option = await screen.findByTestId("add-coin-suggestion");
+    expect(option).toHaveTextContent("SHI");
+    expect(option).toHaveTextContent("SHI name");
+    expect(option).toHaveTextContent("Hyperliquid");
+  });
+
+  it("drops an answer that arrives after a newer keystroke", async () => {
+    let resolveSlow: (v: unknown) => void = () => {};
+    const slow = new Promise((r) => {
+      resolveSlow = r;
+    });
+    const suggest = vi.fn((_kind: string, q: string, _s?: AbortSignal) => (q === "s" ? (slow as never) : result("SOL")));
+    setup({ suggest });
+    await act(async () => {
+      type("s");
+    });
+    await act(async () => {
+      type("so");
+    });
+    await act(async () => {
+      resolveSlow({ ready: true, suggestions: [{ symbol: "STALE", name: "old", venues: [] }] });
+    });
+    expect(screen.queryByText("STALE")).toBeNull();
+    expect(await screen.findByText("SOL")).toBeInTheDocument();
+  });
+
+  it("picking a suggestion fills the symbol, and Add sends it", async () => {
+    const suggest = vi.fn(() => result("SHIB", "SHIBDOGE"));
+    const props = setup({ suggest });
+    await act(async () => {
+      type("shi");
+    });
+    const options = await screen.findAllByTestId("add-coin-suggestion");
+    fireEvent.mouseDown(options[1]);
+    expect((screen.getByLabelText("Coin symbol") as HTMLInputElement).value).toBe("SHIBDOGE");
+    expect(screen.queryByTestId("add-coin-suggestions")).toBeNull();
+    await submit();
+    expect(props.addCoin).toHaveBeenCalledWith("SHIBDOGE", "alts");
+  });
+
+  it("arrow keys move through the list, Enter picks, Escape closes", async () => {
+    const suggest = vi.fn(() => result("AAA", "BBB"));
+    setup({ suggest });
+    const input = screen.getByLabelText("Coin symbol");
+    await act(async () => {
+      type("a");
+    });
+    await screen.findAllByTestId("add-coin-suggestion");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(screen.getAllByRole("option")[1]).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect((input as HTMLInputElement).value).toBe("BBB");
+    await act(async () => {
+      type("b");
+    });
+    await screen.findAllByTestId("add-coin-suggestion");
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByTestId("add-coin-suggestions")).toBeNull();
+  });
+
+  it("a failing suggestion service never blocks typing a symbol and adding it", async () => {
+    const suggest = vi.fn(() => Promise.reject(new Error("down")));
+    const props = setup({ suggest });
+    await act(async () => {
+      type("sol");
+    });
+    expect(screen.queryByTestId("add-coin-suggestions")).toBeNull();
+    await submit();
+    expect(props.addCoin).toHaveBeenCalledWith("SOL", "alts");
+  });
+
+  it("says so when nothing matches or the index is still building, and clears when the box empties", async () => {
+    const suggest = vi.fn((_k: string, q: string) =>
+      Promise.resolve({ ready: q !== "zz", suggestions: [] }),
+    );
+    setup({ suggest });
+    await act(async () => {
+      type("qq");
+    });
+    expect(await screen.findByTestId("add-coin-no-match")).toHaveTextContent("No match.");
+    await act(async () => {
+      type("zz");
+    });
+    expect(await screen.findByTestId("add-coin-no-match")).toHaveTextContent("Still building");
+    await act(async () => {
+      type("");
+    });
+    expect(screen.queryByTestId("add-coin-suggestions")).toBeNull();
+  });
+});
