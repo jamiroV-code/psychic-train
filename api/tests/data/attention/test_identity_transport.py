@@ -192,3 +192,21 @@ def test_restart_and_identity_change_invalidate_bootstrap_cache(monkeypatch):
     second = acquire({**identity, "user_agent": "Mozilla/5.0 Chrome/136.0.0.0 Safari/537.36",
                       "impersonation_target": "chrome136"})
     assert first is not second
+
+
+def test_candidate_target_wire_headers(echo):
+    from curl_cffi.requests import AsyncSession
+
+    async def measure(target):
+        async with AsyncSession(impersonate=target, trust_env=False,
+                                headers={"accept-language": "en-US,en;q=0.9"}) as client:
+            response = await client.get(echo)
+            return response.json()
+
+    results = {target: asyncio.run(measure(target))
+               for target in ("chrome131", "safari170", "firefox133", "edge101")}
+    for target, headers in results.items():
+        values = {name.lower(): value for name, value in headers}
+        assert values["user-agent"]
+        assert values["accept-language"] == "en-US,en;q=0.9"
+        print("B1_WIRE", json.dumps({"target": target, "headers": headers}, ensure_ascii=True))

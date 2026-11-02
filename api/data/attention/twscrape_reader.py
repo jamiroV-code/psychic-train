@@ -954,14 +954,15 @@ def refresh_cookies(label: str, cookies: str, *, config: CollectorConfig, env: M
     try:
         api = load().API(str(path), raise_when_no_account=True, wait_timeout=0)
         async def refresh():
-            if not config.x_identity_enabled:
-                await api.pool.add_account_cookies(label, cookies)
-                return
-            try:
-                previous = await api.pool.get(label)
-            except ValueError:
-                previous = None
+            previous = None
+            if config.x_identity_enabled:
+                try:
+                    previous = await api.pool.get(label)
+                except ValueError:
+                    pass
             await api.pool.add_account_cookies(label, cookies)
+            if not config.x_identity_enabled:
+                return
             current = await api.pool.get(label)
             if previous is not None:
                 current.active, current.error_msg = previous.active, previous.error_msg

@@ -310,13 +310,16 @@ def test_env_guard_refuses_start_for_each_wrong_variable(tmp_path, lib, monkeypa
     wrong = [("TWS_TELEMETRY", "1"), ("DO_NOT_TRACK", "0"), ("TWS_LOG_LEVEL", "DEBUG"), ("TWS_LOG_LEVEL", "INFO"),
              ("TWS_RAISE_WHEN_NO_ACCOUNT", "0"), ("TWS_PROXY", "socks5://h"), ("HTTP_PROXY", "http://h"),
              ("HTTPS_PROXY", "http://h"), ("https_proxy", "http://h"), ("ALL_PROXY", "http://h"),
-             ("TWS_HTTP_BACKEND", "curl"), ("TWS_HTTP_BACKEND", "httpx")]
+             ("TWS_HTTP_BACKEND", "curl")]
     for i, (name, value) in enumerate(wrong):
         with pytest.raises(tr.XStartRefused) as e:
             start(tmp_path / str(i), lib, env={**GOOD_ENV, name: value})
         assert e.value.reasons == [f"env:{name}"], name
         assert value not in str(e.value)
     assert lib.apis == [] and "twscrape" not in tr._LOADED
+    # The launcher now passes an explicit matching plain backend.
+    accepted, _ = start(tmp_path / "matching", lib, env={**GOOD_ENV, "TWS_HTTP_BACKEND": "httpx"})
+    accepted.close()
     # The fallback process needs the curl backend and nothing else.
     assert tr.env_guard({**GOOD_ENV, "TWS_HTTP_BACKEND": "curl"}, fallback=True) == []
     assert tr.env_guard(GOOD_ENV, fallback=True) == ["TWS_HTTP_BACKEND"]
@@ -751,7 +754,7 @@ def test_startup_verifies_installed_wheel_hash_against_matching_entry():
     assert tr.curl_status(rec, "manylinux_x86_64", curl_dist(tag="cp310-abi3-win_amd64")) == "wheel_tag_mismatch"
 
 
-def test_unknown_platform_or_architecture_refused_fallback_off_and_health_says_so(tmp_path, lib):
+def test_unknown_platform_or_architecture_refused_fallback_off_and_health_says_so(tmp_path, lib, monkeypatch):
     for args in (("darwin", "arm64", ""), ("linux", "aarch64", "glibc"), ("win32", "ARM64", ""),
                  ("linux", "x86_64", "")):
         assert tr.platform_key(*args) is None, args
@@ -759,6 +762,7 @@ def test_unknown_platform_or_architecture_refused_fallback_off_and_health_says_s
     assert tr.curl_status(record(), None, curl_dist()) == "unknown_platform"
     with pytest.raises(tr.CurlUnavailable):
         tr.install_record(None, tr.lock_text())
+    monkeypatch.setattr(tr, "platform_key", lambda: None)
     child = Child()
     d = accounts(tmp_path)
     config = cfg(d, x_allow_curl_backend=True)
