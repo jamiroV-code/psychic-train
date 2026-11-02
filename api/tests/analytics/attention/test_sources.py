@@ -112,6 +112,14 @@ def test_helper_snapshot_without_date_is_not_a_500():
     assert (r.state, r.newest, r.coins_with_data) == ("ok", None, 1)
 
 
+def test_universe_row_counts_top_100_of_a_120_row_snapshot(isolated_cache):
+    from api.data.attention import universe_store
+    src.clear_cache()
+    universe_store.write_snapshot(TODAY.isoformat(), [
+        {"id": f"c{i}", "symbol": f"C{i}", "market_cap": 1000 - i, "volume_24h": 1, "rank": i} for i in range(1, 121)])
+    assert row(src.build_sources(TODAY), "universe").coins_with_data == 100
+
+
 def test_helper_stores_missing(isolated_cache, tmp_path):
     src.clear_cache()
     res = src.build_sources(TODAY)

@@ -552,8 +552,18 @@ def _run_classify(symbols, client, today, sleep) -> str:
             e.update({"class": cls, "class_source": src, "updated": day})
             log.append({"source": "classify", "action": "applied", "coin_id": cid, "symbol": e["symbol"],
                         "class": cls, "class_source": src})
+        elif src == "auto" and e["class_source"] != "auto" and not (e["seeded"] and (e["class"], e["class_source"])
+                                                                    == ("normal", "owner")):
+            # The owner removed the list entry or confirmation: the old class is no longer trusted. A seeded coin
+            # returns to its seed baseline (O7: normal, owner); any other coin is reclassified from scratch.
+            restored = ("normal", "owner") if e["seeded"] else ("unknown", "auto")
+            log.append({"source": "classify", "action": "pending" if restored[0] == "unknown" else "applied",
+                        "coin_id": cid, "symbol": e["symbol"], "class": restored[0],
+                        "previous": {"class": e["class"], "class_source": e["class_source"]}})
+            e.update({"class": restored[0], "class_source": restored[1], "class_evidence": {}, "updated": day})
     todo = sorted((cid for cid, e in coins.items() if e["class"] == "unknown" and e["class_source"] == "auto"
-                   and e["state"] in ("watching", "member")), key=lambda c: (coins[c]["state"] != "watching", c))
+                   and e["state"] in ("watching", "member")),
+                  key=lambda c: (coins[c]["state"] != "watching", str(coins[c]["class_evidence"].get("checked") or ""), c))
     tried = known = 0
     stopped = False
     deadline = _clock() + ONBOARDING_TIME_BUDGET_S
@@ -624,7 +634,8 @@ def _resolver_context(source: str):
     coins = led["coins"]
     todo = sorted((cid for cid, e in coins.items() if e["state"] in ("watching", "member")
                    and e["class"] in ("normal", "unknown") and not settings.blocked(e["symbol"], source)),
-                  key=lambda c: (coins[c]["state"] != "watching", c))
+                  key=lambda c: (coins[c]["state"] != "watching",
+                                 str((coins[c].get("resolver") or {}).get(source, {}).get("at") or ""), c))
     return settings, led, names, todo
 
 
@@ -681,7 +692,7 @@ def _run_resolve_wiki(symbols, client, today, sleep) -> str:
         q_owner = web_queries.load()
         _, q_dropped = web_queries.merge_overlay(q_owner, q_doc, [])
         held |= _drop_overlay_entries(q_doc, q_dropped, "reddit_x", led, pending, log, day)
-    taken = {str(t).casefold(): s for s, t in merged.items() if t}
+    taken = {res.title_key(t): s for s, t in merged.items() if t}
     todo = [cid for cid in todo if led["coins"][cid]["symbol"] not in held
             and (led["coins"][cid]["symbol"] not in merged
                  or (owner_q is not None and led["coins"][cid]["symbol"] not in owner_q
@@ -718,7 +729,7 @@ def _run_resolve_wiki(symbols, client, today, sleep) -> str:
             v.reason = "request failed"
         if v.action == "applied":
             _overlay_put(wiki_doc, sym, v.value, day)
-            taken[v.value["title"].casefold()] = sym
+            taken[res.title_key(v.value["title"])] = sym
         counts[v.action] += 1
         _record(led, pending, log, cid, "wikipedia", v, day)
     _resolver_save(led, pending, {WIKI_OVERLAY: wiki_doc, QUERIES_OVERLAY: q_doc}, log, day)

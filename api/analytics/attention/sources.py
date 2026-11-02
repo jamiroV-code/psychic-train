@@ -365,7 +365,11 @@ def build_sources(today: date, *, probe_path: Path | None = None, universe_path:
         out.append(row(m, "exchange-member", cfg["exchange_sub_weights"].get(m), *members[m]))
     fb = row(FALLBACK_SERIES, "fallback", None, *fallback)
     out.append(fb.model_copy(update={"label": COVERAGE_ONLY_LABEL}) if coverage_only else fb)
-    out.append(_helper("universe", universe_store.read_latest(), "coins", "top-100 snapshot"))
+    snap = universe_store.read_latest()
+    if snap and isinstance(snap.get("coins"), list):   # T223: the 120-row snapshot still reports the top 100
+        snap = {**snap, "coins": [r for r in snap["coins"]
+                                  if not (isinstance(r, dict) and isinstance(r.get("rank"), int) and r["rank"] > 100)]}
+    out.append(_helper("universe", snap, "coins", "top-100 snapshot"))
     out.append(_narratives_row())
 
     weighted = [r for r in out if r.kind == "weighted" and (r.weight or 0) > 0]

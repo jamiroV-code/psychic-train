@@ -119,6 +119,15 @@ def test_merge_wiki_owner_wins_and_duplicates_drop():
     assert res.merge_wiki(owner, None) == (owner, []) and res.merge_wiki(owner, {"entries": 3}) == (owner, [])
 
 
+
+def test_owner_underscore_title_blocks_the_same_spaced_title():
+    merged, dropped = res.merge_wiki({"XRP": "XRP_Ledger"}, {"entries": {"NEW": {"title": "XRP Ledger"}}})
+    assert "NEW" not in merged and dropped == [("NEW", "title already used")]
+    taken = {res.title_key(t): s for s, t in merged.items() if t}
+    v = wiki(page(canonical="XRP Ledger", extract="XRP Ledger is a blockchain."), taken=taken, name="XRP Ledger",
+             sym="NEW")
+    assert (v.action, v.reason) == ("pending", "title already assigned to XRP")
+
 # --- Reddit / X (AC10) ---
 
 def test_reddit_x_is_cashtag_only_and_bad_names_wait():

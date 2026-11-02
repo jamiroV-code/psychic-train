@@ -608,6 +608,30 @@ class TestClassifyStep:
         assert "classify" not in ra.DEFAULT_SOURCES and "classify" in ra.RUNNERS
 
 
+    def test_removed_owner_or_confirmed_class_is_reclassified(self, isolated_cache, tmp_path, monkeypatch):
+        cls_settings(tmp_path, monkeypatch)
+        seeded = {**cls_entry("SEED", "member", "stablecoin", "owner"), "seeded": True}
+        self.ledger(**{"gone-1": cls_entry("GONE", "member", "stablecoin", "owner"),
+                       "conf-1": cls_entry("CNF", "member", "normal", "confirmed"),
+                       "seed-1": seeded, "base-1": {**cls_entry("BASE", "member", "normal", "owner"), "seeded": True}})
+        calls = []
+        assert led_run(["--sources", "classify"], handler=cls_handler(calls)) == 0
+        coins = ob.read_ledger()[0]["coins"]
+        assert (coins["gone-1"]["class"], coins["gone-1"]["class_source"]) == ("normal", "auto")
+        assert (coins["conf-1"]["class"], coins["conf-1"]["class_source"]) == ("normal", "auto")
+        assert (coins["seed-1"]["class"], coins["seed-1"]["class_source"]) == ("normal", "owner")
+        assert (coins["base-1"]["class"], coins["base-1"]["class_source"]) == ("normal", "owner")
+        assert len(calls) == 4   # two reclassified coins, detail plus prices each; seeded coins make no request
+
+    def test_classify_rotates_oldest_checked_first(self, isolated_cache, tmp_path, monkeypatch):
+        cls_settings(tmp_path, monkeypatch, classify_max_coins_per_run=1)
+        old = {**cls_entry("BBB", "member"), "class_evidence": {"checked": "2026-10-01"}}
+        new = {**cls_entry("AAA", "member"), "class_evidence": {"checked": "2026-10-10"}}
+        self.ledger(**{"a-1": new, "b-1": old})
+        calls = []
+        led_run(["--sources", "classify"], handler=cls_handler(calls))
+        assert calls[0].endswith("/coins/b-1")
+
 @pytest.mark.usefixtures("no_net")
 class TestResolveStep:
     def setup_coin(self, symbol="ZZNEW", name="New Coin"):
@@ -707,3 +731,21 @@ class TestResolveStep:
         assert ob.read_json("pending.json")["coins"]["ZZNEW"]["trends"]["reason"] == "collides with another keyword"
         assert any(e.get("previous") == {"topic": owner_topic, "label": "Dup"}
                    for e in ob.read_log(TODAY.isoformat())["entries"])
+
+    def test_resolver_retries_oldest_attempt_first(self, isolated_cache, tmp_path, monkeypatch):
+        cls_settings(tmp_path, monkeypatch, resolver_max_coins_per_run=1)
+        stuck = {**cls_entry("AAA", "member"), "resolver": {"wikipedia": {"state": "none", "reason": "x",
+                                                                          "at": "2026-10-10"}}}
+        older = {**cls_entry("BBB", "member"), "resolver": {"wikipedia": {"state": "pending", "reason": "x",
+                                                                          "at": "2026-10-01"}}}
+        ob.write_ledger({"last_advanced_date": TODAY.isoformat(), "seeded_at": TODAY.isoformat(),
+                         "coins": {"a-1": stuck, "b-1": older}})
+        universe_store.write_snapshot(TODAY.isoformat(), [{"id": "a-1", "symbol": "AAA", "name": "Aaa Coin"},
+                                                          {"id": "b-1", "symbol": "BBB", "name": "Bbb Coin"}])
+        seen = []
+        def handler(request):
+            seen.append(str(request.url))
+            return httpx.Response(404)
+        led_run(["--sources", "resolve_wiki"], handler=handler)
+        assert seen and "Bbb_Coin" in seen[0]
+        assert ob.read_ledger()[0]["coins"]["b-1"]["resolver"]["wikipedia"]["at"] == TODAY.isoformat()

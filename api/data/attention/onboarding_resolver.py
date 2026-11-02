@@ -39,6 +39,11 @@ def _norm_title(t: str) -> str:
     return t[:1].upper() + t[1:]
 
 
+def title_key(t) -> str:
+    """One identity for owner titles (underscores) and resolver titles (spaces)."""
+    return _norm_title(t).casefold()
+
+
 def _word(text: str, word: str) -> bool:
     return bool(word) and re.search(rf"(?<![0-9a-z]){re.escape(word.casefold())}(?![0-9a-z])", text.casefold()) is not None
 
@@ -70,7 +75,7 @@ def wiki_verdict(symbol: str, name: str | None, page: dict | None, *, taken: dic
         return Verdict("pending", reason="name not in the first sentence", evidence=ev)
     if not CRYPTO_TERMS.search(f"{page.get('description', '')} {page.get('extract', '')}"):
         return Verdict("pending", reason="no crypto terms", evidence=ev)
-    other = taken.get(canonical.casefold())
+    other = taken.get(title_key(canonical))
     if other and other != symbol:
         return Verdict("pending", reason=f"title already assigned to {other}", evidence=ev)
     if pageview_days < min_days:
@@ -85,7 +90,7 @@ def merge_wiki(owner: dict, overlay) -> tuple[dict, list[tuple[str, str]]]:
     entries = overlay.get("entries") if isinstance(overlay, dict) else None
     if not isinstance(entries, dict):
         return merged, []
-    used = {str(t).casefold() for t in merged.values() if t}
+    used = {title_key(t) for t in merged.values() if t}
     dropped = []
     for sym, raw in entries.items():
         title = raw.get("title") if isinstance(raw, dict) else None
@@ -94,11 +99,11 @@ def merge_wiki(owner: dict, overlay) -> tuple[dict, list[tuple[str, str]]]:
             dropped.append((str(sym)[:24], "invalid entry"))
         elif sym in merged:
             dropped.append((sym, "owner entry wins"))
-        elif title.casefold() in used:
+        elif title_key(title) in used:
             dropped.append((sym, "title already used"))
         else:
             merged[sym] = title
-            used.add(title.casefold())
+            used.add(title_key(title))
     return merged, dropped
 
 
