@@ -85,14 +85,17 @@ def test_thread_refreshes_on_its_interval_then_stop_marks_stopped_and_joins():
     clock = Clock()
     beat = hb.Heartbeat(mode="standalone", sources=[], clock=clock, interval=0.01)
     beat.start()
-    clock.t = NOW + timedelta(seconds=45)
-    deadline = time.monotonic() + 5
-    while doc()["last_beat"] != clock.t.isoformat() and time.monotonic() < deadline:
-        time.sleep(0.01)
-    assert doc()["last_beat"] == clock.t.isoformat()
-    thread = beat.thread
-    clock.t = NOW + timedelta(seconds=50)
-    beat.stop()
+    try:
+        clock.t = NOW + timedelta(seconds=45)
+        deadline = time.monotonic() + 5
+        # `load` reads like the API does: it retries the Windows sharing violation while the thread replaces the file.
+        while (hb.load()[1] or {}).get("last_beat") != clock.t.isoformat() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert hb.load()[1]["last_beat"] == clock.t.isoformat()
+        thread = beat.thread
+        clock.t = NOW + timedelta(seconds=50)
+    finally:
+        beat.stop()
     assert thread is not None and not thread.is_alive()
     d = doc()
     assert d["stopped"] is True and d["stopped_at"] == clock.t.isoformat()
@@ -102,8 +105,10 @@ def test_thread_refreshes_on_its_interval_then_stop_marks_stopped_and_joins():
 def test_stop_never_marks_another_process_heartbeat():
     beat = hb.Heartbeat(mode="standalone", sources=[], clock=Clock(), interval=3600)
     beat.start()
-    plant(pid=OTHER_PID, beat=NOW)  # another process replaced the file (a race the guard could not see)
-    beat.stop()
+    try:
+        plant(pid=OTHER_PID, beat=NOW)  # another process replaced the file (a race the guard could not see)
+    finally:
+        beat.stop()
     d = doc()
     assert d["pid"] == OTHER_PID and d["stopped"] is False
 

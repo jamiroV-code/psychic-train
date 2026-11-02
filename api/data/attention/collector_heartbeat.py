@@ -24,6 +24,7 @@ import logging
 import os
 import sys
 import threading
+import time as _time
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +36,8 @@ log = logging.getLogger(__name__)
 BEAT_SECONDS = 30.0
 FRESH_SECONDS = 90.0
 STOP_JOIN_TIMEOUT_SECONDS = 5.0
+IO_ATTEMPTS = 3  # Windows: a replace or read that meets the other side's open handle fails; retried briefly
+IO_RETRY_SECONDS = 0.05
 MODES = ("standalone", "in_api")
 NAME = "collector_heartbeat.json"
 THREAD_NAME = "attention-collector-heartbeat"
@@ -164,14 +167,21 @@ def _valid(doc) -> bool:
 
 
 def load(p: Path | None = None) -> tuple[str, dict | None]:
-    """("missing", None), ("unreadable", None) or ("ok", heartbeat)."""
+    """("missing", None), ("unreadable", None) or ("ok", heartbeat). A Windows sharing violation while the writer
+    replaces the file is retried briefly before the file counts as unreadable."""
     p = p or path()
-    if not p.exists():
-        return "missing", None
-    try:
-        doc = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return "unreadable", None
+    for attempt in range(IO_ATTEMPTS):
+        try:
+            doc = json.loads(p.read_text(encoding="utf-8"))
+            break
+        except FileNotFoundError:
+            return "missing", None
+        except PermissionError:
+            if attempt == IO_ATTEMPTS - 1:
+                return "unreadable", None
+            _time.sleep(IO_RETRY_SECONDS)
+        except (OSError, ValueError):
+            return "unreadable", None
     return ("ok", doc) if _valid(doc) else ("unreadable", None)
 
 
@@ -226,6 +236,7 @@ class Heartbeat:
             raise ValueError("unknown collector mode")
         self.mode, self.sources, self.clock, self.interval = mode, list(sources), clock or _now, interval
         self.pid = pid or os.getpid()
+        self.path = path()  # bound once: the process's cache root does not move while it runs
         self.version = version if version is not None else code_version()
         self.started_at: str | None = None
         self.thread: threading.Thread | None = None
@@ -240,11 +251,20 @@ class Heartbeat:
                 "stopped_at": now if stopped else None}
 
     def _write(self, doc: dict) -> None:
-        try:
-            path().parent.mkdir(parents=True, exist_ok=True)
-            cache._atomic_write_json(doc, path())
-        except OSError as exc:  # a missed beat is logged; the collector keeps running
-            log.warning("attention collector heartbeat not written: %s", type(exc).__name__)
+        """Atomic write; a sharing violation (a reader holds the file on Windows) is retried briefly."""
+        for attempt in range(IO_ATTEMPTS):
+            try:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                cache._atomic_write_json(doc, self.path)
+                return
+            except PermissionError as exc:
+                if attempt == IO_ATTEMPTS - 1:
+                    log.warning("attention collector heartbeat not written: %s", type(exc).__name__)
+                    return
+                _time.sleep(IO_RETRY_SECONDS)
+            except OSError as exc:  # a missed beat is logged; the collector keeps running
+                log.warning("attention collector heartbeat not written: %s", type(exc).__name__)
+                return
 
     def beat(self) -> None:
         self._write(self._doc(stopped=False))
@@ -265,7 +285,7 @@ class Heartbeat:
             self.thread.join(STOP_JOIN_TIMEOUT_SECONDS)
         if self.started_at is None:
             return
-        _found, doc = load()
+        _found, doc = load(self.path)
         if doc is not None and doc["pid"] != self.pid:
             return
         if doc is not None and doc["stopped"]:
