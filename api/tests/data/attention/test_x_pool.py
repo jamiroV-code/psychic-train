@@ -206,6 +206,8 @@ def test_lost_account_unit_read_by_another_once_reads_split_and_sum_to_global():
     assert pool.reads_today("acct_a") == 20 and pool.reads_today("acct_b") == 40
     assert pool.reads_today("acct_a") + pool.reads_today("acct_b") == src.used == out.reads == 60
     assert pool.health()["accounts"][0]["state"] == "inactive"
+    assert out.row["n_read"] == 40 and out.row["n_counted"] == 40
+    print("STAGE0 SMOKE: loss failover once; account reads 20+40=global 60; stored sample 40, not 60")
 
 
 # --- rest and ready ------------------------------------------------------------------------------------------------
@@ -219,6 +221,7 @@ def test_existing_accounts_grandfathered_new_label_rests_until_rest_and_ready():
     write_old_state(("acct_a",))
     clock = Clock()
     pool = xp.XPool(LABELS, clock=clock, rest_days=2)
+    pool.begin_pass()  # registration is persisted by the producer, never by a read-only status load
     assert pool.account_state("acct_a") == ("active", None)
     assert pool.account_state("acct_b") == ("locked", "resting")
     clock.advance(days=3)
@@ -235,7 +238,7 @@ def test_existing_accounts_grandfathered_new_label_rests_until_rest_and_ready():
 def test_ready_before_rest_passed_is_not_enough():
     write_old_state(("acct_a",))
     clock = Clock()
-    xp.XPool(LABELS, clock=clock, rest_days=5)
+    xp.XPool(LABELS, clock=clock, rest_days=5).begin_pass()
     ready = {"acct_b": clock().isoformat()}
     clock.advance(days=2)
     assert xp.XPool(LABELS, clock=clock, rest_days=5, ready=ready).account_state("acct_b") == ("locked", "resting")
@@ -274,7 +277,7 @@ def test_read_ready_ignores_bad_file(tmp_path):
 def test_account_marked_ready_joins_next_utc_day_canary():
     write_old_state(("acct_a",))
     clock = Clock()
-    xp.XPool(LABELS, clock=clock, rest_days=1)
+    xp.XPool(LABELS, clock=clock, rest_days=1).begin_pass()
     clock.advance(days=1)
     ready = {"acct_b": clock().isoformat()}
     assert xp.XPool(LABELS, clock=clock, rest_days=1, ready=ready).canary_accounts() == ["acct_a"]
@@ -311,3 +314,20 @@ def test_sizing_reports_shortfall_and_backlog_separately():
     s = x_capacity.sizing(global_room=800, remaining_caps=None, queued_target=5, backlog=0, per_unit=40,
                           canary_pages=0, page_size=20)
     assert s["capacity_reads"] == 800 and s["shortfall_reads"] == 0
+
+
+def test_read_only_status_never_persists_registration_or_resets_counters():
+    write_old_state()
+    before = state_file().read_bytes()
+    pool = xp.XPool(LABELS, clock=Clock(), rest_days=2, cap=40)
+    pool.health()
+    assert state_file().read_bytes() == before
+
+
+def test_clock_rollback_cannot_clear_cap():
+    clock = Clock()
+    pool = xp.XPool(LABELS, clock=clock, cap=20)
+    pool.charge("acct_a", 20)
+    clock.advance(days=-1)
+    assert pool.reads_today("acct_a") == 20
+    assert pool.account_state("acct_a") == ("locked", "account_cap")

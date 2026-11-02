@@ -997,3 +997,48 @@ def test_default_collector_uses_placed_overlay_query(monkeypatch, tmp_path):
     assert "ZZNEW" in worker.symbols(loaded, X)
     assert "ZZOFF" not in loaded.coins
     assert wq.x_query(loaded, "ZZNEW").startswith('"$ZZNEW"')
+
+
+def test_stage0_isolated_smoke_cap_no_split_budget_spent_sizing(tmp_path, monkeypatch):
+    clock = Clock()
+    q = queries(x_account_daily_cap=30, x_backfill_days=0)
+    worker, reader, _ = make(clock, q=q)
+    stream = worker.streams[X]
+    assert stream.run_pass(stop_at=T0 + timedelta(hours=1)) == "budget_spent"
+    pool = xp.from_config(q.config, clock=clock)
+    assert pool.reads_today("acct_a") == 60  # canary 20 + whole two-page unit 40
+    assert pool.account_state("acct_a") == ("locked", "account_cap")
+    assert pool.pause_reason() is None
+    assert len(reader.coin_units()) == 1 and len(reader.coin_units()[0][2]) == 2
+    assert x_state(clock, q).used == 60
+    assert stream.schedule("budget_spent") == MIDNIGHT + timedelta(seconds=20)
+    h = source_health(tmp_path, monkeypatch, clock, q, "xsearch")
+    assert h.completeness_fetched == 1 and h.missing == 2
+    facts = json.loads(pc_pace.state_path(X).with_name(f"{X}_health.json").read_text())
+    assert (facts["capacity_reads"], facts["need_reads"], facts["shortfall_reads"]) == (0, 80, 80)
+    print("STAGE0 SMOKE: cap skip, no-split 2 pages, canary+unit=60, budget_spent, next-day schedule, coverage 1/3")
+
+
+def test_stage0_new_registration_rest_and_ready_next_day_canary(tmp_path):
+    clock = Clock()
+    xp.XPool(["acct_a"], clock=clock).begin_pass()
+    q0 = queries(x_account_rest_days=1, x_accounts_db_path=str(tmp_path), x_backfill_days=0)
+    q = dataclasses.replace(q0, config=dataclasses.replace(q0.config, x_accounts=("acct_a", "acct_b")))
+    pool = xp.from_config(q.config, clock=clock)
+    pool.begin_pass()
+    assert pool.canary_accounts() == ["acct_a"]
+    xp.write_ready(tmp_path, "acct_b", clock(), labels=q.config.x_accounts)
+    pool.mark_used("acct_a")  # a running pass saves its snapshot after the external ready mark
+    assert "acct_b" in xp.read_ready(tmp_path)
+    assert pool.canary_accounts() == ["acct_a"]
+    clock.t += timedelta(days=1)
+    # Same live pool, not a reconstruction: refreshed marks and both accounts join the new day's canary.
+    assert pool.canary_accounts() == ["acct_a", "acct_b"]
+    end = datetime.combine(clock().date(), datetime.min.time(), tzinfo=timezone.utc)
+    tweets = [tweet(end - timedelta(minutes=i + 1), "bitcoin", ()) for i in range(20)]
+    page = xrd.FakeXReader.page_of(tweets)
+    readers = {label: xrd.FakeXReader(label, [page]) for label in q.config.x_accounts}
+    result = xp.run_daily_canary(pool, readers, x_state(clock, q), q.config,
+                                 rng=random.Random(1), sleep=clock.sleep)
+    assert result.passed and pool.canary_labels() == ["acct_a", "acct_b"]
+    print("STAGE0 SMOKE: rest gate, ready survives running save, next-day canary includes new account")

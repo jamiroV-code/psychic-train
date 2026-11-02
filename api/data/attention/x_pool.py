@@ -37,6 +37,7 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
+from pathlib import Path
 
 from api.data import cache
 from api.data.attention import density, x_density, x_filters, x_raw, x_window
@@ -57,8 +58,10 @@ DRIFT_STOP = 3
 SINGLE_ACCOUNT_NOTE = "comparison skipped: single active account"
 TOP_KEYS = {"accounts", "alerts", "pause_until", "pause_reason", "stopped", "drift_streak", "canary_day",
             "canary_note", "canary_labels", "curl_uses", "curl_last_use"}
-ACCOUNT_KEYS = {"state", "reason", "last_used", "lock_until", "last_canary", "suspect_since", "rate_limit_seen"}
-TIME_KEYS = ("last_used", "lock_until", "last_canary", "suspect_since", "rate_limit_seen")
+ACCOUNT_KEYS = {"state", "reason", "last_used", "lock_until", "last_canary", "suspect_since", "rate_limit_seen",
+                "reads_day", "reads_used", "rest_until"}
+TIME_KEYS = ("last_used", "lock_until", "last_canary", "suspect_since", "rate_limit_seen", "rest_until")
+READY_FILE = "account_ready.json"
 
 
 class XPoolStateError(ValueError):
@@ -78,8 +81,45 @@ def _iso(v) -> bool:
         return False
 
 
+def _day(value) -> bool:
+    try:
+        return value is None or (isinstance(value, str) and date.fromisoformat(value).isoformat() == value)
+    except ValueError:
+        return False
+
+
+def read_ready(directory: str | Path) -> dict:
+    """Read only label/timestamp marks, never account databases or secrets. Bad evidence is not ready."""
+    if not directory:
+        return {}
+    try:
+        marks = json.loads((Path(directory) / READY_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(marks, dict):
+        return {}
+    return {label: at for label, at in marks.items()
+            if LABEL_RE.fullmatch(label) and at is not None and _iso(at)}
+
+
+def write_ready(directory: str | Path, label: str, now: datetime, *, labels) -> None:
+    """Separate atomic owner file: a collector pool save cannot overwrite these marks."""
+    if label not in labels or not LABEL_RE.fullmatch(label) or not directory:
+        raise ValueError("configured label and accounts directory required")
+    marks = read_ready(directory)
+    marks[label] = _utc(now).isoformat()
+    cache._atomic_write_json(marks, Path(directory) / READY_FILE)
+
+
+def from_config(config: CollectorConfig, *, clock: Callable[[], datetime]) -> XPool:
+    pool = XPool(list(config.x_accounts), clock=clock, cap=config.x_account_daily_cap,
+                 rest_days=config.x_account_rest_days, ready=read_ready(config.x_accounts_db_path))
+    pool.ready_directory = config.x_accounts_db_path
+    return pool
+
+
 def _fresh_account() -> dict:
-    return dict.fromkeys(ACCOUNT_KEYS) | {"state": "active"}
+    return dict.fromkeys(ACCOUNT_KEYS) | {"state": "active", "reads_used": 0}
 
 
 def _valid(s) -> bool:
@@ -87,7 +127,8 @@ def _valid(s) -> bool:
         return False
     for a in s["accounts"].values():
         if not (isinstance(a, dict) and set(a) == ACCOUNT_KEYS and a["state"] in STATES
-                and all(_iso(a[k]) for k in TIME_KEYS)):
+                and all(_iso(a[k]) for k in TIME_KEYS) and _day(a["reads_day"])
+                and type(a["reads_used"]) is int and a["reads_used"] >= 0):
             return False
     return all((
         isinstance(s["alerts"], list), _iso(s["pause_until"]), _iso(s["curl_last_use"]),
@@ -107,11 +148,18 @@ class Selection:
 class XPool:
     """Our persisted account state; `labels` is the configured registration order."""
 
-    def __init__(self, labels: list[str], *, clock: Callable[[], datetime]):
+    def __init__(self, labels: list[str], *, clock: Callable[[], datetime], cap: int | None = None,
+                 rest_days: int = 0, ready: Mapping[str, str] | None = None):
         if not labels or len(set(labels)) != len(labels) or not all(
                 isinstance(x, str) and LABEL_RE.fullmatch(x) for x in labels):
             raise ValueError("labels must be unique opaque labels")
         self.labels, self.clock = list(labels), clock
+        if cap is not None and (type(cap) is not int or cap < 1):
+            raise ValueError("cap must be a positive integer or None")
+        if type(rest_days) is not int or rest_days < 0:
+            raise ValueError("rest days must be a nonnegative integer")
+        self.cap, self.rest_days, self.ready = cap, rest_days, dict(ready or {})
+        self.ready_directory = ""
         self.log: list[str] = []
         self.path = cache.CACHE_ROOT / "attention" / "_pc_state" / "x_pool.json"
         self._s = self._load()
@@ -133,17 +181,28 @@ class XPool:
                 for a in accounts.values() if isinstance(accounts, dict) else ():
                     if isinstance(a, dict):
                         a.setdefault("rate_limit_seen", None)  # a state file from before the in-flight lock fix
+                        a.setdefault("reads_day", None)
+                        a.setdefault("reads_used", 0)
+                        a.setdefault("rest_until", None)
             if not _valid(s):
                 raise XPoolStateError("pool state invalid")
             if set(s["accounts"]) - set(self.labels):
                 raise XPoolStateError("pool state names a label that is not configured")
         for label in self.labels:
-            s["accounts"].setdefault(label, _fresh_account())
+            if label not in s["accounts"]:
+                a = _fresh_account()
+                if self.path.exists() and self.rest_days:
+                    a["rest_until"] = (self._now() + timedelta(days=self.rest_days)).isoformat()
+                s["accounts"][label] = a
         return s
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         cache._atomic_write_json(self._s, self.path)
+
+    def begin_pass(self) -> None:
+        """Persist registration/rest start even if no account reads. Status consumers never call this."""
+        self._save()
 
     def _now(self) -> datetime:
         return _utc(self.clock())
@@ -157,12 +216,48 @@ class XPool:
         return self._s["accounts"][label]
 
     # --- accounts ---
+    def reads_today(self, label: str) -> int | None:
+        """Unknown before the first counted page; reset only forwards, never on a clock rollback."""
+        a = self._acct(label)
+        if a["reads_day"] is None:
+            return None
+        return 0 if self._now().date() > date.fromisoformat(a["reads_day"]) else a["reads_used"]
+
+    def charge(self, label: str, loaded: int) -> None:
+        """Charge exactly where the global counter charges, including aborted attempts and curl pages."""
+        if type(loaded) is not int or loaded < 0:
+            raise ValueError("loaded reads must be nonnegative")
+        a = self._acct(label)
+        today = self._now().date().isoformat()
+        if a["reads_day"] is None or today > a["reads_day"]:
+            a["reads_day"], a["reads_used"] = today, 0
+        a["reads_used"] += loaded
+        self._save()
+
+    def ready_today(self, label: str) -> bool | None:
+        if self._acct(label)["rest_until"] is None:
+            return None  # grandfathered, no ready mark required
+        if self.ready_directory:
+            self.ready = read_ready(self.ready_directory)
+        mark = self.ready.get(label)
+        return bool(mark and _iso(mark) and _utc(datetime.fromisoformat(mark)).date() < self._now().date())
+
+    def remaining_caps(self) -> int | None:
+        if self.cap is None:
+            return None
+        return sum(max(0, self.cap - (self.reads_today(label) or 0)) for label in self.usable())
+
     def account_state(self, label: str) -> tuple[str, str | None]:
         a = self._acct(label)
         if a["state"] != "active":
             return a["state"], a["reason"]
         if a["lock_until"] and self._now() < datetime.fromisoformat(a["lock_until"]):
             return "locked", WAIT_REASON if a["reason"] == WAIT_REASON else "rate_limited"
+        if a["rest_until"] and (self._now() < datetime.fromisoformat(a["rest_until"])
+                                or not self.ready_today(label)):
+            return "locked", "resting"
+        if self.cap is not None and (self.reads_today(label) or 0) >= self.cap:
+            return "locked", "account_cap"
         return "active", None
 
     def usable(self) -> list[str]:
@@ -263,11 +358,14 @@ class XPool:
         self._save()
         return True
 
-    def pause_no_account(self) -> str:
+    def pause_no_account(self, src: pp.PcSource | None = None) -> str:
         """No usable account: wait for the earliest in-flight lock end when an account waits for one, else pause
         the UTC day (`no_usable_account`). Returns the pause reason."""
         if self.pause_for_locks():
             return WAIT_REASON
+        if src is not None and any(self.account_state(x) == ("locked", "account_cap") for x in self.labels):
+            src.mark_spent()
+            return "budget_spent"
         self.pause_day("no_usable_account")
         return "no_usable_account"
 
@@ -353,7 +451,9 @@ class XPool:
         accts = []
         for x in self.labels:
             state, reason = self.account_state(x)
-            accts.append({"label": x, "state": state, "reason": reason, "last_used": self._acct(x)["last_used"]})
+            accts.append({"label": x, "state": state, "reason": reason, "last_used": self._acct(x)["last_used"],
+                          "reads_today": self.reads_today(x), "cap": self.cap,
+                          "rest_until": self._acct(x)["rest_until"], "ready": self.ready_today(x)})
         paused = self.is_paused() and not self._s["stopped"]
         return {"active": sum(1 for a in accts if a["state"] == "active"), "total": len(self.labels),
                 "accounts": accts, "pause_reason": self.pause_reason(),
@@ -506,6 +606,7 @@ def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcS
             results[label] = set()
             continue
         src.record_loaded(len(raw.entry_ids))
+        pool.charge(label, len(raw.entry_ids))
         pool.note_remaining(label, raw.rate_limit_remaining)
         src.record_unit()
         results[label] = xr.canary_ids(reader.parse_tweets(raw.body), start, end)
@@ -513,7 +614,7 @@ def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcS
         return CanaryOutcome(False, reason=WAIT_REASON)
     pool.mark_canaried(list(results))
     if not results:
-        reason = pool.pause_no_account()
+        reason = pool.pause_no_account(src)
         return CanaryOutcome(False, reason=reason)
     suspects, note = [], SINGLE_ACCOUNT_NOTE if len(results) == 1 else None
     if len(results) >= 2:
@@ -605,6 +706,7 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
             raw = xr.RawPage({}, ())  # rule 20b: None is not an error, it is an exhausted cursor
         n = len(raw.entry_ids)
         src.record_loaded(n)
+        pool.charge(label, n)
         pool.note_remaining(label, raw.rate_limit_remaining)
         counts["reads"] += n
         counts["pages"] += 1 + raw.retries
@@ -681,7 +783,7 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
     while attempts < 1 + config.x_unit_max_restarts:
         sel = pool.select()
         if sel is None:
-            return done(None, pool.pause_no_account())
+            return done(None, pool.pause_no_account(src))
         if attempts:
             restarts += 1
         attempts += 1
@@ -712,5 +814,5 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
         x_raw.write_x_row(symbol, row)
         return done(summary.result, att.reason, row)
     if waiting:  # not failed: the coin-day is tried again after the lock ends
-        return done(None, pool.pause_no_account() if not pool.usable() else WAIT_REASON)
+        return done(None, pool.pause_no_account(src) if not pool.usable() else WAIT_REASON)
     return done(None, "account_failed")

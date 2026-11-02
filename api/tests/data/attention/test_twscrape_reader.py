@@ -814,7 +814,8 @@ def test_health_active_over_total_with_label_last_used_state_cookie_age_no_secre
                          platform="manylinux_x86_64", curl_record=None, repo_root=tmp_path / "repo")
     assert (h["active"], h["total"]) == (1, 2)
     assert h["accounts"][0] == {"label": "acct1", "state": "active", "reason": None, "last_used": T0.isoformat(),
-                                "cookie_age_days": None}
+                                "cookie_age_days": None, "reads_today": None, "cap": None,
+                                "rest_until": None, "ready": None}
     assert h["accounts"][1]["state"] == "inactive" and h["accounts"][1]["reason"] == "x_login_required"
     assert h["commit_match"] is True and h["env_ok"] is False and h["env_bad"] == ["HTTPS_PROXY"]
     assert h["accounts_path"] == "ok" and h["curl_fallback"] == "flag_false"
@@ -889,3 +890,19 @@ def test_to_tweet_keeps_missing_counts_as_none_never_zero():
     z = lib_tweet(1849000000000000000)
     z.user.followersCount, z.likeCount = 0, 0
     assert (tr.to_tweet(z).user.followers, tr.to_tweet(z).like) == (0, 0)
+
+
+def test_mark_ready_cli_never_loads_library_or_cookie_secrets(tmp_path, monkeypatch, capsys):
+    from api.data.attention import web_queries
+    from types import SimpleNamespace
+
+    config = cfg(accounts(tmp_path))
+    monkeypatch.setattr(web_queries, "load", lambda: SimpleNamespace(config=config))
+    monkeypatch.setattr(tr, "load_library", lambda: pytest.fail("ready command loaded X library"))
+    monkeypatch.delenv("X_REFRESH_COOKIES", raising=False)
+    assert tr.main(["--mark-ready", "acct1"]) == 0
+    assert "acct1" in xp.read_ready(config.x_accounts_db_path)
+    before = (Path(config.x_accounts_db_path) / xp.READY_FILE).read_bytes()
+    assert tr.main(["--mark-ready", "unknown"]) == 2
+    assert (Path(config.x_accounts_db_path) / xp.READY_FILE).read_bytes() == before
+    assert "ready status=ok label=acct1" in capsys.readouterr().out
