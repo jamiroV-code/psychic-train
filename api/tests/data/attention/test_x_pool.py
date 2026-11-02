@@ -128,6 +128,31 @@ def test_strikes_expire_reset_and_make_account_suspect():
     assert pool.usable() == ["acct_b"]
 
 
+def test_second_stripped_attempt_flags_account_and_other_account_continues():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock), source(clock)
+    pool.set_canary_passed(labels=LABELS)
+    for _ in range(2):
+        pool.begin_pass()
+        out = unit(pool, {"acct_a": StrippedReader("acct_a", [stripped_page()]),
+                          "acct_b": reader("acct_b", day_pages())}, src)
+        assert out.result is not None and out.reads == 60
+        clock.advance(hours=1)
+    assert pool.account_state("acct_a")[0] == "suspect"
+    assert pool.alerts()[0]["reason"] == xp.SUSPECT_REASON
+    assert pool.stopped_reason() is None and pool.usable() == ["acct_b"]
+
+
+def test_clean_page_resets_account_streak():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock), source(clock)
+    pool.set_canary_passed(labels=LABELS)
+    pool.note_parse_drop("acct_a", "unparseable")
+    out = unit(pool, {"acct_a": reader("acct_a", day_pages()), "acct_b": reader("acct_b")}, src)
+    assert out.result is not None
+    assert pool.health()["accounts"][0]["parse_strikes"] == 0
+
+
 def test_two_accounts_with_same_parse_failure_stop_pool():
     clock = Clock()
     pool, src = xp.XPool(LABELS, clock=clock), source(clock)
@@ -136,6 +161,19 @@ def test_two_accounts_with_same_parse_failure_stop_pool():
     out = unit(pool, readers, src)
     assert out.reason == "layout_changed" and pool.stopped_reason() == "layout_changed"
     assert out.reads == 40 and out.pages == 2
+
+
+def test_same_failure_on_different_units_in_pass_stops():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock), source(clock)
+    pool.set_canary_passed(labels=LABELS)
+    pool.begin_pass()
+    readers = {label: StrippedReader(label, [stripped_page()]) for label in LABELS}
+    config = cfg(x_unit_max_restarts=0)
+    assert unit(pool, readers, src, config).reason == "account_failed"
+    clock.advance(hours=1)
+    out = unit(pool, readers, src, config, symbol="OTHER")
+    assert out.reason == "layout_changed" and pool.stopped_reason() == "layout_changed"
 
 
 def test_single_account_second_strike_stops():

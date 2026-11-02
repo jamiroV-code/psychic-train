@@ -321,3 +321,21 @@ def test_stage0_accounts_and_sizing_are_file_only_and_unknown_stays_unknown(live
     schedule["observed_at"] = (NOW - timedelta(days=1)).isoformat()
     schedule_path.write_text(json.dumps(schedule))
     assert "capacity_reads" not in src._collector_status([], END, NOW).sources[0].model_dump()
+
+
+def test_x_health_exposes_strikes_suspect_and_owner_stop(live, monkeypatch):
+    from api.data.attention import x_pool
+
+    put_state("xsearch_web")
+    config = dataclasses.replace(web_queries.validate_config(dict(web_queries.DEFAULTS)),
+                                 x_accounts=("a1", "a2"), x_accounts_db_path=str(live))
+    pool = x_pool.from_config(config, clock=lambda: NOW)
+    pool.note_parse_drop("a1", "content_stripped")
+    pool.note_parse_drop("a1", "content_stripped")
+    pool.stop("layout_changed")
+    monkeypatch.setattr(src, "_collector", lambda: config)
+    h = src._health("xsearch_web", END, NOW)
+    assert h.paused and h.pause_reason == "layout_changed" and h.pause_until is None
+    assert h.accounts[0].state == "suspect" and h.accounts[0].parse_strikes == 2
+    assert h.accounts[0].parse_strike_last_at == NOW.isoformat()
+    assert h.accounts[1].parse_strikes is None

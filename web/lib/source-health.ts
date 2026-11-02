@@ -47,7 +47,8 @@ export function accountText(a: DiscoveryAccountHealth): string {
   return `${a.label} ${a.state}${a.reason ? ` (${a.reason})` : ""}, ` +
     (a.cookie_age_days == null ? `cookie age ${UNKNOWN}` : `cookie ${a.cookie_age_days} days old`) +
     `, reads today ${n(a.reads_today)} / ${a.cap == null ? "no limit" : n(a.cap)}` +
-    `, rest until ${utc(a.rest_until ?? null)}, ready ${ready}, last used ${utc(a.last_used)}`;
+    `, rest until ${utc(a.rest_until ?? null)}, ready ${ready}, last used ${utc(a.last_used)}` +
+    `, parse strikes ${n(a.parse_strikes)}, last strike ${utc(a.parse_strike_last_at ?? null)}`;
 }
 
 /** Only sums/differences of the API's target-day counts, never today's counts or a reconstructed queue. */
@@ -70,7 +71,9 @@ export function sourceHealthLines(row: DiscoverySourceRow): HealthLine[] | null 
     {
       key: "paused",
       text: h.paused
-        ? `Paused: ${h.pause_reason ?? "reason unknown"}, ${h.pause_until === null ? "owner action needed" : `until ${utc(h.pause_until)}`}`
+        ? h.pause_reason === "layout_changed"
+          ? "Stopped: layout_changed, owner action needed"
+          : `Paused: ${h.pause_reason ?? "reason unknown"}, ${h.pause_until === null ? "owner action needed" : `until ${utc(h.pause_until)}`}`
         : "Paused: no",
     },
     {

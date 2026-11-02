@@ -26,12 +26,13 @@ unit across the pool. Pure logic over injected readers, clock, RNG and sleep; no
   the pool; every unit still tries the default backend first while the day is not paused);
   an inconclusive canary sits the canaried accounts out for the UTC day while the others continue (no account
   passed, so their units are missing `account_not_canaried`); three consecutive parse, 404 or transaction-id
-  failures, or a small-page parse drop, count toward `layout_changed`; a parse drop (`x_reader.parse_drop`) stops X at once.
+  failures count toward `layout_changed`; page parse drops first strike the account and retry elsewhere.
 - Quality over speed: nothing is cut for a time budget; only the safety limits above stop reading.
 """
 from __future__ import annotations
 
 import json
+import logging
 import random
 import re
 from collections.abc import Callable, Mapping
@@ -44,6 +45,8 @@ from api.data.attention import density, x_density, x_filters, x_raw, x_window
 from api.data.attention import pc_pace as pp
 from api.data.attention import x_reader as xr
 from api.data.attention.web_queries import CollectorConfig
+
+log = logging.getLogger(__name__)
 
 LABEL_RE = re.compile(r"[a-z0-9_]{1,24}")
 STATES = ("active", "inactive", "suspect")
@@ -59,8 +62,9 @@ SINGLE_ACCOUNT_NOTE = "comparison skipped: single active account"
 TOP_KEYS = {"accounts", "alerts", "pause_until", "pause_reason", "stopped", "drift_streak", "canary_day",
             "canary_note", "canary_labels", "curl_uses", "curl_last_use"}
 ACCOUNT_KEYS = {"state", "reason", "last_used", "lock_until", "last_canary", "suspect_since", "rate_limit_seen",
-                "reads_day", "reads_used", "rest_until"}
-TIME_KEYS = ("last_used", "lock_until", "last_canary", "suspect_since", "rate_limit_seen", "rest_until")
+                "reads_day", "reads_used", "rest_until", "parse_strikes", "parse_strike_last_at"}
+TIME_KEYS = ("last_used", "lock_until", "last_canary", "suspect_since", "rate_limit_seen", "rest_until",
+             "parse_strike_last_at")
 READY_FILE = "account_ready.json"
 
 
@@ -128,7 +132,8 @@ def _valid(s) -> bool:
     for a in s["accounts"].values():
         if not (isinstance(a, dict) and set(a) == ACCOUNT_KEYS and a["state"] in STATES
                 and all(_iso(a[k]) for k in TIME_KEYS) and _day(a["reads_day"])
-                and type(a["reads_used"]) is int and a["reads_used"] >= 0):
+                and type(a["reads_used"]) is int and a["reads_used"] >= 0
+                and (a["parse_strikes"] is None or type(a["parse_strikes"]) is int and a["parse_strikes"] >= 0)):
             return False
     return all((
         isinstance(s["alerts"], list), _iso(s["pause_until"]), _iso(s["curl_last_use"]),
@@ -161,6 +166,7 @@ class XPool:
         self.cap, self.rest_days, self.ready = cap, rest_days, dict(ready or {})
         self.ready_directory = ""
         self.log: list[str] = []
+        self._parse_failures: dict[str, set[str]] = {}
         self.path = cache.CACHE_ROOT / "attention" / "_pc_state" / "x_pool.json"
         self._s = self._load()
 
@@ -184,6 +190,8 @@ class XPool:
                         a.setdefault("reads_day", None)
                         a.setdefault("reads_used", 0)
                         a.setdefault("rest_until", None)
+                        a.setdefault("parse_strikes", None)
+                        a.setdefault("parse_strike_last_at", None)
             if not _valid(s):
                 raise XPoolStateError("pool state invalid")
             if set(s["accounts"]) - set(self.labels):
@@ -202,6 +210,7 @@ class XPool:
 
     def begin_pass(self) -> None:
         """Persist registration/rest start even if no account reads. Status consumers never call this."""
+        self._parse_failures.clear()
         self._save()
 
     def _now(self) -> datetime:
@@ -263,9 +272,9 @@ class XPool:
     def usable(self) -> list[str]:
         return [x for x in self.labels if self.account_state(x)[0] == "active"]
 
-    def select(self) -> Selection | None:
+    def select(self, *, exclude=()) -> Selection | None:
         """Least recently used usable account; never-used first; ties by registration order."""
-        cands = self.usable()
+        cands = [label for label in self.usable() if label not in exclude]
         if not cands:
             return None
         last = {x: self._acct(x)["last_used"] or "" for x in cands}
@@ -331,10 +340,36 @@ class XPool:
         self._save()
         x_raw.mark_suspect(label, now)
 
+    def note_parse_drop(self, label: str, kind: str) -> int:
+        a, now = self._acct(label), self._now()
+        last = a["parse_strike_last_at"]
+        recent = last is not None and timedelta(0) <= now - datetime.fromisoformat(last) < timedelta(hours=24)
+        a["parse_strikes"] = (a["parse_strikes"] or 0) + 1 if recent else 1
+        a["parse_strike_last_at"] = now.isoformat()
+        self.log.append(f"x pool: {label} parse drop {kind}")
+        log.warning("X account %s parse drop: %s", label, kind)
+        self._save()
+        if a["parse_strikes"] >= 2 and a["state"] == "active":
+            self.flag_suspect(label)
+        return a["parse_strikes"]
+
+    def clear_parse_strikes(self, label: str) -> None:
+        a = self._acct(label)
+        if a["parse_strikes"] is not None and a["parse_strikes"] != 0:
+            a["parse_strikes"], a["parse_strike_last_at"] = 0, None
+            self._save()
+
+    def parse_failure_seen_elsewhere(self, label: str, kind: str) -> bool:
+        labels = self._parse_failures.setdefault(kind, set())
+        other = any(previous != label for previous in labels)
+        labels.add(label)
+        return other
+
     def owner_clear(self, label: str) -> None:
         """The owner acted on this account (fresh cookies, or cleared a suspect flag)."""
         a = self._acct(label)
         a["state"], a["reason"], a["suspect_since"] = "active", None, None
+        a["parse_strikes"], a["parse_strike_last_at"] = 0, None
         self._s["alerts"] = [x for x in self._s["alerts"] if x["label"] != label]
         self._save()
 
@@ -451,9 +486,11 @@ class XPool:
         accts = []
         for x in self.labels:
             state, reason = self.account_state(x)
-            accts.append({"label": x, "state": state, "reason": reason, "last_used": self._acct(x)["last_used"],
+            a = self._acct(x)
+            accts.append({"label": x, "state": state, "reason": reason, "last_used": a["last_used"],
                           "reads_today": self.reads_today(x), "cap": self.cap,
-                          "rest_until": self._acct(x)["rest_until"], "ready": self.ready_today(x)})
+                          "rest_until": a["rest_until"], "ready": self.ready_today(x),
+                          "parse_strikes": a["parse_strikes"], "parse_strike_last_at": a["parse_strike_last_at"]})
         paused = self.is_paused() and not self._s["stopped"]
         return {"active": sum(1 for a in accts if a["state"] == "active"), "total": len(self.labels),
                 "accounts": accts, "pause_reason": self.pause_reason(),
@@ -670,6 +707,28 @@ def _drift(pool: XPool) -> str:
     return "layout_changed" if pool.note_drift() >= DRIFT_STOP else "drift"
 
 
+def _parse_drop_kind(body: dict, entry_ids: tuple[str, ...], parsed: int) -> str:
+    """Only classify stripped when every identified tweet entry has an empty result."""
+    found = {}
+    def visit(value):
+        if isinstance(value, dict):
+            entry_id = value.get("entryId")
+            if entry_id in entry_ids:
+                content = value.get("content")
+                item = content.get("itemContent") if isinstance(content, dict) else None
+                found[entry_id] = item.get("tweet_results") if isinstance(item, dict) else None
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+    if not parsed:
+        visit(body)
+        if len(found) == len(entry_ids) and found and all(value == {} for value in found.values()):
+            return "content_stripped"
+    return "unparseable"
+
+
 def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, query, rng, sleep, fallback, collected_at,
                  counts) -> _Attempt:
     out, kv = _Attempt(), x_window.search_kv()
@@ -725,17 +784,21 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
             return out
         try:
             tweets = reader.parse_tweets(raw.body)
-        except Exception:  # noqa: BLE001 - a parse failure is drift, whatever the library raised
+        except Exception:  # noqa: BLE001 - a broken page must never become a zero
+            tweets = []
+        if xr.parse_drop(entries=n, parsed=len(tweets), threshold=config.x_parse_drop_threshold) or \
+                xr.small_page_drop(entries=n, parsed=len(tweets)):
+            kind = _parse_drop_kind(raw.body, raw.entry_ids, len(tweets))
+            single = len(pool.usable()) <= 1
+            shared = pool.parse_failure_seen_elsewhere(label, kind)
+            strikes = pool.note_parse_drop(label, kind)
             src.stamp_attempt()
-            return _Attempt("stop", _drift(pool))
-        # Per page; a unit-wide rate can only exceed the threshold when one of its pages does.
-        if xr.parse_drop(entries=n, parsed=len(tweets), threshold=config.x_parse_drop_threshold):
-            pool.stop("layout_changed")
-            src.stamp_attempt()
-            return _Attempt("stop", "layout_changed")
-        if xr.small_page_drop(entries=n, parsed=len(tweets)):
-            src.stamp_attempt()
-            return _Attempt("stop", _drift(pool))
+            if shared or (single and strikes >= 2):
+                pool.stop("layout_changed")
+                return _Attempt("stop", "layout_changed")
+            return _Attempt("restart", "account_failed")
+        if n:
+            pool.clear_parse_strikes(label)
         pool.clear_drift()
         out.tweets += tweets
         out.n_read += n
@@ -780,10 +843,11 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
         return XUnitOutcome(result, reason, label, attempts, restarts, row, counts["pages"], counts["reads"])
 
     waiting = False  # the last attempt's account waits for the library's in-flight lock
+    failed_labels = set()
     while attempts < 1 + config.x_unit_max_restarts:
-        sel = pool.select()
+        sel = pool.select(exclude=failed_labels)
         if sel is None:
-            return done(None, pool.pause_no_account(src))
+            return done(None, "account_failed" if failed_labels else pool.pause_no_account(src))
         if attempts:
             restarts += 1
         attempts += 1
@@ -792,6 +856,8 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
         att = _run_attempt(pool, reader, src, config, label=label, attempt=attempts, symbol=symbol, day=day,
                            query=query, rng=rng, sleep=sleep, fallback=fallback, collected_at=now, counts=counts)
         if att.status == "restart":
+            if att.reason == "account_failed":
+                failed_labels.add(label)
             waiting = att.reason == "wait"
             continue
         if att.status == "stop":
