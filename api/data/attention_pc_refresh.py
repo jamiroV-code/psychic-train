@@ -554,10 +554,14 @@ class XStream(Stream):
             query = x_window.build_query(x_window.coin_terms(q, symbol), day, syntax=c.x_window_syntax,
                                          lang=policy.lang)
             self._completeness(syms, day, symbol=symbol, reason="unit_interrupted", attempted=True)
+            log_start = len(pool.log)
             try:
                 out = x_pool.run_unit(pool, start.readers, src, c, symbol=symbol, day=day, query=query,
                                       coin=x_filters.Coin(symbol, entry["name"]), policy=policy, rng=self.rng,
                                       sleep=w._sleep, fallback=start.fallback)
+                for message in pool.log[log_start:]:
+                    if " parse drop " in message:
+                        log.warning("attention pc %s", message)
             except Exception:
                 self._completeness(syms, day, symbol=symbol, reason="failed", attempted=True)
                 raise

@@ -32,7 +32,6 @@ unit across the pool. Pure logic over injected readers, clock, RNG and sleep; no
 from __future__ import annotations
 
 import json
-import logging
 import random
 import re
 from collections.abc import Callable, Mapping
@@ -45,8 +44,6 @@ from api.data.attention import density, x_density, x_filters, x_raw, x_window
 from api.data.attention import pc_pace as pp
 from api.data.attention import x_reader as xr
 from api.data.attention.web_queries import CollectorConfig
-
-log = logging.getLogger(__name__)
 
 LABEL_RE = re.compile(r"[a-z0-9_]{1,24}")
 STATES = ("active", "inactive", "suspect")
@@ -347,7 +344,6 @@ class XPool:
         a["parse_strikes"] = (a["parse_strikes"] or 0) + 1 if recent else 1
         a["parse_strike_last_at"] = now.isoformat()
         self.log.append(f"x pool: {label} parse drop {kind}")
-        log.warning("X account %s parse drop: %s", label, kind)
         self._save()
         if a["parse_strikes"] >= 2 and a["state"] == "active":
             self.flag_suspect(label)

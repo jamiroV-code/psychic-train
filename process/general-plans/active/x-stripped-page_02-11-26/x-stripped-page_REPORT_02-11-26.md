@@ -8,7 +8,7 @@ Partial pending draft PR CI and review; implementation and local gates complete 
 Parse drops now strike the reading account and discard its attempt; retry reads remain charged. Two strikes within 24 hours mark the account suspect; a clean page resets its streak. Matching failure classes on two accounts in one pass stop the pool, as does a second strike when only one account is usable. Optional health fields show strikes and the collector box identifies a stopped pool as needing its owner. The synthetic incident test contains 20 entries whose `tweet_results` are all empty and exercises retry to completion without live provider calls.
 
 ## 4 Files changed
-- `api/data/attention/x_pool.py`; `api/models/discovery.py`.
+- `api/data/attention/x_pool.py`, `api/data/attention_pc_refresh.py`; `api/models/discovery.py`.
 - `api/tests/data/attention/test_x_pool.py`, `test_x_reader.py`, `test_twscrape_reader.py`; `api/tests/analytics/attention/test_sources_health.py`.
 - `web/lib/source-health.ts`, `web/lib/types/discovery.ts`, `web/lib/__tests__/source-health.test.ts`.
 - `process/general-plans/active/narrative-baskets_02-10-26/narrative-baskets-xreddit-collector_SPEC_21-10-26.md`.
@@ -25,6 +25,7 @@ UTC test start times were not recorded; evidence was recorded 2026-11-02T20:15:5
 - `uv run --project api --locked pytest -q api/tests/analytics/attention/test_sources_health.py::test_x_health_exposes_strikes_suspect_and_owner_stop api/tests/data/attention/test_x_pool.py::test_same_failure_on_different_units_in_pass_stops`: 2 passed.
 - `uv run --project api --locked pytest -q api/tests/data/attention/test_x_pool.py::test_second_stripped_attempt_flags_account_and_other_account_continues api/tests/data/attention/test_x_pool.py::test_clean_page_resets_account_streak`: 2 passed.
 - `pnpm --dir web test && pnpm --dir web exec tsc --noEmit`: 67 files, 639 tests passed; TypeScript passed. Existing React act warnings were emitted.
+- Draft PR #236 CI on `3721faad`: web passed; API had 3709 passed, 2 skipped and one failure because the X-core no-logger guard rejected logging in `x_pool.py`. Logging was moved to the collector boundary; `uv run --project api --locked pytest -q api/tests/tooling_guards/test_pc_collector_guards.py::test_x_core_has_no_evasion_strings_no_fixed_hour_and_no_logger api/tests/data/attention/test_x_pool.py::test_incident_shape_is_retried_and_classified` then passed (2 tests). Final-head CI remains pending.
 
 ## 7 Tests NOT run
 No live provider requests or live collector smoke (explicitly forbidden). Final-head CI was not yet available when this report was committed; PR checks must provide independent Linux evidence.
