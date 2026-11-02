@@ -1,0 +1,53 @@
+{
+  "recorded_utc": "2026-11-02T14:15:51Z",
+  "host": {"os": "Windows 10 (10.0.19045) x64", "ram_total_mb": 8090, "python_probe_venv": "3.12.14 (uv-managed CPython, existing)"},
+  "artifacts": [
+    {"name": "camoufox-0.5.9-py3-none-any.whl", "bytes": 222658, "sha256": "9f063e2c0356491221a53dc93148174f5fe854382eda9570e30572f10759f577",
+     "expected_from": "https://pypi.org/pypi/camoufox/0.5.9/json digests.sha256", "match": true, "upload_time": "2026-11-01T06:22:04Z"},
+    {"name": "camoufox-158.0.1-beta.41-win.x86_64.zip", "bytes": 1320075455, "sha256": "2644bd14f1cc345c768f6a70b576bcc87eb3d0bf0df54856d6fe0bbc3027515f",
+     "expected_from": "GitHub API release asset digest (api.github.com/repos/daijro/camoufox/releases/tags/v158.0.1-beta.41)", "match": true,
+     "asset_created_at": "2026-10-29T22:12:21Z", "release_published_at": "2026-10-29T22:14:10Z", "release_prerelease": false},
+    {"name": "manifest.json (release v158.0.1-beta.41)", "bytes": 395, "sha256": "c7472b036a84811364fd46688c92310ce5dbf86fd057c707651317b4840a1342",
+     "expected_from": "GitHub API asset digest", "match": true, "interface": 1, "commit": "c3ad3bf2c3c6e93225aa6587246c8b70f9314664"},
+    {"name": "model-release.zip (fpgen model-2/2026, scrapfly/fingerprint-generator)", "bytes": 1564571, "sha256": "6530b8322cdaa4ec042921c8d9a0369a0e6e0269ba636c01a7203e4a2f109936",
+     "expected_from": "camoufox/fpgen-model.json inside the 0.5.9 wheel (library also re-verified the archive and each member)", "match": true}
+  ],
+  "pairing": {
+    "wheel_browser_pin_json": {"tag": "v158.0.1-beta.41", "repo": "daijro/camoufox", "repo_name": "Official", "version": "158.0.1", "build": "beta.41"},
+    "installed_application_ini": {"Version": "158.0.1-beta.41", "BuildID": "20261029202019", "SourceStamp": "48a735cc74a7e6d730f9bf59c3de58f750287a23"},
+    "fpgen_model_pin": "model-2/2026"
+  },
+  "python_packages": {"camoufox": "0.5.9", "playwright": "1.62.0 (resolved under camoufox's playwright<1.63)", "fpgen": "1.3.0", "psutil (probe tooling only)": "7.2.2",
+    "install": "pip --require-hashes --no-deps --only-binary :all: from uv pip compile --generate-hashes locks (sha256 of requirements.lock.txt d8e62ca6..., probe-tools.lock.txt 4b29a91d...)"},
+  "implicit_downloads_found_in_source": [
+    "pkgman.camoufox_path(): CamoufoxFetcher().install() via api.github.com + release asset when no browser is installed (first launch)",
+    "pkgman.release_interface(): GET of the release's manifest.json during a fetch",
+    "fpgen_model.ensure_fpgen_model(): model zip from github.com/scrapfly/fingerprint-generator on first fingerprint generation",
+    "fpgen itself (bypassed by camoufox): api.github.com + model with verify=False when imported without the pinned model",
+    "geolocation/ip (only with geoip=...): ipify/amazonaws/ipinfo/icanhazip/ifconfig.co/ipecho, api6.ipify.org/v6.ident.me, ip-api.com, GeoIP mmdb from github.com/daijro/geoip-all-in-one (weekly refresh)"
+  ],
+  "how_downloads_were_kept_explicit": [
+    "browser: curl to downloads/, sha256 checked, then the library's own install_versioned() fed from the local file (download_file intercepted, requests.get stubbed to raise); library re-verified sha256",
+    "model: curl to downloads/, then ensure_fpgen_model() fed from the local zip (webdl intercepted); library verified archive + member sha256 and stamped",
+    "first real launch made no download: launch_path() resolved the installed build; 0 sink requests, 0 external sockets in the lifecycle step"
+  ],
+  "file_locations": {
+    "probe_root": "C:/Users/jamir/camoufox-probe (downloads 1260.7 MB, venv 208.8 MB, localappdata 2468.0 MB, profiles 222.9 MB, uv-cache 6.2 MB, pip-cache 57.2 MB, wheel-src 1.5 MB)",
+    "camoufox_INSTALL_DIR": "C:/Users/jamir/camoufox-probe/localappdata/camoufox/camoufox/Cache (via WIN_PD_OVERRIDE_LOCAL_APPDATA, platformdirs' supported override)",
+    "browser_extracted": "2468.0 MB, 2241 files; fonts/ 2056.6 MB, 1513 files",
+    "fpgen_model": "venv/Lib/site-packages/fpgen/data",
+    "outside_probe_root_created_by_browser": ["%APPDATA%/camoufox/Profiles (empty dir, created 14:00:52Z first launch)", "%LOCALAPPDATA%/camoufox (empty dir)"],
+    "untouched_defaults": ["%LOCALAPPDATA%/ms-playwright absent", "%APPDATA%/Mozilla absent", "%LOCALAPPDATA%/Mozilla absent", "%USERPROFILE%/.camoufox absent", "%TEMP% (redirected; only the pre-existing playwright-transform-cache there)"]
+  },
+  "hosts_contacted_by_probe_setup": [
+    "github.com (git fetch origin main; release asset URLs, 302 to release-assets.githubusercontent.com)",
+    "release-assets.githubusercontent.com (browser zip, manifest.json, fpgen model zip)",
+    "api.github.com (release metadata JSON)",
+    "pypi.org (package JSON; simple index for uv pip compile and pip)",
+    "files.pythonhosted.org (wheels)"
+  ],
+  "dns_only_lookups": "39 candidate hostnames resolved (no connection) to attribute the unplanned connection; see report section 6",
+  "unplanned_connection": {"step": "same_profile_twice", "pid_in_probe_tree": 21584, "first_seen": "2026-11-02T14:11:36Z", "established": "151.101.65.91:80 at 2026-11-02T14:12:40Z",
+    "syn_only": ["151.101.1.91:80", "[2a04:4e42:400::347]:80", "[2a04:4e42:600::347]:80", "[2a04:4e42:200::347]:80"],
+    "attribution": "Mozilla's shared Fastly endpoints (same IPs as addons.mozilla.org / services.addons.mozilla.org / tracking-protection.cdn.mozilla.net); exact host and URL not captured"}
+}

@@ -1,0 +1,129 @@
+{
+  "step": "reopen",
+  "started": "2026-11-02T14:01:41.652+00:00",
+  "python": "3.12.14",
+  "camoufox": "0.5.9",
+  "playwright": "1.62.0",
+  "free_ram_mb_start": 1882,
+  "disk_free_gib_start": 27.89,
+  "ram_checks": [
+    {
+      "t": "2026-11-02T14:01:41.691+00:00",
+      "before": "launch A-reopen",
+      "available_mb": 1883
+    }
+  ],
+  "launches": [
+    {
+      "label": "A-reopen",
+      "t": "2026-11-02T14:02:03.957+00:00",
+      "launch_s": 22.08,
+      "first_page_s": 0.19
+    }
+  ],
+  "cookies_on_reopen": {
+    "names": [
+      "acct",
+      "auth_token",
+      "ct0"
+    ],
+    "acct": "A",
+    "auth_token_is_FAKE": true,
+    "session_cookie_present": false
+  },
+  "storage_on_reopen": {
+    "probe_acct": "A",
+    "probe_written": "1793628065712"
+  },
+  "echo_on_reopen": {
+    "cookie_names": [
+      "acct",
+      "auth_token",
+      "ct0"
+    ],
+    "acct": "A",
+    "auth_token_is_FAKE": true,
+    "ct0_is_FAKE": true
+  },
+  "identity": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:158.0) Gecko/20100101 Firefox/158.0",
+    "platform": "Win32",
+    "oscpu": "Windows NT 10.0; Win64; x64",
+    "hardwareConcurrency": 8,
+    "languages": [
+      "en-US",
+      "en"
+    ],
+    "timezone": "HOST_TZ_REDACTED",
+    "screen": {
+      "width": 2560,
+      "height": 1440,
+      "availWidth": 2560,
+      "availHeight": 1392,
+      "colorDepth": 24
+    },
+    "outer": [
+      2560,
+      1392
+    ],
+    "inner": [
+      2560,
+      1266
+    ],
+    "dpr": 1,
+    "webgl": {
+      "vendor": "Google Inc. (Intel)",
+      "renderer": "ANGLE (Intel, Intel(R) HD Graphics 400 Direct3D11 vs_5_0 ps_5_0), or similar"
+    },
+    "voices": 0,
+    "fonts": [
+      [
+        "Segoe UI",
+        true
+      ],
+      [
+        "Calibri",
+        true
+      ],
+      [
+        "Helvetica Neue",
+        true
+      ],
+      [
+        "Ubuntu",
+        true
+      ],
+      [
+        "DejaVu Sans",
+        true
+      ],
+      [
+        "Arial",
+        true
+      ]
+    ],
+    "canvas_sha256": "8b83d043fe6d59da7e350792e32fc580c460c299f1c624176946da71ed84a22b"
+  },
+  "memory_peak": {
+    "rss_mb": 807.7,
+    "private_mb": 754.3,
+    "procs": 11
+  },
+  "closes": [
+    {
+      "label": "A-reopen graceful",
+      "close_call_s": 0.47,
+      "all_children_gone_s_after_close": 0.05,
+      "survivors": [],
+      "error": null
+    }
+  ],
+  "cpu_seconds_tree": 55.33,
+  "profile_size_mb_after": 60.66,
+  "external_connections_seen": [],
+  "free_ram_mb_end": 1798,
+  "finished": "2026-11-02T14:02:09.610+00:00",
+  "survivors_at_end": [],
+  "sink_requests": [],
+  "sink_hosts": []
+}

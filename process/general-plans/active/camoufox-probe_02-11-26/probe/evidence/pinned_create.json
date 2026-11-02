@@ -1,0 +1,119 @@
+{
+  "step": "pinned_create",
+  "started": "2026-11-02T14:02:20.512+00:00",
+  "python": "3.12.14",
+  "camoufox": "0.5.9",
+  "playwright": "1.62.0",
+  "free_ram_mb_start": 1901,
+  "disk_free_gib_start": 27.88,
+  "identity_file": "C:\\Users\\jamir\\camoufox-probe\\profiles\\P.identity.json",
+  "identity_file_bytes": 587485,
+  "ram_checks": [
+    {
+      "t": "2026-11-02T14:02:21.172+00:00",
+      "before": "launch P",
+      "available_mb": 1870
+    }
+  ],
+  "launches": [
+    {
+      "label": "P-create",
+      "t": "2026-11-02T14:02:43.416+00:00",
+      "launch_s": 21.66,
+      "first_page_s": 0.59
+    }
+  ],
+  "cookies": {
+    "names": [
+      "acct",
+      "auth_token",
+      "ct0",
+      "sess_marker"
+    ],
+    "acct": "P",
+    "auth_token_is_FAKE": true,
+    "session_cookie_present": true
+  },
+  "storage": {
+    "probe_acct": "P"
+  },
+  "identity": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:158.0) Gecko/20100101 Firefox/158.0",
+    "platform": "Win32",
+    "oscpu": "Windows NT 10.0; Win64; x64",
+    "hardwareConcurrency": 8,
+    "languages": [
+      "en-US",
+      "en"
+    ],
+    "timezone": "HOST_TZ_REDACTED",
+    "screen": {
+      "width": 1920,
+      "height": 1200,
+      "availWidth": 1920,
+      "availHeight": 1152,
+      "colorDepth": 24
+    },
+    "outer": [
+      1920,
+      1152
+    ],
+    "inner": [
+      1920,
+      1067
+    ],
+    "dpr": 1,
+    "webgl": {
+      "vendor": "Google Inc. (Intel)",
+      "renderer": "ANGLE (Intel, Intel(R) HD Graphics 400 Direct3D11 vs_5_0 ps_5_0), or similar"
+    },
+    "voices": 0,
+    "fonts": [
+      [
+        "Segoe UI",
+        true
+      ],
+      [
+        "Calibri",
+        true
+      ],
+      [
+        "Helvetica Neue",
+        true
+      ],
+      [
+        "Ubuntu",
+        true
+      ],
+      [
+        "DejaVu Sans",
+        true
+      ],
+      [
+        "Arial",
+        true
+      ]
+    ],
+    "canvas_sha256": "a9eadbc768fd56cbf4c4ee76909d8a6cf5d053816973e2dca4e243ff79b398b6"
+  },
+  "memory_peak": {
+    "rss_mb": 761.3,
+    "private_mb": 686.9,
+    "procs": 11
+  },
+  "closes": [
+    {
+      "label": "P graceful",
+      "close_call_s": 0.78,
+      "all_children_gone_s_after_close": 0.02,
+      "survivors": [],
+      "error": null
+    }
+  ],
+  "external_connections_seen": [],
+  "free_ram_mb_end": 1780,
+  "finished": "2026-11-02T14:02:45.199+00:00",
+  "survivors_at_end": [],
+  "sink_requests": [],
+  "sink_hosts": []
+}

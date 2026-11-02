@@ -1,0 +1,272 @@
+{
+  "step": "lifecycle",
+  "started": "2026-11-02T14:00:21.577+00:00",
+  "python": "3.12.14",
+  "camoufox": "0.5.9",
+  "playwright": "1.62.0",
+  "free_ram_mb_start": 1846,
+  "disk_free_gib_start": 27.94,
+  "ram_checks": [
+    {
+      "t": "2026-11-02T14:00:21.623+00:00",
+      "before": "launch A",
+      "available_mb": 1843
+    }
+  ],
+  "profile_size_mb_before": 0.0,
+  "launches": [
+    {
+      "label": "A-first",
+      "t": "2026-11-02T14:01:05.452+00:00",
+      "launch_s": 43.23,
+      "first_page_s": 0.59
+    }
+  ],
+  "identity": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:158.0) Gecko/20100101 Firefox/158.0",
+    "platform": "Win32",
+    "oscpu": "Windows NT 10.0; Win64; x64",
+    "hardwareConcurrency": 8,
+    "languages": [
+      "en-US",
+      "en"
+    ],
+    "timezone": "HOST_TZ_REDACTED",
+    "screen": {
+      "width": 2560,
+      "height": 1440,
+      "availWidth": 2560,
+      "availHeight": 1392,
+      "colorDepth": 24
+    },
+    "outer": [
+      1282,
+      1212
+    ],
+    "inner": [
+      1282,
+      1127
+    ],
+    "dpr": 1,
+    "webgl": {
+      "vendor": "Google Inc. (Intel)",
+      "renderer": "ANGLE (Intel, Intel(R) HD Graphics 400 Direct3D11 vs_5_0 ps_5_0), or similar"
+    },
+    "voices": 0,
+    "fonts": [
+      [
+        "Segoe UI",
+        true
+      ],
+      [
+        "Calibri",
+        true
+      ],
+      [
+        "Helvetica Neue",
+        true
+      ],
+      [
+        "Ubuntu",
+        true
+      ],
+      [
+        "DejaVu Sans",
+        true
+      ],
+      [
+        "Arial",
+        true
+      ]
+    ],
+    "canvas_sha256": "4546f32a59c254183ab73493240caf0c71619255cfe011c7119bb6376c3f72a2"
+  },
+  "cookies_after_set": {
+    "names": [
+      "acct",
+      "auth_token",
+      "ct0",
+      "sess_marker"
+    ],
+    "acct": "A",
+    "auth_token_is_FAKE": true,
+    "session_cookie_present": true
+  },
+  "storage_after_set": {
+    "probe_acct": "A",
+    "probe_written": "1793628065712"
+  },
+  "memory_startup_window": {
+    "n": 161,
+    "rss_mb_mean": 423.1,
+    "private_mb_mean": 344.1,
+    "rss_mb_max": 845.6,
+    "private_mb_max": 776.8,
+    "procs_max": 11
+  },
+  "memory_steady_idle_20s": {
+    "n": 56,
+    "rss_mb_mean": 726.8,
+    "private_mb_mean": 631.7,
+    "rss_mb_max": 863.8,
+    "private_mb_max": 804.2,
+    "procs_max": 8
+  },
+  "memory_peak": {
+    "rss_mb": 913.6,
+    "private_mb": 916.3,
+    "procs": 11
+  },
+  "procs_during": [
+    {
+      "pid": 24832,
+      "name": "node.exe",
+      "create_time": 1793628023.0547512,
+      "cpu": 1.109375,
+      "peak_wset_mb": 115.3
+    },
+    {
+      "pid": 24144,
+      "name": "node.exe",
+      "create_time": 1793628025.8388407,
+      "cpu": 0.828125,
+      "peak_wset_mb": 115.5
+    },
+    {
+      "pid": 32308,
+      "name": "camoufox.exe",
+      "create_time": 1793628026.4654522,
+      "cpu": 0.0,
+      "peak_wset_mb": 10.4
+    },
+    {
+      "pid": 36256,
+      "name": "camoufox.exe",
+      "create_time": 1793628027.531714,
+      "cpu": 11.703125,
+      "peak_wset_mb": 399.0
+    },
+    {
+      "pid": 28376,
+      "name": "camoufox.exe",
+      "create_time": 1793628049.7559683,
+      "cpu": 0.078125,
+      "peak_wset_mb": 17.9
+    },
+    {
+      "pid": 29812,
+      "name": "camoufox.exe",
+      "create_time": 1793628050.1170385,
+      "cpu": 8.078125,
+      "peak_wset_mb": 69.0
+    },
+    {
+      "pid": 4756,
+      "name": "camoufox.exe",
+      "create_time": 1793628050.1352327,
+      "cpu": 0.09375,
+      "peak_wset_mb": 24.1
+    },
+    {
+      "pid": 25368,
+      "name": "camoufox.exe",
+      "create_time": 1793628050.2007864,
+      "cpu": 8.28125,
+      "peak_wset_mb": 92.0
+    },
+    {
+      "pid": 29792,
+      "name": "camoufox.exe",
+      "create_time": 1793628050.8163104,
+      "cpu": 7.703125,
+      "peak_wset_mb": 65.0
+    },
+    {
+      "pid": 36104,
+      "name": "camoufox.exe",
+      "create_time": 1793628051.4245987,
+      "cpu": 7.890625,
+      "peak_wset_mb": 65.0
+    },
+    {
+      "pid": 12584,
+      "name": "camoufox.exe",
+      "create_time": 1793628052.4498873,
+      "cpu": 0.0625,
+      "peak_wset_mb": 16.5
+    },
+    {
+      "pid": 34360,
+      "name": "camoufox.exe",
+      "create_time": 1793628061.7851856,
+      "cpu": 0.0,
+      "peak_wset_mb": 5.6
+    },
+    {
+      "pid": 29636,
+      "name": "camoufox.exe",
+      "create_time": 1793628061.8098636,
+      "cpu": 8.78125,
+      "peak_wset_mb": 391.0
+    },
+    {
+      "pid": 23156,
+      "name": "camoufox.exe",
+      "create_time": 1793628062.439624,
+      "cpu": 0.046875,
+      "peak_wset_mb": 17.5
+    },
+    {
+      "pid": 14060,
+      "name": "camoufox.exe",
+      "create_time": 1793628062.8382387,
+      "cpu": 0.21875,
+      "peak_wset_mb": 60.3
+    },
+    {
+      "pid": 22740,
+      "name": "camoufox.exe",
+      "create_time": 1793628062.8532262,
+      "cpu": 0.125,
+      "peak_wset_mb": 23.3
+    },
+    {
+      "pid": 13888,
+      "name": "camoufox.exe",
+      "create_time": 1793628063.0436246,
+      "cpu": 4.703125,
+      "peak_wset_mb": 323.7
+    },
+    {
+      "pid": 22408,
+      "name": "camoufox.exe",
+      "create_time": 1793628063.3217757,
+      "cpu": 0.609375,
+      "peak_wset_mb": 75.7
+    },
+    {
+      "pid": 2092,
+      "name": "camoufox.exe",
+      "create_time": 1793628064.7785585,
+      "cpu": 0.046875,
+      "peak_wset_mb": 15.9
+    }
+  ],
+  "closes": [
+    {
+      "label": "A-first graceful",
+      "close_call_s": 0.55,
+      "all_children_gone_s_after_close": 0.02,
+      "survivors": [],
+      "error": null
+    }
+  ],
+  "cpu_seconds_tree": 60.66,
+  "profile_size_mb_after": 47.36,
+  "external_connections_seen": [],
+  "free_ram_mb_end": 1782,
+  "finished": "2026-11-02T14:01:26.927+00:00",
+  "survivors_at_end": [],
+  "sink_requests": [],
+  "sink_hosts": []
+}
