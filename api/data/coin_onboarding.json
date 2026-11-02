@@ -6,6 +6,7 @@
   "resolver_max_coins_per_run": 5,
   "classify_max_coins_per_run": 15,
   "stable_band_pct": 2.0,
+  "price_min_days": 14,
   "identity_min_days": 60,
   "identity_min_corr": 0.2,
   "wiki_min_days": 30,

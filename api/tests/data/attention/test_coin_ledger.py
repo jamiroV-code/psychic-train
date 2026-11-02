@@ -144,3 +144,22 @@ def test_settings_drive_the_numbers():
     led = run([snap(0, {"x": 5}), snap(1, {"x": 5})], settings=fast)
     assert led["coins"]["x"]["state"] == "member"
     assert run([snap(2, {"x": None})], led, fast)["coins"]["x"]["state"] == "inactive"
+
+
+@pytest.mark.parametrize("kind", ["duplicate-id", "duplicate-rank", "date", "symbol", "id"])
+def test_untrustworthy_snapshot_cannot_seed_or_advance(kind):
+    snapshot = snap(1)
+    if kind == "duplicate-id":
+        snapshot["coins"][1]["id"] = snapshot["coins"][0]["id"]
+    elif kind == "duplicate-rank":
+        snapshot["coins"].append(dict(snapshot["coins"][0]))
+    elif kind == "date":
+        snapshot["date"] = "2026-02-30"
+    elif kind == "symbol":
+        snapshot["coins"][0]["symbol"] = "BAD-SYMBOL"
+    else:
+        snapshot["coins"][0]["id"] = "../bad"
+    ledger = member_ledger()
+    assert cl.seed(snapshot, S).status == "unavailable"
+    result = cl.advance(ledger, snapshot, S)
+    assert result.status == "unavailable" and result.ledger is ledger

@@ -474,7 +474,8 @@ def test_member_at_rank_101_to_120_stays_scored_under_enforce_and_reference_unch
     u_path = tmp_path / "attention_universe.json"
     u_path.write_text(universe_mod.UNIVERSE_PATH.read_text())
     monkeypatch.setattr(universe_mod, "UNIVERSE_PATH", u_path)
-    led = {"c110": entry(), "c111": entry("watching"), "c5": entry("watching", count=2)}
+    led = {"c110": entry(symbol="C110"), "c111": entry("watching", symbol="C111"),
+           "c5": entry("watching", count=2, symbol="C5")}
     onboarding_store.write_ledger({"last_advanced_date": "2026-10-15", "seeded_at": "2026-10-01", "coins": led})
     top, _ = universe_mod.load_universe_rows()
     assert len(top) == 100

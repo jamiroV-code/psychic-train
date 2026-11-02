@@ -14,6 +14,7 @@ from pathlib import Path
 
 from api.data import cache
 from api.data.attention import coin_ledger
+from api.data.attention.onboarding_settings import CLASSES, SOURCES, SYMBOL_RE
 
 MAX_TEXT = 200
 MAX_LEDGER_BYTES = 2_000_000
@@ -47,10 +48,30 @@ def sanitize(value):
 def _valid_ledger(doc) -> bool:
     if not isinstance(doc, dict) or not isinstance(doc.get("coins"), dict):
         return False
-    for e in doc["coins"].values():
+    for cid, e in doc["coins"].items():
+        if not isinstance(cid, str) or not coin_ledger.ID_RE.fullmatch(cid):
+            return False
         if not isinstance(e, dict) or set(coin_ledger.ENTRY_KEYS) - set(e) or e["state"] not in coin_ledger.STATES:
             return False
-    return all(doc.get(k) is None or isinstance(doc.get(k), str) for k in ("last_advanced_date", "seeded_at"))
+        if (not isinstance(e["symbol"], str) or not SYMBOL_RE.fullmatch(e["symbol"])
+                or e["class"] not in (*CLASSES, "unknown")
+                or e["class_source"] not in ("auto", "owner", "confirmed")
+                or not isinstance(e["class_evidence"], dict) or type(e["seeded"]) is not bool):
+            return False
+        if any(type(e[k]) is not int or e[k] < 0 for k in ("consecutive_top100", "consecutive_outside120")):
+            return False
+        if any(not coin_ledger.valid_date(e[k]) for k in ("first_seen", "updated")):
+            return False
+        if any(e[k] is not None and not coin_ledger.valid_date(e[k]) for k in ("last_in_top100", "last_in_top120")):
+            return False
+        resolver = e.get("resolver", {})
+        if not isinstance(resolver, dict) or any(
+                source not in SOURCES or not isinstance(value, dict)
+                or value.get("state") not in ("applied", "pending", "none")
+                or not isinstance(value.get("reason", ""), str)
+                for source, value in resolver.items()):
+            return False
+    return all(doc.get(k) is None or coin_ledger.valid_date(doc[k]) for k in ("last_advanced_date", "seeded_at"))
 
 
 def read_ledger() -> tuple[dict | None, str]:
@@ -59,7 +80,11 @@ def read_ledger() -> tuple[dict | None, str]:
     if not p.exists():
         return None, "absent"
     try:
-        doc = json.loads(p.read_text(encoding="utf-8"))
+        with p.open("rb") as stream:
+            text = stream.read(MAX_LEDGER_BYTES + 1)
+        if len(text) > MAX_LEDGER_BYTES:
+            return None, "corrupt"
+        doc = json.loads(text)
     except (OSError, ValueError):
         return None, "corrupt"
     return (doc, "ok") if _valid_ledger(doc) else (None, "corrupt")
@@ -79,7 +104,11 @@ def write_ledger(doc: dict) -> None:
 def read_json(name: str) -> dict | None:
     """A bot JSON object file under the onboarding root; None when absent or unreadable (never raises)."""
     try:
-        doc = json.loads((root() / name).read_text(encoding="utf-8"))
+        with (root() / name).open("rb") as stream:
+            text = stream.read(MAX_FILE_BYTES + 1)
+        if len(text) > MAX_FILE_BYTES:
+            return None
+        doc = json.loads(text)
     except (OSError, ValueError):
         return None
     return doc if isinstance(doc, dict) else None

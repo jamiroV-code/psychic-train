@@ -16,6 +16,21 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
+import re
+from datetime import date
+
+from api.data.attention.onboarding_settings import SYMBOL_RE
+
+ID_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,99}")
+
+
+def valid_date(value) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        return date.fromisoformat(value).isoformat() == value
+    except ValueError:
+        return False
 
 TOP = 100
 STATES = ("watching", "member", "inactive")
@@ -37,18 +52,23 @@ def empty() -> dict:
 
 def band_rows(snapshot, band: int) -> dict[str, dict] | None:
     """{coin id: row} when the snapshot has contiguous ranks 1..band, else None."""
-    if not isinstance(snapshot, dict) or not isinstance(snapshot.get("date"), str):
+    if not isinstance(snapshot, dict) or not valid_date(snapshot.get("date")):
         return None
     rows = snapshot.get("coins")
     if not isinstance(rows, list):
         return None
     by_rank: dict[int, dict] = {}
+    ids = set()
     for r in rows:
         if not isinstance(r, dict):
-            continue
-        rank = r.get("rank")
-        if isinstance(rank, int) and not isinstance(rank, bool) and isinstance(r.get("id"), str) and r["id"]:
-            by_rank.setdefault(rank, r)
+            return None
+        rank, cid, symbol = r.get("rank"), r.get("id"), r.get("symbol")
+        if (type(rank) is not int or rank < 1 or rank in by_rank
+                or not isinstance(cid, str) or not ID_RE.fullmatch(cid) or cid in ids
+                or not isinstance(symbol, str) or not SYMBOL_RE.fullmatch(symbol)):
+            return None
+        by_rank[rank] = r
+        ids.add(cid)
     if any(k not in by_rank for k in range(1, band + 1)):
         return None
     return {by_rank[k]["id"]: by_rank[k] for k in sorted(by_rank)}

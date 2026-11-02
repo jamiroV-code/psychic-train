@@ -16,10 +16,10 @@ MODES = ("shadow", "enforce")
 DEFAULT_MODE = "shadow"
 CLASSES = ("normal", "stablecoin", "wrapped_staked", "commodity_backed", "tokenized_fund")
 SOURCES = ("wikipedia", "trends", "reddit_x")
-SYMBOL_RE = re.compile(r"^[A-Z0-9_\-]{1,24}$")
+SYMBOL_RE = re.compile(r"[A-Z0-9_]{1,24}")
 INT_KEYS = {"probation_days": (1, 365), "exit_band_rank": (101, 250), "exit_days": (1, 365),
             "resolver_max_coins_per_run": (0, 100), "classify_max_coins_per_run": (0, 100),
-            "identity_min_days": (1, 365), "wiki_min_days": (1, 365)}
+            "identity_min_days": (1, 365), "wiki_min_days": (1, 365), "price_min_days": (1, 365)}
 FLOAT_KEYS = {"stable_band_pct": (0.0, 50.0), "identity_min_corr": (-1.0, 1.0)}
 MAP_KEYS = ("confirmed_classes", "blocked_sources")
 KEYS = {"mode", *INT_KEYS, *FLOAT_KEYS, *MAP_KEYS}
@@ -34,6 +34,7 @@ class Settings:
     resolver_max_coins_per_run: int = 5
     classify_max_coins_per_run: int = 15
     stable_band_pct: float = 2.0
+    price_min_days: int = 14
     identity_min_days: int = 60
     identity_min_corr: float = 0.2
     wiki_min_days: int = 30
@@ -64,13 +65,13 @@ def validate(doc) -> Settings:
         if isinstance(v, bool) or not isinstance(v, (int, float)) or not lo <= v <= hi:
             raise ValueError(f"coin onboarding settings: {k} must be a number from {lo:g} to {hi:g}")
     cc = doc["confirmed_classes"]
-    if not isinstance(cc, dict) or not all(isinstance(s, str) and SYMBOL_RE.match(s) and c in CLASSES
+    if not isinstance(cc, dict) or not all(isinstance(s, str) and SYMBOL_RE.fullmatch(s) and c in CLASSES
                                            for s, c in cc.items()):
         raise ValueError(f"coin onboarding settings: confirmed_classes must map a symbol to one of "
                          f"{', '.join(CLASSES)}")
     bs = doc["blocked_sources"]
     if not isinstance(bs, dict) or not all(
-            isinstance(s, str) and SYMBOL_RE.match(s) and isinstance(v, list) and v and all(x in SOURCES for x in v)
+            isinstance(s, str) and SYMBOL_RE.fullmatch(s) and isinstance(v, list) and v and all(x in SOURCES for x in v)
             for s, v in bs.items()):
         raise ValueError(f"coin onboarding settings: blocked_sources must map a symbol to a list of "
                          f"{', '.join(SOURCES)}")

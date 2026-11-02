@@ -15,8 +15,8 @@ def test_absent_ledger_reads_absent(isolated_cache):
 
 def test_write_then_read_round_trip_and_path(isolated_cache):
     doc = cl.empty()
-    doc["coins"]["a"] = {**dict.fromkeys(cl.ENTRY_KEYS), "symbol": "A", "state": "member", "class": "normal",
-                         "class_evidence": {}, "consecutive_top100": 3, "consecutive_outside120": 0}
+    doc["coins"]["a"] = cl._entry({"symbol": "A"}, "2026-11-01", state="member", count=3,
+                                 cls="normal", source="owner")
     ob.write_ledger(doc)
     assert (isolated_cache / "attention" / "onboarding" / "ledger.json").exists()
     assert ob.read_ledger() == (doc, "ok")
@@ -74,3 +74,27 @@ def test_has_log_history(isolated_cache):
     assert not ob.has_log_history()
     ob.append_log("2026-11-01", [{"action": "seeded"}])
     assert ob.has_log_history()
+
+
+@pytest.mark.parametrize("key,value", [
+    ("consecutive_top100", "14"), ("consecutive_outside120", -1),
+    ("consecutive_top100", True), ("class", "other"), ("class_evidence", []),
+    ("class_source", "other"), ("seeded", 1), ("updated", "2026-02-30"),
+    ("symbol", "BAD-SYMBOL"), ("resolver", {"trends": []}),
+])
+def test_malformed_values_are_corrupt_and_preserved(isolated_cache, key, value):
+    doc = cl.empty()
+    doc["coins"]["a"] = cl._entry({"symbol": "A"}, "2026-11-01", state="watching", count=1)
+    doc["coins"]["a"][key] = value
+    ob.write_ledger(doc)
+    before = ob.ledger_path().read_bytes()
+    assert ob.read_ledger() == (None, "corrupt")
+    assert ob.ledger_path().read_bytes() == before
+
+
+def test_oversized_ledger_read_is_refused(isolated_cache, monkeypatch):
+    ob.write_ledger(cl.empty())
+    before = ob.ledger_path().read_bytes()
+    monkeypatch.setattr(ob, "MAX_LEDGER_BYTES", 10)
+    assert ob.read_ledger() == (None, "corrupt")
+    assert ob.ledger_path().read_bytes() == before
