@@ -138,3 +138,42 @@ def test_categories_one_failure_fails_all():
 def test_categories_malformed_json_returns_none():
     c = client_for(lambda r: httpx.Response(200, json={"error": "x"}))
     assert cg.fetch_categories(["ai"], client=c, sleep=lambda x: None) is None
+
+
+# --- T223 O3: coin detail and price statistics for the classifier (live shapes UNVERIFIED until P-O0) ---
+
+def test_coin_detail_keeps_only_categories_name_platform_and_quotes_the_id():
+    seen = []
+
+    def h(r: httpx.Request):
+        seen.append((r.url.raw_path.decode(), dict(r.url.params)))
+        return httpx.Response(200, json={"categories": ["Stablecoins", None, 3], "name": "Pay", "symbol": "pay",
+                                         "asset_platform_id": "ethereum", "description": {"en": "long"}})
+    got, state = cg.fetch_coin_detail("a b", client=client_for(h), sleep=lambda x: None)
+    assert state == "ok" and got == {"categories": ["Stablecoins"], "name": "Pay", "asset_platform_id": "ethereum"}
+    assert "/coins/a%20b" in seen[0][0] and seen[0][1].get("market_data") == "false"
+
+
+def test_coin_detail_failures_are_states_never_raise():
+    assert cg.fetch_coin_detail("x", client=client_for(lambda r: httpx.Response(429)), sleep=lambda x: None) == (
+        None, "capped")
+    assert cg.fetch_coin_detail("x", client=client_for(lambda r: httpx.Response(503)), sleep=lambda x: None) == (
+        None, "unavailable")
+    assert cg.fetch_coin_detail("x", client=client_for(lambda r: httpx.Response(200, json=[1])),
+                                sleep=lambda x: None) == (None, "unavailable")
+
+    def boom(r):
+        raise httpx.ConnectError("secret")
+    assert cg.fetch_coin_detail("x", client=client_for(boom), sleep=lambda x: None) == (None, "unavailable")
+
+
+def test_price_stats_fetch_returns_derived_numbers_only():
+    body = {"prices": [[1_700_000_000_000 + i * 86_400_000, 1.0 + i * 0.0001] for i in range(30)],
+            "total_volumes": [[1, 2]]}
+    got, state = cg.fetch_price_stats("usd-x", client=client_for(lambda r: httpx.Response(200, json=body)),
+                                      sleep=lambda x: None)
+    assert state == "ok" and set(got) == {"price_min", "price_max", "n_days", "last_price"} and got["n_days"] == 30
+    assert cg.fetch_price_stats("x", client=client_for(lambda r: httpx.Response(429)), sleep=lambda x: None) == (
+        None, "capped")
+    assert cg.fetch_price_stats("x", client=client_for(lambda r: httpx.Response(200, json={"prices": []})),
+                                sleep=lambda x: None) == (None, "unavailable")
