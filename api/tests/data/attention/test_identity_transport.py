@@ -159,3 +159,31 @@ def test_incompatible_upstream_factory_is_refused(monkeypatch):
     adapter = tr.IdentityAdapter("plain", {})
     with pytest.raises(tr.XStartRefused):
         adapter.install()
+
+
+def test_restart_and_identity_change_invalidate_bootstrap_cache(monkeypatch):
+    from twscrape.queue_client import XClIdGenStore
+    created = []
+
+    async def create(proxy=None, cookies=None):
+        result = object()
+        created.append(result)
+        return result
+
+    monkeypatch.setattr(xclid.XClIdGen, "create", staticmethod(create))
+    identity = {"accept_language": "en-US", "region": "US", "timezone": "America/New_York",
+                "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36", "impersonation_target": "chrome131"}
+
+    def acquire(value):
+        adapter = tr.IdentityAdapter("plain", {"alpha": value})
+        adapter.install()
+        try:
+            with adapter.bind("alpha"):
+                return asyncio.run(XClIdGenStore.get("same-username"))
+        finally:
+            adapter.close()
+
+    first = acquire(identity)
+    second = acquire({**identity, "user_agent": "Mozilla/5.0 Chrome/136.0.0.0 Safari/537.36",
+                      "impersonation_target": "chrome136"})
+    assert first is not second
