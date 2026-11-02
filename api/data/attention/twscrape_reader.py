@@ -34,6 +34,8 @@ Owner procedures (exact commands in the W8d2 report):
 from __future__ import annotations
 
 import contextlib
+import contextvars
+import inspect
 import json
 import os
 import re
@@ -425,6 +427,94 @@ def load_library() -> Library:
     return lib
 
 
+class IdentityAdapter:
+    """Bind verified process transport and account identity at both upstream factory references."""
+
+    def __init__(self, style: str, identities: Mapping[str, Mapping[str, str]]):
+        self.style = style
+        self.identities = {label: dict(value) for label, value in identities.items()}
+        self._label = contextvars.ContextVar("x_transport_label", default=None)
+        self._items = {}
+        self._installed = False
+
+    @contextlib.contextmanager
+    def bind(self, label: str):
+        token = self._label.set(label)
+        try:
+            yield
+        finally:
+            self._label.reset(token)
+
+    def install(self):
+        from twscrape import account, http, queue_client, xclid
+
+        try:
+            factory = http.make_client
+            if account._make_http_client is not factory or xclid._make_http_client is not factory:
+                raise ValueError("factory reference changed")
+            if tuple(inspect.signature(factory).parameters) != ("backend", "proxy", "headers", "cookies", "seed"):
+                raise ValueError("factory signature changed")
+            if tuple(inspect.signature(queue_client.XClIdGenStore.get).parameters) != ("username", "proxy", "cookies", "fresh"):
+                raise ValueError("cache signature changed")
+            if tuple(inspect.signature(xclid.XClIdGen.create).parameters) != ("proxy", "cookies"):
+                raise ValueError("bootstrap signature changed")
+            if self.style == "curl":
+                from typing import get_args
+                from curl_cffi.requests import BrowserTypeLiteral
+                supported = set(get_args(BrowserTypeLiteral))
+                if any(value["impersonation_target"] not in supported for value in self.identities.values()):
+                    raise ValueError("target unavailable")
+        except (AttributeError, ImportError, TypeError, ValueError):
+            raise XStartRefused(["identity_adapter_incompatible"]) from None
+        self._account, self._xclid, self._store = account, xclid, queue_client.XClIdGenStore
+        self._factory = factory
+        self._get = self._store.__dict__["get"]
+
+        def make_client(backend=None, *, proxy=None, headers=None, cookies=None, seed=None):
+            label = self._label.get()
+            identity = self.identities.get(label)
+            if self.identities and identity is None:
+                raise XStartRefused(["identity_context_missing"])
+            supplied = dict(headers or {})
+            if identity is not None:
+                supplied = {k: v for k, v in supplied.items() if k.lower() not in ("user-agent", "accept-language")}
+                supplied["accept-language"] = identity["accept_language"]
+                supplied["user-agent"] = identity["user_agent"] if self.style == "plain" else "@" + identity["impersonation_target"]
+            client = factory(backend="httpx" if self.style == "plain" else "curl", proxy=proxy,
+                             headers=supplied, cookies=cookies, seed=seed)
+            if self.style == "curl" and identity is not None:
+                session = getattr(client, "_session", None)
+                if session is None or not hasattr(session, "impersonate"):
+                    raise XStartRefused(["identity_adapter_incompatible"])
+                session.impersonate = identity["impersonation_target"]
+            return client
+
+        async def get(_cls, username, proxy=None, cookies=None, fresh=False):
+            if not self.identities:
+                return await self._get.__func__(_cls, username, proxy=proxy, cookies=cookies, fresh=fresh)
+            label = self._label.get()
+            identity = self.identities.get(label)
+            if identity is None:
+                raise XStartRefused(["identity_context_missing"])
+            key = (label, tuple(sorted(identity.items())), username)
+            if not fresh and key in self._items:
+                return self._items[key]
+            result = await xclid.XClIdGen.create(proxy=proxy, cookies=cookies)
+            self._items[key] = result
+            return result
+
+        account._make_http_client = xclid._make_http_client = make_client
+        self._store.get = classmethod(get)
+        self._installed = True
+
+    def close(self):
+        if self._installed:
+            self._account._make_http_client = self._xclid._make_http_client = self._factory
+            self._store.get = self._get
+            self._items.clear()
+            self._installed = False
+
+
 def map_exception(exc: BaseException, lib: Library) -> xr.ReaderFailure:
     """The W8d1 failure kind of a library exception; the message is read for its prefix only and dropped."""
     if isinstance(exc, xr.ReaderFailure):
@@ -533,7 +623,8 @@ class TwscrapeReader:
     """One account: its own accounts file and its own `API`. Implements `x_reader.XReader`."""
 
     def __init__(self, label: str, db_path: Path, lib: Library, *, max_entries: int, version: str = "unknown",
-                 commit: str | None = PINNED_COMMIT, account_names: tuple[str, ...] = ()):
+                 commit: str | None = PINNED_COMMIT, account_names: tuple[str, ...] = (),
+                 adapter: IdentityAdapter | None = None):
         import asyncio
 
         self.label, self.version, self.commit = label, f"twscrape {version}", commit
@@ -541,6 +632,7 @@ class TwscrapeReader:
         self.account_names = tuple(account_names)
         self.max_entries = max_entries
         self._lib = lib
+        self._adapter = adapter
         self._api = lib.API(str(db_path), raise_when_no_account=True, wait_timeout=0)
         self._loop = asyncio.new_event_loop()
         self._gen = None
@@ -552,7 +644,9 @@ class TwscrapeReader:
         self._remaining: int | None = None
 
     def _run(self, coro):
-        return self._loop.run_until_complete(coro)
+        context = self._adapter.bind(self.label) if self._adapter else contextlib.nullcontext()
+        with context:
+            return self._loop.run_until_complete(coro)
 
     def _close_gen(self) -> None:
         gen, self._gen = self._gen, None
@@ -702,10 +796,13 @@ class XStart:
     fallback: CurlFallback | None
     curl_status: str
     notes: list[str] = field(default_factory=list)
+    adapter: IdentityAdapter | None = None
 
     def close(self) -> None:
         for r in self.readers.values():
             r.close()
+        if self.adapter:
+            self.adapter.close()
 
 
 def _curl(config: CollectorConfig, platform: str | None, dist_lookup, record: dict | None) -> str:
@@ -742,18 +839,28 @@ def start(config: CollectorConfig, *, env: Mapping[str, str] = os.environ, repo_
         raise XStartRefused(reasons)
     clean_dumps([LIBRARY_DUMP_ROOT, private_tmp()] if dump_roots is None else dump_roots)
     lib = load()
+    adapter = IdentityAdapter(config.x_connection_style,
+                              config.x_account_identities if config.x_identity_enabled else {})
+    adapter.install()
     d = Path(config.x_accounts_db_path)
     names = account_names or {}
-    readers = {x: TwscrapeReader(x, d / f"{x}.db", lib, max_entries=config.x_page_cap * xr.PAGE_ENTRIES,
-                                 version=dist.version, account_names=tuple(names.get(x, ())))
-               for x in config.x_accounts}
+    readers = {}
+    try:
+        for x in config.x_accounts:
+            readers[x] = TwscrapeReader(x, d / f"{x}.db", lib, max_entries=config.x_page_cap * xr.PAGE_ENTRIES,
+                                        version=dist.version, account_names=tuple(names.get(x, ())), adapter=adapter)
+    except Exception:
+        for reader in readers.values():
+            reader.close()
+        adapter.close()
+        raise
     notes = [n for n in (permission_note(),) if n]
     fallback = None
     if curl == "ok" and config.x_connection_style == "plain":
         fallback = CurlFallback(readers, d, env, run_child)
     elif config.x_connection_style == "plain":
         notes.append(f"curl_fallback_off:{curl}")
-    return XStart(readers, fallback, curl, notes)
+    return XStart(readers, fallback, curl, notes, adapter)
 
 
 def reader_status(config: CollectorConfig, *, env: Mapping[str, str], now: datetime,

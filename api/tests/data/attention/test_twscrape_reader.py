@@ -6,6 +6,7 @@ stat results. Injected clock.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import random
@@ -156,6 +157,20 @@ def make_lib():
 @pytest.fixture
 def lib(monkeypatch):
     fake = make_lib()
+    class FakeAdapter:
+        def __init__(self, style, identities):
+            self.style, self.identities = style, identities
+
+        def install(self):
+            pass
+
+        def close(self):
+            pass
+
+        def bind(self, label):
+            return contextlib.nullcontext()
+
+    monkeypatch.setattr(tr, "IdentityAdapter", FakeAdapter)
     monkeypatch.setitem(sys.modules, "twscrape", fake)
     monkeypatch.setitem(sys.modules, "twscrape.models", fake.models)
     return fake
