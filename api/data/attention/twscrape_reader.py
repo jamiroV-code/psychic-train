@@ -290,6 +290,8 @@ def curl_status(record: dict | None, key: str | None, dist: DistInfo | None) -> 
     tags = {ln.split(":", 1)[1].strip() for ln in (dist.wheel or "").splitlines() if ln.startswith("Tag:")}
     if not record:
         return "record_missing"
+    if record.get("package") != "curl_cffi":
+        return "record_package_mismatch"
     if record.get("platform") != key:
         return "record_platform_mismatch"
     if CURL_WHEEL_TAGS[key] not in tags:
@@ -481,6 +483,9 @@ class IdentityAdapter:
                 supplied = {k: v for k, v in supplied.items() if k.lower() not in ("user-agent", "accept-language")}
                 supplied["accept-language"] = identity["accept_language"]
                 supplied["user-agent"] = identity["user_agent"] if self.style == "plain" else "@" + identity["impersonation_target"]
+                for key in supplied:
+                    if key.lower() == "x-twitter-client-language":
+                        supplied[key] = identity["accept_language"].split(",", 1)[0].split(";", 1)[0].split("-", 1)[0].lower()
             client = factory(backend="httpx" if self.style == "plain" else "curl", proxy=proxy,
                              headers=supplied, cookies=cookies, seed=seed)
             if self.style == "curl" and identity is not None:
@@ -885,7 +890,8 @@ def reader_status(config: CollectorConfig, *, env: Mapping[str, str], now: datet
                   dist_lookup: Callable[[str], DistInfo | None] = find_dist, platform: str | None = None,
                   curl_record: dict | None = None, repo_root: Path = REPO_ROOT) -> dict:
     """The X reader's health: counts, labels, states and check results only, never a secret, path or value."""
-    bad = env_guard(env)
+    selected_backend = "curl" if config.x_connection_style == "curl" else "httpx"
+    bad = env_guard(env, selected_backend=selected_backend)
     paths = accounts_problems(config, repo_root=repo_root)
     labels = list(config.x_accounts)
     ages = cookie_ages(config, now=now) if labels else {}

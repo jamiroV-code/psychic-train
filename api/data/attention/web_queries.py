@@ -259,7 +259,7 @@ def _validate_identity_settings(block: dict) -> None:
         return
     if set(identities) != set(block["x_accounts"]):
         raise QueriesError("collector: identity labels must match x_accounts")
-    effective = set()
+    effective, targets = set(), set()
     for value in identities.values():
         required = {"accept_language", "region", "timezone", "impersonation_target"}
         if style == "plain":
@@ -268,11 +268,18 @@ def _validate_identity_settings(block: dict) -> None:
             raise QueriesError("collector: invalid identity fields")
         if any(not isinstance(v, str) or not v or v != v.strip() or not v.isprintable() for v in value.values()):
             raise QueriesError("collector: invalid identity value")
+        language_range = r"[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*(?:\s*;\s*q=(?:0(?:\.\d{1,3})?|1(?:\.0{1,3})?))?"
+        if not re.fullmatch(rf"{language_range}(?:\s*,\s*{language_range})*", value["accept_language"]):
+            raise QueriesError("collector: invalid identity language")
         target = value["impersonation_target"]
         if target not in _IDENTITY_TARGETS:
             raise QueriesError("collector: invalid impersonation target")
-        if style == "plain" and _browser_family(value["user_agent"]) != _browser_family(target):
+        if "user_agent" in value and (value["user_agent"].startswith("@")
+                                      or _browser_family(value["user_agent"]) != _browser_family(target)):
             raise QueriesError("collector: identity browser family mismatch")
+        if target in targets:
+            raise QueriesError("collector: duplicate fallback identity")
+        targets.add(target)
         try:
             ZoneInfo(value["timezone"])
         except (ZoneInfoNotFoundError, ValueError):
