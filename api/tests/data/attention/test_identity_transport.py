@@ -76,3 +76,40 @@ def test_both_factory_paths_send_account_identity(echo, style):
             assert b_graph["user-agent"] == identities["beta"]["user_agent"]
     finally:
         adapter.close()
+
+
+def test_bootstrap_cache_isolated_by_label_and_fresh(monkeypatch):
+    from twscrape.queue_client import XClIdGenStore
+
+    identities = {
+        "alpha": {"accept_language": "en-US", "region": "US", "timezone": "America/New_York",
+                  "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36", "impersonation_target": "chrome131"},
+        "beta": {"accept_language": "en-GB", "region": "GB", "timezone": "Europe/London",
+                 "user_agent": "Mozilla/5.0 Firefox/133.0", "impersonation_target": "firefox133"},
+    }
+    calls = []
+
+    async def create(proxy=None, cookies=None):
+        result = object()
+        calls.append(result)
+        return result
+
+    monkeypatch.setattr(xclid.XClIdGen, "create", staticmethod(create))
+    adapter = tr.IdentityAdapter("plain", identities)
+    adapter.install()
+    try:
+        async def check():
+            with adapter.bind("alpha"):
+                alpha = await XClIdGenStore.get("same-username")
+                assert await XClIdGenStore.get("same-username") is alpha
+            with adapter.bind("beta"):
+                beta = await XClIdGenStore.get("same-username")
+                assert beta is not alpha
+                fresh = await XClIdGenStore.get("same-username", fresh=True)
+                assert fresh is not beta
+            with adapter.bind("alpha"):
+                assert await XClIdGenStore.get("same-username") is alpha
+        asyncio.run(check())
+        assert len(calls) == 3
+    finally:
+        adapter.close()
