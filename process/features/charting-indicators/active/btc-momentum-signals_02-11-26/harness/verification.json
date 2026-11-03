@@ -43,6 +43,24 @@
       "command": "uv run --project api pytest api/ -q",
       "result": "SKIP",
       "notes": "This invocation failed before pytest started with `uv trampoline failed to canonicalize script path`; the final full suite was executed via the project interpreter above."
+    },
+    {
+      "step": "Initial PR #241 Linux CI on 7d11096b",
+      "command": "GitHub Actions run #41689448300",
+      "result": "FAIL",
+      "notes": "API job passed; web Vitest passed; tsc failed because two BtcLegChartResponse fixtures omitted required signals; island build skipped."
+    },
+    {
+      "step": "Local web verification after fixture correction",
+      "command": "pnpm --filter web exec tsc --noEmit --incremental false && pnpm --filter web test",
+      "result": "PASS",
+      "notes": "Typecheck passed; 67 files and 639 tests passed. Existing Vite CJS deprecation and React act warnings."
+    },
+    {
+      "step": "Corrected GitHub Linux CI on PR #241",
+      "command": "GitHub Actions run #41690626570 (commit e4fd25b5)",
+      "result": "PASS",
+      "notes": "API pytest and web jobs passed; web job included Vitest, tsc, and island build."
     }
   ]
 }
