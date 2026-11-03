@@ -10,8 +10,9 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import asdict, dataclass, field
+from importlib.resources import files
 from pathlib import Path
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import TZPATH, ZoneInfo, ZoneInfoNotFoundError
 
 DATA_DIR = Path(__file__).resolve().parents[1]
 QUERIES_PATH = DATA_DIR / "attention_queries.json"
@@ -250,6 +251,70 @@ def _browser_family(value: str) -> str | None:
     return None
 
 
+def _timezone_countries() -> dict[str, set[str]]:
+    """Use tzdb's country tables, not offset guesses or a one-country-per-zone map."""
+    tables = []
+    for name in ("zone.tab", "zone1970.tab"):
+        for root in TZPATH:
+            path = Path(root) / name
+            if path.is_file():
+                tables.append(path.read_text(encoding="utf-8"))
+                break
+        else:
+            try:
+                tables.append(files("tzdata.zoneinfo").joinpath(name).read_text(encoding="utf-8"))
+            except (ModuleNotFoundError, FileNotFoundError):
+                continue
+    if not tables:
+        raise QueriesError("collector: identity coherence timezone country tables unavailable")
+    countries: dict[str, set[str]] = {}
+    for table in tables:
+        for line in table.splitlines():
+            if line and not line.startswith("#"):
+                codes, _coordinates, zone, *_ = line.split("\t")
+                countries.setdefault(zone, set()).update(codes.split(","))
+    return countries
+
+
+def _identity_coherence(value: dict[str, str], countries: dict[str, set[str]]) -> None:
+    """Reject explicit contradictions only. OS has no geographic implication.
+
+    Country tables are many-to-many. Aliases/neutral zones absent from them are unknown,
+    not mismatches. Only the primary language's explicit alpha-2 region is compared;
+    languages, secondary preferences, offsets and DST never imply residence.
+    Platform evidence is limited to B1's four measured targets and explicit mobile suffixes.
+    A platform-neutral literal UA remains allowed; this is not full browser equivalence.
+    """
+    region = value["region"]
+    if not re.fullmatch(r"[A-Z]{2}", region):
+        raise QueriesError("collector: identity coherence requires alpha-2 region")
+    if value["timezone"] in countries and region not in countries[value["timezone"]]:
+        raise QueriesError("collector: identity coherence timezone/region mismatch")
+    primary = value["accept_language"].split(",", 1)[0].split(";", 1)[0].split("-")
+    # Stop before BCP47 extensions/private use; their subtags are not region claims.
+    for subtag in primary[1:]:
+        if len(subtag) == 1:
+            break
+        if len(subtag) == 2 and subtag.isalpha():
+            if subtag.upper() != region:
+                raise QueriesError("collector: identity coherence language/region mismatch")
+            break
+    target = value["impersonation_target"]
+    expected = {"chrome131": "macos", "safari170": "macos", "firefox133": "macos",
+                "edge101": "windows"}.get(target)
+    if target.endswith("_android"):
+        expected = "android"
+    elif target.endswith("_ios"):
+        expected = "ios"
+    ua = value.get("user_agent", "").lower()
+    platforms = {platform for marker, platform in (
+        ("windows nt", "windows"), ("android", "android"), ("iphone", "ios"), ("ipad", "ios"),
+        ("macintosh", "macos"), ("x11; linux", "linux"),
+    ) if marker in ua}
+    if expected and platforms and platforms != {expected}:
+        raise QueriesError("collector: identity coherence target/UA platform mismatch")
+
+
 def _validate_identity_settings(block: dict) -> None:
     style, enabled, identities = (block["x_connection_style"], block["x_identity_enabled"],
                                   block["x_account_identities"])
@@ -259,6 +324,7 @@ def _validate_identity_settings(block: dict) -> None:
         return
     if set(identities) != set(block["x_accounts"]):
         raise QueriesError("collector: identity labels must match x_accounts")
+    countries = _timezone_countries()
     effective, targets = set(), set()
     for value in identities.values():
         required = {"accept_language", "region", "timezone", "impersonation_target"}
@@ -284,6 +350,7 @@ def _validate_identity_settings(block: dict) -> None:
             ZoneInfo(value["timezone"])
         except (ZoneInfoNotFoundError, ValueError):
             raise QueriesError("collector: invalid identity timezone") from None
+        _identity_coherence(value, countries)
         current = value["user_agent"] if style == "plain" else target
         if current in effective:
             raise QueriesError("collector: duplicate effective identity")

@@ -294,6 +294,14 @@ Our collector is HTTP-only (twscrape), so browser-surface spoofing (canvas, font
 - Part C gate: any browser must be proven on the wire to send nothing outside its assigned route (WebRTC, DNS prefetch, addons), with a loopback proof like B1's.
 - Humanised behaviour maps to B3 pacing/order variation, switchable and measured.
 
+#### Authorized B1 follow-ups implemented 03-11-26 (supersedes the ambiguous platform/geography wording above)
+
+- B1.1 uses the existing `x_identity_enabled` switch (still false); no additional runtime networking or switch. OS does **not** determine timezone or country. Reject only explicit contradictions: declared uppercase alpha-2 region versus a known tzdb country-table entry; primary language tag's explicit alpha-2 region versus declaration; recognizable literal UA platform versus the four B1 wire-observed targets (chrome131/safari170/firefox133 macOS, edge101 Windows) or explicit `_android`/`_ios` suffixes. Platform-neutral UA and unmeasured target platforms remain unknown, not rejected.
+- Use the union of local IANA `zone.tab` and `zone1970.tab` country memberships, including shared zones (Europe/Zurich includes CH, DE, LI). System `TZPATH` tables take precedence per table, otherwise installed `tzdata` resources; enabled validation refuses when no country tables exist. No added dependency. Valid aliases or neutral zones absent from the tables remain unknown. No unique timezone-to-country claim, offset heuristic, speaker-distribution rule, IP geolocation, DST scheduling or route admission. A regional primary language is an explicit configured identity claim; secondary preferences and regionless primary languages do not assert residence.
+- B1.2 test-only tooling in `api/tests/data/attention/test_identity_fingerprint.py` captures bounded raw ClientHello records on TCP loopback and HTTP/2 initial SETTINGS over a separately negotiated loopback TLS connection with a temporary trusted certificate. Four exact B1 targets observed. Certificate/key are temporary and removed; no secrets/accounts/proxy/external endpoint. Parsers cover length bounds, fragmentation, GREASE filtering, extension order and ordered SETTINGS.
+- Evidence: `collector-identity-pool_WIRE-B1-FOLLOWUPS_03-11-26.json`; mechanism verdict: `collector-identity-pool_FEASIBILITY_03-11-26.md`; execution/CI: `collector-identity-pool_REPORT-B1-FOLLOWUPS_03-11-26.md` in this folder. Observed bytes/settings are **not** published browser baseline data: no reference browser captured, JA4 computed, matching guarantee, cross-host stability or live acceptance established. B1's historical NOT-PERFORMED remains accurate for its execution; this adds only the bounded new evidence.
+
+
 ### Deliberate test and documentation amendments (B1/B2/B3)
 
 These are required replacements/extensions with reasons, not blanket deletion of guards. Line numbers refer to the validation snapshot; rebase to current definitions before execution.
