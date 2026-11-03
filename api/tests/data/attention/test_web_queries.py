@@ -170,6 +170,38 @@ def test_identity_coherence_is_not_an_offset_or_dst_test(doc):
     assert wq.validate(doc).config.x_identity_enabled
 
 
+@pytest.mark.parametrize("target,ua", [
+    ("edge101", "Mozilla/5.0 (Macintosh) Chrome/101.0 Edg/101.0"),
+    ("safari170", "Mozilla/5.0 (Windows NT 10.0) Version/17.0 Safari/605.1"),
+    ("firefox133", "Mozilla/5.0 (Windows NT 10.0) Firefox/133.0"),
+    ("chrome131_android", "Mozilla/5.0 (Macintosh) Chrome/131.0"),
+    ("safari172_ios", "Mozilla/5.0 (Macintosh) Version/17.2 Safari/605.1"),
+])
+def test_identity_coherence_platform_evidence_is_target_specific(doc, target, ua):
+    _coherent_identity(doc, "plain", impersonation_target=target, user_agent=ua)
+    with pytest.raises(wq.QueriesError, match="coherence target/UA platform"):
+        wq.validate(doc)
+
+
+def test_identity_coherence_requires_country_tables_only_when_enabled(doc, monkeypatch):
+    monkeypatch.setattr(wq, "TZPATH", ())
+    def absent(_package):
+        raise ModuleNotFoundError
+    monkeypatch.setattr(wq, "files", absent)
+    _coherent_identity(doc, "plain")
+    with pytest.raises(wq.QueriesError, match="tables unavailable"):
+        wq.validate(doc)
+    doc["collector"]["x_identity_enabled"] = False
+    assert not wq.validate(doc).config.x_identity_enabled
+
+
+def test_identity_coherence_loads_system_country_tables(tmp_path, monkeypatch):
+    (tmp_path / "zone.tab").write_text("US\t+0000+00000\tAmerica/New_York\n", encoding="utf-8")
+    (tmp_path / "zone1970.tab").write_text("# shared\nCH,DE,LI\t+0000+00000\tEurope/Zurich\n", encoding="utf-8")
+    monkeypatch.setattr(wq, "TZPATH", (str(tmp_path),))
+    assert wq._timezone_countries() == {"America/New_York": {"US"}, "Europe/Zurich": {"CH", "DE", "LI"}}
+
+
 def test_reddit_baseline_250_and_separate_degraded_150_budget():
     assert wq.DEFAULTS["reddit_daily_request_budget"] == 250
     assert wq.REDDIT_DEFAULTS["reddit_degraded_request_budget"] == wq.REDDIT_DEGRADED_BUDGET == 150
