@@ -59,6 +59,7 @@ function data(): BtcLegChartResponse {
     ],
     current_leg: null,
     estimate: estimate(),
+    signals: [],
   };
 }
 
