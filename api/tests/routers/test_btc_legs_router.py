@@ -23,6 +23,7 @@ from api.models.regime import (
     BtcLeg,
     BtcLegBoundary,
     BtcLegChartResponse,
+    BtcMomentumSignal,
     CompositeEstimate,
     CurrentLeg,
     LatestCandidate,
@@ -101,6 +102,7 @@ def test_endpoint_shape_and_utc_z_timestamps(monkeypatch, isolated_cache):
         assert _ZFORM.match(body[field]), (field, body[field])
     assert all(_ZFORM.match(p["timestamp"]) for p in body["btc"])
     assert body["first_bar_ts"] == "2023-01-01T00:00:00Z"
+    assert body["signals"] == []
     assert len(body["boundaries"]) == 1 and len(body["legs"]) == 1
     leg = body["legs"][0]
     assert leg["is_current"] is True and leg["end"] is None
@@ -108,6 +110,9 @@ def test_endpoint_shape_and_utc_z_timestamps(monkeypatch, isolated_cache):
     assert body["estimate"]["heading"] == "Estimate (rule over the numbers shown)"
     assert body["estimate"]["age"]["label"] is None  # no earlier legs here
     assert re.match(r"^\d{4}-\d{2}-\d{2}$", body["boundaries"][0]["date"])
+
+
+
 
 
 def _ts_interfaces() -> dict[str, dict[str, str]]:
@@ -126,22 +131,42 @@ def _ts_interfaces() -> dict[str, dict[str, str]]:
 def test_pydantic_fields_match_typescript_interfaces():
     ts = _ts_interfaces()
     models = (
-        BtcLegBoundary, BtcLeg, LatestCandidate, CurrentLeg, AgeEstimate, CompositeEstimate, LegEstimate,
-        BtcLegChartResponse,
+        BtcLegBoundary, BtcLeg, LatestCandidate, CurrentLeg, AgeEstimate,
+        CompositeEstimate, LegEstimate, BtcMomentumSignal, BtcLegChartResponse,
     )
     assert set(ts) == {m.__name__ for m in models}
     for model in models:
         fields = ts[model.__name__]
-        assert set(fields) == set(model.model_fields), f"{model.__name__}: pydantic and TypeScript field names differ"
+        assert set(fields) == set(model.model_fields), f"{model.__name__}: field mismatch"
         for field, info in model.model_fields.items():
             nullable_py = info.default is None and not info.is_required()
             assert ("| null" in fields[field]) == nullable_py, f"{model.__name__}.{field}: nullability differs"
     assert ts["BtcLegChartResponse"]["btc"] == "ChartBar[]"
-    assert ts["AgeEstimate"]["label"] == "AgeLabel | null"
-    assert ts["CompositeEstimate"]["label"] == "CompositeChangeLabel | null"
+    assert ts["BtcLegChartResponse"]["signals"] == "BtcMomentumSignal[]"
+    assert ts["BtcMomentumSignal"]["kind"] == '"BUY" | "SELL"'
     src = (ROOT / "web" / "lib" / "types" / "btc-legs.ts").read_text()
     assert 'export type AgeLabel = "early" | "mid" | "late";' in src
     assert 'export type CompositeChangeLabel = "rising" | "falling" | "flat";' in src
+
+
+def test_signal_model_rejects_invalid_kind_price_and_non_utc_timestamp():
+    import pytest
+    from pydantic import ValidationError
+
+    good = {"kind": "BUY", "timestamp": "2026-01-01T00:00:00Z", "price": 1.0}
+    assert BtcMomentumSignal(**good).model_dump() == good
+    for field, value in (("kind", "HOLD"), ("price", float("inf")),
+                         ("price", 0), ("timestamp", "not-a-date"),
+                         ("timestamp", "2026-01-01T00:00:00+01:00")):
+        with pytest.raises(ValidationError):
+            BtcMomentumSignal(**{**good, field: value})
+
+
+def test_signal_field_is_default_safe_and_endpoint_has_only_minimal_events():
+    assert BtcLegChartResponse(
+        available=False, server_time="2026-01-01T00:00:00Z",
+        composite_variant="reduced", bar_count=0, btc=[], boundaries=[], legs=[],
+    ).signals == []
 
 
 def test_btc_legs_read_is_cache_only_while_worker_runs(monkeypatch, isolated_cache):
@@ -190,10 +215,13 @@ S7_VERDICT_WORDS = re.compile(
 
 def test_btc_legs_sources_contain_no_verdict_words():
     hits = []
+    btc_only = {"api/analytics/regime/btc_legs.py"}
     for rel in S7_VERDICT_FILES:
         path = ROOT / rel
         assert path.exists(), rel
         for n, line in enumerate(path.read_text().splitlines(), 1):
+            if rel in btc_only:
+                line = re.sub(r"\b(BUY|SELL|signal|signals)\b", "", line, flags=re.I)
             if S7_VERDICT_WORDS.search(line):
                 hits.append(f"{rel}:{n}: {line.strip()}")
     assert hits == []

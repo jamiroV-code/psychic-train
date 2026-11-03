@@ -1,0 +1,48 @@
+{
+  "task": "T222 — BTC Momentum API calculation/model/response/TypeScript contract slice",
+  "commands": [
+    {
+      "command": "api/.venv/Scripts/python.exe -m pytest api/tests/analytics/test_btc_legs.py api/tests/routers/test_btc_legs_router.py -q",
+      "result": "PASS",
+      "notes": "28 passed, 2 deprecation warnings."
+    },
+    {
+      "command": "api/.venv/Scripts/python.exe -m pytest api/ -q",
+      "result": "FAIL",
+      "notes": "44 failed, 3675 passed, 4 skipped, 5 deselected, 9 warnings, 1 error; real-data guard mismatch is unresolved."
+    },
+    {
+      "command": "uv run --project api pytest api/ -q",
+      "result": "SKIP",
+      "notes": "Failed before pytest started with uv trampoline canonicalize error."
+    }
+  ],
+  "manualChecks": [],
+  "result": "FAIL",
+  "steps": [
+    {
+      "step": "Initial full API suite before final T222 corrections",
+      "command": "uv run --project api pytest api/ -q",
+      "result": "FAIL",
+      "notes": "Pre-correction run: 46 failed, 3670 passed, 4 skipped, 5 deselected. Three T222 test expectation/fixture failures were corrected afterward; this run is historical, not final evidence."
+    },
+    {
+      "step": "Focused BTC legs API tests after final T222 edits",
+      "command": "api/.venv/Scripts/python.exe -m pytest api/tests/analytics/test_btc_legs.py api/tests/routers/test_btc_legs_router.py -q",
+      "result": "PASS",
+      "notes": "28 passed, 2 deprecation warnings in 6.23s. Covers exact vote targets, strict SMA equality/scaling, 252/360-bar warm-up, signal transitions, completed-bar cutoff, gap/invalid/duplicate handling, UTC date range, model/TypeScript parity, route isolation, and unavailable-composite independence."
+    },
+    {
+      "step": "Final full API suite after final T222 edits",
+      "command": "api/.venv/Scripts/python.exe -m pytest api/ -q",
+      "result": "FAIL",
+      "notes": "44 failed, 3675 passed, 4 skipped, 5 deselected, 9 warnings, 1 error in 945.39s. The pytest lastfailed record contains failures in attention, discovery, equities, deploy, and router tests, with no T222 test node. It includes test_real_data_paths_untouched, whose guard observed a mismatch between the deploy-package start and end snapshots of the real api/data/cache and watchlist. No separate full-run before-snapshot or complete changed-path diff was preserved; no restoration or deletion was attempted. Overall full-suite gate remains red."
+    },
+    {
+      "step": "Prescribed uv full-suite invocation after final T222 edits",
+      "command": "uv run --project api pytest api/ -q",
+      "result": "SKIP",
+      "notes": "This invocation failed before pytest started with `uv trampoline failed to canonicalize script path`; the final full suite was executed via the project interpreter above."
+    }
+  ]
+}

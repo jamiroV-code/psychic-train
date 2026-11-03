@@ -1,0 +1,19 @@
+{
+  "scenarios": [
+    {
+      "scenario": "Malformed or non-UTC event timestamp reaches the API response model.",
+      "ruled_out": true,
+      "rationale": "The event model validates ISO timestamps and requires UTC; focused contract tests reject malformed and non-UTC offsets, and the independent review found no validator defect."
+    },
+    {
+      "scenario": "NaN, infinite, zero, or negative signal price is serialized.",
+      "ruled_out": true,
+      "rationale": "The validator rejects non-finite and non-positive values; focused contract tests exercise infinity and zero, and the independent reviewer approved the validator. The full API suite remains red outside T222."
+    },
+    {
+      "scenario": "BTC signal calculation depends on composite availability or leaks allocation/order fields.",
+      "ruled_out": true,
+      "rationale": "Focused assembly/response tests pass with composite unavailable; the event schema contains only kind, timestamp and price. Independent review approved the BTC-only integration."
+    }
+  ]
+}

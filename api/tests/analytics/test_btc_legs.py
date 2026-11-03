@@ -17,6 +17,149 @@ from api.analytics.regime import btc_legs, leg_boundary
 from api.analytics.regime.leg_boundary import BoundaryCandidate, BoundaryConfirmation, LegInputs
 from api.models.regime import AgeLabel, CompositeChangeLabel
 
+
+def _signals(closes, start="2020-01-01", now=None, **settings):
+    bars = pd.DataFrame({
+        "timestamp": pd.date_range(start, periods=len(closes), freq="D", tz="UTC"),
+        "close": closes,
+    })
+    as_of = now or (bars.timestamp.iloc[-1] + pd.Timedelta(days=1))
+    return btc_legs.calculate_btc_momentum_signals(bars, as_of, **settings)
+
+
+def test_momentum_vote_targets_are_bounded_and_sma_scaled():
+    above_sma = [
+        btc_legs._target_for_votes(
+            votes, vote_scale=1.73, max_exposure=0.98,
+            below_sma=False, below_ma_scale=0.5,
+        )
+        for votes in range(4)
+    ]
+    below_sma = [
+        btc_legs._target_for_votes(
+            votes, vote_scale=1.73, max_exposure=0.98,
+            below_sma=True, below_ma_scale=0.5,
+        )
+        for votes in range(4)
+    ]
+    assert above_sma == pytest.approx([0.0, 0.5766666667, 0.98, 0.98])
+    assert below_sma == pytest.approx([0.0, 0.2883333333, 0.49, 0.49])
+
+
+def test_momentum_default_and_auto_horizons_and_strict_ordering():
+    import inspect
+    params = inspect.signature(btc_legs.calculate_btc_momentum_signals).parameters
+    assert params["bars_per_month"].default == 21
+    up = lambda n: [100.0 + i for i in range(n)]
+    assert _signals(up(252)) == []
+    assert _signals(up(253)) == [
+        {"kind": "BUY", "timestamp": "2020-09-09T00:00:00Z", "price": 352.0},
+    ]
+    assert _signals(up(360), bars_per_month=0) == []
+    assert _signals(up(361), bars_per_month=0) == [
+        {"kind": "BUY", "timestamp": "2020-12-26T00:00:00Z", "price": 460.0},
+    ]
+    for ends in ((3, 3, 12), (6, 3, 12), (3, 12, 6)):
+        with pytest.raises(ValueError, match="strictly increasing"):
+            _signals([100.0] * 253, segment_ends=ends)
+
+
+
+def test_momentum_one_to_two_votes_changes_target_under_default_scaling():
+    # Alternating returns produce one positive vote at index 3 and two at index 4.
+    closes = [100.0, 80.0, 90.0, 70.0, 75.0]
+    events = _signals(
+        closes, segment_ends=(1, 2, 3), bars_per_month=1, sma_length=1,
+    )
+    assert events == [
+        {"kind": "BUY", "timestamp": "2020-01-04T00:00:00Z", "price": 70.0},
+        {"kind": "BUY", "timestamp": "2020-01-05T00:00:00Z", "price": 75.0},
+    ]
+
+
+def test_momentum_below_sma_uses_half_scale_and_equality_uses_full_target():
+    # The final close equals its SMA, so below-MA scaling must be strict.
+    events = _signals(
+        [100.0, 80.0, 90.0, 70.0, 56.0, 63.0],
+        segment_ends=(1, 2, 3), bars_per_month=1, sma_length=3,
+    )
+    assert events == [
+        {"kind": "BUY", "timestamp": "2020-01-04T00:00:00Z", "price": 70.0},
+        {"kind": "BUY", "timestamp": "2020-01-06T00:00:00Z", "price": 63.0},
+    ]
+
+def test_momentum_signal_transitions_are_anchored_to_daily_close():
+    events = _signals(
+        [100.0] * 10 + [110.0] * 3 + [90.0] * 4,
+        segment_ends=(1, 2, 3), bars_per_month=1, sma_length=1, vote_scale=1.0,
+    )
+    assert events == [
+        {"kind": "BUY", "timestamp": "2020-01-11T00:00:00Z", "price": 110.0},
+        {"kind": "SELL", "timestamp": "2020-01-14T00:00:00Z", "price": 90.0},
+    ]
+
+
+def test_momentum_forming_bar_cutoff_is_strictly_after_completion():
+    bars = pd.DataFrame({
+        "timestamp": pd.date_range("2020-01-01", periods=4, freq="D", tz="UTC"),
+        "close": [100.0, 100.0, 110.0, 110.0],
+    })
+    settings = dict(segment_ends=(1, 2, 3), bars_per_month=1, sma_length=1, vote_scale=1.0)
+    assert btc_legs.calculate_btc_momentum_signals(
+        bars, pd.Timestamp("2020-01-04T23:59:59Z"), **settings
+    ) == []
+    assert btc_legs.calculate_btc_momentum_signals(
+        bars, pd.Timestamp("2020-01-05T00:00:00Z"), **settings
+    )[0]["timestamp"] == "2020-01-04T00:00:00Z"
+
+
+def test_momentum_invalid_close_gap_and_duplicate_date_reset_without_false_events():
+    cases = (
+        (pd.date_range("2020-01-01", periods=8, freq="D", tz="UTC"),
+         [100, 100, 100, 120, float("nan"), 120, 120, 120], "2020-01-04T00:00:00Z"),
+        (pd.to_datetime(["2020-01-01T00:00Z", "2020-01-02T00:00Z",
+                         "2020-01-02T12:00Z", "2020-01-03T00:00Z",
+                         "2020-01-04T00:00Z", "2020-01-05T00:00Z"]),
+         [100, 101, 102, 103, 104, 105], None),
+    )
+    for timestamps, closes, expected in cases:
+        bars = pd.DataFrame({"timestamp": timestamps, "close": closes})
+        events = btc_legs.calculate_btc_momentum_signals(
+            bars, pd.Timestamp("2020-01-10T00:00:00Z"),
+            segment_ends=(1, 2, 3), bars_per_month=1, sma_length=1,
+        )
+        assert [event["timestamp"] for event in events] == ([expected] if expected else [])
+
+def test_momentum_date_window_inclusive_start_and_exclusive_end():
+    bars = pd.DataFrame({
+        "timestamp": pd.to_datetime([
+            "2005-06-01T00:00:00Z", "2006-01-01T00:00:00Z",
+            "2006-01-02T00:00:00Z", "2006-01-03T00:00:00Z",
+            "2006-01-04T00:00:00Z",
+        ]),
+        "close": [100.0, 100.0, 100.0, 110.0, 110.0],
+    })
+    events = btc_legs.calculate_btc_momentum_signals(
+        bars, pd.Timestamp("2006-01-05T00:00:00Z"),
+        segment_ends=(1, 2, 3), bars_per_month=1, sma_length=1, vote_scale=1.0,
+    )
+    assert events[0]["timestamp"] == "2006-01-04T00:00:00Z"
+    assert all(event["timestamp"] >= "2006-01-01T00:00:00Z" for event in events)
+
+
+    timestamps = pd.date_range("2170-12-20", "2171-01-02", freq="D", tz="UTC")
+    closes = list(np.linspace(100.0, 120.0, len(timestamps)))
+    bars = pd.DataFrame({"timestamp": timestamps, "close": closes})
+    settings = dict(segment_ends=(1, 2, 3), bars_per_month=1, sma_length=1)
+    events = btc_legs.calculate_btc_momentum_signals(
+        bars, pd.Timestamp("2171-01-03T00:00:00Z"), **settings
+    )
+    assert events[-1] == {
+        "kind": "SELL", "timestamp": "2171-01-01T00:00:00Z", "price": closes[12]
+    }
+    assert sum(event["kind"] == "SELL" for event in events) <= 1
+
+
 NOW = pd.Timestamp("2026-10-09T12:00:00Z")
 _ZFORM = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
@@ -215,6 +358,23 @@ def test_unavailable_composite_makes_composite_part_na_never_flat():
     assert "composite unavailable" in gone.reason
 
 
+def test_signal_calculation_is_independent_of_unavailable_composite():
+    btc = _btc()
+    body = btc_legs.assemble_btc_leg_chart(
+        LegInputs(
+            variant="reduced",
+            composite=_Composite(None, available=False),
+            candidates=[],
+            confirmations=[],
+            btc=btc,
+        ),
+        NOW,
+    )
+    assert body.available is True
+    assert body.estimate is None and body.boundaries == []
+    assert [event.model_dump() for event in body.signals] == [
+        {"kind": "BUY", "timestamp": "2026-09-10T00:00:00Z", "price": 190.0},
+    ]
 def test_unavailable_btc_history_is_unavailable_not_zero_legs():
     empty = _btc()
     empty.df = empty.df.iloc[0:0]
