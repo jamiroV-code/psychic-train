@@ -39,6 +39,7 @@ GitHub Actions run #41690626570 on `e4fd25b5`: API and web jobs passed. No merge
 - Local TypeScript check `pnpm --filter web exec tsc --noEmit --incremental false` — passed after the fixture correction.
 - Local web suite `pnpm --filter web test` — **67 files / 639 tests passed**; existing Vite CJS deprecation and React `act(...)` warnings.
 - Corrected GitHub CI run #41690626570 — API and web jobs passed; web job covered Vitest, tsc, and island build.
+- Heartbeat guard quick fix: `api/.venv/Scripts/python.exe -m pytest api/tests/deploy/test_real_data_snapshot.py -q` — **1 passed in 0.77s**. Temporary-file regression proves the exact collector heartbeat is excluded while other cache files and watchlist changes remain detected.
 
 ## 7 Tests NOT run
 - Seeded Playwright, manual chart visual probe, and user chart confirmation: pending T223/integrated gates.
@@ -51,11 +52,11 @@ GitHub Actions run #41690626570 on `e4fd25b5`: API and web jobs passed. No merge
 
 ## 9 Blockers
 - The local Windows full API suite remains red (44 failed, 3675 passed, 4 skipped, 5 deselected, 1 error); `lastfailed` lists no T222 test node. GitHub Linux API CI passed on PR #241.
-- `test_real_data_paths_untouched` observed a real-cache/watchlist metadata mismatch. Exact changed paths and cause are not established; no data was restored or deleted.
+- Read-only 60-second observation of 1,353 real cache/watchlist files found only `attention/_pc_state/collector_heartbeat.json` changing. It identifies standalone collector PID 23604, confirmed alive by Windows; the writer updates every 30 seconds. This reproduces an external-writer false positive in the old guard. The historical run did not preserve a changed-path diff, so its exact mismatch remains retrospectively unproven. The guard now excludes only that exact heartbeat path; all other cache files and watchlist remain protected. No real data was restored, deleted, or edited.
 - PR #241 remains draft/open. No merge or T223 start until the owner accepts the local guard disposition and merges T222.
 
 ## 10 Follow-up
-- Do not restore data or rerun the Windows full suite until cache isolation is understood.
+- The scoped heartbeat guard regression passed; the full Windows suite has not been rerun. Assess the remaining Windows failures separately rather than attributing them to the heartbeat.
 - After the owner merges T222, proceed with T223, then run integrated RT4 gates and visual verification.
 
 ## 11 Context cost

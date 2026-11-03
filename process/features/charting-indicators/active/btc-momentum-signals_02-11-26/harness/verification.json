@@ -9,7 +9,7 @@
     {
       "command": "api/.venv/Scripts/python.exe -m pytest api/ -q",
       "result": "FAIL",
-      "notes": "44 failed, 3675 passed, 4 skipped, 5 deselected, 9 warnings, 1 error; real-data guard mismatch is unresolved."
+      "notes": "44 failed, 3675 passed, 4 skipped, 5 deselected, 9 warnings, 1 error. Subsequent read-only probe identified the live collector heartbeat as an external writer that triggers the old metadata guard; exact historical changed paths were not preserved. Other Windows failures remain unresolved."
     },
     {
       "command": "uv run --project api pytest api/ -q",
@@ -61,6 +61,12 @@
       "command": "GitHub Actions run #41690626570 (commit e4fd25b5)",
       "result": "PASS",
       "notes": "API pytest and web jobs passed; web job included Vitest, tsc, and island build."
+    },
+    {
+      "step": "Exact heartbeat exclusion regression after local guard investigation",
+      "command": "api/.venv/Scripts/python.exe -m pytest api/tests/deploy/test_real_data_snapshot.py -q",
+      "result": "PASS",
+      "notes": "1 passed in 0.77s. Temporary paths prove only the exact collector heartbeat is exempt; another heartbeat-named cache file, regular cache data, and watchlist remain tracked. No real data edited. Full Windows suite not rerun."
     }
   ]
 }
