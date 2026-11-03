@@ -111,6 +111,65 @@ def test_enabled_identity_rejects_invalid_fields(doc, key, value):
         wq.validate(doc)
 
 
+def _coherent_identity(doc, style, **changes):
+    identity = {"accept_language": "en-US,en;q=0.9", "region": "US", "timezone": "America/New_York",
+                "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/131.0.0.0 Safari/537.36",
+                "impersonation_target": "chrome131"}
+    identity.update(changes)
+    doc["collector"].update(x_accounts=["alpha"], x_identity_enabled=True, x_connection_style=style,
+                            x_account_identities={"alpha": identity})
+    return identity
+
+
+@pytest.mark.parametrize("style", ["plain", "curl"])
+@pytest.mark.parametrize("changes", [
+    {"region": "FR"},  # Neither New York nor the primary language's region agrees.
+    {"timezone": "Europe/Paris"},
+    {"accept_language": "en-GB,en;q=0.9"},
+    {"user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0 Safari/537.36"},
+])
+def test_identity_coherence_rejects_explicit_contradictions(doc, style, changes):
+    _coherent_identity(doc, style, **changes)
+    with pytest.raises(wq.QueriesError, match="coherence"):
+        wq.validate(doc)
+
+
+@pytest.mark.parametrize("style", ["plain", "curl"])
+@pytest.mark.parametrize("changes", [
+    {},  # macOS can be used in New York; OS never determines geography.
+    {"timezone": "America/Phoenix"},  # Same country, no seasonal offset change.
+    {"timezone": "Pacific/Honolulu"},  # Same country, very different offset.
+    {"region": "DE", "timezone": "Europe/Zurich", "accept_language": "de-DE,de;q=0.9"},
+    {"region": "CH", "timezone": "Europe/Zurich", "accept_language": "fr-CH,fr;q=0.9"},
+    {"accept_language": "fr,en-GB;q=0.5"},  # No regional claim in primary language.
+    {"accept_language": "en-US,en-GB;q=0.5"},  # Secondary preference is not residence.
+    {"timezone": "UTC"},  # Region-neutral zone: no country claim to contradict.
+    {"timezone": "US/Eastern"},  # Valid alias not in country tables: unknown, not false.
+    {"user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36"},  # Platform-neutral B1 UA.
+])
+def test_identity_coherence_accepts_bounded_claims(doc, style, changes):
+    identity = _coherent_identity(doc, style, **changes)
+    assert wq.validate(doc).config.x_account_identities["alpha"] == identity
+
+
+@pytest.mark.parametrize("style", ["plain", "curl"])
+def test_disabled_identity_skips_coherence(doc, style):
+    _coherent_identity(doc, style, region="FR", timezone="America/New_York",
+                       user_agent="Mozilla/5.0 (Windows NT 10.0) Chrome/131.0.0.0 Safari/537.36")
+    doc["collector"]["x_identity_enabled"] = False
+    assert wq.validate(doc).config.x_identity_enabled is False
+
+
+def test_identity_coherence_is_not_an_offset_or_dst_test(doc):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    zone = ZoneInfo("America/New_York")
+    assert datetime(2026, 1, 15, tzinfo=zone).utcoffset() != datetime(2026, 7, 15, tzinfo=zone).utcoffset()
+    _coherent_identity(doc, "plain")
+    assert wq.validate(doc).config.x_identity_enabled
+
+
 def test_reddit_baseline_250_and_separate_degraded_150_budget():
     assert wq.DEFAULTS["reddit_daily_request_budget"] == 250
     assert wq.REDDIT_DEFAULTS["reddit_degraded_request_budget"] == wq.REDDIT_DEGRADED_BUDGET == 150
