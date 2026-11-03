@@ -29,6 +29,87 @@ def test_committed_file_loads_with_locked_defaults():
     assert {k: wq.DEFAULTS[k] for k in LOCKED} == LOCKED
     assert set(wq.DEFAULTS) == set(q.config.as_dict())
 
+def test_transport_identity_defaults_are_off(doc):
+    config = wq.validate(doc).config
+    assert config.x_connection_style == "plain"
+    assert config.x_identity_enabled is False
+    assert config.x_account_identities == {}
+
+
+def test_plain_identity_requires_compatible_fallback_target(doc):
+    block = doc["collector"]
+    block["x_accounts"] = ["alpha"]
+    block["x_identity_enabled"] = True
+    block["x_account_identities"] = {"alpha": {
+        "accept_language": "en-US,en;q=0.9", "region": "US", "timezone": "America/New_York",
+        "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36",
+        "impersonation_target": "chrome131",
+    }}
+    assert wq.validate(doc).config.x_account_identities["alpha"]["impersonation_target"] == "chrome131"
+    del block["x_account_identities"]["alpha"]["impersonation_target"]
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+    block["x_account_identities"]["alpha"]["impersonation_target"] = "firefox133"
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+
+
+@pytest.mark.parametrize("style", ["plain", "curl"])
+def test_identity_rejects_unknown_duplicate_and_missing_labels(doc, style):
+    block = doc["collector"]
+    block.update(x_accounts=["alpha", "beta"], x_identity_enabled=True, x_connection_style=style)
+    identity = {"accept_language": "en-US,en;q=0.9", "region": "US", "timezone": "America/New_York",
+                "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36",
+                "impersonation_target": "chrome131"}
+    block["x_account_identities"] = {"alpha": identity.copy(), "beta": identity.copy()}
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+    block["x_account_identities"] = {"alpha": identity.copy()}
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+    block["x_account_identities"] = {"alpha": identity.copy(), "unknown": identity.copy()}
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+
+
+def test_plain_identities_cannot_share_fallback_target(doc):
+    block = doc["collector"]
+    block.update(x_accounts=["alpha", "beta"], x_identity_enabled=True)
+    one = {"accept_language": "en-US", "region": "US", "timezone": "America/New_York",
+           "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36", "impersonation_target": "chrome131"}
+    two = {**one, "user_agent": "Mozilla/5.0 Chrome/131.0.1.0 Safari/537.36"}
+    block["x_account_identities"] = {"alpha": one, "beta": two}
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+
+
+@pytest.mark.parametrize("key,value", [
+    ("x_connection_style", "browser"), ("x_identity_enabled", 1),
+    ("x_account_identities", []),
+])
+def test_identity_settings_reject_invalid_types(doc, key, value):
+    doc["collector"][key] = value
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+
+
+@pytest.mark.parametrize("key,value", [
+    ("accept_language", ""), ("accept_language", "en\r\nX-Injected: yes"),
+    ("region", ""), ("timezone", "not/a/timezone"), ("user_agent", ""),
+    ("impersonation_target", "chrome"), ("impersonation_target", "chrome999999"),
+    ("user_agent", "@chrome"), ("accept_language", "not a language"),
+])
+def test_enabled_identity_rejects_invalid_fields(doc, key, value):
+    block = doc["collector"]
+    block.update(x_accounts=["alpha"], x_identity_enabled=True)
+    identity = {"accept_language": "en-US,en;q=0.9", "region": "US", "timezone": "America/New_York",
+                "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36",
+                "impersonation_target": "chrome131"}
+    identity[key] = value
+    block["x_account_identities"] = {"alpha": identity}
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+
 
 def test_reddit_baseline_250_and_separate_degraded_150_budget():
     assert wq.DEFAULTS["reddit_daily_request_budget"] == 250

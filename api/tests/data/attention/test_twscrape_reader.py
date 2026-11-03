@@ -6,6 +6,7 @@ stat results. Injected clock.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import random
@@ -156,6 +157,20 @@ def make_lib():
 @pytest.fixture
 def lib(monkeypatch):
     fake = make_lib()
+    class FakeAdapter:
+        def __init__(self, style, identities):
+            self.style, self.identities = style, identities
+
+        def install(self):
+            pass
+
+        def close(self):
+            pass
+
+        def bind(self, label):
+            return contextlib.nullcontext()
+
+    monkeypatch.setattr(tr, "IdentityAdapter", FakeAdapter)
     monkeypatch.setitem(sys.modules, "twscrape", fake)
     monkeypatch.setitem(sys.modules, "twscrape.models", fake.models)
     return fake
@@ -248,6 +263,31 @@ def test_reader_options_wait_timeout_zero_raise_when_no_account_true_and_env_swi
     s.close()
 
 
+def test_selected_curl_is_verified_before_library_load_and_api(tmp_path, lib):
+    d = accounts(tmp_path)
+    config = cfg(d, x_connection_style="curl")
+    calls = []
+    def load():
+        calls.append("load")
+        return tr.load_library()
+    with pytest.raises(tr.XStartRefused):
+        tr.start(config, env=GOOD_ENV, repo_root=tmp_path / "repo", dist_lookup=lookup(),
+                 load=load, platform="manylinux_x86_64", dump_roots=[])
+    assert calls == []
+    assert lib.apis == []
+
+
+def test_normal_curl_never_installs_curl_fallback(tmp_path, lib):
+    d = accounts(tmp_path)
+    config = cfg(d, x_connection_style="curl", x_allow_curl_backend=True)
+    started = tr.start(config, env=GOOD_ENV, repo_root=tmp_path / "repo", dist_lookup=lookup(curl=curl_dist()),
+                       load=tr.load_library, platform="manylinux_x86_64", dump_roots=[], curl_record=record())
+    try:
+        assert started.fallback is None
+    finally:
+        started.close()
+
+
 def test_one_sqlite_file_and_one_api_per_account(tmp_path, lib):
     s, d = start(tmp_path, lib)
     assert sorted(s.readers) == ["acct1", "acct2"]
@@ -270,13 +310,16 @@ def test_env_guard_refuses_start_for_each_wrong_variable(tmp_path, lib, monkeypa
     wrong = [("TWS_TELEMETRY", "1"), ("DO_NOT_TRACK", "0"), ("TWS_LOG_LEVEL", "DEBUG"), ("TWS_LOG_LEVEL", "INFO"),
              ("TWS_RAISE_WHEN_NO_ACCOUNT", "0"), ("TWS_PROXY", "socks5://h"), ("HTTP_PROXY", "http://h"),
              ("HTTPS_PROXY", "http://h"), ("https_proxy", "http://h"), ("ALL_PROXY", "http://h"),
-             ("TWS_HTTP_BACKEND", "curl"), ("TWS_HTTP_BACKEND", "httpx")]
+             ("TWS_HTTP_BACKEND", "curl")]
     for i, (name, value) in enumerate(wrong):
         with pytest.raises(tr.XStartRefused) as e:
             start(tmp_path / str(i), lib, env={**GOOD_ENV, name: value})
         assert e.value.reasons == [f"env:{name}"], name
         assert value not in str(e.value)
     assert lib.apis == [] and "twscrape" not in tr._LOADED
+    # The launcher now passes an explicit matching plain backend.
+    accepted, _ = start(tmp_path / "matching", lib, env={**GOOD_ENV, "TWS_HTTP_BACKEND": "httpx"})
+    accepted.close()
     # The fallback process needs the curl backend and nothing else.
     assert tr.env_guard({**GOOD_ENV, "TWS_HTTP_BACKEND": "curl"}, fallback=True) == []
     assert tr.env_guard(GOOD_ENV, fallback=True) == ["TWS_HTTP_BACKEND"]
@@ -331,6 +374,23 @@ def test_no_ua_override_or_proxy_with_curl(tmp_path):
     assert set(req) == {"label", "db", "query", "kv"} and set(req["kv"]) == {"product"}
     with pytest.raises(ValueError):
         tr.fallback_request("acct1", Path("/srv/x/acct1.db"), QUERY, {"product": "Latest", "proxy": "h"}, cursor=None)
+
+
+def test_fallback_child_refuses_enabled_identity_without_target_before_library_load(tmp_path, lib, monkeypatch):
+    d = accounts(tmp_path, labels=("acct1",))
+    identity = {"accept_language": "en-US", "region": "US", "timezone": "America/New_York",
+                "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36"}
+    config = cfg(d, labels=("acct1",), x_identity_enabled=True, x_account_identities={"acct1": identity})
+    monkeypatch.setattr(wq, "load", lambda: types.SimpleNamespace(config=config))
+    monkeypatch.setattr(tr, "find_dist", lookup(curl=curl_dist()))
+    monkeypatch.setattr(tr, "curl_status", lambda *args: "ok")
+    monkeypatch.setattr(tr, "read_install_record", lambda: record())
+    loaded = []
+    monkeypatch.setattr(tr, "load_library", lambda: loaded.append(True))
+    req = tr.fallback_request("acct1", d / "acct1.db", QUERY, {"product": "Latest"}, cursor=None)
+    env = tr.service_env(GOOD_ENV, private_tmp=tmp_path / "tmp", fallback=True)
+    assert tr._child(json.dumps(req), env)["status"] == "refused"
+    assert loaded == []
 
 
 # --- AC46: exceptions to reasons ----------------------------------------------------------------------------------
@@ -562,6 +622,7 @@ def test_curl_fallback_runs_in_separate_process_with_backend_env_only_there(tmp_
     base = datetime(2026, 10, 26, 22, 0, tzinfo=UTC)
     ids = [snowflake(base - timedelta(minutes=i * 70)) for i in range(15)] + [snowflake(base - timedelta(days=1))]
     child = Child(ok_reply(ids))
+    curl_loaded_before = "curl_cffi" in sys.modules  # other B1 tests load it in-process; the fallback must not
     monkeypatch.delenv("TWS_HTTP_BACKEND", raising=False)
     s, d, config = curl_start(tmp_path, lib, child)
     lib.scripts[str(d / "acct1.db")] = [AbortReqError("Blocked by Cloudflare: 403 - r")]
@@ -571,7 +632,7 @@ def test_curl_fallback_runs_in_separate_process_with_backend_env_only_there(tmp_
     assert env["TWS_HTTP_BACKEND"] == "curl" and tr.env_guard(env, fallback=True) == []
     assert request["db"] == str(d / "acct1.db") and request["label"] == "acct1" and request["query"] == QUERY
     assert "TWS_HTTP_BACKEND" not in os.environ  # the main process keeps the default backend
-    assert "curl_cffi" not in sys.modules
+    assert ("curl_cffi" in sys.modules) == curl_loaded_before
     s.close()
 
 
@@ -685,6 +746,7 @@ def test_installer_picks_wheel_by_platform_and_records_hash():
 def test_startup_verifies_installed_wheel_hash_against_matching_entry():
     rec = record()
     assert tr.curl_status(rec, "manylinux_x86_64", curl_dist()) == "ok"
+    assert tr.curl_status({**rec, "package": "other"}, "manylinux_x86_64", curl_dist()) == "record_package_mismatch"
     assert tr.curl_status({**rec, "sha256": "0" * 64}, "manylinux_x86_64", curl_dist()) == "hash_mismatch"
     assert tr.curl_status(rec, "win_amd64", curl_dist()) == "record_platform_mismatch"
     assert tr.curl_status(None, "manylinux_x86_64", curl_dist()) == "record_missing"
@@ -694,7 +756,7 @@ def test_startup_verifies_installed_wheel_hash_against_matching_entry():
     assert tr.curl_status(rec, "manylinux_x86_64", curl_dist(tag="cp310-abi3-win_amd64")) == "wheel_tag_mismatch"
 
 
-def test_unknown_platform_or_architecture_refused_fallback_off_and_health_says_so(tmp_path, lib):
+def test_unknown_platform_or_architecture_refused_fallback_off_and_health_says_so(tmp_path, lib, monkeypatch):
     for args in (("darwin", "arm64", ""), ("linux", "aarch64", "glibc"), ("win32", "ARM64", ""),
                  ("linux", "x86_64", "")):
         assert tr.platform_key(*args) is None, args
@@ -702,6 +764,7 @@ def test_unknown_platform_or_architecture_refused_fallback_off_and_health_says_s
     assert tr.curl_status(record(), None, curl_dist()) == "unknown_platform"
     with pytest.raises(tr.CurlUnavailable):
         tr.install_record(None, tr.lock_text())
+    monkeypatch.setattr(tr, "platform_key", lambda: None)
     child = Child()
     d = accounts(tmp_path)
     config = cfg(d, x_allow_curl_backend=True)

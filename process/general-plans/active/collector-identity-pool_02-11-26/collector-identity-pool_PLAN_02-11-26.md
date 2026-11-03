@@ -284,6 +284,16 @@ A read-only reviewer plus a measured loopback check ran against current code. Co
 - V7: the owner-approved live comparison needs its own approval and a predefined protocol: matched queries and windows, order, per-account and global read ceilings, stopping rules on challenge or rate limit, setup and bootstrap requests counted against the budget, both styles on each of two accounts with other identity settings unchanged; record timestamp, commit, package and target, anonymized account, style, query and window id, order, budget before and after, attempted and completed reads, challenges and errors, result counts and canary agreement; no cookies, proxy credentials or raw responses; a tiny sample proves little, and an inconclusive result is recorded as such.
 - V8: stripped-page overlap: the strike and cool-down paths in `x_pool.py` are merged (PR #236); B1 does not touch them.
 
+#### Camoufox feature review (03-11-26, docs only; source https://camoufox.com/features/; nothing built)
+
+Our collector is HTTP-only (twscrape), so browser-surface spoofing (canvas, fonts, WebGL, audio, `navigator.webdriver`, WebRTC, cursor) is Part C only. Lessons adopted for the HTTP mission:
+- Coherence beats variety: every identity field must agree (UA, hints and platform come from one exact target; language, region and timezone from one declared region). B1 enforces UA/language/region; follow-up B1.1: cross-check target platform against declared timezone/region plausibility and reject contradictions.
+- Language from the target region's speaker distribution, not a copied default: an owner config choice when each account's `accept_language` is set (B1 needs no code).
+- Region-derived defaults and exit-versus-declared checks belong to B2 admission (AC10).
+- B1.2: verify TLS/HTTP-2 fingerprints with a small reviewed local ClientHello/JA3 capture; until then TLS stays recorded as NOT verified.
+- Part C gate: any browser must be proven on the wire to send nothing outside its assigned route (WebRTC, DNS prefetch, addons), with a loopback proof like B1's.
+- Humanised behaviour maps to B3 pacing/order variation, switchable and measured.
+
 ### Deliberate test and documentation amendments (B1/B2/B3)
 
 These are required replacements/extensions with reasons, not blanket deletion of guards. Line numbers refer to the validation snapshot; rebase to current definitions before execution.
