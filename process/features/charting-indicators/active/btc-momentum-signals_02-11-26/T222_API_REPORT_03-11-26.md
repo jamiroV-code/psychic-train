@@ -22,7 +22,9 @@ The API implementation and focused tests pass, and an independent reviewer appro
 - `process/features/charting-indicators/active/btc-momentum-signals_02-11-26/harness/{risk-gate,context-snippets,verification,review-decision,adversarial-validation}.json`
 
 ## 5 Commits
-No commit created. No push, PR, merge, or deployment performed.
+
+Commit `a32921c8` (`feat: add BTC momentum API signals`) on `claude/t222-btc-momentum-api`.
+Draft PR #241 is open for isolated Linux CI: https://github.com/jamiroV-code/psychic-train/pull/241. No merge or deployment.
 
 ## 6 Tests run
 - Focused T222 API tests: `api/.venv/Scripts/python.exe -m pytest api/tests/analytics/test_btc_legs.py api/tests/routers/test_btc_legs_router.py -q` — **28 passed, 2 deprecation warnings**.
