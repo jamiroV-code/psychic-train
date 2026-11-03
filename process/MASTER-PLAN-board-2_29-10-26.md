@@ -71,5 +71,5 @@ Columns: ID · What · Status · PR / evidence · Cost. Built 29-10-26 from `gh 
 
 | ID | What | Status | PR / evidence | Cost |
 |---|---|---|---|---|
-| T222 | BTC daily momentum calculation and additive `signals` API contract (RFC-001 API slice) | blocked | Plan `active/btc-momentum-signals_02-11-26/`; focused API tests 28 passed; independent code review approved; local Windows full suite 44 failed with unresolved cache/watchlist guard mismatch; GitHub CI #41690626570 passed API and web jobs; draft PR #241; no merge/T223 pending owner review. Report `T222_API_REPORT_03-11-26.md` | unmeasured |
+| T222 | BTC daily momentum calculation and additive `signals` API contract (RFC-001 API slice) | review | Plan `active/btc-momentum-signals_02-11-26/`; focused API tests 28 passed; independent code review approved; local Windows full suite 44 failed with unresolved cache/watchlist guard mismatch; GitHub CI #41692179272 passed API and web jobs; draft PR #241; awaiting owner review/merge. Report `T222_API_REPORT_03-11-26.md` | unmeasured |
 | T223 | BUY/SELL markers in the existing BTC legs chart (RFC-001 web slice) | approved | Depends on T222 owner-merge; seeded Playwright and final integrated RT4 gates | unmeasured |
