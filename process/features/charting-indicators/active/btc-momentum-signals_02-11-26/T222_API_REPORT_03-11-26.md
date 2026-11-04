@@ -2,7 +2,7 @@
 T222 — BTC Momentum API calculation/model/response/TypeScript contract slice
 
 ## 2 Outcome
-The deterministic API implementation, focused tests, independent code review, and final GitHub Linux CI all passed. The first PR CI run exposed two typed web fixtures missing required `signals`; both were fixed and run #41690626570 passed both jobs. The local Windows full API suite remains red outside T222 test nodes, with the cache/watchlist guard mismatch unresolved. PR #241 remains draft/open; no merge, T223, or integrated chart verification yet.
+The deterministic API implementation, focused tests, independent code review, and GitHub Linux CI passed. Guard fix commit `66e5cb3c` passed API and web in run #41700270156. A live collector heartbeat reproduced the old guard false positive; only that exact path is now excluded. The historical Windows suite remains red outside T222 nodes. Assessment supports a pre-existing/environment-sensitive failure disposition, not a green Windows gate; owner acceptance is required before merge. PR #241 remains draft/open; T223 and integrated chart verification have not started.
 
 ## 3 Summary
 - Added the deterministic daily BTC target-transition calculator using completed UTC daily closes, script defaults (21 bars/month; 63/126/252 horizons), crypto auto horizon (30 bars/month), the corrected vote-to-target formula, SMA filter, cap, active-date gating, gap/duplicate/invalid-data resets, forming-bar cutoff, and first out-of-range exit behavior.
@@ -40,6 +40,8 @@ GitHub Actions run #41690626570 on `e4fd25b5`: API and web jobs passed. No merge
 - Local web suite `pnpm --filter web test` — **67 files / 639 tests passed**; existing Vite CJS deprecation and React `act(...)` warnings.
 - Corrected GitHub CI run #41690626570 — API and web jobs passed; web job covered Vitest, tsc, and island build.
 - Heartbeat guard quick fix: `api/.venv/Scripts/python.exe -m pytest api/tests/deploy/test_real_data_snapshot.py -q` — **1 passed in 0.77s**. Temporary-file regression proves the exact collector heartbeat is excluded while other cache files and watchlist changes remain detected.
+- GitHub Actions run #41700270156 on guard-fix commit `66e5cb3c` — **API pytest and web Vitest/tsc/island build passed**.
+- Throwaway project-Python mechanism probe (no test rerun or external connection): `_socket.socketpair` is absent, `socket.socketpair` uses `_fallback_socketpair`, and blocking `socket.socket.connect` prevents `asyncio.new_event_loop()` with the expected `AssertionError` on `127.0.0.1`. The partially initialized loop emitted a destructor warning; subprocess exited 0. This proves the Windows harness mechanism, not each historical failure traceback.
 
 ## 7 Tests NOT run
 - Seeded Playwright, manual chart visual probe, and user chart confirmation: pending T223/integrated gates.
@@ -53,6 +55,7 @@ GitHub Actions run #41690626570 on `e4fd25b5`: API and web jobs passed. No merge
 ## 9 Blockers
 - The local Windows full API suite remains red (44 failed, 3675 passed, 4 skipped, 5 deselected, 1 error); `lastfailed` lists no T222 test node. GitHub Linux API CI passed on PR #241.
 - Read-only 60-second observation of 1,353 real cache/watchlist files found only `attention/_pc_state/collector_heartbeat.json` changing. It identifies standalone collector PID 23604, confirmed alive by Windows; the writer updates every 30 seconds. This reproduces an external-writer false positive in the old guard. The historical run did not preserve a changed-path diff, so its exact mismatch remains retrospectively unproven. The guard now excludes only that exact heartbeat path; all other cache files and watchlist remain protected. No real data was restored, deleted, or edited.
+- Remaining failure assessment: 39 router nodes plus one universe end-to-end node patch every socket connect; the observed Windows loopback mechanism explains their shared harness conflict. One equities-store test ends with a forward-slash-only suffix assertion; one twscrape test assumes an empty owner configuration despite the configured account path. Historical reports record these environment-sensitive failures; `process/general-plans/active/narrative-baskets-trends-stage2_01-11-26/narrative-baskets-trends-stage2_EXEC-REPORT_01-11-26.md` records identical baseline/final failed sets including the equities concurrent-add node. That concurrency node's exact cause remains unproven. No T222 causal defect was found; this supports a baseline-failure waiver, not claiming the Windows suite passed.
 - PR #241 remains draft/open. No merge or T223 start until the owner accepts the local guard disposition and merges T222.
 
 ## 10 Follow-up
