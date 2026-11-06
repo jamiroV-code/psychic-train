@@ -27,6 +27,7 @@ const manifest = JSON.parse(
   thin_symbol: string;
   min_bars_required: number;
   bars_written: Record<string, Record<string, number>>;
+  btc_signals: { kind: "BUY" | "SELL"; timestamp: string; price: number }[];
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8001";
@@ -435,4 +436,87 @@ test("the BTC leg chart covers every seeded daily bar, with ordered legs and the
   } else {
     await expect(page.getByTestId("leg-estimate-na")).toContainText("N/A:");
   }
+});
+
+// ---------------------------------------------------------------------------
+// RFC-001 / T223: BUY/SELL markers on the BTC leg chart. The expected events
+// come from the seeder's hand-designed BTC series (manifest.btc_signals), not
+// from the production calculator. Catches: a wrong or shifted signal, a marker
+// off its bar's close, no accessible text, markers that survive a zoom outside
+// the visible range, and a signal layer that disturbs bands or boundaries.
+// ---------------------------------------------------------------------------
+test("BTC leg chart shows the seeded BUY and SELL signals on their closes, through zoom and reset", async ({
+  page,
+  request,
+}) => {
+  const expected = manifest.btc_signals;
+  expect(expected.map((s) => s.kind)).toEqual(["BUY", "SELL", "SELL", "SELL"]);
+
+  const res = await request.get(`${API_BASE_URL}/api/regime/btc-legs`);
+  expect(res.ok()).toBe(true);
+  const body = (await res.json()) as { signals: typeof expected };
+  expect(body.signals).toEqual(expected);
+
+  await page.goto("/screener");
+  const plot = page.getByTestId("btc-leg-chart-container").locator(".simple-lines");
+  await expect(plot).toBeVisible();
+  const overlay = plot.locator(".simple-lines__overlay");
+  const points = plot.getByTestId("btc-signal-point");
+  await expect(points).toHaveCount(expected.length);
+  await expect(overlay).toHaveAttribute("data-signal-count", String(expected.length));
+
+  // Accessible text, one entry per event, despite the island's role="img".
+  const list = page.getByTestId("btc-signal-list").locator("li");
+  await expect(list).toHaveCount(expected.length);
+  for (let i = 0; i < expected.length; i++) {
+    const s = expected[i];
+    await expect(list.nth(i)).toHaveText(`${s.kind} ${s.timestamp.slice(0, 10)} at ${Math.round(s.price).toLocaleString("en-US")}`);
+    await expect(points.nth(i)).toHaveAttribute("data-kind", s.kind);
+    await expect(points.nth(i)).toHaveAttribute("data-timestamp", s.timestamp);
+  }
+
+  // Each marker sits inside the plot box; a higher close is drawn higher up.
+  const plotBox = (await plot.boundingBox())!;
+  const ys: number[] = [];
+  const xs: number[] = [];
+  for (let i = 0; i < expected.length; i++) {
+    const b = (await points.nth(i).boundingBox())!;
+    expect(b.x).toBeGreaterThanOrEqual(plotBox.x);
+    expect(b.x + b.width).toBeLessThanOrEqual(plotBox.x + plotBox.width);
+    expect(b.y).toBeGreaterThanOrEqual(plotBox.y);
+    expect(b.y + b.height).toBeLessThanOrEqual(plotBox.y + plotBox.height);
+    xs.push(b.x + b.width / 2);
+    ys.push(b.y + b.height / 2);
+  }
+  for (let i = 1; i < expected.length; i++) expect(xs[i]).toBeGreaterThan(xs[i - 1]); // later bar, further right
+  // BUY @ 353 > SELL @ 332.5 > SELL @ 266.5 > SELL @ 134.5: y falls down the screen.
+  for (let i = 1; i < expected.length; i++) expect(ys[i]).toBeGreaterThan(ys[i - 1]);
+
+  const bands = await overlay.getAttribute("data-band-count");
+  const markers = await overlay.getAttribute("data-marker-count");
+
+  // Zoom in about the plot's right side: points outside the visible range are dropped.
+  await plot.scrollIntoViewIfNeeded();
+  const zb = (await plot.boundingBox())!;
+  await page.mouse.move(zb.x + zb.width * 0.9, zb.y + zb.height / 2);
+  await page.keyboard.down("Control");
+  for (let i = 0; i < 6; i++) await page.mouse.wheel(0, -400);
+  await page.keyboard.up("Control");
+  await expect(plot).toHaveAttribute("data-zoomed", "true");
+  const visible = await overlay.getAttribute("data-signal-count");
+  expect(Number(visible)).toBeLessThan(expected.length);
+  const from = new Date((await plot.getAttribute("data-visible-from"))!).getTime();
+  const to = new Date((await plot.getAttribute("data-visible-to"))!).getTime();
+  for (const p of await points.all()) {
+    const t = new Date((await p.getAttribute("data-timestamp"))!).getTime();
+    expect(t >= from && t <= to, "a signal outside the visible range is drawn").toBe(true);
+  }
+
+  // Reset restores every marker, and bands/boundaries never changed.
+  await plot.dblclick({ position: { x: 5, y: 5 } });
+  await expect(plot).toHaveAttribute("data-zoomed", "false");
+  await expect(points).toHaveCount(expected.length);
+  await expect(overlay).toHaveAttribute("data-band-count", bands!);
+  await expect(overlay).toHaveAttribute("data-marker-count", markers!);
+  await expect(page.getByTestId("leg-estimate-heading").or(page.getByTestId("leg-estimate-na"))).toBeVisible();
 });

@@ -5,7 +5,7 @@ import { useLiveData } from "@/components/screener/LiveProvider";
 import type { SimpleLinesProps } from "@/lib/island-loader";
 import { shareStructure, VOLATILE } from "@/lib/same-data";
 import { useSimpleLines } from "@/lib/use-simple-lines";
-import { boundaryMarkers, btcLegSpanText, btcSeries, currentLegReadouts, legBands } from "@/lib/btc-leg-lines";
+import { boundaryMarkers, btcLegSpanText, btcSeries, currentLegReadouts, legBands, signalPoints, signalText } from "@/lib/btc-leg-lines";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
 import { LegEstimate } from "@/components/screener/LegEstimate";
 import { fetchBtcLegs } from "@/lib/api/regime";
@@ -57,6 +57,7 @@ export function BtcLegChart({ fetchData = fetchBtcLegs }: BtcLegChartProps) {
   const series = useMemo(() => (data && available ? btcSeries(data) : []), [data, available]);
   const bands = useMemo(() => (data && available ? legBands(data) : []), [data, available]);
   const markers = useMemo(() => (data && available ? boundaryMarkers(data) : []), [data, available]);
+  const signals = useMemo(() => (data && available ? signalPoints(data) : []), [data, available]);
   const span = data ? btcLegSpanText(data) : null;
   const readouts = data ? currentLegReadouts(data) : [];
 
@@ -68,12 +69,13 @@ export function BtcLegChart({ fetchData = fetchBtcLegs }: BtcLegChartProps) {
             series,
             bands,
             markers,
+            signalPoints: signals,
             height: 280,
             format: formatPrice,
             label: span ? `BTC daily close with confirmed legs shaded. ${span}` : "BTC daily close with confirmed legs shaded",
             timeframe: "1d",
           },
-    [series, bands, markers, span],
+    [series, bands, markers, signals, span],
   );
   useSimpleLines(containerRef, islandProps, "btc");
 
@@ -101,6 +103,13 @@ export function BtcLegChart({ fetchData = fetchBtcLegs }: BtcLegChartProps) {
       )}
 
       <div ref={containerRef} data-testid="btc-leg-chart-container" />
+      {data && available && data.signals.length > 0 && (
+        <ul className="visually-hidden" data-testid="btc-signal-list" aria-label="BTC BUY and SELL signals">
+          {data.signals.map((s) => (
+            <li key={`${s.timestamp}-${s.kind}`}>{signalText(s)}</li>
+          ))}
+        </ul>
+      )}
 
       {data && available && (
         <>

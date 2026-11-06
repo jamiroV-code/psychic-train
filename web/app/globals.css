@@ -1065,6 +1065,20 @@
   bottom: 0;
   border-left: 1px dashed var(--an-axis);
 }
+.simple-lines__signal {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  transform: translate(-50%, -50%);
+}
+.simple-lines__signal--buy {
+  border-bottom: 10px solid #1a9850;
+}
+.simple-lines__signal--sell {
+  border-top: 10px solid #d73027;
+}
 
 .btc-leg-chart {
   margin-bottom: var(--sp-4);

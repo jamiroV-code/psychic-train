@@ -56,6 +56,7 @@
     highlight = false,
     bands = [],
     markers = [],
+    signalPoints = [],
     linkedRange = null,
     onRangeChange = null,
   } = $props();
@@ -209,6 +210,21 @@
       : [],
   );
 
+  // BTC momentum signals: price-anchored points on the shared plot scale. x
+  // and y use the same visible domains as the Chart, so they zoom and pan
+  // with it; a point outside the visible plot is not drawn.
+  const visibleSignals = $derived(
+    xDomain && yDomain
+      ? signalPoints
+          .map((s) => ({
+            ...s,
+            f: xFraction(new Date(s.timestamp).getTime()),
+            g: (yDomain[1] - s.value) / (yDomain[1] - yDomain[0]),
+          }))
+          .filter((s) => Number.isFinite(s.f) && Number.isFinite(s.g) && s.f >= 0 && s.f <= 1 && s.g >= 0 && s.g <= 1)
+      : [],
+  );
+
   // ---- interaction --------------------------------------------------------
 
   let el = $state(null);
@@ -344,13 +360,14 @@
   onpointercancel={onPointerUp}
   onpointerleave={() => (hoverKey = null)}
 >
-  {#if xDomain && yDomain && (visibleBands.length || visibleMarkers.length)}
+  {#if xDomain && yDomain && (visibleBands.length || visibleMarkers.length || visibleSignals.length)}
     <div
       class="simple-lines__overlay"
       style="top: {PAD_TOP}px; bottom: {PAD_BOTTOM}px"
       aria-hidden="true"
       data-band-count={visibleBands.length}
       data-marker-count={visibleMarkers.length}
+      data-signal-count={visibleSignals.length}
     >
       {#each visibleBands as band (band.from)}
         <div
@@ -361,6 +378,16 @@
       {/each}
       {#each visibleMarkers as marker (marker.timestamp)}
         <div class="simple-lines__marker" style="left: {plotLeft(marker.f)}" title={marker.label}></div>
+      {/each}
+      {#each visibleSignals as s (s.timestamp + s.kind)}
+        <div
+          class="simple-lines__signal simple-lines__signal--{s.kind.toLowerCase()}"
+          style="left: {plotLeft(s.f)}; top: {s.g * 100}%"
+          data-testid="btc-signal-point"
+          data-kind={s.kind}
+          data-timestamp={s.timestamp}
+          title="{s.kind} {s.timestamp.slice(0, 10)}"
+        ></div>
       {/each}
     </div>
   {/if}

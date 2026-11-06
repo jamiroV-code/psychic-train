@@ -1,7 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { BtcLegChart } from "@/components/screener/BtcLegChart";
 import type { BtcLegChartResponse } from "@/lib/types/btc-legs";
+import type { SimpleLinesProps } from "@/lib/island-loader";
+
+const island = vi.hoisted(() => {
+  const mountSimpleLines = vi.fn((_t: HTMLElement, _p: unknown) => Object.assign(() => {}, { update: vi.fn() }));
+  return { mountSimpleLines };
+});
+vi.mock("@/lib/island-loader", () => ({ loadIslands: () => Promise.resolve({ mountSimpleLines: island.mountSimpleLines }) }));
+beforeEach(() => island.mountSimpleLines.mockClear());
 
 function response(overrides: Partial<BtcLegChartResponse> = {}): BtcLegChartResponse {
   return {
@@ -70,6 +78,34 @@ describe("BtcLegChart", () => {
       expect(screen.getByTestId("leg-estimate-heading")).toHaveTextContent(/^Estimate \(rule over the numbers shown\)$/),
     );
     expect(screen.getByTestId("btc-leg-span")).toHaveTextContent("Daily BTC, 2026-01-01 to 2026-10-08 (Brussels time), 3 bars");
+  });
+
+  it("signals reach the chart island beside bands and markers, and are listed accessibly", async () => {
+    const signals = [
+      { kind: "BUY" as const, timestamp: "2026-06-01T00:00:00Z", price: 95000 },
+      { kind: "SELL" as const, timestamp: "2026-10-08T00:00:00Z", price: 120000 },
+    ];
+    await mount(response({ signals }));
+    await waitFor(() => expect(island.mountSimpleLines).toHaveBeenCalled());
+    const props = island.mountSimpleLines.mock.calls[0][1] as SimpleLinesProps;
+    expect(props.signalPoints).toEqual([
+      { kind: "BUY", timestamp: "2026-06-01T00:00:00Z", value: 95000 },
+      { kind: "SELL", timestamp: "2026-10-08T00:00:00Z", value: 120000 },
+    ]);
+    expect(props.series[0].points).toHaveLength(3);
+    expect(props.bands).toHaveLength(1);
+    expect(props.markers).toHaveLength(1);
+    const items = screen.getByTestId("btc-signal-list").querySelectorAll("li");
+    expect([...items].map((li) => li.textContent)).toEqual(["BUY 2026-06-01 at 95,000", "SELL 2026-10-08 at 120,000"]);
+    expect(screen.getByTestId("leg-estimate-heading")).toBeInTheDocument();
+    expect(screen.getByTestId("btc-current-leg")).toBeInTheDocument();
+  });
+
+  it("no signals: empty point list and no signal list", async () => {
+    await mount(response());
+    await waitFor(() => expect(island.mountSimpleLines).toHaveBeenCalled());
+    expect((island.mountSimpleLines.mock.calls[0][1] as SimpleLinesProps).signalPoints).toEqual([]);
+    expect(screen.queryByTestId("btc-signal-list")).toBeNull();
   });
 
   it("inputs visible beside each label", async () => {
