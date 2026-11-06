@@ -32,7 +32,7 @@ charts only — do not widen that boundary to ordinary UI. The most likely sourc
 
 ## Current Status
 
-Status: not-started
+Status: in-progress. BTC momentum signals (plan `active/btc-momentum-signals_02-11-26/`): API slice T222 (draft PR #241) and chart slice T223 (BUY/SELL point layer in `web/islands/simple-lines.svelte`, props in `web/lib/island-loader.ts`, builders in `web/lib/btc-leg-lines.ts`, wired in `web/components/screener/BtcLegChart.tsx`) are built; user visual confirmation pending.
 
 ## Folder Contents
 

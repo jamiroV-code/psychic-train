@@ -8,6 +8,8 @@ import {
   compositeEstimatePart,
   estimatePartText,
   legBands,
+  signalPoints,
+  signalText,
 } from "@/lib/btc-leg-lines";
 import type { BtcLegChartResponse, LegEstimate } from "@/lib/types/btc-legs";
 
@@ -69,6 +71,20 @@ describe("btc-leg-lines", () => {
     expect(bands).toHaveLength(3);
     expect(bands[0]).toEqual({ from: "2026-02-01T00:00:00Z", to: "2026-03-15T00:00:00Z", tint: 0, current: false });
     expect(bands.map((b) => b.tint)).toEqual([0, 1, 0]);
+  });
+
+  it("signal points carry the signal close at its bar timestamp, in response order", () => {
+    const d = data();
+    d.signals = [
+      { kind: "BUY", timestamp: "2026-03-02T00:00:00Z", price: 90210.5 },
+      { kind: "SELL", timestamp: "2026-05-09T00:00:00Z", price: 101000 },
+    ];
+    expect(signalPoints(d)).toEqual([
+      { kind: "BUY", timestamp: "2026-03-02T00:00:00Z", value: 90210.5 },
+      { kind: "SELL", timestamp: "2026-05-09T00:00:00Z", value: 101000 },
+    ]);
+    expect(signalText(d.signals[1])).toBe("SELL 2026-05-09 at 101,000");
+    expect(signalPoints(data())).toEqual([]);
   });
 
   it("markers from boundaries: one per confirmed boundary date", () => {

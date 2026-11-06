@@ -215,7 +215,8 @@ S7_VERDICT_WORDS = re.compile(
 
 def test_btc_legs_sources_contain_no_verdict_words():
     hits = []
-    btc_only = {"api/analytics/regime/btc_legs.py"}
+    # The BTC chart (and only it) may name BUY/SELL signals; LegEstimate stays fully strict.
+    btc_only = {"api/analytics/regime/btc_legs.py", "web/lib/btc-leg-lines.ts", "web/components/screener/BtcLegChart.tsx"}
     for rel in S7_VERDICT_FILES:
         path = ROOT / rel
         assert path.exists(), rel

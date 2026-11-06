@@ -68,6 +68,14 @@ export interface SimpleLineMarker {
   label: string;
 }
 
+// A price-anchored point (BTC momentum signal): the close `value` on the
+// bar at `timestamp`. Not a vertical marker. Additive; absent means none.
+export interface SimpleLineSignalPoint {
+  timestamp: string;
+  value: number;
+  kind: "BUY" | "SELL";
+}
+
 export interface SimpleLinesProps {
   series: SimpleLineSeries[];
   height: number;
@@ -81,6 +89,7 @@ export interface SimpleLinesProps {
   // T38 / S7: additive; absent means no bands and no markers.
   bands?: SimpleLineBand[];
   markers?: SimpleLineMarker[];
+  signalPoints?: SimpleLineSignalPoint[];
   // T44: linked zoom. With `onRangeChange` the chart reports every zoom, pan
   // or reset (null = full range) and applies `linkedRange`, clamped into its
   // own data. Absent means the chart zooms on its own, as before.
