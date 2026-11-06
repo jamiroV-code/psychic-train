@@ -5,10 +5,10 @@ date: 29-10-26
 metadata:
   node_type: root
   type: master-plan
-  read_when: "looking up a task or PR from #148 to #197; before creating a plan artifact or spawning a worker for the attention, Trends or W8 programs"
+  read_when: "looking up tasks T119-T223 or PRs #148-#197; before planning or spawning workers for attention, Trends, W8, or charting work"
 ---
 
-# my_site - Master Plan board 2 (T119-T221)
+# my_site - Master Plan board 2 (T119-T223)
 
 Continuation of `process/MASTER-PLAN.md` (rules, lanes, older rows). Same writer rule: only the Master Planner session edits this file. Why a second file: the new rows did not fit the 19,000 B cap of MASTER-PLAN.md without dropping IDs.
 
@@ -66,3 +66,10 @@ Columns: ID · What · Status · PR / evidence · Cost. Built 29-10-26 from `gh 
 | W8g | Sources panel health and completeness text for PC worker rows | review | #197, merge `3f45921` | unmeasured |
 | - | SPEC rule 18(a) and AC47 use `x_accounts` and `x_pool_max` wording (owner decision) | review | #196, merge `3cd39e2` | unmeasured |
 | - | docs catch-up 2: state and registry to `3cd39e2`, W8c2 PLAN/SPEC owner decisions (D1-D3, Q17, E1-E4) recorded | in_progress | this EXECUTE, one draft PR; the owner merges (D-28) | unmeasured |
+
+### BTC momentum chart tasks (P11; T222-T223)
+
+| ID | What | Status | PR / evidence | Cost |
+|---|---|---|---|---|
+| T222 | BTC daily momentum calculation and additive `signals` API contract (RFC-001 API slice) | review | Plan `active/btc-momentum-signals_02-11-26/`; focused API tests 28 passed; independent code review approved; local Windows full suite 44 failed with unresolved cache/watchlist guard mismatch; GitHub CI #41693356570 passed API and web jobs; draft PR #241; awaiting owner review/merge. Report `T222_API_REPORT_03-11-26.md` | unmeasured |
+| T223 | BUY/SELL markers in the existing BTC legs chart (RFC-001 web slice) | approved | Depends on T222 owner-merge; seeded Playwright and final integrated RT4 gates | unmeasured |

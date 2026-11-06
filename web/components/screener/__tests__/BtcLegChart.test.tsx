@@ -52,6 +52,7 @@ function response(overrides: Partial<BtcLegChartResponse> = {}): BtcLegChartResp
         reason: null,
       },
     },
+    signals: [],
     ...overrides,
   };
 }

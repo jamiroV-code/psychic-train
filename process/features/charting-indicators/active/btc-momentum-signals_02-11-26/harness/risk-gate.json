@@ -1,0 +1,12 @@
+{
+  "task": "T222 — BTC Momentum API calculation/model/response/TypeScript contract slice",
+  "planPath": "process/features/charting-indicators/active/btc-momentum-signals_02-11-26/btc-momentum-signals_PLAN_02-11-26.md",
+  "riskLevel": "high",
+  "riskClasses": ["public API or external contract changes"],
+  "humanApprovalRequired": true,
+  "why": "The existing GET /api/regime/btc-legs response gains a public signal field; external consumers may depend on the exact response shape.",
+  "riskClass": "public API or external contract changes",
+  "workDescription": "Add BTC daily momentum signal events to the existing btc-legs API response.",
+  "approver": "User authorized T222 execution; independent code reviewer T222ApiIndependentReview approved; final API suite failed.",
+  "mustStopBeforeFinalize": true
+}
