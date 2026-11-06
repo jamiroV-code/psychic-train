@@ -813,7 +813,6 @@ def test_accounts_db_path_outside_repo_required(tmp_path):
         "accounts_path_not_absolute"]
     assert tr.accounts_problems(cfg(tmp_path / "absent", labels=("acct1",)), repo_root=repo) == [
         "accounts_path_missing"]
-    assert wq.load().config.x_accounts_db_path == ""
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 from datetime import date
 
 import pandas as pd
@@ -83,22 +84,33 @@ def test_thirty_first_is_409_with_exact_message(client, refreshes):
 
 
 def test_concurrent_adds_store_exactly_thirty(client, refreshes):
-    codes = []
+    results, errors = [], []
     lock = threading.Lock()
 
     def worker(i):
-        code = _add(client, f"C{i:02d}").status_code
-        with lock:
-            codes.append(code)
+        symbol = f"C{i:02d}"
+        try:
+            response = _add(client, symbol)
+            with lock:
+                results.append((symbol, response.status_code, response.json()))
+        except BaseException as exc:
+            with lock:
+                errors.append(exc)
 
-    threads = [threading.Thread(target=worker, args=(i,)) for i in range(35)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-    assert sorted(codes) == [200] * 30 + [409] * 5
+    threads = [threading.Thread(target=worker, args=(i,), daemon=True) for i in range(35)]
+    for worker_thread in threads:
+        worker_thread.start()
+    deadline = time.monotonic() + 30
+    for worker_thread in threads:
+        worker_thread.join(max(0, deadline - time.monotonic()))
+    assert not any(worker_thread.is_alive() for worker_thread in threads)
+    assert errors == []
+    assert sorted(code for _, code, _ in results) == [200] * 30 + [409] * 5
+    assert all(body == {"detail": MESSAGE} for _, code, body in results if code == 409)
+    accepted = {symbol for symbol, code, _ in results if code == 200}
     stored = equities_store.load_tickers()
-    assert len(stored) == 30 and len(set(stored)) == 30
+    assert len(stored) == len(set(stored)) == 30
+    assert set(stored) == accepted
 
 
 def test_new_ticker_triggers_one_background_refresh(client, refreshes):
