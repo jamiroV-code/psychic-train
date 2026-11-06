@@ -340,6 +340,10 @@ class Stream:
         """When the second wake source is next due (default: None, there is none)."""
         return None
 
+    def _control(self, q, src) -> str | None:
+        """Sources without separate control-plane work have nothing to run here."""
+        return None
+
     def _behind(self, now: datetime) -> datetime:
         q = self.worker.queries()
         try:
@@ -382,6 +386,9 @@ class Stream:
                 log.warning("attention pc %s state unreadable: source paused, file kept", self.source)
                 return "state_error"
             syms = self._symbols(q)
+            control_reason = self._control(q, src)
+            if control_reason is not None:
+                return control_reason
             self._health_schedule(q, src, syms)
             today = _utc(self.worker.clock()).date()
             hold = src.pause_reason() or ("budget_spent" if src.budget_spent() else "not_reached")
@@ -433,6 +440,37 @@ class XStream(Stream):
 
     def _pool(self, config) -> x_pool.XPool:
         return x_pool.from_config(config, clock=self.worker.clock)
+
+    def schedule(self, outcome: str | None = None) -> datetime:
+        due = super().schedule(outcome)
+        q = self.worker.queries()
+        if q.config.x_proxy_policy_path is None:
+            return due
+        try:
+            wake = self._pool(q.config).proxy_health_wake(q.config.x_proxy_health_interval_seconds)
+        except x_pool.XPoolStateError:
+            return min(due, _utc(self.worker.clock()) + timedelta(seconds=RECHECK_SECONDS))
+        if wake is None:
+            return due
+        now = _utc(self.worker.clock())
+        return min(due, max(wake, now + timedelta(seconds=RECHECK_SECONDS)))
+
+    def _control(self, q, src) -> str | None:
+        if q.config.x_proxy_policy_path is None and not q.config.x_proxy_required:
+            return None
+        if not q.config.x_accounts:
+            return "not_configured"
+        start = self._reader(q.config)
+        if start is None:
+            return "start_refused"
+        try:
+            start.reconcile(q.config, self._pool(q.config))
+        except Exception as failure:
+            from api.data.attention.x_proxy import ProxyFailure
+            if isinstance(failure, ProxyFailure):
+                return failure.reason
+            raise
+        return None
 
     def _sizing(self, q, src, syms) -> dict:
         from api.data.attention import x_capacity
@@ -533,6 +571,18 @@ class XStream(Stream):
             if stop_at is not None and due >= stop_at:
                 return "host_stopped"
             w._wait_until(due)
+            # Reconcile private/config snapshots at EVERY unit boundary, including
+            # a pending canary. A route revision never shares a partial sample.
+            q = w.queries()
+            c = q.config
+            if hasattr(start, "reconcile"):
+                try:
+                    start.reconcile(c, pool)
+                except Exception as exc:
+                    from api.data.attention.x_proxy import ProxyFailure
+                    if isinstance(exc, ProxyFailure):
+                        return exc.reason
+                    raise
             if not pool.canary_passed_today():
                 canary = x_pool.run_daily_canary(pool, start.readers, src, c, rng=self.rng, sleep=w._sleep,
                                                  fallback=start.fallback)
@@ -864,16 +914,26 @@ class AttentionPcWorker:
                  reddit_ledger: Callable[[], reddit_items.Ledger | None] | None = None,
                  seed: int | None = None, discovery_path: Path | None = None,
                  ledger_retention_days: int = LEDGER_RETENTION_DAYS_DEFAULT, x_spread_over_day: bool = True,
-                 x_rotation: bool = True, reddit_stream: bool | None = None):
+                 x_rotation: bool = True, reddit_stream: bool | None = None,
+                 queries_path: Path | None = None):
         self.clock = clock or _default_clock
         self.started_at = _utc(self.clock())  # refuses a naive clock
         if not isinstance(ledger_retention_days, int) or isinstance(ledger_retention_days, bool) \
                 or ledger_retention_days < 1:
             raise ValueError("ledger retention must be at least one day")
         self._wait = wait or _default_wait
-        self.queries = queries or web_queries.load_merged
+        if queries_path is not None and not Path(queries_path).is_absolute():
+            raise ValueError("trusted query path must be absolute")
+        self.queries_path = Path(queries_path) if queries_path is not None else None
+        self.queries = queries or (lambda: web_queries.load_merged(self.queries_path))
         self.symbols = symbols or _default_symbols
-        self.x_start = x_start or _default_x_start
+        if x_start is None and self.queries_path is not None:
+            def trusted_start(config):
+                from api.data.attention import twscrape_reader
+                return twscrape_reader.start(config, config_path=self.queries_path)
+            self.x_start = trusted_start
+        else:
+            self.x_start = x_start or _default_x_start
         self.x_cleanup = x_cleanup or _default_x_cleanup
         self.reddit_client = reddit_client or reddit_web.make_client
         self.reddit_ledger = reddit_ledger or _default_ledger

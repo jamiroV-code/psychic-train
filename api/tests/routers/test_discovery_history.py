@@ -1,9 +1,8 @@
 """T103 W2: GET /api/narrative/discovery/history through the real app, store only."""
 from __future__ import annotations
 
-import socket
+from api.tests.network_guard import deny_network
 
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -23,11 +22,7 @@ def wired(isolated_cache, tmp_path, monkeypatch):
     world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7}, cats={"ai": ["A", "B"]})
     gain("A"), gain("B", factor=3.0)
 
-    def boom(*a, **k):
-        raise AssertionError("handler must not reach the network")
-    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", boom)
-    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", boom)
-    monkeypatch.setattr(socket.socket, "connect", boom)
+    deny_network(monkeypatch)
     return TestClient(app)
 
 

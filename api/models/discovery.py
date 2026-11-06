@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 from typing import Literal
+from datetime import datetime
+from uuid import UUID
+import re
 
-from pydantic import BaseModel, Field, model_serializer
+from pydantic import BaseModel, Field, field_validator, model_serializer
 
 DiscoveryStatus = Literal["ok", "no-data"]
 
@@ -102,6 +105,14 @@ SourceReason = Literal["", "parked", "x_live_off", "not_probed", "stale", "insuf
                        "no_stored_data", "invalid_file"]
 
 
+ProxyState = Literal["direct", "unknown", "healthy", "quarantined", "blocked"]
+ProxyReason = Literal[
+    "proxy_config", "proxy_private", "proxy_assignment", "proxy_policy", "proxy_address",
+    "proxy_transport", "proxy_timeout", "proxy_redirect", "proxy_response", "proxy_exit",
+    "proxy_region", "proxy_feed", "proxy_baseline", "proxy_budget", "proxy_quarantine",
+    "proxy_revision", "proxy_lock",
+]
+
 class DiscoveryAccountHealth(BaseModel):
     """One X account of the pool (AC47, AC52): opaque label only, never a cookie, token or username."""
     label: str
@@ -115,11 +126,46 @@ class DiscoveryAccountHealth(BaseModel):
     ready: bool | None = None      # None: grandfathered/no ready gate
     parse_strikes: int | None = None
     parse_strike_last_at: str | None = None
+    proxy_id: str | None = None
+    proxy_state: ProxyState | None = None
+    proxy_reason: ProxyReason | None = None
+    proxy_checked_at: str | None = None
+    proxy_quarantine_until: str | None = None
+    region: str | None = None
+    connection_style: Literal["plain", "curl"] | None = None
+    identity_revision: str | None = None
+
+    @field_validator("proxy_id", "identity_revision")
+    @classmethod
+    def opaque_uuid(cls, value, info):
+        if value is not None:
+            parsed = UUID(value)
+            if str(parsed) != value or (info.field_name == "identity_revision" and parsed.version != 4):
+                raise ValueError("invalid opaque identifier")
+        return value
+
+    @field_validator("region")
+    @classmethod
+    def safe_region(cls, value):
+        if value is not None and re.fullmatch(r"[A-Z]{2}(?:-[A-Z0-9]{1,3})?", value) is None:
+            raise ValueError("invalid region code")
+        return value
+
+    @field_validator("proxy_checked_at", "proxy_quarantine_until")
+    @classmethod
+    def proxy_timestamp(cls, value):
+        if value is not None:
+            parsed = datetime.fromisoformat(value)
+            if parsed.tzinfo is None or parsed.utcoffset().total_seconds() != 0:
+                raise ValueError("invalid UTC timestamp")
+        return value
 
     @model_serializer(mode="wrap")
     def serialize_account(self, handler):
         row = handler(self)
-        for key in ("reads_today", "cap", "rest_until", "ready", "parse_strikes", "parse_strike_last_at"):
+        for key in ("reads_today", "cap", "rest_until", "ready", "parse_strikes", "parse_strike_last_at",
+                    "proxy_id", "proxy_state", "proxy_reason", "proxy_checked_at", "proxy_quarantine_until",
+                    "region", "connection_style", "identity_revision"):
             if row[key] is None:
                 row.pop(key)
         return row

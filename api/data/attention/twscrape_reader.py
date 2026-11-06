@@ -323,7 +323,7 @@ def env_guard(env: Mapping[str, str], *, fallback: bool = False, selected_backen
 def service_env(base: Mapping[str, str], *, private_tmp: Path, fallback: bool = False) -> dict:
     """The X process environment: the required switches, no proxy, a private temporary directory, and
     `TWS_HTTP_BACKEND=curl` only for the fallback child."""
-    proxies = {v.upper() for v in xr.PROXY_VARS}
+    proxies = {v.upper() for v in xr.PROXY_VARS} | {"SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"}
     env = {k: v for k, v in base.items() if k.upper() not in proxies and k.upper() != "TWS_HTTP_BACKEND"}
     env.update(REQUIRED_ENV)
     env.update(dict.fromkeys(TMP_VARS, str(private_tmp)))
@@ -400,9 +400,11 @@ def _ages_path(config: CollectorConfig) -> Path:
 
 def cookie_ages(config: CollectorConfig, *, now: datetime) -> dict[str, int | None]:
     """Whole days since each account's last cookie refresh (None: never refreshed through `refresh_cookies`)."""
+    from api.data.attention import x_proxy as xp
+    from api.data.attention.x_proxy_private import read_bounded
     try:
-        seen = json.loads(_ages_path(config).read_text(encoding="utf-8")) if config.x_accounts_db_path else {}
-    except (OSError, ValueError):
+        seen = xp.strict_json(read_bounded(_ages_path(config), xp.SMALL_LIMIT)) if config.x_accounts_db_path else {}
+    except (OSError, ValueError, xp.ProxyFailure):
         seen = {}
     out = {}
     for label in config.x_accounts:
@@ -428,6 +430,8 @@ class Library:
 
 def load_library() -> Library:
     """Import the wrapped surface of twscrape (call only after `env_guard` passed)."""
+    for variable in ("SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"):
+        os.environ.pop(variable, None)
     import twscrape
     from twscrape.models import parse_tweets
 
@@ -440,12 +444,15 @@ def load_library() -> Library:
 class IdentityAdapter:
     """Bind verified process transport and account identity at both upstream factory references."""
 
-    def __init__(self, style: str, identities: Mapping[str, Mapping[str, str]]):
+    def __init__(self, style: str, identities: Mapping[str, Mapping[str, str]], *, runtime=None):
         self.style = style
         self.identities = {label: dict(value) for label, value in identities.items()}
         self._label = contextvars.ContextVar("x_transport_label", default=None)
         self._items = {}
         self._installed = False
+        self.runtime = runtime
+        self._route_failures = {}
+        self._db_guard = None
 
     @contextlib.contextmanager
     def bind(self, label: str):
@@ -455,8 +462,76 @@ class IdentityAdapter:
         finally:
             self._label.reset(token)
 
+    def ensure_current(self, label):
+        if self.runtime is None or self.runtime.snapshot.policy is None or getattr(self.runtime, "child_frozen", False):
+            return
+        from api.data.attention import x_proxy as xp
+        reason = None
+        try:
+            current = self.runtime.snapshot_loader(self.runtime.config_path, repo_root=self.runtime.repo_root)
+            xp.require(current.roles == self.runtime.snapshot.private_snapshot.roles, "proxy_revision")
+        except xp.ProxyFailure as error:
+            reason = error.reason
+        if reason is not None:
+            self._route_failures[label] = reason
+            self.runtime.admissions.pop(label, None)
+            raise self._route_abort(reason)
+
     def install(self):
         from twscrape import account, http, queue_client, xclid
+        from api.data.attention import x_proxy as xp
+
+        class RouteAbort(queue_client.AbortReqError):
+            def __init__(self, reason):
+                self.proxy_reason = reason if isinstance(reason, str) and reason in xp.REASONS else "proxy_transport"
+                super().__init__(self.proxy_reason)
+
+        class DirectAbort(queue_client.AbortReqError):
+            failure_kind = "api"
+            def __init__(self):
+                super().__init__("transport_failed")
+
+        self._route_abort = RouteAbort
+        self._curl_retries = http._CURL_MAX_RETRIES
+        self._http = http
+
+        adapter = self
+
+        class RoutedClient(http.HttpClient):
+            def __init__(self, label, client, *, curl, routed=True):
+                self.label, self.client, self.curl, self.routed = label, client, curl, routed
+                self.backend = "curl" if curl else "httpx"
+
+            @property
+            def headers(self):
+                return self.client.headers
+
+            @property
+            def cookies(self):
+                return self.client.cookies
+
+            async def request(self, method, url, **kwargs):
+                reason = adapter._route_failures.get(self.label)
+                if reason:
+                    raise RouteAbort(reason)
+                try:
+                    if self.routed:
+                        xp.require(adapter.runtime.admitted(self.label), "proxy_revision")
+                    if self.curl:
+                        return await self.client.request(method, url, **kwargs)
+                    import asyncio
+                    async with asyncio.timeout(10):
+                        return http.Response(await self.client.request(method, url, **kwargs))
+                except Exception as error:
+                    reason = error.reason if isinstance(error, xp.ProxyFailure) else "proxy_transport"
+                if not self.routed:
+                    raise DirectAbort() from None
+                adapter._route_failures[self.label] = reason
+                adapter.runtime.admissions.pop(self.label, None)
+                raise RouteAbort(reason) from None
+
+            async def aclose(self):
+                await self.client.aclose()
 
         try:
             factory = http.make_client
@@ -493,30 +568,84 @@ class IdentityAdapter:
                 for key in supplied:
                     if key.lower() == "x-twitter-client-language":
                         supplied[key] = identity["accept_language"].split(",", 1)[0].split(";", 1)[0].split("-", 1)[0].lower()
-            client = factory(backend="httpx" if self.style == "plain" else "curl", proxy=proxy,
-                             headers=supplied, cookies=cookies, seed=seed)
-            if self.style == "curl" and identity is not None:
-                session = getattr(client, "_session", None)
-                if session is None or not hasattr(session, "impersonate"):
-                    raise XStartRefused(["identity_adapter_incompatible"])
-                session.impersonate = identity["impersonation_target"]
-            return client
+            if self.runtime is not None and self.runtime.snapshot.policy is not None:
+                snapshot = self.runtime.snapshot
+                if label not in snapshot.assignments or not self.runtime.admitted(label):
+                    raise RouteAbort("proxy_revision")
+                route = snapshot.assignments[label].route
+                supplied = {k: v for k, v in supplied.items() if k.lower() not in ("accept-language", "x-twitter-client-language")}
+                language = snapshot.assignments[label].accept_language
+                supplied["accept-language"] = language
+                supplied["x-twitter-client-language"] = language.split(",", 1)[0].split(";", 1)[0].split("-", 1)[0].lower()
+                if self.style == "plain":
+                    from api.data.attention.x_proxy_transport import client as route_client
+                    supplied["user-agent"] = http._resolve_browser(supplied.get("user-agent"), seed=seed)[0]
+                    client = route_client(route, snapshot.policy, headers=supplied, cookies=cookies)
+                else:
+                    from api.data.attention.x_proxy_curl import CurlRouteClient
+                    client = CurlRouteClient(route, snapshot.policy,
+                        target=identity["impersonation_target"] if identity else http._resolve_browser(supplied.get("user-agent"))[1],
+                        headers=supplied, cookies=cookies)
+                return RoutedClient(label, client, curl=self.style == "curl")
+            if proxy is not None:
+                raise XStartRefused(["unexpected_account_proxy"])
+            if self.style == "plain":
+                from api.data.attention.x_proxy_transport import direct_client
+                supplied["user-agent"] = http._resolve_browser(supplied.get("user-agent"), seed=seed)[0]
+                client = direct_client(headers=supplied, cookies=cookies)
+            else:
+                from api.data.attention.x_proxy_curl import CurlRouteClient
+                client = CurlRouteClient(None, None,
+                    target=identity["impersonation_target"] if identity else http._resolve_browser(supplied.get("user-agent"))[1],
+                    headers=supplied, cookies=cookies)
+            return RoutedClient(label, client, curl=self.style == "curl", routed=False)
 
         async def get(_cls, username, proxy=None, cookies=None, fresh=False):
-            if not self.identities:
+            if not self.identities and (self.runtime is None or self.runtime.snapshot.policy is None):
                 return await self._get.__func__(_cls, username, proxy=proxy, cookies=cookies, fresh=fresh)
             label = self._label.get()
             identity = self.identities.get(label)
-            if identity is None:
+            if identity is None and self.identities:
                 raise XStartRefused(["identity_context_missing"])
-            key = (label, tuple(sorted(identity.items())), username)
+            revision = self.runtime.snapshot.revisions.get(label) if self.runtime else None
+            key = (label, revision, tuple(sorted((identity or {}).items())), username)
             if not fresh and key in self._items:
                 return self._items[key]
-            result = await xclid.XClIdGen.create(proxy=proxy, cookies=cookies)
+            try:
+                result = await xclid.XClIdGen.create(proxy=proxy, cookies=cookies)
+            except Exception:
+                if label in self._route_failures:
+                    raise RouteAbort(self._route_failures[label]) from None
+                raise
+            if label in self._route_failures:
+                raise RouteAbort(self._route_failures[label])
             self._items[key] = result
             return result
 
+        self._queue_client = queue_client.QueueClient
+        self._check_rep = self._queue_client._check_rep
+        original_check = self._check_rep
+
+        async def check_rep(client, response):
+            try:
+                await original_check(client, response)
+            except queue_client.GqlFeaturesOutdatedError:
+                failure = DirectAbort()
+                failure.failure_kind = "gql_outdated"
+                raise failure from None
+
+        if self.runtime is not None:
+            from api.data.attention.x_proxy_sqlite import DatabaseGuard
+            refusal = None
+            try:
+                self._db_guard = DatabaseGuard(self.runtime, RouteAbort, self._label)
+            except xp.ProxyFailure as error:
+                refusal = error.reason
+            if refusal is not None:
+                raise XStartRefused([refusal])
+        self._queue_client._check_rep = check_rep
         account._make_http_client = xclid._make_http_client = make_client
+        http._CURL_MAX_RETRIES = 0
         self._store.get = classmethod(get)
         self._installed = True
 
@@ -524,14 +653,31 @@ class IdentityAdapter:
         if self._installed:
             self._account._make_http_client = self._xclid._make_http_client = self._factory
             self._store.get = self._get
+            self._queue_client._check_rep = self._check_rep
             self._items.clear()
             self._installed = False
+            self._http._CURL_MAX_RETRIES = self._curl_retries
+            self._route_failures.clear()
+            if self._db_guard is not None:
+                self._db_guard.close()
+                self._db_guard = None
 
 
 def map_exception(exc: BaseException, lib: Library) -> xr.ReaderFailure:
     """The W8d1 failure kind of a library exception; the message is read for its prefix only and dropped."""
+    from api.data.attention.x_proxy import ProxyFailure
     if isinstance(exc, xr.ReaderFailure):
-        return exc
+        text = {"cloudflare": xr.CLOUDFLARE_PREFIX, "html": xr.HTML_PREFIX}.get(exc.abort)
+        return xr.ReaderFailure(exc.kind, text=text, status=exc.status,
+                                proxy_reason=exc.proxy_reason, charged_reads=exc.charged_reads)
+    if isinstance(exc, ProxyFailure):
+        return xr.ReaderFailure("proxy", proxy_reason=exc.reason)
+    reason = getattr(exc, "proxy_reason", None)
+    kind = getattr(exc, "failure_kind", None)
+    if kind in xr.FAILURE_KINDS:
+        return xr.ReaderFailure(kind)
+    if isinstance(reason, str) and reason in xr.PROXY_REASONS:
+        return xr.ReaderFailure("proxy", proxy_reason=reason)
     if isinstance(exc, lib.NoAccountError):
         return xr.ReaderFailure("no_account")
     if isinstance(exc, lib.GqlFeaturesOutdatedError):
@@ -668,6 +814,15 @@ class TwscrapeReader:
                 self._run(gen.aclose())
 
     def search_raw(self, query: str, kv: dict, page: int) -> xr.RawPage | None:
+        if self._adapter is not None:
+            try:
+                self._adapter.ensure_current(self.label)
+            except Exception as error:
+                failure = map_exception(error, self._lib)
+            else:
+                failure = None
+            if failure is not None:
+                raise failure
         if page == 0:
             self._close_gen()
             self._query, self._kv, self._read, self.cursor, self._remaining = query, dict(kv), 0, None, None
@@ -750,12 +905,15 @@ class TwscrapeReader:
 
 # --- the curl fallback child --------------------------------------------------------------------------------------
 
-def fallback_request(label: str, db: Path, query: str, kv: Mapping, *, cursor: str | None) -> dict:
-    """What the child is told: the account, its file, the query and the search variables (no other options)."""
-    if set(kv) - {"product"}:
-        raise ValueError("only the search product may be passed to the fallback")
-    return {"label": label, "db": str(db), "query": query,
-            "kv": {**kv, **({"cursor": cursor} if cursor else {})}}
+def fallback_request(label: str, config_path: Path, query: str, kv: Mapping, *, cursor: str | None) -> dict:
+    """Bounded work only; the child derives the DB from this explicitly selected config."""
+    if (not x_pool.LABEL_RE.fullmatch(label) or not config_path.is_absolute()
+            or set(kv) != {"product"} or kv["product"] != "Latest"
+            or not isinstance(query, str) or not 0 < len(query.encode("utf-8")) <= 4096
+            or cursor is not None and (not isinstance(cursor, str) or len(cursor.encode("utf-8")) > 4096)):
+        raise ValueError("invalid child work")
+    return {"label": label, "config_path": str(config_path.resolve()), "query": query, "backend": "curl",
+            "kv": {**kv, **({"cursor": cursor} if cursor is not None else {})}}
 
 
 def identity_revision(identity: Mapping[str, str]) -> str:
@@ -765,20 +923,71 @@ def identity_revision(identity: Mapping[str, str]) -> str:
 
 
 def child_reply_for(failure: xr.ReaderFailure) -> dict:
-    return {"status": "fail", "kind": failure.kind, "abort": failure.abort}
+    return {"status": "fail", "kind": failure.kind, "abort": failure.abort,
+            **({"proxy_reason": failure.proxy_reason} if failure.kind == "proxy" else {}),
+            **({"charged_reads": failure.charged_reads} if failure.charged_reads else {})}
 
 
 def run_child(request: dict, env: Mapping[str, str], *, timeout: float = 180) -> dict:
     """Run the fallback child (`--curl-fallback`) with `env`; its reply, or a failure reply."""
     import subprocess
+    import threading
+    from api.data.attention import x_proxy as xp
 
+    payload = json.dumps(request, separators=(",", ":")).encode("utf-8")
+    if len(payload) > xp.CHILD_STDOUT_LIMIT:
+        return child_reply_for(xr.ReaderFailure("proxy", proxy_reason="proxy_response"))
+    allowed = {"PATH", "SYSTEMROOT", "WINDIR", "HOMEDRIVE", "HOMEPATH", "USERPROFILE",
+               "LOCALAPPDATA", "APPDATA", "TEMP", "TMP", "TMPDIR", "SCREENER_CACHE_ROOT",
+               "TWS_TELEMETRY", "DO_NOT_TRACK", "TWS_LOG_LEVEL", "TWS_RAISE_WHEN_NO_ACCOUNT", "TWS_HTTP_BACKEND"}
+    child_env = {k: v for k, v in env.items() if k.upper() in allowed}
+    process = None
+    failed = threading.Event()
+    stdout, stderr = bytearray(), bytearray()
+    def collect(pipe, target, ceiling):
+        try:
+            while True:
+                chunk = pipe.read(65536)
+                if not chunk:
+                    break
+                if len(target) + len(chunk) > ceiling:
+                    failed.set()
+                    process.kill()
+                    break
+                target.extend(chunk)
+        except OSError:
+            failed.set()
+        finally:
+            pipe.close()
+    def send():
+        try:
+            process.stdin.write(payload)
+        except (OSError, BrokenPipeError):
+            failed.set()
+        finally:
+            process.stdin.close()
     try:
-        done = subprocess.run([sys.executable, "-m", __name__, "--curl-fallback"], input=json.dumps(request),
-                              capture_output=True, text=True, env=dict(env), cwd=str(REPO_ROOT), timeout=timeout,
-                              check=False)
-        reply = json.loads(done.stdout.strip().splitlines()[-1]) if done.stdout.strip() else {}
-    except (OSError, ValueError, subprocess.SubprocessError):
-        reply = {}
+        process = subprocess.Popen([sys.executable, "-m", __name__, "--curl-fallback"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env=child_env, cwd=str(REPO_ROOT))
+        threads = [threading.Thread(target=collect, args=(process.stdout, stdout, xp.CHILD_STDOUT_LIMIT), daemon=True),
+                   threading.Thread(target=collect, args=(process.stderr, stderr, xp.CHILD_STDERR_LIMIT), daemon=True),
+                   threading.Thread(target=send, daemon=True)]
+        for thread in threads:
+            thread.start()
+        process.wait(timeout=timeout)
+        for thread in threads:
+            thread.join(timeout=1)
+        if failed.is_set() or any(thread.is_alive() for thread in threads) or process.returncode != 0:
+            return child_reply_for(xr.ReaderFailure("proxy", proxy_reason="proxy_response"))
+        reply = xp.strict_json(bytes(stdout), limit=xp.CHILD_STDOUT_LIMIT)
+    except (OSError, ValueError, subprocess.SubprocessError, xp.ProxyFailure):
+        if process is not None and process.poll() is None:
+            process.kill()
+            process.wait(timeout=2)
+        return child_reply_for(xr.ReaderFailure("proxy", proxy_reason="proxy_transport"))
+    finally:
+        stderr.clear()  # never expose captured third-party diagnostics
     return reply if isinstance(reply, dict) and reply.get("status") else {"status": "fail", "kind": "api"}
 
 
@@ -791,17 +1000,38 @@ class CurlFallback:
     env: Mapping[str, str]
     run: Callable[[dict, Mapping[str, str]], dict] = run_child
     identities: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
+    runtime: object | None = None
 
     def __call__(self, label: str, query: str, kv: dict, page: int) -> xr.RawPage | None:
+        from api.data.attention import x_proxy as xp
+        from api.data.attention.x_proxy_child import prepare, validate_reply
         reader = self.readers[label]
-        req = fallback_request(label, self.accounts_dir / f"{label}.db", query, kv,
-                               cursor=reader.cursor if page else None)
-        if self.identities:
-            identity = self.identities.get(label)
-            if not identity or not identity.get("impersonation_target"):
-                raise xr.ReaderFailure("api")
-            req["identity_revision"] = identity_revision(identity)
-        reply = self.run(req, service_env(self.env, private_tmp=private_tmp(), fallback=True))
+        cursor = reader.cursor if page else None
+        routed = self.runtime is not None and self.runtime.snapshot.policy is not None
+        req, reply, failure = None, None, None
+        try:
+            if routed:
+                req = prepare(self.runtime, label, query, {**kv, **({"cursor": cursor} if cursor is not None else {})})
+            else:
+                path = self.runtime.config_path if self.runtime is not None else None
+                req = fallback_request(label, path or web_queries.QUERIES_PATH.resolve(), query, kv, cursor=cursor)
+                req["identity_revision"] = identity_revision(self.identities.get(label, {}))
+            reply = self.run(req, service_env(self.env, private_tmp=private_tmp(), fallback=True))
+            if routed:
+                validate_reply(self.runtime, req, reply)
+        except xp.ProxyFailure as error:
+            charged = len(timeline_entry_ids(reply["body"])) if isinstance(reply, dict) and isinstance(reply.get("body"), dict) else 0
+            if not charged and isinstance(reply, dict) and type(reply.get("charged_reads")) is int and 0 <= reply["charged_reads"] <= xp.X_LIMIT:
+                charged = reply["charged_reads"]
+            failure = xr.ReaderFailure("proxy", proxy_reason=error.reason, charged_reads=charged)
+        finally:
+            if req is not None:
+                req.pop("attestation_key", None)
+                req.pop("attestation_tag", None)
+        if failure is not None:
+            if self.runtime is not None:
+                self.runtime.admissions.pop(label, None)
+            raise failure
         status = reply.get("status")
         if status == "ok" and isinstance(reply.get("body"), dict):
             return reader.adopt(reply["body"], {"x-rate-limit-remaining": reply.get("remaining"),
@@ -810,7 +1040,12 @@ class CurlFallback:
             return None
         kind = reply.get("kind") if reply.get("kind") in xr.FAILURE_KINDS else "api"
         text = {"cloudflare": xr.CLOUDFLARE_PREFIX, "html": xr.HTML_PREFIX}.get(reply.get("abort"))
-        raise xr.ReaderFailure(kind, text=text)
+        charged = reply.get("charged_reads", 0)
+        if type(charged) is not int or not 0 <= charged <= xp.X_LIMIT:
+            raise xr.ReaderFailure("proxy", proxy_reason="proxy_response")
+        if kind == "proxy" and self.runtime is not None:
+            self.runtime.admissions.pop(label, None)
+        raise xr.ReaderFailure(kind, text=text, proxy_reason=reply.get("proxy_reason"), charged_reads=charged)
 
 
 # --- start, health, cookie refresh --------------------------------------------------------------------------------
@@ -822,6 +1057,42 @@ class XStart:
     curl_status: str
     notes: list[str] = field(default_factory=list)
     adapter: IdentityAdapter | None = None
+    runtime: object | None = None
+    library: Library | None = None
+    version: str = "unknown"
+
+    def reconcile(self, config: CollectorConfig, pool) -> None:
+        if self.runtime is None:
+            return
+        from api.data.attention import x_proxy as xp
+        self.runtime.initial_config = config
+        changed = self.runtime.reconcile(pool)
+        config = self.runtime.snapshot.config
+        xp.require(config.x_connection_style == self.adapter.style, "proxy_revision")
+        self.adapter.identities = dict(config.x_account_identities) if config.x_identity_enabled else {}
+        if self.fallback is not None:
+            self.fallback.identities = self.adapter.identities
+        for label in changed:
+            previous = self.readers.pop(label, None)
+            names = previous.account_names if previous is not None else ()
+            if previous is not None:
+                previous.close()
+            self.adapter._items = {key: item for key, item in self.adapter._items.items() if key[0] != label}
+            self.adapter._route_failures.pop(label, None)
+            if label in config.x_accounts:
+                self.readers[label] = TwscrapeReader(label, Path(config.x_accounts_db_path) / f"{label}.db",
+                    self.library, max_entries=config.x_page_cap * xr.PAGE_ENTRIES,
+                    version=self.version, adapter=self.adapter, account_names=names)
+        for label in config.x_accounts:
+            if self.runtime.snapshot.policy is not None:
+                try:
+                    self.runtime.admit(label, pool)
+                    self.adapter._route_failures.pop(label, None)
+                except xp.ProxyFailure as failure:
+                    if failure.reason == "proxy_budget":
+                        pool.proxy_unknown(label, failure.reason, wake_at=self.runtime.next_health(label))
+                    if failure.reason not in ("proxy_quarantine", "proxy_budget"):
+                        self.adapter._route_failures[label] = failure.reason
 
     def close(self) -> None:
         for r in self.readers.values():
@@ -839,7 +1110,8 @@ def _curl(config: CollectorConfig, platform: str | None, dist_lookup, record: di
 def start(config: CollectorConfig, *, env: Mapping[str, str] = os.environ, repo_root: Path = REPO_ROOT,
           dist_lookup: Callable[[str], DistInfo | None] = find_dist, load: Callable[[], Library] = load_library,
           platform: str | None = None, dump_roots: Iterable[Path] | None = None, curl_record: dict | None = None,
-          run_child: Callable = run_child, account_names: Mapping[str, tuple[str, ...]] | None = None) -> XStart:
+          run_child: Callable = run_child, account_names: Mapping[str, tuple[str, ...]] | None = None,
+          config_path: Path | None = None, runtime_factory=None) -> XStart:
     """One reader per configured account, or `XStartRefused` with every reason (nothing imported before the
     environment passed; no library call is made here other than building each account's `API`)."""
     selected_backend = "curl" if config.x_connection_style == "curl" else "httpx"
@@ -866,10 +1138,17 @@ def start(config: CollectorConfig, *, env: Mapping[str, str] = os.environ, repo_
         curl = _curl(config, platform, dist_lookup, record)
     if reasons:
         raise XStartRefused(reasons)
+    from api.data.attention import x_proxy as xp
+    from api.data.attention.x_proxy_runtime import ProxyRuntime
+    runtime = (runtime_factory or ProxyRuntime)(config, config_path=config_path, repo_root=repo_root)
+    try:
+        runtime.reconcile(x_pool.from_config(config, clock=lambda: datetime.now(UTC)))
+    except xp.ProxyFailure as failure:
+        raise XStartRefused([failure.reason]) from None
     clean_dumps([LIBRARY_DUMP_ROOT, private_tmp()] if dump_roots is None else dump_roots)
     lib = load()
     adapter = IdentityAdapter(config.x_connection_style,
-                              config.x_account_identities if config.x_identity_enabled else {})
+                              config.x_account_identities if config.x_identity_enabled else {}, runtime=runtime)
     adapter.install()
     d = Path(config.x_accounts_db_path)
     names = account_names or {}
@@ -890,7 +1169,9 @@ def start(config: CollectorConfig, *, env: Mapping[str, str] = os.environ, repo_
                                 config.x_account_identities if config.x_identity_enabled else {})
     elif config.x_connection_style == "plain":
         notes.append(f"curl_fallback_off:{curl}")
-    return XStart(readers, fallback, curl, notes, adapter)
+    if fallback is not None:
+        fallback.runtime = runtime
+    return XStart(readers, fallback, curl, notes, adapter, runtime, lib, dist.version)
 
 
 def reader_status(config: CollectorConfig, *, env: Mapping[str, str], now: datetime,
@@ -931,7 +1212,11 @@ def _word(v) -> str:
 
 
 def status_lines(h: dict) -> list[str]:
-    """`reader_status` as probe lines; every value is a number, a known code, a label or an ISO time."""
+    """Compact allowlisted probe; deliberately omit B2 proxy metadata.
+
+    The sources API owns the optional proxy fields. Unknown/new dictionary keys
+    never reach this CLI, including private path/URL/IP or malformed metadata.
+    """
     lines = [(f"xreader accounts_active={h['active']} accounts_total={h['total']}"
               f" commit_match={_word(h['commit_match'])}"
               f" env_ok={_word(h['env_ok'])} env_bad={_word(','.join(h['env_bad']) or None)}"
@@ -947,7 +1232,8 @@ def status_lines(h: dict) -> list[str]:
 
 
 def refresh_cookies(label: str, cookies: str, *, config: CollectorConfig, env: Mapping[str, str] = os.environ,
-                    now: datetime, repo_root: Path = REPO_ROOT, load: Callable[[], Library] = load_library) -> None:
+                    now: datetime, repo_root: Path = REPO_ROOT, load: Callable[[], Library] = load_library,
+                    config_path: Path | None = None) -> None:
     """The cookie upsert `pool.add_account_cookies(label, cookies)` on that account's own file."""
     import asyncio
 
@@ -964,8 +1250,28 @@ def refresh_cookies(label: str, cookies: str, *, config: CollectorConfig, env: M
     if problems:
         raise XStartRefused(problems)
     path = Path(config.x_accounts_db_path) / f"{label}.db"
+    adapter = None
+    runtime = None
+    if config.x_proxy_required or any(value is not None for value in
+            (config.x_proxy_list_path, config.x_proxy_assignments_path, config.x_proxy_policy_path)):
+        from api.data.attention import x_proxy as xp
+        from api.data.attention.x_proxy_runtime import ProxyRuntime, Snapshot
+        from api.data.attention.x_proxy_snapshot import load_snapshot
+        try:
+            xp.require(config_path is not None, "proxy_config")
+            private = load_snapshot(Path(config_path), repo_root=repo_root)
+            xp.require(private.config == config, "proxy_revision")
+            runtime = ProxyRuntime(config, config_path=config_path, repo_root=repo_root)
+            runtime.snapshot = Snapshot(config, private.policy, private.assignments, {}, Path(config_path), private)
+        except xp.ProxyFailure as failure:
+            raise XStartRefused([failure.reason]) from None
     try:
-        api = load().API(str(path), raise_when_no_account=True, wait_timeout=0)
+        library = load()
+        if runtime is not None:
+            adapter = IdentityAdapter(config.x_connection_style,
+                config.x_account_identities if config.x_identity_enabled else {}, runtime=runtime)
+            adapter.install()
+        api = library.API(str(path), raise_when_no_account=True, wait_timeout=0)
         async def refresh():
             previous = None
             if config.x_identity_enabled:
@@ -991,6 +1297,9 @@ def refresh_cookies(label: str, cookies: str, *, config: CollectorConfig, env: M
         cls = type(exc).__name__
     else:
         cls = None
+    finally:
+        if adapter is not None:
+            adapter.close()
     if cls:
         raise RefreshFailed(cls)
     if os.name == "posix":
@@ -1001,51 +1310,110 @@ def refresh_cookies(label: str, cookies: str, *, config: CollectorConfig, env: M
     except (OSError, ValueError):
         ages = {}
     ages[label] = now.astimezone(UTC).isoformat()
-    cache._atomic_write_json(ages, ages_path)
+    if runtime is None:
+        cache._atomic_write_json(ages, ages_path)
+    else:
+        from api.data.attention.x_proxy_private import atomic_json
+        atomic_json(ages_path, ages, service_sid=runtime.snapshot.policy.service_sid)
     if os.name == "posix":
         os.chmod(ages_path, 0o600)
 
 
 # --- command line: the fallback child, the install record, the cookie refresh -------------------------------------
 
-def _child(stdin: str, env: Mapping[str, str]) -> dict:
-    """The fallback process: one page on the curl backend for one account, from the given cursor."""
+def _child_work(req: dict, env: Mapping[str, str]) -> dict:
+    from api.data.attention import x_proxy as xp
+    routed = "attestation_key" in req or "proxy_id" in req
     if env_guard(env, fallback=True):
-        return {"status": "refused", "reason": "env"}
+        return child_reply_for(xr.ReaderFailure("proxy", proxy_reason="proxy_policy")) if routed else {"status": "refused", "reason": "env"}
     if identity_problem(find_dist("twscrape"), PINNED_COMMIT):
-        return {"status": "refused", "reason": "identity"}
+        return child_reply_for(xr.ReaderFailure("proxy", proxy_reason="proxy_policy")) if routed else {"status": "refused", "reason": "identity"}
     if curl_status(read_install_record(), platform_key(), find_dist("curl_cffi")) != "ok":
-        return {"status": "refused", "reason": "curl"}
-    try:
-        req = json.loads(stdin)
-        label, db, query, kv = req["label"], Path(req["db"]), req["query"], dict(req["kv"])
-        config = web_queries.validate_config(web_queries.load().config.as_dict())
-        if (label not in config.x_accounts or config.x_connection_style != "plain"
-                or db.resolve() != (Path(config.x_accounts_db_path) / f"{label}.db").resolve()
-                or not isinstance(query, str) or set(kv) - {"product", "cursor"}):
-            return {"status": "refused", "reason": "request"}
-        identities = config.x_account_identities if config.x_identity_enabled else {}
-        if identities and req.get("identity_revision") != identity_revision(identities[label]):
-            return {"status": "refused", "reason": "identity"}
-    except (OSError, ValueError, KeyError, TypeError):
-        return {"status": "refused", "reason": "identity"}
+        return child_reply_for(xr.ReaderFailure("proxy", proxy_reason="proxy_policy")) if routed else {"status": "refused", "reason": "curl"}
+    label = req.get("label")
+    xp.require(isinstance(label, str) and x_pool.LABEL_RE.fullmatch(label) is not None, "proxy_assignment")
+    runtime = None
+    if routed:
+        from api.data.attention.x_proxy_child import reload_verified
+        from api.data.attention.x_proxy_runtime import Admission, ProxyRuntime, Snapshot
+        from api.data.attention.x_proxy_private import verified_open
+        private, admission = reload_verified(req, repo_root=REPO_ROOT, now=datetime.now(UTC))
+        config = private.config
+        db = Path(config.x_accounts_db_path) / f"{label}.db"
+        with verified_open(db, private.policy.private_root, repo_root=REPO_ROOT,
+                           service_sid=private.policy.service_sid):
+            pass  # inspect/hold the exact DB handle before SQLite opens its validated path
+        runtime = ProxyRuntime(config, config_path=Path(req["config_path"]), repo_root=REPO_ROOT)
+        runtime.child_frozen = True
+        runtime._revisions = {label: req["identity_revision"]}
+        runtime.snapshot = Snapshot(config, private.policy, private.assignments, dict(runtime._revisions),
+                                    Path(req["config_path"]), private)
+        runtime.admissions[label] = Admission(req["proxy_id"], req["identity_revision"],
+            datetime.fromisoformat(admission["checked_at"]), datetime.fromisoformat(admission["expires_at"]),
+            tuple(admission["feeds"].items()))
+        req.pop("attestation_key", None)
+        req.pop("attestation_tag", None)
+    else:
+        xp.exact(req, ("config_path", "label", "query", "kv", "backend", "identity_revision"))
+        path = Path(req["config_path"])
+        xp.require(path.is_absolute() and path.resolve(strict=True) == path, "proxy_private")
+        from api.data.attention.x_proxy_private import read_bounded
+        config = web_queries.validate(xp.strict_json(read_bounded(path, 1024 * 1024), limit=1024 * 1024)).config
+        xp.require(not config.x_proxy_required and all(value is None for value in
+            (config.x_proxy_list_path, config.x_proxy_assignments_path, config.x_proxy_policy_path)), "proxy_config")
+        xp.require(isinstance(req["kv"], dict) and set(req["kv"]) <= {"product", "cursor"}
+                   and req["backend"] == "curl", "proxy_config")
+        fallback_request(label, path, req["query"], {"product": req["kv"].get("product")},
+                         cursor=req["kv"].get("cursor"))
+        db = Path(config.x_accounts_db_path) / f"{label}.db"
+    xp.require(label in config.x_accounts and config.x_connection_style == "plain", "proxy_config")
+    xp.require(not accounts_problems(config, repo_root=REPO_ROOT), "proxy_private")
+    identities = config.x_account_identities if config.x_identity_enabled else {}
+    if not routed:
+        xp.require(req["identity_revision"] == identity_revision(identities.get(label, {})), "proxy_revision")
+    query, kv = req["query"], dict(req["kv"])
+    cursor = kv.pop("cursor", None)
     lib = load_library()
-    adapter = IdentityAdapter("curl", identities)
+    adapter = IdentityAdapter("curl", identities, runtime=runtime)
+    reader = None
     try:
         adapter.install()
         reader = TwscrapeReader(label, db, lib, max_entries=xr.PAGE_ENTRIES, adapter=adapter)
-    except XStartRefused:
-        return {"status": "refused", "reason": "identity"}
-    try:
-        raw = reader.resume(query, kv, kv.pop("cursor", None))
-    except xr.ReaderFailure as f:
-        return child_reply_for(f)
+        raw = reader.resume(query, kv, cursor)
+    except xr.ReaderFailure as failure:
+        return child_reply_for(failure)
     finally:
-        reader.close()
+        if reader is not None:
+            reader.close()
         adapter.close()
     if raw is None:
         return {"status": "empty"}
     return {"status": "ok", "body": raw.body, "remaining": raw.rate_limit_remaining, "limit": raw.rate_limit_limit}
+
+
+def _child(stdin: str, env: Mapping[str, str]) -> dict:
+    """Real child entry, bounded before parse, with safe failures on every path."""
+    from api.data.attention import x_proxy as xp
+    req = None
+    try:
+        raw = stdin.encode("utf-8") if isinstance(stdin, str) else stdin
+        req = xp.strict_json(raw, limit=xp.CHILD_STDOUT_LIMIT)
+        xp.require(isinstance(req, dict), "proxy_config")
+        result = _child_work(req, env)
+    except xp.ProxyFailure as failure:
+        result = child_reply_for(xr.ReaderFailure("proxy", proxy_reason=failure.reason))
+    except Exception:
+        result = child_reply_for(xr.ReaderFailure("proxy", proxy_reason="proxy_transport")) if isinstance(req, dict) and "proxy_id" in req else {"status": "refused", "reason": "request"}
+    finally:
+        if isinstance(req, dict):
+            req.pop("attestation_key", None)
+            req.pop("attestation_tag", None)
+    if isinstance(req, dict) and isinstance(req.get("request_nonce"), str) and re.fullmatch(r"[0-9a-f]{64}", req["request_nonce"]):
+        result["request_nonce"] = req["request_nonce"]
+        revision = req.get("identity_revision")
+        if isinstance(revision, str) and re.fullmatch(r"[0-9a-f-]{36}", revision):
+            result["identity_revision"] = revision
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1057,9 +1425,23 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--write-curl-record", action="store_true", help="record the curl_cffi wheel for this platform")
     g.add_argument("--refresh-cookies", metavar="LABEL", help="cookie upsert; cookies from X_REFRESH_COOKIES")
     g.add_argument("--mark-ready", metavar="LABEL", help="mark a configured account ready for the next UTC day")
+    p.add_argument("--queries", type=Path, help="explicit absolute owner query configuration")
     args = p.parse_args(argv)
     if args.curl_fallback:
-        print(json.dumps(_child(sys.stdin.read(), os.environ)))
+        from api.data.attention import x_proxy as xp
+        raw = sys.stdin.buffer.read(xp.CHILD_STDOUT_LIMIT + 1)
+        result = _child(raw, os.environ)
+        encoded = bytearray()
+        for piece in json.JSONEncoder(ensure_ascii=False, separators=(",", ":")).iterencode(result):
+            data = piece.encode("utf-8")
+            if len(encoded) + len(data) > xp.CHILD_STDOUT_LIMIT:
+                charged = len(timeline_entry_ids(result["body"])) if isinstance(result.get("body"), dict) else 0
+                proof = {k: result[k] for k in ("request_nonce", "identity_revision") if k in result}
+                result = child_reply_for(xr.ReaderFailure("proxy", proxy_reason="proxy_response", charged_reads=charged))
+                encoded = bytearray(json.dumps({**result, **proof}, separators=(",", ":")).encode())
+                break
+            encoded.extend(data)
+        sys.stdout.write(encoded.decode("utf-8"))
         return 0
     if args.write_curl_record:
         key = platform_key()
@@ -1075,13 +1457,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"curl_record status={status} platform={key}")
         return 0 if status == "ok" else 2
     from api.data.attention import web_queries
+    from api.data.attention.x_proxy import ProxyFailure
 
     if args.mark_ready:
         try:
-            config = web_queries.load().config
+            config = web_queries.load(args.queries).config if args.queries else web_queries.load().config
+            service_sid = None
+            if config.x_proxy_required or any(value is not None for value in
+                    (config.x_proxy_list_path, config.x_proxy_assignments_path, config.x_proxy_policy_path)):
+                from api.data.attention.x_proxy_snapshot import load_snapshot
+                if args.queries is None:
+                    raise ValueError("explicit configuration required")
+                service_sid = load_snapshot(args.queries, repo_root=REPO_ROOT).policy.service_sid
             x_pool.write_ready(config.x_accounts_db_path, args.mark_ready, datetime.now(UTC),
-                               labels=config.x_accounts)
-        except (OSError, ValueError):
+                               labels=config.x_accounts, service_sid=service_sid)
+        except (OSError, ValueError, ProxyFailure):
             print("ready status=refused")
             return 2
         print(f"ready status=ok label={_word(args.mark_ready)}")
@@ -1092,8 +1482,9 @@ def main(argv: list[str] | None = None) -> int:
         print("refresh status=no_cookies_in_env")
         return 2
     try:
-        refresh_cookies(args.refresh_cookies, cookies, config=web_queries.load().config,
-                        now=datetime.now(UTC))
+        config = web_queries.load(args.queries).config if args.queries else web_queries.load().config
+        refresh_cookies(args.refresh_cookies, cookies, config=config,
+                        now=datetime.now(UTC), config_path=args.queries)
     except (XStartRefused, RefreshFailed, ValueError) as e:
         reasons = getattr(e, "reasons", None)
         detail = ",".join(reasons) if reasons else reasons

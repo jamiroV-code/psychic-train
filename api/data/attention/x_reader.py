@@ -32,6 +32,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Protocol, runtime_checkable
 
 from api.data.attention import x_filters, x_window
+from api.data.attention.x_proxy import REASONS as PROXY_REASONS
 
 TWSCRAPE_PACKAGE = "twscrape"
 TWSCRAPE_REPO = "https://github.com/vladkens/twscrape"
@@ -51,7 +52,7 @@ PAGE_ENTRIES = x_window.PAGE_ENTRIES
 PARSE_DROP_MIN_ENTRIES = 2  # "several" raw entries with zero parsed is a layout change
 PARSE_DROP_RATE_MIN_ENTRIES = 10  # the drop-rate test needs a page this large
 INACTIVE_CODES = {88: "x_account_suspended", 326: "x_account_suspended", 32: "x_login_required"}
-FAILURE_KINDS = ("no_account", "abort", "api", "gql_outdated", "xclid_parse", "not_found", "parse")
+FAILURE_KINDS = ("no_account", "abort", "api", "gql_outdated", "xclid_parse", "not_found", "parse", "proxy")
 DRIFT_KINDS = frozenset({"gql_outdated", "xclid_parse", "not_found", "parse"})
 _CODE_RE = re.compile(r"\((\d{1,4})\)")
 PROXY_VARS = ("TWS_PROXY", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "tws_proxy", "http_proxy", "https_proxy",
@@ -89,7 +90,8 @@ class ReaderFailure(Exception):
     """A reader failure by kind. An abort keeps only its classification (`cloudflare`, `html`, `other`), never
     the text, and `str()` is the class and kind only, so nothing from a response reaches a log."""
 
-    def __init__(self, kind: str, *, text: str | None = None, status: int | None = None):
+    def __init__(self, kind: str, *, text: str | None = None, status: int | None = None,
+                 proxy_reason: str | None = None, charged_reads: int = 0):
         if kind not in FAILURE_KINDS:
             raise ValueError("unknown failure kind")
         if status is not None and (not isinstance(status, int) or isinstance(status, bool)):
@@ -97,6 +99,10 @@ class ReaderFailure(Exception):
         super().__init__()
         self.kind, self.status = kind, status
         self.abort = abort_kind(text) if kind == "abort" else None
+        self.proxy_reason = (proxy_reason if isinstance(proxy_reason, str) and proxy_reason in PROXY_REASONS else "proxy_transport") if kind == "proxy" else None
+        if type(charged_reads) is not int or charged_reads < 0:
+            raise ValueError("charged reads must be nonnegative")
+        self.charged_reads = charged_reads
 
     def __str__(self) -> str:
         return f"ReaderFailure {self.kind}" + (f" {self.abort}" if self.abort else "")

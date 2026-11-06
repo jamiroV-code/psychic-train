@@ -120,11 +120,18 @@ def run(env=None, *, stop: threading.Event | None = None, install_signals: bool 
         restore()
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+    from pathlib import Path
+    parser = argparse.ArgumentParser(description="Standalone attention collector")
+    parser.add_argument("--queries", type=Path, help="explicit absolute private owner query config")
+    args = parser.parse_args(argv)
+    if args.queries is not None and not args.queries.is_absolute():
+        parser.error("--queries must be absolute")
     logging.basicConfig(level=logging.INFO, format="%(asctime)sZ %(levelname)s %(name)s %(message)s",
                         datefmt="%Y-%m-%dT%H:%M:%S")
     logging.Formatter.converter = _time.gmtime
-    return run()
+    return run(**({"queries_path": args.queries} if args.queries is not None else {}))
 
 
 if __name__ == "__main__":

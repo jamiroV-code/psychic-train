@@ -1,9 +1,8 @@
 """S-F1: GET /api/narrative/discovery through the real app, store only."""
 from __future__ import annotations
 
-import socket
+from api.tests.network_guard import deny_network
 
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -21,11 +20,7 @@ def wired(isolated_cache, tmp_path, monkeypatch):
     world(tmp_path, monkeypatch, {"A": 5e7, "B": 5e7}, cats={"ai": ["A", "B"]})
     gain("A"), gain("B", factor=3.0)
 
-    def boom(*a, **k):
-        raise AssertionError("handler must not reach the network")
-    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", boom)
-    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", boom)
-    monkeypatch.setattr(socket.socket, "connect", boom)
+    deny_network(monkeypatch)
     return TestClient(app)
 
 
@@ -135,17 +130,7 @@ def test_no_data_payload_carries_the_new_fields_with_defaults(isolated_cache, tm
 
 def test_onboarding_route_reads_fixture_without_network(isolated_cache, monkeypatch):
     from api.data.attention import coin_ledger, onboarding_store
-    import ipaddress
-    real_connect = socket.socket.connect
-    def boom(*args, **kwargs):
-        raise AssertionError("onboarding route must not reach the network")
-    def local_only(sock, address, *args, **kwargs):
-        if isinstance(address, tuple) and ipaddress.ip_address(address[0]).is_loopback:
-            return real_connect(sock, address, *args, **kwargs)
-        return boom()
-    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", boom)
-    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", boom)
-    monkeypatch.setattr(socket.socket, "connect", local_only)
+    deny_network(monkeypatch)
     ledger = coin_ledger.empty()
     ledger["coins"]["new"] = coin_ledger._entry({"symbol": "ZZNEW"}, "2026-11-01", state="watching", count=4)
     onboarding_store.write_ledger(ledger)

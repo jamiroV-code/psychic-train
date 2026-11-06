@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 import path from "node:path";
 import os from "node:os";
+import { mkdtempSync } from "node:fs";
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 
@@ -9,7 +10,15 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 // equal to the real cache root — the E2E must never be able to overwrite live
 // market data (three live-data incidents in two days made that explicit).
 const D18 = process.env.D18_E2E === "1";
-const E2E_CACHE_ROOT = process.env.E2E_CACHE_ROOT ?? path.join(os.tmpdir(), "screener-e2e-cache");
+const B2 = process.env.B2_E2E === "1";
+if (B2 && D18) throw new Error("B2 and D18 require separate fixture servers");
+if ((B2 || D18) && (!process.env.E2E_API_PORT || !process.env.E2E_WEB_PORT)) {
+  throw new Error("Isolated acceptance requires explicit E2E_API_PORT and E2E_WEB_PORT");
+}
+const E2E_CACHE_ROOT = process.env.E2E_CACHE_ROOT ??
+  (B2 ? mkdtempSync(path.join(os.tmpdir(), "b2-status-e2e-")) :
+    D18 ? mkdtempSync(path.join(os.tmpdir(), "d18-e2e-")) : path.join(os.tmpdir(), "screener-e2e-cache"));
+process.env.E2E_CACHE_ROOT = E2E_CACHE_ROOT;
 const E2E_WATCHLIST = path.join(E2E_CACHE_ROOT, "watchlist.json");
 // Pair-screener fixture universe (RFC-005). The seeder writes it and refuses
 // to run if this resolves to the real api/data/pairs_universe.json.
@@ -27,6 +36,7 @@ const CHROMIUM_PATH = process.env["PLAYWRIGHT_CHROMIUM_PATH"] || undefined;
 const API_PORT = Number(process.env.E2E_API_PORT ?? 8001);
 const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 3100);
 const API_BASE_URL = `http://127.0.0.1:${API_PORT}`;
+process.env.NEXT_PUBLIC_API_BASE_URL = API_BASE_URL;
 
 const apiEnv = {
   UV_FROZEN: "1",
@@ -39,6 +49,7 @@ const apiEnv = {
   SCREENER_ATTENTION_REDDIT_STREAM: "0",
   SPOT_VOLUME_REFRESH: "0",
   D18_API_PORT: String(API_PORT),
+  E2E_API_PORT: String(API_PORT),
   SCREENER_LAYOUT_PATH: path.join(E2E_CACHE_ROOT, "layout.json"),
   SCREENER_CACHE_ROOT: E2E_CACHE_ROOT,
   SCREENER_WATCHLIST_PATH: E2E_WATCHLIST,
@@ -56,6 +67,13 @@ const apiEnv = {
 
 export default defineConfig({
   testDir: "./e2e",
+  // Specialized real-server fixtures are required separate gates; neither
+  // may substitute its configuration for the ordinary full-suite server.
+  ...(B2
+    ? { testMatch: "**/collector-status.spec.ts" }
+    : D18
+      ? { testMatch: "**/daily-data-gap.spec.ts" }
+      : { testIgnore: ["**/collector-status.spec.ts", "**/daily-data-gap.spec.ts"] }),
   // These specs drive two real servers; a flaky-retry would hide a genuine
   // ordering bug rather than surface it.
   retries: 0,
@@ -108,7 +126,10 @@ export default defineConfig({
           ? `uv run --project api python -m api.tests.daily_gap_e2e seed && uv run --project api python -m api.tests.daily_gap_e2e serve`
           : `uv run --project api python api/scripts/seed_e2e_cache.py && ` +
             `uv run --project api python api/scripts/seed_e2e_equities.py && ` +
-            `uv run --project api uvicorn api.main:app --host 127.0.0.1 --port ${API_PORT}`,
+            (B2
+              ? `uv run --project api --frozen --group xreader python -m api.tests.collector_status_e2e seed && ` +
+                `uv run --project api --frozen --group xreader python -m api.tests.collector_status_e2e serve`
+              : `uv run --project api uvicorn api.main:app --host 127.0.0.1 --port ${API_PORT}`),
       cwd: REPO_ROOT,
       url: `${API_BASE_URL}/api/health`,
       env: apiEnv,

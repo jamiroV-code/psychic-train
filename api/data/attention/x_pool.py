@@ -38,18 +38,22 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
+from functools import wraps
+from contextvars import ContextVar
 
 from api.data import cache
 from api.data.attention import density, x_density, x_filters, x_raw, x_window
 from api.data.attention import pc_pace as pp
 from api.data.attention import x_reader as xr
 from api.data.attention.web_queries import CollectorConfig
+from api.data.attention import x_proxy as xp
+from api.data.attention.x_proxy_private import atomic_json, read_bounded, state_lock
 
 LABEL_RE = re.compile(r"[a-z0-9_]{1,24}")
 STATES = ("active", "inactive", "suspect")
 DAY_PAUSE_REASONS = ("no_usable_account", "cloudflare_block", "html_block", "empty_results", "canary_disagree")
 WAIT_REASON = xr.IN_FLIGHT_REASON
-PAUSE_REASONS = (*DAY_PAUSE_REASONS, WAIT_REASON)
+PAUSE_REASONS = (*DAY_PAUSE_REASONS, WAIT_REASON, "proxy_quarantine")
 LOCK_MARGIN_S = 30  # past the library's lock end before the account is tried again
 RATE_LIMIT_WINDOW = timedelta(minutes=15)  # X's rate-limit window: older near-zero headers are no evidence
 SUSPECT_REASON = "x_account_suspect"
@@ -57,12 +61,32 @@ ALERT_REASONS = ("x_account_suspended", "x_login_required", SUSPECT_REASON)
 DRIFT_STOP = 3
 SINGLE_ACCOUNT_NOTE = "comparison skipped: single active account"
 TOP_KEYS = {"accounts", "alerts", "pause_until", "pause_reason", "stopped", "drift_streak", "canary_day",
-            "canary_note", "canary_labels", "curl_uses", "curl_last_use"}
+            "canary_note", "canary_labels", "curl_uses", "curl_last_use", "proxy_provider_budget"}
 ACCOUNT_KEYS = {"state", "reason", "last_used", "lock_until", "last_canary", "suspect_since", "rate_limit_seen",
-                "reads_day", "reads_used", "rest_until", "parse_strikes", "parse_strike_last_at"}
+                "reads_day", "reads_used", "rest_until", "parse_strikes", "parse_strike_last_at",
+                "proxy_id", "identity_revision", "proxy_health", "proxy_checked_at",
+                "proxy_quarantine_until", "proxy_reason", "proxy_changed_at"}
 TIME_KEYS = ("last_used", "lock_until", "last_canary", "suspect_since", "rate_limit_seen", "rest_until",
-             "parse_strike_last_at")
+             "parse_strike_last_at", "proxy_checked_at", "proxy_quarantine_until", "proxy_changed_at")
 READY_FILE = "account_ready.json"
+B2_ACCOUNT_KEYS = ("proxy_id", "identity_revision", "proxy_health", "proxy_checked_at",
+                   "proxy_quarantine_until", "proxy_reason", "proxy_changed_at")
+
+
+def _transaction(method):
+    """Reload before mutation; nested helpers use explicit internal ownership."""
+    @wraps(method)
+    def call(self, *args, **kwargs):
+        if self._lock_owned is not None:
+            return method(self, *args, **kwargs)
+        with state_lock(self.path) as ownership:
+            self._lock_owned = ownership
+            try:
+                self._s = self._load()
+                return method(self, *args, **kwargs)
+            finally:
+                self._lock_owned = None
+    return call
 
 
 class XPoolStateError(ValueError):
@@ -94,8 +118,8 @@ def read_ready(directory: str | Path) -> dict:
     if not directory:
         return {}
     try:
-        marks = json.loads((Path(directory) / READY_FILE).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        marks = xp.strict_json(read_bounded(Path(directory) / READY_FILE, xp.SMALL_LIMIT))
+    except (OSError, ValueError, xp.ProxyFailure):
         return {}
     if not isinstance(marks, dict):
         return {}
@@ -103,34 +127,67 @@ def read_ready(directory: str | Path) -> dict:
             if LABEL_RE.fullmatch(label) and at is not None and _iso(at)}
 
 
-def write_ready(directory: str | Path, label: str, now: datetime, *, labels) -> None:
+def write_ready(directory: str | Path, label: str, now: datetime, *, labels, service_sid=None) -> None:
     """Separate atomic owner file: a collector pool save cannot overwrite these marks."""
     if label not in labels or not LABEL_RE.fullmatch(label) or not directory:
         raise ValueError("configured label and accounts directory required")
     marks = read_ready(directory)
     marks[label] = _utc(now).isoformat()
-    cache._atomic_write_json(marks, Path(directory) / READY_FILE)
+    if service_sid is None:
+        cache._atomic_write_json(marks, Path(directory) / READY_FILE)
+    else:
+        atomic_json(Path(directory) / READY_FILE, marks, service_sid=service_sid)
 
 
 def from_config(config: CollectorConfig, *, clock: Callable[[], datetime]) -> XPool:
     pool = XPool(list(config.x_accounts), clock=clock, cap=config.x_account_daily_cap,
                  rest_days=config.x_account_rest_days, ready=read_ready(config.x_accounts_db_path))
     pool.ready_directory = config.x_accounts_db_path
+    paths = (config.x_proxy_list_path, config.x_proxy_assignments_path, config.x_proxy_policy_path)
+    pool.proxy_direct = not config.x_proxy_required and all(path is None for path in paths)
+    pool.proxy_required = not pool.proxy_direct
+    pool.connection_style = config.x_connection_style
+    pool.proxy_regions = {k: v.get("region") for k, v in config.x_account_identities.items()}
+    pool.proxy_max_age = config.x_proxy_admission_max_age_seconds
     return pool
 
 
 def _fresh_account() -> dict:
-    return dict.fromkeys(ACCOUNT_KEYS) | {"state": "active", "reads_used": 0}
+    return dict.fromkeys(ACCOUNT_KEYS) | {"state": "active", "reads_used": 0, "proxy_health": "unknown"}
 
 
 def _valid(s) -> bool:
     if not isinstance(s, dict) or set(s) != TOP_KEYS or not isinstance(s["accounts"], dict):
+        return False
+    budget = s["proxy_provider_budget"]
+    if not (isinstance(budget, dict) and set(budget) == {"day", "used"} and _day(budget["day"])
+            and type(budget["used"]) is int and 0 <= budget["used"] <= 899
+            and (budget["day"] is not None or budget["used"] == 0)):
         return False
     for a in s["accounts"].values():
         if not (isinstance(a, dict) and set(a) == ACCOUNT_KEYS and a["state"] in STATES
                 and all(_iso(a[k]) for k in TIME_KEYS) and _day(a["reads_day"])
                 and type(a["reads_used"]) is int and a["reads_used"] >= 0
                 and (a["parse_strikes"] is None or type(a["parse_strikes"]) is int and a["parse_strikes"] >= 0)):
+            return False
+        if a["proxy_health"] not in ("unknown", "healthy", "quarantined") or (
+                a["proxy_reason"] is not None and (not isinstance(a["proxy_reason"], str) or a["proxy_reason"] not in xp.REASONS)):
+            return False
+        try:
+            for key in ("proxy_id", "identity_revision"):
+                if a[key] is not None:
+                    xp.opaque_id(a[key])
+        except xp.ProxyFailure:
+            return False
+        if any(a[key] is not None and datetime.fromisoformat(a[key]).utcoffset() != timedelta(0)
+               for key in ("proxy_checked_at", "proxy_quarantine_until", "proxy_changed_at")):
+            return False
+        if a["proxy_health"] == "healthy" and (
+                any(a[key] is None for key in ("proxy_id", "identity_revision", "proxy_checked_at"))
+                or a["proxy_reason"] is not None or a["proxy_quarantine_until"] is not None):
+            return False
+        if a["proxy_health"] == "quarantined" and any(a[key] is None for key in
+                ("proxy_checked_at", "proxy_quarantine_until", "proxy_reason")):
             return False
     return all((
         isinstance(s["alerts"], list), _iso(s["pause_until"]), _iso(s["curl_last_use"]),
@@ -165,21 +222,36 @@ class XPool:
         self.log: list[str] = []
         self._parse_failures: dict[str, set[str]] = {}
         self.path = cache.CACHE_ROOT / "attention" / "_pc_state" / "x_pool.json"
+        self._ownership = ContextVar("x_pool_lock_owner", default=None)
+        self.proxy_direct = False
+        self.proxy_required = False
+        self.connection_style = None
+        self.proxy_regions = {}
+        self.proxy_max_age = 86400
         self._s = self._load()
+
+    @property
+    def _lock_owned(self):
+        return self._ownership.get()
+
+    @_lock_owned.setter
+    def _lock_owned(self, value):
+        self._ownership.set(value)
 
     # --- persistence ---
     def _load(self) -> dict:
         if not self.path.exists():
             s = {"accounts": {}, "alerts": [], "pause_until": None, "pause_reason": None, "stopped": None,
                  "drift_streak": 0, "canary_day": None, "canary_note": None, "canary_labels": [], "curl_uses": 0,
-                 "curl_last_use": None}
+                 "curl_last_use": None, "proxy_provider_budget": {"day": None, "used": 0}}
         else:
             try:
-                s = json.loads(self.path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
+                s = xp.strict_json(read_bounded(self.path, 1024 * 1024), limit=1024 * 1024)
+            except (OSError, ValueError, xp.ProxyFailure):
                 raise XPoolStateError("pool state unreadable") from None
             if isinstance(s, dict):
                 s.setdefault("canary_labels", [])  # a state file from before T190: no account passed yet
+                s.setdefault("proxy_provider_budget", {"day": None, "used": 0})
                 accounts = s.get("accounts")
                 for a in accounts.values() if isinstance(accounts, dict) else ():
                     if isinstance(a, dict):
@@ -189,10 +261,14 @@ class XPool:
                         a.setdefault("rest_until", None)
                         a.setdefault("parse_strikes", None)
                         a.setdefault("parse_strike_last_at", None)
+                        for key in B2_ACCOUNT_KEYS:
+                            a.setdefault(key, "unknown" if key == "proxy_health" else None)
             if not _valid(s):
                 raise XPoolStateError("pool state invalid")
             if set(s["accounts"]) - set(self.labels):
                 raise XPoolStateError("pool state names a label that is not configured")
+            if s["proxy_provider_budget"]["day"] is not None and s["proxy_provider_budget"]["day"] > self._now().date().isoformat():
+                raise XPoolStateError("pool state invalid")
         for label in self.labels:
             if label not in s["accounts"]:
                 a = _fresh_account()
@@ -202,9 +278,10 @@ class XPool:
         return s
 
     def _save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        cache._atomic_write_json(self._s, self.path)
+        xp.require(self._lock_owned is not None, "proxy_lock")
+        atomic_json(self.path, self._s)
 
+    @_transaction
     def begin_pass(self) -> None:
         """Persist registration/rest start even if no account reads. Status consumers never call this."""
         self._parse_failures.clear()
@@ -229,6 +306,7 @@ class XPool:
             return None
         return 0 if self._now().date() > date.fromisoformat(a["reads_day"]) else a["reads_used"]
 
+    @_transaction
     def charge(self, label: str, loaded: int) -> None:
         """Charge exactly where the global counter charges, including aborted attempts and curl pages."""
         if type(loaded) is not int or loaded < 0:
@@ -262,6 +340,13 @@ class XPool:
         if a["rest_until"] and (self._now() < datetime.fromisoformat(a["rest_until"])
                                 or not self.ready_today(label)):
             return "locked", "resting"
+        if self.proxy_required:
+            if a["proxy_health"] == "quarantined":
+                return "locked", "proxy_quarantine"
+            if a["proxy_health"] != "healthy":
+                return "locked", a["proxy_reason"] or "proxy_revision"
+            if not a["proxy_checked_at"] or not timedelta(0) <= self._now() - datetime.fromisoformat(a["proxy_checked_at"]) < timedelta(seconds=self.proxy_max_age):
+                return "locked", "proxy_revision"
         if self.cap is not None and (self.reads_today(label) or 0) >= self.cap:
             return "locked", "account_cap"
         return "active", None
@@ -281,10 +366,12 @@ class XPool:
         self.log.append(f"x pool: selected {pick} ({reason})")
         return Selection(pick, reason)
 
+    @_transaction
     def mark_used(self, label: str) -> None:
         self._acct(label)["last_used"] = self._now().isoformat()
         self._save()
 
+    @_transaction
     def lock_for_day(self, label: str) -> None:
         """A rate limit: no retry on this account until the next 00:00 UTC; it stays active."""
         a = self._acct(label)
@@ -293,6 +380,7 @@ class XPool:
             a["reason"] = None
         self._save()
 
+    @_transaction
     def wait_for_lock(self, label: str, lock_end: datetime) -> None:
         """The library's bare in-flight lock: skip this account until that lock ends (plus a margin), never for
         the day; the library's own lock is left as it is and expires by itself."""
@@ -302,6 +390,7 @@ class XPool:
         self.log.append(f"x pool: {label} waits for the library's in-flight lock until {a['lock_until']}")
         self._save()
 
+    @_transaction
     def note_remaining(self, label: str, remaining: int | None) -> None:
         """Keep the rate-limit evidence of a page's `x-rate-limit-remaining`: near 0 is evidence, more clears it."""
         a = self._acct(label)
@@ -321,6 +410,7 @@ class XPool:
         if not any(a["label"] == label and a["reason"] == reason for a in self._s["alerts"]):
             self._s["alerts"].append({"label": label, "reason": reason, "at": self._now().isoformat()})
 
+    @_transaction
     def mark_inactive(self, label: str, reason: str) -> None:
         if reason not in ("x_account_suspended", "x_login_required"):
             raise ValueError("unknown inactive reason")
@@ -329,6 +419,7 @@ class XPool:
         self._alert(label, reason)
         self._save()
 
+    @_transaction
     def flag_suspect(self, label: str) -> None:
         """Excluded from selection until the owner clears it; its stored units get `suspect_since`."""
         a, now = self._acct(label), self._now()
@@ -337,6 +428,7 @@ class XPool:
         self._save()
         x_raw.mark_suspect(label, now)
 
+    @_transaction
     def note_parse_drop(self, label: str, kind: str) -> int:
         a, now = self._acct(label), self._now()
         last = a["parse_strike_last_at"]
@@ -349,6 +441,7 @@ class XPool:
             self.flag_suspect(label)
         return a["parse_strikes"]
 
+    @_transaction
     def clear_parse_strikes(self, label: str) -> None:
         a = self._acct(label)
         if a["parse_strikes"] is not None and a["parse_strikes"] != 0:
@@ -361,6 +454,7 @@ class XPool:
         labels.add(label)
         return other
 
+    @_transaction
     def owner_clear(self, label: str) -> None:
         """The owner acted on this account (fresh cookies, or cleared a suspect flag)."""
         a = self._acct(label)
@@ -373,12 +467,14 @@ class XPool:
         return [dict(a) for a in self._s["alerts"]]
 
     # --- pause, stop, drift, fallback ---
+    @_transaction
     def pause_day(self, reason: str) -> None:
         if reason not in DAY_PAUSE_REASONS:
             raise ValueError("unknown pause reason")
         self._s["pause_until"], self._s["pause_reason"] = self._next_midnight(), reason
         self._save()
 
+    @_transaction
     def pause_for_locks(self) -> bool:
         """Pause X until the earliest in-flight lock end of the accounts that wait for one; False when none waits."""
         ends = [self._acct(x)["lock_until"] for x in self.labels if self.account_state(x) == ("locked", WAIT_REASON)]
@@ -389,10 +485,14 @@ class XPool:
         self._save()
         return True
 
+    @_transaction
     def pause_no_account(self, src: pp.PcSource | None = None) -> str:
         """No usable account: wait for the earliest in-flight lock end when an account waits for one, else pause
         the UTC day (`no_usable_account`). Returns the pause reason."""
-        if self.pause_for_locks():
+        waiting = self.pause_for_locks()
+        if self.pause_for_proxies():
+            return self._s["pause_reason"]
+        if waiting:
             return WAIT_REASON
         if src is not None and any(self.account_state(x) == ("locked", "account_cap") for x in self.labels):
             src.mark_spent()
@@ -401,11 +501,16 @@ class XPool:
         return "no_usable_account"
 
     def resume_at(self) -> datetime | None:
-        """When a pause for an in-flight lock ends; None for no pause or any other pause."""
-        if self._s["stopped"] or self._s["pause_reason"] != WAIT_REASON or not self.is_paused():
+        """Short control wake without clearing an independent pool day pause."""
+        if self._s["stopped"] or not self.is_paused():
             return None
-        return datetime.fromisoformat(self._s["pause_until"])
+        if self._s["pause_reason"] in (WAIT_REASON, "proxy_quarantine"):
+            return datetime.fromisoformat(self._s["pause_until"])
+        wakes = [datetime.fromisoformat(a["proxy_quarantine_until"]) for a in self._s["accounts"].values()
+                 if a["proxy_quarantine_until"] and datetime.fromisoformat(a["proxy_quarantine_until"]) > self._now()]
+        return min(wakes) if wakes else None
 
+    @_transaction
     def stop(self, reason: str = "layout_changed") -> None:
         self._s["stopped"] = reason
         self._save()
@@ -413,6 +518,7 @@ class XPool:
     def stopped_reason(self) -> str | None:
         return self._s["stopped"]
 
+    @_transaction
     def owner_clear_stop(self) -> None:
         """The owner reviewed and installed a new pin: X may run again."""
         self._s["stopped"], self._s["drift_streak"] = None, 0
@@ -429,6 +535,7 @@ class XPool:
             return self._s["stopped"]
         return self._s["pause_reason"] if self.is_paused() else None
 
+    @_transaction
     def note_drift(self) -> int:
         self._s["drift_streak"] += 1
         if self._s["drift_streak"] >= DRIFT_STOP:
@@ -436,6 +543,7 @@ class XPool:
         self._save()
         return self._s["drift_streak"]
 
+    @_transaction
     def clear_drift(self) -> None:
         if self._s["drift_streak"]:
             self._s["drift_streak"] = 0
@@ -446,22 +554,29 @@ class XPool:
         last = self._s["curl_last_use"]
         return last is not None and datetime.fromisoformat(last).astimezone(timezone.utc).date() == self._now().date()
 
+    @_transaction
     def note_curl(self) -> None:
         self._s["curl_uses"] += 1
         self._s["curl_last_use"] = self._now().isoformat()
         self._save()
 
     # --- canary ---
+    @_transaction
     def set_canary_passed(self, note: str | None = None, *, labels) -> None:
         """Today's canary passed; `labels` are the accounts that passed it (an exact count needs one of them)."""
         if set(labels) - set(self.labels):
             raise ValueError("unknown label")
-        self._s["canary_day"], self._s["canary_note"] = self._now().date().isoformat(), note
-        self._s["canary_labels"] = [x for x in self.labels if x in set(labels)]
+        today = self._now().date().isoformat()
+        previous = set(self._s["canary_labels"]) if self._s["canary_day"] == today else set()
+        passed = previous | set(labels)
+        self._s["canary_day"], self._s["canary_note"] = today, note
+        self._s["canary_labels"] = [x for x in self.labels if x in passed and self._acct(x)["state"] == "active"]
         self._save()
 
     def canary_passed_today(self) -> bool:
-        return self._s["canary_day"] == self._now().date().isoformat()
+        pending = any(self._acct(label)["proxy_changed_at"] is not None
+                      and self._acct(label)["last_canary"] is None for label in self.usable())
+        return not pending and self._s["canary_day"] == self._now().date().isoformat()
 
     def canary_labels(self) -> list[str]:
         """The accounts that passed today's canary; empty on another day."""
@@ -469,13 +584,104 @@ class XPool:
 
     def canary_accounts(self) -> list[str]:
         """The least recently canaried usable accounts: two, or three when there are three or more (a majority)."""
-        cands = sorted(self.usable(), key=lambda x: (self._acct(x)["last_canary"] or "", self.labels.index(x)))
+        cands = sorted(self.usable(), key=lambda x: (
+            not (self._acct(x)["proxy_changed_at"] is not None and self._acct(x)["last_canary"] is None),
+            self._acct(x)["last_canary"] or "", self.labels.index(x)))
         return cands[:3] if len(cands) >= 3 else cands
 
+    @_transaction
     def mark_canaried(self, labels) -> None:
         for x in labels:
             self._acct(x)["last_canary"] = self._now().isoformat()
         self._save()
+
+    @_transaction
+    def reconcile_proxy(self, label: str, proxy_id: str | None, revision: str) -> bool:
+        xp.opaque_id(revision)
+        if proxy_id is not None:
+            xp.opaque_id(proxy_id)
+        a = self._acct(label)
+        if a["proxy_id"] == proxy_id and a["identity_revision"] == revision:
+            return False
+        a.update(proxy_id=proxy_id, identity_revision=revision, proxy_health="unknown",
+                 proxy_checked_at=None, proxy_quarantine_until=None, proxy_reason=None,
+                 proxy_changed_at=self._now().isoformat(), last_canary=None)
+        self._s["canary_labels"] = [x for x in self._s["canary_labels"] if x != label]
+        self._save()
+        return True
+
+    @_transaction
+    def proxy_result(self, label: str, *, reason: str | None, quarantine_seconds: int = 3600):
+        xp.require(reason is None or reason in xp.REASONS, "proxy_config")
+        a = self._acct(label)
+        a.update(proxy_health="healthy" if reason is None else "quarantined",
+                 proxy_reason=reason, proxy_checked_at=self._now().isoformat(),
+                 proxy_quarantine_until=None if reason is None else
+                 (self._now() + timedelta(seconds=quarantine_seconds)).isoformat())
+        self._save()
+
+    @_transaction
+    def proxy_unknown(self, label: str, reason: str, *, wake_at: datetime | None = None):
+        xp.require(reason in xp.REASONS, "proxy_config")
+        self._acct(label).update(proxy_health="unknown", proxy_reason=reason,
+                                proxy_quarantine_until=None if wake_at is None else _utc(wake_at).isoformat())
+        self._save()
+
+    @_transaction
+    def pause_for_proxies(self) -> bool:
+        ends = [a["proxy_quarantine_until"] for a in self._s["accounts"].values()
+                if a["proxy_health"] in ("quarantined", "unknown") and a["proxy_quarantine_until"]
+                and datetime.fromisoformat(a["proxy_quarantine_until"]) > self._now()]
+        if not ends:
+            return False
+        if self._s["pause_reason"] in DAY_PAUSE_REASONS and self.is_paused():
+            return True
+        until = min(ends, key=datetime.fromisoformat)
+        reason = "proxy_quarantine"
+        if self._s["pause_until"] and self._s["pause_reason"] == WAIT_REASON and datetime.fromisoformat(self._s["pause_until"]) <= datetime.fromisoformat(until):
+            until, reason = self._s["pause_until"], WAIT_REASON
+        self._s["pause_until"], self._s["pause_reason"] = until, reason
+        self._save()
+        return True
+    def proxy_health_wake(self, interval_seconds: int) -> datetime | None:
+        if not self.proxy_required:
+            return None
+        wakes = []
+        now = self._now()
+        for a in self._s["accounts"].values():
+            if a["state"] != "active":
+                continue
+            if a["proxy_quarantine_until"]:
+                wakes.append(max(now, datetime.fromisoformat(a["proxy_quarantine_until"])))
+            elif a["proxy_checked_at"]:
+                wakes.append(max(now, datetime.fromisoformat(a["proxy_checked_at"]) + timedelta(seconds=interval_seconds)))
+            else:
+                wakes.append(now)
+        return min(wakes) if wakes else None
+
+
+    def provider_request(self, send):
+        """Reserve durably before a one-shot send; lock remains held to completion."""
+        xp.require(self._lock_owned is None, "proxy_lock")
+        with state_lock(self.path) as ownership:
+            self._lock_owned = ownership
+            try:
+                self._s = self._load()
+                now = self._now()
+                midnight = datetime.combine(now.date() + timedelta(days=1), time(), tzinfo=timezone.utc)
+                xp.require((midnight - now).total_seconds() > 11, "proxy_budget")
+                budget = self._s["proxy_provider_budget"]
+                today = now.date().isoformat()
+                xp.require(budget["day"] is None or budget["day"] <= today, "proxy_budget")
+                if budget["day"] is None or budget["day"] < today:
+                    budget.update(day=today, used=0)
+                xp.require(budget["used"] < 899, "proxy_budget")
+                budget["used"] += 1
+                self._save()
+                xp.require(self._now().date().isoformat() == today, "proxy_budget")
+                return send()
+            finally:
+                self._lock_owned = None
 
     def health(self) -> dict:
         """Active over total and per-account label, state and last use; the pause and its end; never a secret."""
@@ -487,6 +693,23 @@ class XPool:
                           "reads_today": self.reads_today(x), "cap": self.cap,
                           "rest_until": a["rest_until"], "ready": self.ready_today(x),
                           "parse_strikes": a["parse_strikes"], "parse_strike_last_at": a["parse_strike_last_at"]})
+            safe = {}
+            for key in ("proxy_id", "identity_revision", "proxy_reason", "proxy_checked_at", "proxy_quarantine_until"):
+                if a[key] is not None:
+                    safe[key] = a[key]
+            if self.proxy_direct:
+                safe["proxy_state"] = "direct"
+            elif a["proxy_health"] == "quarantined":
+                safe["proxy_state"] = "quarantined"
+            elif a["proxy_health"] == "healthy" and a["proxy_checked_at"] and timedelta(0) <= self._now() - datetime.fromisoformat(a["proxy_checked_at"]) < timedelta(seconds=self.proxy_max_age):
+                safe["proxy_state"] = "healthy"
+            else:
+                safe["proxy_state"] = "blocked" if a["proxy_reason"] in xp.BLOCK_REASONS else "unknown"
+            if self.connection_style is not None:
+                safe["connection_style"] = self.connection_style
+            if self.proxy_regions.get(x) is not None:
+                safe["region"] = self.proxy_regions[x]
+            accts[-1].update(safe)
         paused = self.is_paused() and not self._s["stopped"]
         return {"active": sum(1 for a in accts if a["state"] == "active"), "total": len(self.labels),
                 "accounts": accts, "pause_reason": self.pause_reason(),
@@ -570,7 +793,7 @@ Fallback = Callable[[str, str, dict, int], "xr.RawPage | None"]
 
 
 def _on_block(pool: XPool, f: xr.ReaderFailure, config: CollectorConfig, fallback: Fallback | None, label: str,
-              query: str, kv: dict, page_no: int, events: list) -> tuple[xr.RawPage | None, str | None]:
+              query: str, kv: dict, page_no: int, events: list, *, src, counts=None) -> tuple[xr.RawPage | None, str | None]:
     """A Cloudflare or HTML block: (the fallback's page, None) after the pool's one curl retry of the UTC day,
     else (None, block reason) with the UTC day paused for the whole pool."""
     block = f"{f.abort}_block"
@@ -579,7 +802,16 @@ def _on_block(pool: XPool, f: xr.ReaderFailure, config: CollectorConfig, fallbac
         pool.note_curl()
         try:
             raw = fallback(label, query, kv, page_no)
-        except xr.ReaderFailure:
+        except xr.ReaderFailure as failure:
+            if failure.charged_reads:
+                src.record_loaded(failure.charged_reads)
+                pool.charge(label, failure.charged_reads)
+                if counts is not None:
+                    counts["reads"] += failure.charged_reads
+                    counts["pages"] += 1
+            if failure.kind == "proxy":
+                pool.proxy_result(label, reason=failure.proxy_reason, quarantine_seconds=config.x_proxy_quarantine_seconds)
+                return None, failure.proxy_reason
             events.append({"backend": "curl", "reason": block, "outcome": "blocked"})
             pool.pause_day(block)
             return None, block
@@ -627,12 +859,20 @@ def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcS
             raw = reader.search_raw(query, kv, 0)
         except xr.ReaderFailure as f:
             src.stamp_attempt()
+            if f.charged_reads:
+                src.record_loaded(f.charged_reads)
+                pool.charge(label, f.charged_reads)
+            if f.kind == "proxy":
+                pool.proxy_result(label, reason=f.proxy_reason, quarantine_seconds=config.x_proxy_quarantine_seconds)
+                continue
             if not _is_block(f):
                 if f.kind == "no_account":
                     waited |= _account_failure(pool, label, reader, f) == "wait"
                 continue
-            raw, block = _on_block(pool, f, config, fallback, label, query, kv, 0, events)
+            raw, block = _on_block(pool, f, config, fallback, label, query, kv, 0, events, src=src)
             if block:
+                if block in xp.REASONS:
+                    continue
                 return CanaryOutcome(False, reason=block)
         if raw is None:
             src.stamp_attempt()
@@ -742,10 +982,18 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
             raw = reader.search_raw(query, kv, page_no)
         except xr.ReaderFailure as f:
             src.stamp_attempt()
+            if f.charged_reads:
+                src.record_loaded(f.charged_reads)
+                pool.charge(label, f.charged_reads)
+                counts["reads"] += f.charged_reads
+                counts["pages"] += 1
+            if f.kind == "proxy":
+                pool.proxy_result(label, reason=f.proxy_reason, quarantine_seconds=config.x_proxy_quarantine_seconds)
+                return _Attempt("restart", f.proxy_reason)
             if _is_block(f):
-                raw, block = _on_block(pool, f, config, fallback, label, query, kv, page_no, out.events)
+                raw, block = _on_block(pool, f, config, fallback, label, query, kv, page_no, out.events, src=src, counts=counts)
                 if block:
-                    return _Attempt("stop", block, events=out.events)
+                    return _Attempt("restart" if block in xp.REASONS else "stop", block, events=out.events)
                 backend = "curl"
             elif f.kind == "no_account":
                 step = _account_failure(pool, label, reader, f)

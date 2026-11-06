@@ -459,3 +459,126 @@ Rollback: older versions reject the three added per-account state keys. Before r
 the collector stopped by the owner, back up the pool file and remove `reads_day`, `reads_used` and
 `rest_until` from each account object. Keep the ready marks separately. This change does not deploy,
 restart anything, renew cookies, add proxies or enable a browser.
+
+## B2 private account routes (04-11-26 local cutover; release BLOCKED)
+
+B2 is default off. This section is a configuration/rollback contract, NOT permission
+to start/restart the collector or use live routes/providers. Synthetic local smoke
+does not establish deployment ancestor ACLs, route quality, provider terms/privacy,
+live region accuracy or anti-ban effectiveness. Owner acceptance and the RT4
+evidence pack remain mandatory before live operation.
+
+`CollectorQueriesPath` in the private deployment config, or the launcher's
+`-QueriesPath`, selects an explicit absolute owner query file. Keep configured-route
+queries, policy, assignments, route list and account DBs outside the repository.
+The launcher passes that selection explicitly with frozen `xreader`, bounds query
+input to 1 MiB, clears ambient proxy/CA variables and freezes the validated backend.
+It does not print the private path. Python reloads/validates the strict schema
+before constructing clients. Explicit direct/off requires `x_proxy_required=false`
+AND `x_proxy_list_path`, `x_proxy_assignments_path`, `x_proxy_policy_path` all null;
+partial/invalid/unavailable configured routing never falls back to direct.
+
+Private policy/list/assignment schemas and authoritative resource limits are in
+the selected identity-pool PLAN B2 and VALIDATE. Routes are HTTP without credentials
+or verified HTTPS with separately supplied authentication; SOCKS is unsupported.
+The owner publishes list/assignment replacements atomically and retains opaque
+IDs when reordering. Admission verifies the expected unique exit, fresh bounded
+Spamhaus/FireHOL raw-body caches and pinned baseline digest before use. Ipapi is
+optional/off; without it region is owner-declared for the verified exit, not measured
+geolocation. No provider/key/credential belongs in public configuration or state.
+
+Windows requires the actual collector token/service SID as private-root owner,
+protected root/file DACLs with exactly service Modify and SYSTEM directory
+ReadAndExecute/file Read, and no inherited/unknown ACEs. Ancestors reject untrusted
+owners and nonprivileged write/control rights; SYSTEM/elevated Administrators are
+outside this threat boundary. Existing ACLs are never automatically repaired.
+Ordinary home/TEMP ancestors are not conforming deployment proof. Synthetic tests
+compose ancestor policy separately from native protected temporary files.
+
+Configured cookie DBs use the same application-owned hook in collector, fallback
+child and `--refresh-cookies LABEL --queries <selected-private-config>`. Both DB
+and rollback journal are securely created/verified before SQLite opens. The FIRST
+database pragma is verified `main.locking_mode=EXCLUSIVE`, before any recovery-
+triggering read; verified `journal_mode=PERSIST` and `temp_store=MEMORY` follow
+before migrations/writes. This preserves the verified journal during hot-crash
+recovery; no replacement exception exists. WAL, shm, unknown/missing/replaced
+sidecars refuse. Transaction/close checks retain identity and ACL. Live-DB
+inspection permits its own SQLite writer but denies deletion/replacement; immutable
+query/list/policy snapshot handles also deny writing. Exclusive SQLite contention
+is bounded by the connection timeout and does not change direct/off DB behavior.
+
+Every pool-state mutation reloads under the one adjacent lock
+`<x_pool.json>.proxy-provider-budget.lock`: Windows `msvcrt.locking` or POSIX
+`flock`, non-reentrant, bounded acquisition and `finally` release. Nested helpers
+carry internal lock ownership. Optional ipapi reserves and atomically persists
+one of 899 UTC-day request starts before sending and holds this SAME lock through
+the one-shot completion/timeout. No refund/retry/overlap; final 11 seconds defer;
+day change between reservation and send refuses without refund. Process death
+releases the OS lock but retains the durable charge. A stale collector save cannot
+overwrite reservations. Health work has its independent bounded cadence/cap and
+does not consume X reads or bypass global/per-account caps.
+
+Before each unit, changed account revisions evict their readers/bootstrap cache,
+invalidate admission and queue canaries even with identity disabled. More than
+three changes retain pending canaries across bounded batches and preserve
+same-day/current-revision successful labels. Mid-unit typed route failures discard
+partial samples while spent reads remain charged. Plain style keeps the existing
+once/day pool-wide curl fallback; normal curl never falls back to curl or direct.
+Child work/HMAC verifier material stays in bounded private stdin only, never
+argv/environment/output/persistent storage; replies bind nonce/revision and are
+rechecked before adoption.
+
+**Stopped rollback to pre-B2 code (owner action only, UNRUN):** stop all writers,
+back up pool state and private files, and remove exactly these seven per-account
+keys: `proxy_id`, `identity_revision`, `proxy_health`, `proxy_checked_at`,
+`proxy_quarantine_until`, `proxy_reason`, `proxy_changed_at`. Remove the top-level
+`proxy_provider_budget`. Preserve all Part A counters/rest/ready marks and parse
+strike fields. Do not strip other keys. Restore explicit direct/off config before
+starting old code; never point old code at configured private routing. Private
+admission/feed caches are not legacy pool state and must not be reused as proof.
+Restore the backed-up B2 state/config together when returning to B2; removing the
+keys deliberately loses admission/provider accounting and is not an online reset.
+
+Local evidence (not full acceptance): first bounded smoke reported 12 passed /
+8 failed / 0 skipped. Corrected failed mechanism cases subsequently reported
+8 passed / 0 skipped (12.49 s), including real Windows protected DB/journal
+sharing+ACL extraction/reopen with synthetic ancestor composition, real hot-crash
+rollback with retained journal identity, actual spawned HMAC current-revision
+bootstrap+GraphQL clients, both proxy-scheme curl cancellation, and admission/
+provider/cache cases. Full locked backend, web and browser acceptance is owned by
+the integration tester and must be recorded separately; these are not live probes.
+
+Additional bounded regression evidence: a later 13-case smoke reported 11 passed /
+2 failed (the two direct-child fixtures expected `fail` where existing strict
+schema rejection correctly returned `refused`; assertions were corrected to the
+exact safe contract). Partial-cleanup smoke also exposed callback socket-set
+bookkeeping warnings; native socket membership now remains available until
+multi cleanup, and any final callback-installed timer is cancelled. The corrected
+9-case smoke reported 9 passed / 0 skipped (18.84 s), covering easy/watcher/timer
+cleanup faults through both proxy schemes, exact required/partial direct refusal
+and exclusive SQLite contention/release. Native refresh also exercised the
+protected DB hook in that preceding smoke. Typed normal/canary/fallback dispatch
+smoke separately reported 3 passed (1.43 s). These separate development runs are
+not a consolidated acceptance total.
+
+E8 proof-boundary correction: the earlier spawned direct/off predicate unit cases
+use an injected search response and do not by themselves prove composed wire/
+cursor/accounting behavior. A separate regression now composes parent pool/unit,
+the real bounded child runner and spawned entrypoint, real `API.search_raw`,
+QueueClient/cookie DB, cursor encoding and both direct TLS client factories. Its
+test dependencies select only synthetic endpoint/DNS/trust and a deterministic
+transaction-ID parser whose bootstrap still makes a real fixture TLS request.
+It asserts continuation, adopted next cursor, retained global/account charges,
+pool-wide daily fallback cap and no second child/wire attempt. Four additional
+spawned configured/partial/required cases prove an available direct fixture route
+is never used. Parent-authorized bounded implementer execution subsequently
+reported **5 passed / 0 skipped (30.07 s)** for the composed test plus four negative
+modes. A final strengthened child-diagnostic/protocol credential-marker assertion
+reported **1 passed (7.22 s)** for the changed composed case; unchanged negatives
+were not repeated. Fixture root causes were an incomplete runtime stub, omission
+of Windows OS environment variables, a missing private temporary directory, and a
+transaction-ID parser mock whose signature violated the pinned compatibility
+guard. The corrected test uses real `ProxyRuntime`, the normal OS environment
+through the production child allowlist, an existing isolated private temp directory
+and the exact bootstrap signature. No production guard was bypassed or relaxed.
+Independent consolidated acceptance and live release gates remain separate.

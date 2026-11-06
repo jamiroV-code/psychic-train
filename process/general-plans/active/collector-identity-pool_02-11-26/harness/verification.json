@@ -1,0 +1,484 @@
+{
+  "task": "collector-identity-pool B2 fixed private routing/admission/quarantine",
+  "generatedAt": "2026-11-04T14:59:10.494Z",
+  "updatedAt": "2026-11-06",
+  "worktree": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+  "result": "ACCEPTED_LOCAL_WITH_CONCERNS",
+  "scope": "Main accepts the local synthetic B2 implementation with the unwaived unrelated backend failure and browser flake caveat. Full backend command remains FAIL; browser attempts remain separate observations. Live release BLOCKED. Counts are never summed across runs.",
+  "commands": [
+    {
+      "id": "backend-smoke-initial",
+      "step": "Initial bounded backend mechanism smoke",
+      "command": "uv run --project api --frozen --group xreader pytest api/tests/data/attention/test_x_proxy_runtime.py api/tests/data/attention/test_x_proxy_admission.py api/tests/data/attention/test_x_proxy_sqlite.py api/tests/data/attention/test_x_proxy_spawn.py api/tests/data/attention/test_x_proxy_state.py::test_changed_recent_account_canary_prioritized_and_pending_survives_batch api/tests/data/attention/test_x_proxy_transport.py::test_cancelled_wire_request_drains_native_ownership_without_slowclose_extension -q -rs",
+      "result": "FAIL",
+      "observedSummary": "12 passed, 8 failed, zero skips",
+      "evidence": [
+        "agent://B2BackendFinish section 6 run 1",
+        "artifact://1098"
+      ],
+      "notes": "Historical development attempt before corrections. Failure details retained; not current acceptance.",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+      "executedBy": "B2BackendFinish",
+      "date": "2026-11-04",
+      "utc": "Exact invocation UTC not separately captured by executing agent",
+      "evidenceType": "Executing-agent published result; packet author did not rerun"
+    },
+    {
+      "id": "backend-smoke-corrected-eight",
+      "step": "Corrected admission, native protected SQLite/recovery, spawned child and curl cancellation smoke",
+      "command": "uv run --project api --frozen --group xreader pytest api/tests/data/attention/test_x_proxy_admission.py api/tests/data/attention/test_x_proxy_sqlite.py::test_native_protected_sqlite_live_writer_inspection_and_immutable_input_sharing api/tests/data/attention/test_x_proxy_sqlite.py::test_real_crash_recovery_preserves_rollback_value_and_guarded_journal api/tests/data/attention/test_x_proxy_spawn.py::test_spawned_child_hmac_current_snapshot_both_factories_no_secret_output[current-revision] api/tests/data/attention/test_x_proxy_transport.py::test_cancelled_wire_request_drains_native_ownership_without_slowclose_extension[http-proxy-curl] api/tests/data/attention/test_x_proxy_transport.py::test_cancelled_wire_request_drains_native_ownership_without_slowclose_extension[https-proxy-curl] -q -rs",
+      "result": "PASS",
+      "observedSummary": "8 passed, zero skips, 12.49 seconds",
+      "evidence": [
+        "agent://B2BackendFinish section 6 run 2",
+        "agent://B2BackendSecurityReview evidence boundary"
+      ],
+      "notes": "Scoped corrected smoke, not full backend acceptance. Native ancestor policy is explicitly synthetic.",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+      "executedBy": "B2BackendFinish",
+      "date": "2026-11-04",
+      "utc": "Exact invocation UTC not separately captured by executing agent",
+      "evidenceType": "Executing-agent published result; packet author did not rerun"
+    },
+    {
+      "id": "backend-smoke-additional-initial",
+      "step": "Additional development regressions before refusal/cleanup expectation correction",
+      "command": null,
+      "result": "FAIL",
+      "observedSummary": "11 passed, 2 failed",
+      "evidence": [
+        "agent://B2BackendFinish section 6 run 3"
+      ],
+      "notes": "Exact invocation not supplied in published report; not reconstructed. Two fixture expectations and native callback bookkeeping subsequently corrected.",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+      "executedBy": "B2BackendFinish",
+      "date": "2026-11-04",
+      "utc": "Exact invocation UTC not separately captured by executing agent",
+      "evidenceType": "Executing-agent published result; packet author did not rerun"
+    },
+    {
+      "id": "backend-smoke-corrected-nine",
+      "step": "Corrected native partial cleanup, required/partial route refusal and SQLite contention",
+      "command": "uv run --project api --frozen --group xreader pytest api/tests/data/attention/test_x_proxy_transport.py::test_partial_native_retirement_retains_slist_until_retry_finishes api/tests/data/attention/test_x_proxy_spawn.py::test_spawned_explicit_direct_off_predicate_never_implicit_or_configured[required] api/tests/data/attention/test_x_proxy_spawn.py::test_spawned_explicit_direct_off_predicate_never_implicit_or_configured[partial] api/tests/data/attention/test_x_proxy_sqlite.py::test_exclusive_guarded_connections_serialize_and_release_after_close -q -rs",
+      "result": "PASS",
+      "observedSummary": "9 passed, zero skips, 18.84 seconds",
+      "evidence": [
+        "agent://B2BackendFinish section 6 run 4"
+      ],
+      "notes": "Separate development run. No unraisable callback warning reported; pinned curl Proactor/HTTPS advisory warnings remained.",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+      "executedBy": "B2BackendFinish",
+      "date": "2026-11-04",
+      "utc": "Exact invocation UTC not separately captured by executing agent",
+      "evidenceType": "Executing-agent published result; packet author did not rerun"
+    },
+    {
+      "id": "backend-smoke-typed-dispatch",
+      "step": "Proxy typed-failure charge/dispatch smoke",
+      "command": "uv run --project api --frozen --group xreader pytest api/tests/data/attention/test_x_proxy_dispatch.py -q -rs",
+      "result": "PASS",
+      "observedSummary": "3 passed, 1.43 seconds",
+      "evidence": [
+        "agent://B2BackendFinish section 6 run 5"
+      ],
+      "notes": "Separate three-case development smoke; never sum with other runs.",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+      "executedBy": "B2BackendFinish",
+      "date": "2026-11-04",
+      "utc": "Exact invocation UTC not separately captured by executing agent",
+      "evidenceType": "Executing-agent published result; packet author did not rerun"
+    },
+    {
+      "id": "web-unit-initial",
+      "step": "Initial complete web unit collection",
+      "command": "pnpm --filter web test",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+      "result": "PASS",
+      "observedSummary": "647 passed in 69 files; exit 0",
+      "evidence": [
+        "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/web-vitest.log:206-209",
+        "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/records.json:13-20"
+      ],
+      "notes": "Initial pre-browser-correction snapshot; not proof of later source edits.",
+      "executedBy": "B2WebAcceptance",
+      "evidenceType": "Executing tester log and exact command record read by packet author",
+      "start": "2026-11-04T14:36:01.368Z",
+      "end": "2026-11-04T14:37:16.970Z",
+      "exitCode": 0,
+      "date": "2026-11-04"
+    },
+    {
+      "id": "web-types-initial",
+      "step": "Initial web TypeScript check",
+      "command": "pnpm --filter web exec tsc --noEmit --incremental false",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+      "result": "PASS",
+      "observedSummary": "TypeScript exit 0",
+      "evidence": [
+        "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/records.json:23-30",
+        "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/web-tsc.log"
+      ],
+      "notes": "Initial snapshot; executing tester dispositions any needed post-correction rerun.",
+      "executedBy": "B2WebAcceptance",
+      "evidenceType": "Exact executing tester command/timestamp/exit record read by packet author",
+      "start": "2026-11-04T14:37:21.051Z",
+      "end": "2026-11-04T14:37:32.616Z",
+      "exitCode": 0,
+      "date": "2026-11-04"
+    },
+    {
+      "id": "web-islands-initial",
+      "step": "Initial island production build",
+      "command": "pnpm --filter web build:islands",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+      "result": "PASS",
+      "observedSummary": "Production island build exit 0; 1080 modules transformed",
+      "evidence": [
+        "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/web-islands.log:1-33",
+        "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/records.json:33-40"
+      ],
+      "notes": "Observed log confirms 1080 is transformed module count, not a test count. Initial snapshot.",
+      "executedBy": "B2WebAcceptance",
+      "evidenceType": "Executing tester log and exact command record read by packet author",
+      "start": "2026-11-04T14:37:32.618Z",
+      "end": "2026-11-04T14:37:49.442Z",
+      "exitCode": 0,
+      "date": "2026-11-04"
+    },
+    {
+      "id": "browser-normal-initial",
+      "step": "Initial normal full browser invocation",
+      "command": "pnpm test:e2e --workers=1",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate/web",
+      "result": "FAIL",
+      "observedSummary": "85 passed, 4 failed, 0 skipped",
+      "evidence": [
+        "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/browser-normal.log",
+        "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/records.json:74-87",
+        "agent://B2Consumers"
+      ],
+      "notes": "Historical failed attempt. Dedicated D18 fixture isolation, layout cache-root usage and narrow hidden-badge positioning corrections subsequently landed. No baseline waiver or deletion.",
+      "executedBy": "B2WebAcceptance",
+      "evidenceType": "Executing tester count report plus exact command/timestamp/exit record",
+      "start": "2026-11-04T14:38:11.686Z",
+      "end": "2026-11-04T14:45:00.281Z",
+      "exitCode": 1,
+      "environment": {
+        "E2E_CACHE_ROOT": "C:/Users/jamir/AppData/Local/Temp/b2-web-normal-eb0ad9f6-9b39-4288-aa71-8b987a078bad",
+        "E2E_API_PORT": "18131",
+        "E2E_WEB_PORT": "18132"
+      },
+      "date": "2026-11-04"
+    },
+    {
+      "id": "browser-b2-initial",
+      "step": "Initial B2 collector status browser invocation",
+      "command": "pnpm test:e2e -- collector-status.spec.ts --workers=1",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate/web",
+      "result": "FAIL",
+      "observedSummary": "0 passed, 3 failed; exit 1 (executing tester reported counts)",
+      "evidence": [
+        "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/browser-b2.log",
+        "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/records.json:90-103",
+        "agent://B2Consumers"
+      ],
+      "notes": "Historical initial B2 failure: synthetic five-account fixture exceeded default pool max. Fixture corrected; later B2 acceptance passed all3 cases and is recorded separately.",
+      "executedBy": "B2WebAcceptance",
+      "evidenceType": "Executing tester count report plus exact command/timestamp/exit record",
+      "start": "2026-11-04T14:45:25.983Z",
+      "end": "2026-11-04T14:46:52.924Z",
+      "exitCode": 1,
+      "environment": {
+        "B2_E2E": "1",
+        "E2E_CACHE_ROOT": "C:/Users/jamir/AppData/Local/Temp/b2-web-required-edb75749-9e78-4284-9760-09874b353708",
+        "E2E_API_PORT": "18141",
+        "E2E_WEB_PORT": "18142"
+      },
+      "date": "2026-11-04"
+    },
+    {
+      "id": "backend-full-final",
+      "step": "Final independent consolidated locked-xreader backend acceptance",
+      "command": "uv run --project api --frozen --group xreader pytest api/ -q -rs",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+      "result": "FAIL",
+      "status": "COMPLETE_WITH_UNRELATED_FAILURE",
+      "observedSummary": "4123 passed, 4 skipped, 1 failed, 5 deselected",
+      "counts": { "passed": 4123, "skipped": 4, "failed": 1, "deselected": 5, "junitExecuted": 4128, "junitErrors": 0 },
+      "date": "2026-11-06",
+      "junitSuiteTimestamp": "2026-11-06T16:39:44.619758+01:00",
+      "junitSuiteTimestampUtc": "2026-11-06T15:39:44.619758Z",
+      "junitDurationSeconds": 1312.425,
+      "commandUtcStartEnd": null,
+      "executedBy": "Main final consolidated acceptance report",
+      "evidence": "C:/Users/jamir/AppData/Local/Temp/b2-final-backend.xml:1-23",
+      "failedNode": "api/tests/data/test_equities_store.py::test_path_override_honoured_at_call_time",
+      "skipDisposition": "Four legacy/environment cases: symlink unavailable, two POSIX permission cases, branch-specific deploy lane scope. No required B2 skip reported by Main; five existing integration/live tests deselected.",
+      "notes": "JUnit directly records tests4128/failures1/skipped4/errors0 and the Windows backslash-versus-forward-slash endswith assertion at test_equities_store.py:107. Passed4123 follows4128 minus1 failure minus4 skips; five deselections and unchanged baseline ownership are Main-reported. Failure is OPEN/UNWAIVED, owned by another session and not attributed to B2. Exact process UTC interval was not supplied; retain the observed JUnit offset timestamp rather than inventing one. Local B2 acceptance with concerns is not a full-suite PASS."
+    },
+    {
+      "id": "browser-normal-final",
+      "step": "Corrected independent normal full browser acceptance",
+      "command": "pnpm test:e2e --workers=1",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate/web",
+      "result": "FAIL",
+      "status": "COMPLETE_FAILED",
+      "environment": {
+        "B2_E2E": "unset",
+        "D18_E2E": "unset",
+        "E2E_CACHE_ROOT": "C:/Users/jamir/AppData/Local/Temp/b2-web-normal-final-c8dd8d41-c0f9-471c-a600-4dcf17131f63",
+        "E2E_API_PORT": "18151",
+        "E2E_WEB_PORT": "18152"
+      },
+      "observedSummary": "86 passed, 2 failed of 88 selected; exit 1",
+      "start": "2026-11-04T14:53:59.666Z",
+      "end": "2026-11-04T15:01:01.010Z",
+      "evidence": "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/browser-normal-final.log:991-1038",
+      "notes": "Preserved corrected normal failure: layout.spec.ts:147 reload timeout and layout.spec.ts:226 context-close failure; no product cause proven. A later unintended full normal run passed88/0, recorded separately. This is not a clean isolated flake proof; no failed result is erased."
+    },
+    {
+      "id": "browser-b2-final",
+      "step": "Corrected independent B2 API-to-screen acceptance",
+      "command": "pnpm test:e2e -- collector-status.spec.ts --workers=1",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate/web",
+      "result": "PASS",
+      "status": "COMPLETE",
+      "observedSummary": "3 passed, zero skipped; exit 0",
+      "start": "2026-11-04T15:01:21.912Z",
+      "end": "2026-11-04T15:02:40.356Z",
+      "evidence": "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/browser-b2-final.log:57-89",
+      "environment": {
+        "B2_E2E": "1",
+        "D18_E2E": "unset",
+        "E2E_CACHE_ROOT": "C:/Users/jamir/AppData/Local/Temp/b2-web-required-final-82a7a672-6199-4496-b60b-cf0f9c8d91c7",
+        "E2E_API_PORT": "18161",
+        "E2E_WEB_PORT": "18162",
+        "viewports": [
+          375,
+          768,
+          1280
+        ]
+      },
+      "notes": "Observed all three actual seeded API-to-screen cases at 375/768/1280 pass. Tester reports six configured/direct screenshots inspected; packet author independently inspected configured375/configured1280/direct375. B2 pass does not override normal browser failure."
+    },
+    {
+      "id": "browser-d18-final",
+      "step": "Separate required D18 regression acceptance",
+      "command": "pnpm test:e2e -- daily-data-gap.spec.ts --workers=1",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate/web",
+      "result": "PASS",
+      "status": "COMPLETE",
+      "observedSummary": "1 passed, zero skipped; exit 0",
+      "start": "2026-11-04T15:02:47.091Z",
+      "end": "2026-11-04T15:03:34.138Z",
+      "evidence": "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/browser-d18.log:61-63",
+      "environment": {
+        "B2_E2E": "unset",
+        "D18_E2E": "1",
+        "E2E_CACHE_ROOT": "C:/Users/jamir/AppData/Local/Temp/d18-e2e-4c3fb50f-101e-4fbc-9c06-af6b47afd14e",
+        "E2E_API_PORT": "18171",
+        "E2E_WEB_PORT": "18172"
+      },
+      "notes": "Separate D18 fixture invocation passed stored-gap persistence/reload/all-widths/offline-repair case. It does not establish normal suite acceptance."
+    },
+    {
+      "id": "web-post-correction",
+      "step": "Final disposition of web evidence",
+      "command": null,
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+      "result": "PASS",
+      "status": "ACCEPTED_LOCAL_WITH_CONCERNS",
+      "notes": "Main final directive accepts recorded vitest647/69, corrected TypeScript exit0 and island build1080 modules, plus B2 browser3/zero-skips and D18 browser1/zero-skips. Normal corrected86/2 and unintended full88/0 remain a flake caveat, not clean isolated classification or a blanket green history."
+    },
+    {
+      "id": "web-types-post-correction",
+      "step": "Post-correction web TypeScript check",
+      "command": "pnpm --filter web exec tsc --noEmit --incremental false",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+      "result": "PASS",
+      "exitCode": 0,
+      "start": "2026-11-04T14:53:41.977Z",
+      "end": "2026-11-04T14:53:53.098Z",
+      "evidence": "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/records.json:106-113",
+      "executedBy": "B2WebAcceptance",
+      "notes": "Actual recorded exit 0; no rerun by packet author."
+    },
+    {
+      "id": "web-python-preflight-quoting-failure",
+      "step": "Initial dependency preflight invocation failed from command quoting",
+      "command": "uv run --project api --frozen --group xreader python -c \"import twscrape, curl_cffi, httpx, httpcore; print('B2 web import preflight OK')\"",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+      "result": "FAIL",
+      "exitCode": 1,
+      "start": "2026-11-04T14:37:49.443Z",
+      "end": "2026-11-04T14:37:49.679Z",
+      "evidence": "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/python-import-preflight.log:1-15",
+      "notes": "Observed SyntaxError unterminated string literal; not evidence of unavailable locked dependencies. Executing tester corrected invocation via direct argv."
+    },
+    {
+      "id": "web-python-preflight-corrected",
+      "step": "Corrected direct-argv locked xreader dependency preflight",
+      "command": "uv (direct argv; see args)",
+      "args": ["run", "--project", "api", "--frozen", "--group", "xreader", "python", "-c", "import twscrape, curl_cffi, httpx, httpcore; print(\"B2 web import preflight OK\")"],
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+      "result": "PASS",
+      "exitCode": 0,
+      "start": "2026-11-04T14:38:05.851Z",
+      "end": "2026-11-04T14:38:07.336Z",
+      "evidence": "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/python-import-preflight-direct.log:1-23",
+      "notes": "Observed B2 web import preflight OK; this is dependency presence, not backend acceptance."
+    },
+    {
+      "id": "artifact-schema",
+      "step": "RT4 five-artifact schema validation",
+      "command": "node .claude/skills/vc-risk-evidence-pack/scripts/validate-risk-artifacts.mjs process/general-plans/active/collector-identity-pool_02-11-26/harness",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+      "result": "PASS",
+      "status": "COMPLETE",
+      "notes": "Executed by B2SecurityGate with explicit parent authorization: exit 0; warnings=[]; failures=[]. This validates JSON shape, not source/test correctness."
+    }
+    ,
+    {
+      "id": "backend-full-historical-first",
+      "step": "Historical first independent full backend run before harness/guard/direct-composition corrections",
+      "command": "uv run --project api --frozen --group xreader pytest api/ -q -rs",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+      "result": "FAIL",
+      "observedSummary": "53 failed, 4058 passed, 8 skipped, 5 deselected, 57 warnings",
+      "start": "2026-11-04T14:36:52.494453+00:00",
+      "end": "2026-11-04T15:00:07.109464+00:00",
+      "exitCode": 1,
+      "evidence": [
+        "process/general-plans/active/collector-identity-pool_02-11-26/collector-identity-pool-b2-backend_ACCEPTANCE_04-11-26.md:33-40,81-89",
+        "C:/Users/jamir/AppData/Local/Temp/b2-backend-acceptance-w87gqzlc/run-metadata.json"
+      ],
+      "notes": "Historical failure retained. Subsequent source-grounded network_guard harness fixes, guards and composed direct test correction preceded final consolidated result; do not sum runs or treat old report as final verdict."
+    },
+    {
+      "id": "backend-composed-direct-five",
+      "step": "Composed direct plain-to-real-spawned-curl case plus four configured-route negative cases",
+      "command": null,
+      "result": "PASS",
+      "observedSummary": "5 passed in30.07 seconds (Main-reported)",
+      "nodeIds": [
+        "api/tests/data/attention/test_x_proxy_spawn.py::test_composed_direct_plain_to_spawned_curl_wire_cursor_charges_and_daily_cap",
+        "api/tests/data/attention/test_x_proxy_spawn.py::test_spawned_configured_route_never_uses_available_direct_wire"
+      ],
+      "evidence": "Main final RT4 evidence-update directive",
+      "notes": "Exact invocation/UTC not supplied; node IDs located in current test source, not an invented command. Four negative modes cover required-no-paths, partial, configured and configured-optional."
+    },
+    {
+      "id": "backend-composed-direct-strengthened",
+      "step": "Strengthened composed direct plain-to-spawned-curl wire/cursor/accounting case",
+      "command": null,
+      "result": "PASS",
+      "observedSummary": "1 passed (Main-reported)",
+      "nodeIds": ["api/tests/data/attention/test_x_proxy_spawn.py::test_composed_direct_plain_to_spawned_curl_wire_cursor_charges_and_daily_cap"],
+      "evidence": "Main final RT4 evidence-update directive",
+      "notes": "Separate strengthened-case result; exact invocation/UTC not supplied. Never add this count to the five-case or full-suite results."
+    },
+    {
+      "id": "browser-isolation-command-failed-before-tests",
+      "step": "Attempted isolated normal failure classification did not execute tests",
+      "command": "pnpm test:e2e -- layout.spec.ts --grep=create.*rename.*move^|hidden.spaghetti --workers=1",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate/web",
+      "result": "FAIL",
+      "exitCode": 255,
+      "start": "2026-11-04T15:06:21.837Z",
+      "end": "2026-11-04T15:06:21.946Z",
+      "evidence": "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/browser-normal-isolated-classification.log:1-19",
+      "notes": "Shell interpreted hidden.spaghetti as a command; not a product failure and no isolated test evidence."
+    },
+    {
+      "id": "browser-unintended-full-normal-pass",
+      "step": "Intended isolated retry actually ran the full normal88-test collection",
+      "command": "C:/Users/jamir/AppData/Roaming/npm/node_modules/pnpm/pnpm.exe",
+      "args": ["test:e2e", "--", "layout.spec.ts", "--grep", "create.*rename.*move|hidden.spaghetti", "--workers=1"],
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate/web",
+      "result": "PASS",
+      "exitCode": 0,
+      "observedSummary": "88 passed, 0 failed; full normal collection, NOT isolated",
+      "start": "2026-11-04T15:06:54.089Z",
+      "end": "2026-11-04T15:12:27.573Z",
+      "environment": {
+        "E2E_CACHE_ROOT": "C:/Users/jamir/AppData/Local/Temp/b2-web-layout-classification-da7292ef-65d1-495f-8f19-38e0393db904",
+        "E2E_API_PORT": "18181",
+        "E2E_WEB_PORT": "18182",
+        "DEBUG": "pw:browser"
+      },
+      "evidence": [
+        "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/browser-normal-isolated-direct.log:1-49,1073-1080",
+        "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/records.json:193-214"
+      ],
+      "notes": "Output explicitly says Running88 tests and88passed. Preserve prior corrected86/2; no product cause or clean isolated flake classification proven. Parent accepts local implementation with this caveat only."
+    }
+    ,
+    {
+      "id": "artifact-schema-final",
+      "step": "Final updated RT4 artifact schema validation",
+      "command": "node .claude/skills/vc-risk-evidence-pack/scripts/validate-risk-artifacts.mjs process/general-plans/active/collector-identity-pool_02-11-26/harness",
+      "cwd": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+      "date": "2026-11-06",
+      "result": "PASS",
+      "status": "COMPLETE",
+      "notes": "Executed once by B2SecurityGate under Main final-update authorization: exit0,warnings=[],failures=[]. JSON/schema structure only; not a source/test/build rerun or live-release approval."
+    }
+  ],
+  "manualChecks": [
+    {
+      "step": "Independent scoped backend source security review",
+      "result": "PASS",
+      "scope": "Review completed; disposition CONDITIONAL, no remaining concrete source blocker",
+      "evidence": "agent://B2BackendSecurityReview",
+      "notes": "Not complete B2 acceptance or release approval."
+    },
+    {
+      "step": "Packet author current security-source excerpt capture",
+      "result": "PASS",
+      "evidence": "context-snippets.json",
+      "notes": "40 exact relative-file/line excerpts captured with read; no runtime assertion."
+    },
+    {
+      "step": "Pinned SQLite EXCLUSIVE-first recovery evidence",
+      "result": "PASS",
+      "scope": "Corrected synthetic native smoke and parent-known pinned SQLite 3.53.1 mechanism",
+      "evidence": [
+        "agent://B2BackendFinish",
+        "agent://B2BackendSecurityReview",
+        "api/data/attention/x_proxy_sqlite.py:60-98"
+      ],
+      "notes": "Not deployment ACL/root approval; no claim of a newly rerun probe."
+    },
+    {
+      "step": "Inspect passing B2 browser screenshot evidence",
+      "result": "PASS",
+      "status": "COMPLETE_B2_ONLY",
+      "notes": "Tester inspected all six configured/direct B2 screenshots; packet author independently inspected configured375/configured1280/direct375. Actual B2 UI states and explicit direct observed. Normal browser retains86/2 then unintended full88/0 flake caveat.",
+      "evidence": [
+        "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/b2-final-results/collector-status-B2-real-s-38341-tates-legacy-and-no-secrets-chromium/configured-375.png",
+        "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/b2-final-results/collector-status-B2-real-s-1d78e-tates-legacy-and-no-secrets-chromium/configured-1280.png",
+        "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/b2-final-results/collector-status-B2-real-s-38341-tates-legacy-and-no-secrets-chromium/direct-375.png"
+      ]
+    },
+    {
+      "step": "Real owner route/provider configuration, terms and runtime evidence",
+      "result": "SKIP",
+      "status": "BLOCKED_RELEASE",
+      "notes": "Not supplied/authorized; no live probes or terms acceptance performed."
+    },
+    {
+      "step": "Deployment actual service SID/private-root/ancestor ACL evidence and manual release acceptance",
+      "result": "SKIP",
+      "status": "BLOCKED_RELEASE",
+      "notes": "Native tests use synthetic ancestor composition; no deployment-host ACL proof."
+    }
+  ],
+  "pendingFinalResults": [],
+  "outstandingConcerns": [
+    "OPEN/UNWAIVED unrelated Windows path-separator assertion: test_equities_store.py::test_path_override_honoured_at_call_time; another session owns it. Final full backend remainsFAIL.",
+    "Normal browser corrected86/2 then unintended full88/0; no product cause proven and not clean isolated flake classification.",
+    "Live release BLOCKED pending real assignments/exits/baseline/provider terms/quota semantics, actual deployment service/root/ancestor ACLs, authorized live route/provider evidence and manual RT4 release acceptance."
+  ],
+  "localAcceptanceAuthority": "Main final RT4 update directive: local synthetic implementation accepted with stated unrelated-failure and browser-flake concerns; no live-release approval.",
+  "provenance": "Final backend JUnit summary/failure read directly; final composed-case results, baseline ownership and acceptance disposition reported by Main. Browser exact commands/timestamps/counts read from records/logs, retaining all failed and unintended invocations. No tests/source checks rerun by packet author. Final artifact validator is separately authorized."
+}

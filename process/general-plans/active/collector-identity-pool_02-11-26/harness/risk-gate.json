@@ -1,0 +1,24 @@
+{
+  "task": "collector-identity-pool B2 fixed private routing/admission/quarantine",
+  "generatedAt": "2026-11-04T14:57:55.917Z",
+  "worktree": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+  "planPath": "process/general-plans/active/collector-identity-pool_02-11-26/collector-identity-pool_PLAN_02-11-26.md",
+  "riskLevel": "high",
+  "riskTier": "RT4",
+  "riskClass": "permission, secret, or trust-boundary logic",
+  "riskClasses": [
+    "auth or identity",
+    "schema/data migration or destructive data mutation",
+    "public API or external contract changes",
+    "deploy/runtime/container/proxy/gateway behavior",
+    "permission, secret, or trust-boundary logic"
+  ],
+  "workDescription": "Complete B2 fixed per-account private routing across HTTPX/curl, sequential admission, protected credentials/SQLite, HMAC child snapshots, shared provider budget, quarantine/revision/canary lifecycle and safe API-to-screen health.",
+  "approver": "B2SecurityGate (classification); B2BackendSecurityReview (scoped CONDITIONAL source review); Main retains final gate",
+  "mustStopBeforeFinalize": true,
+  "humanApprovalRequired": true,
+  "why": "Credentials, native handle ownership, proxy routing, process boundaries, Windows ACLs, state migration, quotas and public health projections are high risk. This packet is prepared during independent acceptance, not approval to finalize.",
+  "localAuthorization": "User already authorized local implementation/build/testing. No repeat permission required for synthetic acceptance.",
+  "liveRelease": "BLOCKED: no real route/provider probes, purchases, deployment, commit/push/PR/merge or release authorized by this packet.",
+  "approvalScope": "humanApprovalRequired applies to separately gated live/host/provider/manual release actions; local synthetic development is already authorized."
+}

@@ -40,7 +40,7 @@ def imported(source: str) -> set[str]:
 
 def network_offenders(source: str) -> list[str]:
     """Network-capable imports/dynamic code; static package data access stays pure."""
-    bad = sorted(m for m in imported(source) if m != "importlib.resources"
+    bad = sorted(m for m in imported(source) if m not in ("importlib.resources", "urllib.parse")
                  and any(m == r or m.startswith(r + ".") for r in NETWORK_ROOTS))
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Call):
@@ -201,7 +201,8 @@ def test_no_machine_state_committed():
 # --- W8d1: the X pure core for the X library (SPEC rules 17-20, AC41, AC53, AC55) --------------------------------
 
 X_MODULES = [API_DIR / "data" / "attention" / f for f in
-             ("x_window.py", "x_filters.py", "x_density.py", "x_raw.py", "x_reader.py", "x_pool.py", "x_capacity.py")]
+             ("x_window.py", "x_filters.py", "x_density.py", "x_raw.py", "x_reader.py", "x_pool.py", "x_capacity.py",
+              "x_proxy.py", "x_proxy_private.py", "x_proxy_snapshot.py")]
 # The X library, its optional HTTP backend and every network client stay out of the pure core (W8d2 wraps them).
 X_LIBRARY_ROOTS = ("twscrape", "curl_cffi")
 
@@ -235,6 +236,8 @@ def test_x_library_guard_detects_planted_imports():
                 "from curl_cffi import requests", "import httpx"):
         assert x_library_offenders(src), src
     assert x_library_offenders("import json\nfrom api.data.attention import x_filters") == []
+    assert x_library_offenders("from urllib.parse import urlsplit") == []
+    assert x_library_offenders("from urllib.request import urlopen")
 
 
 def test_x_core_has_no_evasion_strings_no_fixed_hour_and_no_logger():

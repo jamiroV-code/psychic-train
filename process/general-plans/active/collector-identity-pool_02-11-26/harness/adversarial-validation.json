@@ -1,0 +1,115 @@
+{
+  "task": "collector-identity-pool B2 fixed private routing/admission/quarantine",
+  "generatedAt": "2026-11-04T14:57:55.917Z",
+  "updatedAt": "2026-11-06",
+  "worktree": "C:/Users/jamir/.herdr/worktrees/my_site/wt-b2-validate",
+  "evidenceScope": "Final local synthetic evidence only, accepted with concerns by Main. True applies solely to the stated observed fixture/test corpus; false preserves universal, live-release or known threat-model limitations. Final full backend still has one unwaived unrelated failure; browser86/2 then unintended full88/0 is not isolated flake proof.",
+  "scenarios": [
+    {
+      "scenario": "In the bounded mechanism fixtures, hostname CONNECT bypasses the selected numeric HTTP/HTTPS-proxy authority or origin TLS accepts untrusted/wrong-name origin certificates.",
+      "ruled_out": true,
+      "rationale": "Both backend mechanism artifacts record numeric CONNECT, trusted success and origin rejection through HTTP/HTTPS proxies; final synthetic implementation accepted with concerns. This does not prove malicious-proxy actual remote dialing or live operation.",
+      "evidence": [
+        "process/general-plans/active/collector-identity-pool_02-11-26/collector-identity-pool-b2-httpx_FEASIBILITY_03-11-26.md:28-52",
+        "process/general-plans/active/collector-identity-pool_02-11-26/collector-identity-pool-b2-curl_FEASIBILITY_03-11-26.md:32-65"
+      ]
+    },
+    {
+      "scenario": "The corrected synthetic current-revision spawned child cannot reconstruct HMAC-verified private bytes and both account/bootstrap factories without emitting marked credentials.",
+      "ruled_out": true,
+      "rationale": "B2BackendFinish corrected eight-test smoke includes current-revision spawned-child/both-factories/no-secret-output test; scoped development proof, not whole child tamper/replay matrix.",
+      "evidence": "agent://B2BackendFinish section 6 run 2"
+    },
+    {
+      "scenario": "In the corrected native hot-journal fixture, legitimate crash recovery loses rollback value or replaces the verified persistent journal identity.",
+      "ruled_out": true,
+      "rationale": "B2BackendFinish corrected smoke includes real_crash_recovery_preserves_rollback_value_and_guarded_journal; source establishes EXCLUSIVE-first then PERSIST/MEMORY. Parent identifies pinned SQLite 3.53.1. Ancestor policy is synthetic and no general deployment proof is claimed.",
+      "evidence": [
+        "agent://B2BackendFinish section 6 run 2",
+        "api/data/attention/x_proxy_sqlite.py:60-98"
+      ]
+    },
+    {
+      "scenario": "Selected injected curl partial-retirement failures unconditionally free CONNECT_TO slist storage before retained native ownership can retire.",
+      "ruled_out": true,
+      "rationale": "Corrected nine-test smoke includes parameterized partial-native-retirement retention; final consolidated run has only the unrelated equities assertion failure and four legacy skips. Scope is implemented synthetic cleanup fault cases, not every possible native failure.",
+      "evidence": [
+        "agent://B2BackendFinish section 6 run 4",
+        "api/data/attention/x_proxy_curl.py:34-100",
+        "api/data/attention/x_proxy_curl.py:186-196"
+      ]
+    },
+    {
+      "scenario": "Missing/partial configured routing silently becomes direct mode in the selected spawned-refusal fixture.",
+      "ruled_out": true,
+      "rationale": "Corrected nine-test smoke includes required and partial spawned explicit-direct predicate cases. This is not proof for every client path.",
+      "evidence": "agent://B2BackendFinish section 6 run 4"
+    },
+    {
+      "scenario": "Selected normal/canary/fallback proxy failure dispatch erases spent charges or changes the failure into account/day-pause state.",
+      "ruled_out": true,
+      "rationale": "Typed-dispatch smoke passed3; final consolidated backend has no reported B2 failures/required skips. Scoped synthetic lifecycle/accounting evidence only, with the unrelated equities assertion left open.",
+      "evidence": "agent://B2BackendFinish section 6 run 5"
+    },
+    {
+      "scenario": "Every production parent/child/bootstrap/redirect/refresh path is free of direct egress, unsafe retries and secret leakage under all synthetic failures.",
+      "ruled_out": false,
+      "rationale": "Implemented synthetic B2 cases passed in final consolidated run, but this universal production/all-possible-failures assertion exceeds a finite corpus. No live assignments/provider/deployment ACL/route evidence or release approval exists."
+    },
+    {
+      "scenario": "Implemented synthetic CONNECT framing, cancellation/cleanup, rebinding, bounds and HMAC/stale-reply acceptance cases fail or require a B2 skip in the final consolidated collection.",
+      "ruled_out": true,
+      "rationale": "Final collection4123passed/4legacy-skips/1failed/5deselected: sole failure is unrelated test_equities_store Windows suffix assertion; Main reports no required B2 skips. This rules out failures in that executed synthetic corpus only, not untested adversarial possibilities.",
+      "evidence": "C:/Users/jamir/AppData/Local/Temp/b2-final-backend.xml; Main final RT4 acceptance directive"
+    },
+    {
+      "scenario": "Implemented provider-budget concurrency/crash/stale-save/midnight/shared-lock synthetic cases fail final acceptance.",
+      "ruled_out": true,
+      "rationale": "Final consolidated result has no reported B2 failure/required skip. Client-side synthetic budget cases do not establish provider quota accounting, late arrival, terms acceptance or live metadata reliability; those stay separate blocked release gates.",
+      "evidence": "C:/Users/jamir/AppData/Local/Temp/b2-final-backend.xml; Main final RT4 acceptance directive"
+    },
+    {
+      "scenario": "API-to-formatter-to-screen accurately renders every proxy state at 375/768/1280 with no secrets/overflow and preserves normal/D18 behavior.",
+      "ruled_out": false,
+      "rationale": "B2 passed3 and D18 passed1, zero skips and screenshots inspected. Preserve normal corrected86/2 followed by unintended full88/0. Parent accepts local implementation with caveat, but this does not establish a clean isolated flake cause or universally reliable normal browser behavior."
+    },
+    {
+      "scenario": "Within the seeded B2 browser fixture, public proxy states or legacy unknown values fail actual API-to-screen rendering, leak secret markers, overflow the document, or mutate observed private files at375/768/1280.",
+      "ruled_out": true,
+      "rationale": "Observed all3 named B2 viewport cases pass with zero skips; executing tester inspected all6 configured/direct screenshots and packet author independently inspected3. This is seeded local B2 evidence only, not real proxy/account/provider health or normal-suite approval.",
+      "evidence": "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/browser-b2-final.log:57-89"
+    },
+    {
+      "scenario": "Within the separate D18 offline fixture, stored daily-gap persistence/reload/all-widths and repair behavior is broken.",
+      "ruled_out": true,
+      "rationale": "Observed D18 named fixture passed1/zero-skips/exit0. Normal browser separately retains86/2 then unintended full88/0 caveat; no live inference.",
+      "evidence": "C:/Users/jamir/AppData/Local/Temp/b2-web-acceptance-nZkFaI/browser-d18.log:61-63"
+    },
+    {
+      "scenario": "The composed explicit-direct plain-to-real-spawned-curl path fails wire/cursor/read-charge/daily-cap behavior, or configured required/partial routes use available direct wire in the four tested negative modes.",
+      "ruled_out": true,
+      "rationale": "Main reports composed case plus four negative modes5passed in30.07s and strengthened composed case1passed separately. These are not summed; exact command/UTC not supplied. Explicit direct compatibility is not permission for configured-route fallback.",
+      "evidence": "Main final RT4 directive; api/tests/data/attention/test_x_proxy_spawn.py::test_composed_direct_plain_to_spawned_curl_wire_cursor_charges_and_daily_cap; ::test_spawned_configured_route_never_uses_available_direct_wire"
+    },
+    {
+      "scenario": "Real deployment ACLs and ancestor identity/ownership cannot expose or replace private material.",
+      "ruled_out": false,
+      "rationale": "No deployment-host ACL inspection or actual service/root evidence. Native temporary-root checks deliberately use synthetic ancestor composition."
+    },
+    {
+      "scenario": "A malicious real proxy actually dials only the numeric authority requested by the client.",
+      "ruled_out": false,
+      "rationale": "Cannot be proven by client-side CONNECT/TLS captures. Evidence intentionally claims requested authority and original-origin authentication only."
+    },
+    {
+      "scenario": "A compromised collector-identity process or jointly leaked transient HMAC key/tag cannot expose/guess credentials.",
+      "ruled_out": false,
+      "rationale": "Same-user process compromise is outside this equality-attestation boundary; joint key/tag leak allows offline guessing. No perfect Python zeroization claim."
+    },
+    {
+      "scenario": "Real provider/geolocation/feed terms, region accuracy, baseline integrity and owner assignment inputs are approved and validated.",
+      "ruled_out": false,
+      "rationale": "No live owner config/provider/route evidence or terms acceptance. Fail closed for missing required inputs; live release BLOCKED."
+    }
+  ]
+}

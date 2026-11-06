@@ -1,10 +1,9 @@
 """T104 W3: GET /api/narrative/discovery/price, daily closes from the local 1d cache only."""
 from __future__ import annotations
 
-import socket
+from api.tests.network_guard import deny_network
 from datetime import date
 
-import httpx
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
@@ -28,11 +27,7 @@ def bars(start: str, n: int, base: float = 100.0) -> pd.DataFrame:
 def client(isolated_cache, monkeypatch):
     monkeypatch.setattr(router_mod, "utc_today", lambda: TODAY)
 
-    def boom(*a, **k):
-        raise AssertionError("handler must not reach the network")
-    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", boom)
-    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", boom)
-    monkeypatch.setattr(socket.socket, "connect", boom)
+    deny_network(monkeypatch)
     return TestClient(app)
 
 

@@ -1,9 +1,8 @@
 """S-C: GET /api/narrative/baskets/attention through the real app, store only."""
 from __future__ import annotations
 
-import socket
+from api.tests.network_guard import deny_network
 
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -30,11 +29,7 @@ def wired(isolated_cache, tmp_path, monkeypatch):
         put(s, "A1", 1.5)
         put(s, "A2", 3.5)
 
-    def boom(*a, **k):
-        raise AssertionError("handler must not reach the network")
-    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", boom)
-    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", boom)
-    monkeypatch.setattr(socket.socket, "connect", boom)
+    deny_network(monkeypatch)
     return TestClient(app)
 
 

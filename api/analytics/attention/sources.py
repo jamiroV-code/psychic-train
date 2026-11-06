@@ -28,6 +28,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
+from pydantic import ValidationError
 
 from api.analytics.attention.discovery import (EXCHANGE_SERIES, FALLBACK_SERIES, SLOT, X_SOURCE, eligibility,
                                                load_config, source_impls, weights_for_day, x_setting)
@@ -60,6 +61,10 @@ def clear_cache() -> None:
 
 PC_STORES = frozenset({"xsearch_web", "reddit_web"})
 COLLECTOR_SOURCES = (("xsearch", "xsearch_web"), ("reddit", "reddit_web"))   # (Discovery id, PC stream store)
+_PROXY_ACCOUNT_FIELDS = frozenset({
+    "proxy_id", "proxy_state", "proxy_reason", "proxy_checked_at", "proxy_quarantine_until",
+    "region", "connection_style", "identity_revision",
+})
 
 
 def _json_file(path: Path) -> dict | None:
@@ -100,11 +105,29 @@ def _accounts(now: datetime, health: DiscoverySourceHealth) -> None:
     except x_pool.XPoolStateError:
         health.paused, health.pause_reason, health.pause_until = True, "state_error", None
         return
+    accounts = []
+    try:
+        for account in snapshot["accounts"]:
+            refreshed = _timestamp((ages or {}).get(account["label"]))
+            # Only public fields cross this boundary, never private resolver data.
+            public = {key: value for key, value in account.items()
+                      if key in DiscoveryAccountHealth.model_fields and key != "cookie_age_days"}
+            public["cookie_age_days"] = max(0, (now - refreshed).days) if refreshed else None
+            try:
+                projected = DiscoveryAccountHealth(**public)
+            except ValidationError:
+                # Refuse the entire proxy tuple: retaining a healthy state with
+                # malformed evidence would turn an unknown into a false success.
+                legacy = {key: value for key, value in public.items() if key not in _PROXY_ACCOUNT_FIELDS}
+                projected = DiscoveryAccountHealth(**legacy, proxy_state="unknown", proxy_reason="proxy_response")
+            accounts.append(projected)
+    except ValidationError:
+        # Invalid legacy data makes the complete snapshot unreadable. Never
+        # stringify validation errors: they contain the rejected input.
+        health.paused, health.pause_reason, health.pause_until = True, "state_error", None
+        return
     health.accounts_active, health.accounts_total = snapshot["active"], snapshot["total"]
-    for account in snapshot["accounts"]:
-        refreshed = _timestamp((ages or {}).get(account["label"]))
-        health.accounts.append(DiscoveryAccountHealth(
-            **account, cookie_age_days=max(0, (now - refreshed).days) if refreshed else None))
+    health.accounts = accounts
     if snapshot["pause_reason"]:
         # One loaded snapshot: do not re-read a file that the producer may replace concurrently.
         health.paused, health.pause_reason = True, snapshot["pause_reason"]

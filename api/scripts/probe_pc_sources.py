@@ -27,6 +27,7 @@ import re
 import sys
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 
 from api.data.attention import density, reddit_web, web_queries
 from api.data.attention.pc_adapter import CollectorError, describe_error
@@ -52,6 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--compare-scope", action="store_true", help="Reddit: subreddit set against one subreddit (W8c)")
     p.add_argument("--stream-status", action="store_true", help="Reddit: stream polls and coverage (W8c2)")
     p.add_argument("--reader-status", action="store_true", help="X: local reader health, no request (W8d2)")
+    p.add_argument("--queries", type=Path, help="X reader status: explicit absolute owner query config")
     return p
 
 
@@ -89,12 +91,17 @@ def _reader_status_config():
     return web_queries.load().config
 
 
-def reader_status() -> int:
+def reader_status(config_path: Path | None = None) -> int:
     """The X reader's health from local state only; the library is never imported here."""
     from api.data.attention import twscrape_reader as tr
 
-    h = tr.reader_status(_reader_status_config(), env=os.environ, now=datetime.now(UTC),
-                         dist_lookup=tr.find_dist, platform=tr.platform_key(), curl_record=tr.read_install_record())
+    try:
+        config = web_queries.load(config_path).config if config_path is not None else _reader_status_config()
+        h = tr.reader_status(config, env=os.environ, now=datetime.now(UTC),
+                             dist_lookup=tr.find_dist, platform=tr.platform_key(), curl_record=tr.read_install_record())
+    except (OSError, ValueError):
+        print("xreader status=refused")
+        return 2
     for line in tr.status_lines(h):
         print(line)
     return 0
@@ -179,8 +186,11 @@ def main(argv: list[str] | None = None, *, client=None, clock=None, sleep=None) 
         args = build_parser().parse_args(argv)
     except SystemExit as exc:
         return 2 if exc.code else 0
+    if args.queries is not None and (not args.queries.is_absolute() or args.source != "xsearch" or not args.reader_status):
+        print("probe status=invalid_queries_argument")
+        return 2
     if args.source == "xsearch" and args.reader_status:
-        return reader_status()
+        return reader_status(args.queries)
     if args.source == "reddit":
         return _reddit(args, client, clock or (lambda: datetime.now(UTC)), sleep or time.sleep)
     mode = next((m for m in MODES if getattr(args, m)), "default")

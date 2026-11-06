@@ -66,8 +66,24 @@ function seededBody(baskets: object[] = [seededBasket("Majors", {}), seededBaske
 }
 
 async function noHorizontalScroll(page: Page): Promise<void> {
-  const fits = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
-  expect(fits).toBe(true);
+  const geometry = await page.evaluate(() => {
+    const viewport = document.documentElement.clientWidth;
+    const describe = (el: Element) => {
+      const box = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return { tag: el.tagName, id: el.getAttribute("data-testid"), class: el.getAttribute("class"),
+        left: box.left, right: box.right, width: box.width, minWidth: style.minWidth,
+        maxWidth: style.maxWidth, overflowX: style.overflowX };
+    };
+    return {
+      viewport, scrollWidth: document.documentElement.scrollWidth,
+      offenders: Array.from(document.querySelectorAll("body *")).filter((el) => {
+        const box = el.getBoundingClientRect();
+        return box.width > 0 && (box.right > viewport + 1 || box.left < -1);
+      }).slice(0, 30).map((el) => ({ element: describe(el), parent: el.parentElement ? describe(el.parentElement) : null })),
+    };
+  });
+  expect(geometry.scrollWidth <= geometry.viewport, JSON.stringify(geometry, null, 2)).toBe(true);
 }
 
 async function shot(page: Page, name: string, width: number, fullPage = true): Promise<void> {

@@ -19,7 +19,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, ".fixture-manif
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8001";
-const E2E_CACHE_ROOT = path.join(os.tmpdir(), "screener-e2e-cache");
+const E2E_CACHE_ROOT = process.env.E2E_CACHE_ROOT ?? path.join(os.tmpdir(), "screener-e2e-cache");
 const CAP_TEXT = "Screener is full: 30 coins maximum. Remove a coin to add another.";
 
 async function watchlist(request: APIRequestContext): Promise<string[]> {

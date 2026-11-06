@@ -92,7 +92,11 @@ export function CollectorStatus({ collector, xHealth }: CollectorStatusProps) {
         <>
           <ul style={{ margin: 0, paddingLeft: "1.25em" }}>
             {xHealth.accounts.length === 0 && <li>X accounts: unknown</li>}
-            {xHealth.accounts.map((a) => <li key={a.label}>{accountText(a)}</li>)}
+            {xHealth.accounts.map((a) => (
+              <li key={a.label} data-testid={`collector-account-${a.label}`} style={{ overflowWrap: "anywhere" }}>
+                {accountText(a)}
+              </li>
+            ))}
           </ul>
           <p style={{ margin: 0 }}>{coverageText(xHealth)}</p>
         </>

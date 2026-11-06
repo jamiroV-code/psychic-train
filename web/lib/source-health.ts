@@ -42,13 +42,30 @@ function diskText(bytes: number | null): string {
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
+const PROXY_STATES: Record<string, true> = { direct: true, unknown: true, healthy: true, quarantined: true, blocked: true };
+const PROXY_REASONS: Record<string, true> = {
+  proxy_config: true, proxy_private: true, proxy_assignment: true, proxy_policy: true, proxy_address: true,
+  proxy_transport: true, proxy_timeout: true, proxy_redirect: true, proxy_response: true, proxy_exit: true,
+  proxy_region: true, proxy_feed: true, proxy_baseline: true, proxy_budget: true, proxy_quarantine: true,
+  proxy_revision: true, proxy_lock: true,
+};
+
+function proxyText(a: DiscoveryAccountHealth): string {
+  const state = a.proxy_state && Object.prototype.hasOwnProperty.call(PROXY_STATES, a.proxy_state) ? a.proxy_state : UNKNOWN;
+  const reason = a.proxy_reason && Object.prototype.hasOwnProperty.call(PROXY_REASONS, a.proxy_reason) ? ` (${a.proxy_reason})` : "";
+  const region = a.region && /^[A-Z]{2}(?:-[A-Z0-9]{1,3})?$/.test(a.region) ? a.region : UNKNOWN;
+  const style = a.connection_style === "plain" || a.connection_style === "curl" ? a.connection_style : UNKNOWN;
+  return `proxy ${state}${reason}, proxy checked ${utc(a.proxy_checked_at ?? null)}, ` +
+    `quarantine until ${utc(a.proxy_quarantine_until ?? null)}, region ${region}, connection style ${style}`;
+}
+
 export function accountText(a: DiscoveryAccountHealth): string {
   const ready = a.ready == null ? UNKNOWN : a.ready ? "yes" : "no";
   return `${a.label} ${a.state}${a.reason ? ` (${a.reason})` : ""}, ` +
     (a.cookie_age_days == null ? `cookie age ${UNKNOWN}` : `cookie ${a.cookie_age_days} days old`) +
     `, reads today ${n(a.reads_today)} / ${a.cap == null ? "no limit" : n(a.cap)}` +
     `, rest until ${utc(a.rest_until ?? null)}, ready ${ready}, last used ${utc(a.last_used)}` +
-    `, parse strikes ${n(a.parse_strikes)}, last strike ${utc(a.parse_strike_last_at ?? null)}`;
+    `, parse strikes ${n(a.parse_strikes)}, last strike ${utc(a.parse_strike_last_at ?? null)}, ${proxyText(a)}`;
 }
 
 /** Only sums/differences of the API's target-day counts, never today's counts or a reconstructed queue. */
@@ -95,7 +112,7 @@ export function sourceHealthLines(row: DiscoverySourceRow): HealthLine[] | null 
     },
     { key: "mode", text: `Mode: ${h.mode ?? UNKNOWN}` },
   ];
-  if (row.id === "x" || h.accounts_total !== null || h.accounts.length > 0) {
+  if (row.id === "xsearch" || h.accounts_total !== null || h.accounts.length > 0) {
     const per = h.accounts.map(accountText);
     const head = `X accounts: ${n(h.accounts_active)} of ${n(h.accounts_total)} active`;
     lines.push({ key: "accounts", text: per.length ? `${head}. ${per.join("; ")}` : head });

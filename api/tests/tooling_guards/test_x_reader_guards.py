@@ -87,11 +87,15 @@ def test_default_env_does_not_install_or_import_twscrape(monkeypatch):
     monkeypatch.delitem(sys.modules, tr.__name__)
     __import__(tr.__name__)
     assert not {"twscrape", "curl_cffi"} & set(sys.modules)
-    # Only the reader module names the library in an import, and only inside functions (lazy).
-    others = [p for p in walk_py(API_DIR) if p.resolve() != READER.resolve()
+    # B2's app-owned native transport/DB hooks are explicit lazy reader boundaries,
+    # not pure-core or default-import exceptions.
+    boundaries = {READER.resolve(), (READER.parent / "x_proxy_curl.py").resolve(),
+                  (READER.parent / "x_proxy_sqlite.py").resolve()}
+    others = [p for p in walk_py(API_DIR) if p.resolve() not in boundaries
               and "tests" not in p.relative_to(API_DIR).parts and ".venv" not in p.parts]
     assert not [p.name for p in others if _roots(imported(p.read_text(encoding="utf-8")), LIBRARY_ROOTS)]
-    assert not _roots(_module_level_imports(TREE), LIBRARY_ROOTS)
+    for path in boundaries:
+        assert not _roots(_module_level_imports(ast.parse(path.read_text(encoding="utf-8"))), LIBRARY_ROOTS), path.name
     lazy = {fn for fn, mods in _function_imports(TREE).items() if _roots(mods, LIBRARY_ROOTS)}
     assert lazy == {"load_library", "install"}  # B1: adapter installs only after transport verification.
 
@@ -107,7 +111,10 @@ def test_no_network_import_at_module_level_and_subprocess_only_in_the_child_runn
     assert not _roots(top, NETWORK_ROOTS + LIBRARY_ROOTS), sorted(top)
     by_fn = _function_imports(TREE)
     assert {fn for fn, mods in by_fn.items() if "subprocess" in mods} == {"run_child"}
-    assert {fn for fn, mods in by_fn.items() if _roots(mods, ("asyncio",))} <= {"__init__", "refresh_cookies"}
+    # B2: the maintained lazy routed request wrapper owns the total timeout.
+    # `install` includes its nested method under this guard's AST traversal.
+    assert {fn for fn, mods in by_fn.items() if _roots(mods, ("asyncio",))} <= {
+        "__init__", "refresh_cookies", "install", "request"}
 
 
 def test_pinned_full_sha_required_short_sha_refused():
@@ -224,7 +231,18 @@ def test_no_auto_update_code_path():
                  "auto_update"):
         assert word not in lower, word
     calls = {getattr(n.func, "attr", getattr(n.func, "id", None)) for n in ast.walk(TREE) if isinstance(n, ast.Call)}
-    assert not calls & {"system", "popen", "Popen", "check_call", "check_output", "call"}
+    assert not calls & {"system", "popen", "check_call", "check_output", "call"}
+    runner = next(node for node in TREE.body if isinstance(node, ast.FunctionDef) and node.name == "run_child")
+    launches = [node for node in ast.walk(TREE) if isinstance(node, ast.Call)
+                and getattr(node.func, "attr", getattr(node.func, "id", None)) == "Popen"]
+    assert len(launches) == 1 and launches[0] in tuple(ast.walk(runner))
+    launch = launches[0]
+    assert isinstance(launch.func, ast.Attribute) and isinstance(launch.func.value, ast.Name)
+    assert launch.func.value.id == "subprocess"
+    assert isinstance(launch.args[0], ast.List)
+    assert [ast.unparse(item) for item in launch.args[0].elts] == [
+        "sys.executable", "'-m'", "__name__", "'--curl-fallback'"]
+    assert "shell" not in {keyword.arg for keyword in launch.keywords}
 
 
 def test_cookie_upsert_procedure_documented_and_guarded():

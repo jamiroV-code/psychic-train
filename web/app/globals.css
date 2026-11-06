@@ -1755,6 +1755,8 @@
   overflow-wrap: anywhere;
 }
 .discovery-tag {
+  /* Keep clipped accessible labels inside the badge's local scroll container. */
+  position: relative;
   display: inline-block;
   margin-left: var(--sp-1);
   padding: 0 var(--sp-2);

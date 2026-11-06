@@ -1,0 +1,160 @@
+"""B2 test-only seeded real server; no production fixture switches or fake responses.
+
+The launcher explicitly injects private synthetic query and discovery paths into
+this process before importing the real FastAPI application. Workers stay disabled.
+"""
+from __future__ import annotations
+
+import ipaddress
+import json
+import os
+from pathlib import Path
+import socket
+import sys
+from datetime import UTC, datetime, timedelta
+from uuid import UUID
+
+LABELS = ("legacy", "unknown", "healthy", "quarantined", "blocked")
+SECRET = "B2_SYNTHETIC_SECRET_NEVER_PUBLIC"
+
+
+def root() -> Path:
+    from api.scripts.seed_e2e_cache import _guard
+    return _guard()
+
+
+def put(path: Path, value) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+
+def seed() -> None:
+    from api.data.attention import web_queries, x_pool
+    from copy import deepcopy
+    from api.analytics.attention.discovery import load_config
+    directory = root()
+    private = directory / "collector-private"
+    private.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(UTC)
+    config = dict(web_queries.DEFAULTS)
+    config.update(x_accounts=list(LABELS), x_accounts_db_path=str(private / "accounts"),
+                  x_account_daily_cap=100, x_pool_max=len(LABELS), x_proxy_required=False)
+    direct = dict(version=1, collector=dict(config), subreddits=["synthetic"],
+                  ambiguous={"xsearch_web": [], "reddit_web": []}, coins={})
+    put(private / "queries-direct.json", direct)
+    config.update(x_proxy_list_path=str(private / "routes.txt"),
+                  x_proxy_assignments_path=str(private / "assignments.json"),
+                  x_proxy_policy_path=str(private / "policy.json"))
+    configured = dict(direct, collector=config)
+    put(private / "queries-configured.json", configured)
+    put(private / "queries.json", configured)
+    # Refuse an internally inconsistent fixture before the real server starts.
+    web_queries.validate(direct)
+    web_queries.validate(configured)
+    # These marker-bearing private inputs must never be opened by the status
+    # reader. Deliberately malformed bodies make accidental admission fail.
+    for name in ("routes.txt", "assignments.json", "policy.json"):
+        (private / name).write_text(SECRET, encoding="utf-8")
+    (private / "accounts").mkdir(exist_ok=True)
+    put(private / "accounts" / "cookie_ages.json", {"healthy": now.isoformat()})
+    discovery_config = deepcopy(load_config())
+    discovery_config.setdefault("source_impl", {})["xsearch"] = "xsearch_web"
+    if discovery_config["source_weights"]["xsearch"] <= 0:
+        discovery_config["source_weights"]["xsearch"] = 10
+    put(directory / "discovery.json", discovery_config)
+    pool = x_pool.XPool(list(LABELS), clock=lambda: now)
+    state = pool._s
+    state["proxy_provider_budget"] = {"day": None, "used": 0}
+    for index, label in enumerate(LABELS):
+        account = state["accounts"][label]
+        account.update(reads_day=now.date().isoformat(), reads_used=index + 1)
+        if label == "legacy":
+            for key in tuple(account):
+                if key.startswith("proxy_") or key == "identity_revision":
+                    account.pop(key)
+            continue
+        account.update(proxy_id=str(UUID(int=index + 1)),
+                       identity_revision="12345678-1234-4234-8234-123456789abd",
+                       proxy_health="unknown", proxy_checked_at=None,
+                       proxy_quarantine_until=None, proxy_reason=None, proxy_changed_at=now.isoformat())
+        if label == "healthy":
+            account.update(proxy_health="healthy", proxy_checked_at=now.isoformat())
+        elif label == "quarantined":
+            account.update(proxy_health="quarantined", proxy_checked_at=now.isoformat(),
+                           proxy_quarantine_until=(now + timedelta(hours=1)).isoformat(),
+                           proxy_reason="proxy_quarantine")
+        elif label == "blocked":
+            account.update(proxy_reason="proxy_config")
+    put(pool.path, state)
+    put(directory / "attention" / "_pc_state" / "xsearch_web.json", {
+        "budget_day": now.date().isoformat(), "used": 15, "spent_day": None,
+        "effective": 400, "clean_days": 0,
+        "activity": {"day": now.date().isoformat(), "units": 0, "warned": False},
+        "pause_until": None, "pause_reason": None, "last_unit_at": now.isoformat(),
+    })
+
+def install_private_read_guard(directory: Path) -> None:
+    """Fail the test server if any status path opens admission-only inputs."""
+    forbidden = {str((directory / "collector-private" / name).resolve())
+                 for name in ("routes.txt", "assignments.json", "policy.json")}
+
+    class ForbiddenPrivateRead(BaseException):
+        """Cannot be swallowed by a production fail-closed Exception handler."""
+
+    def audit(event, args):
+        if event == "open" and isinstance(args[0], (str, bytes, os.PathLike)):
+            try:
+                target = str(Path(os.fsdecode(args[0])).resolve())
+            except (OSError, ValueError):
+                return
+            if target in forbidden:
+                raise ForbiddenPrivateRead("status opened an admission-only private fixture")
+
+    sys.addaudithook(audit)
+
+
+
+def serve() -> None:
+    from api.analytics.attention import discovery
+    from api.data.attention import web_queries
+    directory = root()
+    discovery.CONFIG_PATH = directory / "discovery.json"
+    web_queries.QUERIES_PATH = directory / "collector-private" / "queries.json"
+    install_private_read_guard(directory)
+    # Dependency-level containment in this test process, not a production
+    # bypass flag. Any attempted provider/collection connection fails loudly.
+    connect = socket.socket.connect
+
+    def loopback_only(sock, address):
+        if not isinstance(address, tuple) or not ipaddress.ip_address(address[0]).is_loopback:
+            raise AssertionError("external connection forbidden in seeded B2 server")
+        return connect(sock, address)
+
+    socket.socket.connect = loopback_only
+    resolve = socket.getaddrinfo
+    connect_ex = socket.socket.connect_ex
+
+    def resolve_loopback(host, *args, **kwargs):
+        if host != "localhost":
+            try:
+                allowed = ipaddress.ip_address(host).is_loopback
+            except ValueError:
+                allowed = False
+            if not allowed:
+                raise AssertionError("external DNS forbidden in seeded B2 server")
+        return resolve(host, *args, **kwargs)
+
+    def connect_ex_loopback(sock, address):
+        if not isinstance(address, tuple) or not ipaddress.ip_address(address[0]).is_loopback:
+            raise AssertionError("external connection forbidden in seeded B2 server")
+        return connect_ex(sock, address)
+
+    socket.getaddrinfo = resolve_loopback
+    socket.socket.connect_ex = connect_ex_loopback
+    import uvicorn
+    from api.main import app
+    uvicorn.run(app, host="127.0.0.1", port=int(os.environ["E2E_API_PORT"]))
+
+
+if __name__ == "__main__":
+    {"seed": seed, "serve": serve}[sys.argv[1]]()

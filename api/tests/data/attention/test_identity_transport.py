@@ -221,7 +221,12 @@ def test_fallback_child_uses_configured_target_on_both_paths(tmp_path, monkeypat
     config = wq.CollectorConfig(**{**wq.load().config.as_dict(), "x_accounts": ("alpha",),
                                   "x_accounts_db_path": str(tmp_path), "x_identity_enabled": True,
                                   "x_account_identities": {"alpha": identity}})
-    monkeypatch.setattr(wq, "load", lambda: SimpleNamespace(config=config))
+    document = {"version": 1, "note": "synthetic direct identity", "collector": config.as_dict(),
+                "subreddits": ["Bitcoin"], "ambiguous": {key: [] for key in wq.SOURCES}, "coins": {}}
+    config_path = tmp_path / "queries.json"
+    config_path.write_text(json.dumps(document), encoding="utf-8")
+    (tmp_path / "alpha.db").write_bytes(b"")
+    (tmp_path / "alpha.db").chmod(0o600)
     monkeypatch.setattr(tr, "find_dist", lambda name: None)
     monkeypatch.setattr(tr, "identity_problem", lambda *args: None)
     monkeypatch.setattr(tr, "curl_status", lambda *args: "ok")
@@ -241,7 +246,7 @@ def test_fallback_child_uses_configured_target_on_both_paths(tmp_path, monkeypat
         return reader.page_from({}, {})
 
     monkeypatch.setattr(tr.TwscrapeReader, "resume", resume)
-    req = tr.fallback_request("alpha", tmp_path / "alpha.db", "fake", {"product": "Latest"}, cursor=None)
+    req = tr.fallback_request("alpha", config_path, "fake", {"product": "Latest"}, cursor=None)
     req["identity_revision"] = tr.identity_revision(identity)
     env = tr.service_env({}, private_tmp=tmp_path, fallback=True)
     assert tr._child(json.dumps(req), env)["status"] == "ok"

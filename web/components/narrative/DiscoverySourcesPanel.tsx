@@ -129,7 +129,7 @@ export function DiscoverySourcesPanel({ fetchSources = fetchDefault }: Discovery
                     <tr data-testid={`sources-health-${r.id}`}>
                       {/* One cell over all columns: the lines wrap instead of widening the table on phones. */}
                       <td colSpan={7} className="discovery-muted" style={{ whiteSpace: "normal", overflowWrap: "anywhere" }}>
-                        <ul style={{ margin: 0, paddingLeft: "1.25em", maxWidth: "min(100%, 80ch)" }}>
+                        <ul aria-label={`${r.label} collector health`} style={{ margin: 0, paddingLeft: "1.25em", maxWidth: "min(100%, 80ch)" }}>
                           {health.map((l) => (
                             <li key={l.key} data-testid={`sources-health-${r.id}-${l.key}`}>{l.text}</li>
                           ))}

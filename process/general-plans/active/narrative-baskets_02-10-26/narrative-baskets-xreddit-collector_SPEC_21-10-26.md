@@ -618,3 +618,56 @@ Target: a dedicated spare laptop that runs 24/7 (owner decision 24-10-26). All c
 - Identity validation remains off by default. When enabled, `region` is an uppercase alpha-2 declaration. Reject an explicit disagreement with local IANA country-table memberships or the primary language tag's alpha-2 regional subtag. Do not infer residence from language alone, secondary preferences, UTC offset or DST. Shared zones can cover multiple countries; valid aliases/neutral zones absent from country tables are unknown. Missing all local country tables refuses enabled validation. Existing system tzdb or locked `tzdata` supplies local data; no networking.
 - An OS does not determine geography: do not compare macOS/Windows to a country or timezone. Reject only recognizable literal-UA platform contradictions against B1's four wire-observed targets or explicit mobile target suffixes; platform-neutral UA and other target platforms are unknown. This also bounds plain-mode fallback consistency, without claiming literal UA equals curl's derived UA.
 - Offline test-only capture now observes raw ClientHello and separately negotiated h2 initial SETTINGS for chrome131, safari170, firefox133 and edge101. The identity-pool task folder's dated WIRE, FEASIBILITY and REPORT-B1-FOLLOWUPS artifacts contain the evidence and commands. No reference-browser baseline was captured or adopted; no JA3/JA4/complete HTTP2 match, anti-ban effectiveness or cross-host stability is established. No runtime capture, new networking, live-account probe, B2/B3, collector restart or deployment.
+
+## Superseding B2 rules 04-11-26 (approved local cutover; historical decisions retained)
+
+These rules supersede conflicting proxy/identity exclusions in rules 5, 8 and 17–20,
+AC41, AC46, AC53, AC55, the proxy/evasion non-goals, Q24 and Q30. They implement
+only the selected identity-pool PLAN B2 and its VALIDATE §§14–17; B3, cookie
+automation and Part C are not authorized by this amendment. Local implementation
+is CONDITIONAL; automated acceptance is recorded separately and live release is
+BLOCKED. Neither this text nor synthetic fixtures establish live route quality.
+
+- Deliberate per-account private routing is permitted through the maintained lazy
+  reader adapters, including GraphQL and transaction-ID bootstrap. Each configured
+  account retains an opaque route ID and revision, verified expected unique exit,
+  bounded sequential admission, quarantine and a fresh canary after change even
+  with identity disabled. Numeric CONNECT preserves the original Host/SNI and
+  separately verifies proxy and origin TLS. No automatic retry, redirect, ambient
+  proxy/CA trust, hostname fallback or direct fallback is permitted on these paths.
+  URL policy applies to discovered bootstrap assets as well as initial requests.
+- Direct/off is exactly `x_proxy_required=false` with all three private paths null.
+  Configured, partial, malformed, unavailable or quarantined routing never means
+  direct. A unit-boundary change rebuilds affected reader/bootstrap state; a typed
+  route failure discards its partial sample without refunding spent read charges.
+  It is not login, suspension, Cloudflare or a UTC-day pause.
+- Region without selected metadata provider is an owner-declared mapping for the
+  echo-verified expected exit, not measured geolocation. Optional ipapi is off by
+  default; selection requires its fixed schema and matching observations, never
+  owner-declaration fallback. Its durable 899/day request-start budget is reserved
+  before send under the shared adjacent state lock, held through completion with
+  no refund, no overlap and final-11-second deferral.
+- Plain→curl fallback remains once per UTC day pool-wide for Cloudflare/HTML only;
+  normal verified curl never retries curl. Children receive an explicit canonical
+  query path and bounded work in private stdin. Configured children additionally
+  verify fresh HMAC-bound exact raw query/policy/assignment/list/admission snapshots,
+  canonical paths, label, route ID, revision, backend, nonce, expiry and work before
+  clients. Parent rechecks freshness before adoption. No key/tag, raw credentials
+  or credential-derived persistent hash may enter argv, environment, output,
+  logs, status, reports or account DB proxy fields.
+- Configured private files require protected owner/SID ACLs, same-handle identity
+  and reparse checks, strict ancestor policy and no automatic ACL repair. The
+  app-owned SQLite hook securely creates/verifies DB and persistent rollback
+  journal before writes, verifies EXCLUSIVE locking before any recovery-triggering
+  read and then PERSIST/MEMORY before migrations/writes. Hot recovery retains the
+  original verified journal; no replacement exception exists. It rejects
+  WAL/shm/unknown sidecars and checks identities/ACLs after transactions and close. Live database handle
+  inspection permits the SQLite writer but denies replacement; immutable input
+  snapshot handles deny both writing and replacement. Refresh and child reuse the
+  same scoped hook; direct/off retains its original database behavior.
+- The global ceiling, per-account caps, canary, first-write-wins completeness,
+  no-account/debug/telemetry protections, pure cores and global proxy-environment
+  ban remain mandatory. No bought accounts/proxies, main/Premium account use,
+  Reddit change, provider terms acceptance, live probes, deploy or restart is
+  authorized. Production service SID/path/ancestor ACL evidence and RT4/manual
+  acceptance remain separate release gates.

@@ -37,4 +37,8 @@
     # the defaults (api\data\cache and api\data\watchlist.json in RepoRoot) are correct.
     CacheRoot        = ''
     WatchlistPath    = ''
+    # Optional absolute PRIVATE owner query config, outside RepoRoot. Required
+    # for B2 proxy routing; contains only private file paths, never route URLs.
+    # Empty retains the existing direct/off committed query file.
+    CollectorQueriesPath = ''
 }

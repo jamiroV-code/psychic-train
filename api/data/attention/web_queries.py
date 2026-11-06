@@ -95,7 +95,12 @@ REDDIT_STREAM_DEFAULTS = {
 # Optional pool and transport settings; the committed query file need not contain them.
 X_POOL_OPTIONAL_DEFAULTS = {"x_account_daily_cap": None, "x_account_rest_days": 0,
                             "x_connection_style": "plain", "x_identity_enabled": False,
-                            "x_account_identities": {}}
+                            "x_account_identities": {},
+                            "x_proxy_required": False, "x_proxy_list_path": None,
+                            "x_proxy_assignments_path": None, "x_proxy_policy_path": None,
+                            "x_proxy_admission_max_age_seconds": 86400,
+                            "x_proxy_health_interval_seconds": 3600,
+                            "x_proxy_quarantine_seconds": 3600}
 REDDIT_METHODS = ("reddit_stream", "reddit_web")
 _INT_KEYS = tuple(DEFAULTS)
 DEFAULTS = {**DEFAULTS, **X_DEFAULTS, **REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **X_POOL_OPTIONAL_DEFAULTS}
@@ -169,6 +174,13 @@ class CollectorConfig:
     x_connection_style: str = "plain"
     x_identity_enabled: bool = False
     x_account_identities: dict[str, dict[str, str]] = field(default_factory=dict)
+    x_proxy_required: bool = False
+    x_proxy_list_path: str | None = None
+    x_proxy_assignments_path: str | None = None
+    x_proxy_policy_path: str | None = None
+    x_proxy_admission_max_age_seconds: int = 86400
+    x_proxy_health_interval_seconds: int = 3600
+    x_proxy_quarantine_seconds: int = 3600
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -368,6 +380,21 @@ def validate_config(block) -> CollectorConfig:
             raise QueriesError(f"collector: {key} is missing or not a valid value")
     block = {**REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **X_POOL_OPTIONAL_DEFAULTS, **block}
     _validate_identity_settings(block)
+    if type(block["x_proxy_required"]) is not bool:
+        raise QueriesError("collector: x_proxy_required must be boolean")
+    paths = [block[k] for k in ("x_proxy_list_path", "x_proxy_assignments_path", "x_proxy_policy_path")]
+    if any(p is not None and (not isinstance(p, str) or not p or p != p.strip()
+                             or not p.isprintable() or not Path(p).is_absolute()) for p in paths):
+        raise QueriesError("collector: proxy paths must be absolute or null")
+    if (any(p is not None for p in paths) and any(p is None for p in paths)
+            or block["x_proxy_required"] and any(p is None for p in paths)):
+        raise QueriesError("collector: proxy paths must be configured together")
+    for key, lower, upper in (("x_proxy_admission_max_age_seconds", 1, 86400),
+                              ("x_proxy_health_interval_seconds", 3600, 86400),
+                              ("x_proxy_quarantine_seconds", 1, None)):
+        value = block[key]
+        if type(value) is not int or value < lower or upper is not None and value > upper:
+            raise QueriesError(f"collector: {key} is not a valid value")
     for key, floor in (("x_account_daily_cap", 1), ("x_account_rest_days", 0)):
         value = block[key]
         if key == "x_account_daily_cap" and value is None:
@@ -458,7 +485,11 @@ def _no_duplicate_keys(pairs):
 
 
 def load(path: Path | None = None, placed_symbols=None) -> Queries:
-    text = (path or QUERIES_PATH).read_bytes().decode("utf-8")
+    with (path or QUERIES_PATH).open("rb") as stream:
+        raw = stream.read(1024 * 1024 + 1)
+    if len(raw) > 1024 * 1024:
+        raise QueriesError("queries: file exceeds 1 MiB")
+    text = raw.decode("utf-8")
     return validate(json.loads(text, object_pairs_hook=_no_duplicate_keys), placed_symbols)
 
 

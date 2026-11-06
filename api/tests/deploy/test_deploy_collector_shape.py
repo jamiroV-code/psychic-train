@@ -28,7 +28,7 @@ def _section() -> str:
 
 def test_start_collector_runs_the_module_with_its_flag_and_dry_run():
     text = _read("start-collector.ps1")
-    assert "param([switch]$DryRun)" in text and 'Import-MySiteConfig -LogName \'collector\'' in text
+    assert "param([switch]$DryRun, [string]$QueriesPath = '')" in text and 'Import-MySiteConfig -LogName \'collector\'' in text
     assert "'python', '-m', 'api.data.attention_collector'" in text
     assert f"$env:{apr.FLAG_ENV} = '1'" in text
     assert apr.STREAM_ENV in text  # printed, inherited as the owner sets it, never forced on here
@@ -73,3 +73,16 @@ def test_readme_collector_section_has_task_switchover_and_unrun_marks():
     assert commands, "the section must give the exact commands"
     assert section.count("UNRUN") >= 3
     assert section.isascii()
+
+
+def test_b2_launcher_freezes_locked_group_and_passes_explicit_bounded_query_path():
+    text = _read("start-collector.ps1")
+    assert "'--frozen', '--group', 'xreader'" in text
+    assert "'--queries', $queriesPath" in text
+    assert "[System.IO.File]::OpenRead($queriesPath)" in text
+    assert "$count -gt 1048576" in text
+    assert "x_proxy_required" in text
+    for name in ("x_proxy_list_path", "x_proxy_assignments_path", "x_proxy_policy_path"):
+        assert name in text
+    assert "if ($hasRouting -and -not $privateQueries)" in text
+    assert "Get-Content -Raw" not in text

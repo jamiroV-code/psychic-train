@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import json
 import shutil
-import socket
+from api.tests.network_guard import deny_network
 from datetime import timedelta
 from pathlib import Path
 
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -263,11 +262,7 @@ def test_discovery_end_to_end_on_fixture(snap, tmp_path, monkeypatch):
     for s in shipped(snap).eligible:
         gain(s)
 
-    def boom(*a, **k):
-        raise AssertionError("handler must not reach the network")
-    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", boom)
-    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", boom)
-    monkeypatch.setattr(socket.socket, "connect", boom)
+    deny_network(monkeypatch)
     body = TestClient(app).get("/api/narrative/discovery", params={"window": 30}).json()
     counts = body["excluded_counts"]
     assert body["status"] == "ok" and body["universe_size"] == 100 and body["eligible_size"] == 74

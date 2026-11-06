@@ -158,8 +158,11 @@ def make_lib():
 def lib(monkeypatch):
     fake = make_lib()
     class FakeAdapter:
-        def __init__(self, style, identities):
-            self.style, self.identities = style, identities
+        def __init__(self, style, identities, *, runtime=None):
+            self.style, self.identities, self.runtime = style, identities, runtime
+
+        def ensure_current(self, label):
+            pass
 
         def install(self):
             pass
@@ -370,10 +373,12 @@ def test_no_ua_override_or_proxy_with_curl(tmp_path):
                          private_tmp=tmp_path, fallback=True)
     assert not set(env) & set(xr.PROXY_VARS)
     assert env["TWS_HTTP_BACKEND"] == "curl"
-    req = tr.fallback_request("acct1", Path("/srv/x/acct1.db"), QUERY, {"product": "Latest"}, cursor=None)
-    assert set(req) == {"label", "db", "query", "kv"} and set(req["kv"]) == {"product"}
+    config_path = tmp_path / "queries.json"
+    req = tr.fallback_request("acct1", config_path, QUERY, {"product": "Latest"}, cursor=None)
+    assert set(req) == {"label", "config_path", "query", "kv", "backend"} and set(req["kv"]) == {"product"}
+    assert req["config_path"] == str(config_path.resolve()) and req["backend"] == "curl"
     with pytest.raises(ValueError):
-        tr.fallback_request("acct1", Path("/srv/x/acct1.db"), QUERY, {"product": "Latest", "proxy": "h"}, cursor=None)
+        tr.fallback_request("acct1", config_path, QUERY, {"product": "Latest", "proxy": "h"}, cursor=None)
 
 
 def test_fallback_child_refuses_enabled_identity_without_target_before_library_load(tmp_path, lib, monkeypatch):
@@ -381,13 +386,17 @@ def test_fallback_child_refuses_enabled_identity_without_target_before_library_l
     identity = {"accept_language": "en-US", "region": "US", "timezone": "America/New_York",
                 "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36"}
     config = cfg(d, labels=("acct1",), x_identity_enabled=True, x_account_identities={"acct1": identity})
-    monkeypatch.setattr(wq, "load", lambda: types.SimpleNamespace(config=config))
+    document = {"version": 1, "note": "invalid synthetic identity", "collector": config.as_dict(),
+                "subreddits": ["Bitcoin"], "ambiguous": {key: [] for key in wq.SOURCES}, "coins": {}}
+    config_path = tmp_path / "queries.json"
+    config_path.write_text(json.dumps(document), encoding="utf-8")
     monkeypatch.setattr(tr, "find_dist", lookup(curl=curl_dist()))
     monkeypatch.setattr(tr, "curl_status", lambda *args: "ok")
     monkeypatch.setattr(tr, "read_install_record", lambda: record())
     loaded = []
     monkeypatch.setattr(tr, "load_library", lambda: loaded.append(True))
-    req = tr.fallback_request("acct1", d / "acct1.db", QUERY, {"product": "Latest"}, cursor=None)
+    req = tr.fallback_request("acct1", config_path, QUERY, {"product": "Latest"}, cursor=None)
+    req["identity_revision"] = tr.identity_revision(identity)
     env = tr.service_env(GOOD_ENV, private_tmp=tmp_path / "tmp", fallback=True)
     assert tr._child(json.dumps(req), env)["status"] == "refused"
     assert loaded == []
@@ -630,7 +639,7 @@ def test_curl_fallback_runs_in_separate_process_with_backend_env_only_there(tmp_
     assert out.result is not None and len(child.calls) == 1
     request, env = child.calls[0]
     assert env["TWS_HTTP_BACKEND"] == "curl" and tr.env_guard(env, fallback=True) == []
-    assert request["db"] == str(d / "acct1.db") and request["label"] == "acct1" and request["query"] == QUERY
+    assert request["config_path"] == str(wq.QUERIES_PATH.resolve()) and request["label"] == "acct1" and request["query"] == QUERY
     assert "TWS_HTTP_BACKEND" not in os.environ  # the main process keeps the default backend
     assert ("curl_cffi" in sys.modules) == curl_loaded_before
     s.close()
@@ -881,7 +890,7 @@ def test_health_active_over_total_with_label_last_used_state_cookie_age_no_secre
     assert h["accounts"][0] == {"label": "acct1", "state": "active", "reason": None, "last_used": T0.isoformat(),
                                 "cookie_age_days": None, "reads_today": None, "cap": None,
                                 "rest_until": None, "ready": None, "parse_strikes": None,
-                                "parse_strike_last_at": None}
+                                "parse_strike_last_at": None, "proxy_state": "direct", "connection_style": "plain"}
     assert h["accounts"][1]["state"] == "inactive" and h["accounts"][1]["reason"] == "x_login_required"
     assert h["commit_match"] is True and h["env_ok"] is False and h["env_bad"] == ["HTTPS_PROXY"]
     assert h["accounts_path"] == "ok" and h["curl_fallback"] == "flag_false"

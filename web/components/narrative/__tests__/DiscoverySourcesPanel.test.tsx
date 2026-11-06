@@ -18,14 +18,14 @@ const resp: DiscoverySourcesResponse = {
   newest: "2026-10-29",
   sources: [
     { id: "wikipedia", label: "Wikipedia pageviews", kind: "weighted", weight: 25, state: "ok", newest: "2026-10-29", history_days: 99, coins_with_data: 38, eligible_size: 50, note: "", reason: "", impl: "wiki" },
-    { id: "x", label: "X", kind: "weighted", weight: 15, state: "unavailable", newest: null, history_days: 0, coins_with_data: 0, eligible_size: 50, note: "", reason: "x_live_off", impl: "x_worker", health },
+    { id: "xsearch", label: "X", kind: "weighted", weight: 15, state: "unavailable", newest: null, history_days: 0, coins_with_data: 0, eligible_size: 50, note: "", reason: "x_live_off", impl: "x_worker", health },
   ],
 };
 
 describe("DiscoverySourcesPanel health", () => {
   it("renders a visible health block under a worker row", async () => {
     render(<DiscoverySourcesPanel fetchSources={() => Promise.resolve(resp)} />);
-    const block = await screen.findByTestId("sources-health-x");
+    const block = await screen.findByTestId("sources-health-xsearch");
     const t = block.textContent ?? "";
     expect(t).toContain("Reason: X live collection off");
     expect(t).toContain("Method: x_worker");
@@ -40,6 +40,8 @@ describe("DiscoverySourcesPanel health", () => {
     expect(t).toContain("One day late");
     expect(t).toContain("Free disk: unknown");
     expect(block.querySelector("[title]")).toBeNull();
+    expect(screen.getByTestId("collector-status")).toHaveTextContent("acct-1 active");
+    expect(screen.getByTestId("collector-status")).toHaveTextContent("proxy unknown");
   });
 
   it("renders rows without health exactly as before", async () => {

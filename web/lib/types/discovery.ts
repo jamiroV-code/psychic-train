@@ -148,6 +148,13 @@ export interface DiscoverySourceRow {
 export type DiscoverySourceReason =
   | "" | "parked" | "x_live_off" | "not_probed" | "stale" | "insufficient_history" | "no_stored_data" | "invalid_file";
 
+export type DiscoveryProxyState = "direct" | "unknown" | "healthy" | "quarantined" | "blocked";
+export type DiscoveryProxyReason =
+  | "proxy_config" | "proxy_private" | "proxy_assignment" | "proxy_policy" | "proxy_address"
+  | "proxy_transport" | "proxy_timeout" | "proxy_redirect" | "proxy_response" | "proxy_exit"
+  | "proxy_region" | "proxy_feed" | "proxy_baseline" | "proxy_budget" | "proxy_quarantine"
+  | "proxy_revision" | "proxy_lock";
+
 /** One X account of the pool: opaque label only. */
 export interface DiscoveryAccountHealth {
   label: string;
@@ -163,6 +170,14 @@ export interface DiscoveryAccountHealth {
   ready?: boolean | null;
   parse_strikes?: number | null;
   parse_strike_last_at?: string | null;
+  proxy_id?: string;
+  proxy_state?: DiscoveryProxyState;
+  proxy_reason?: DiscoveryProxyReason;
+  proxy_checked_at?: string;
+  proxy_quarantine_until?: string;
+  region?: string;
+  connection_style?: "plain" | "curl";
+  identity_revision?: string;
 }
 
 /** W8e2 health line, computed by the API; the web only formats it. */

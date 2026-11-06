@@ -36,7 +36,7 @@ const health = (over: Partial<DiscoverySourceHealth> = {}): DiscoverySourceHealt
 });
 
 const row = (h: DiscoverySourceHealth | undefined, over: Partial<DiscoverySourceRow> = {}): DiscoverySourceRow => ({
-  id: "x", label: "X", kind: "weighted", weight: 15, state: "ok", newest: "2026-10-28", history_days: 30,
+  id: "xsearch", label: "X", kind: "weighted", weight: 15, state: "ok", newest: "2026-10-28", history_days: 30,
   coins_with_data: 40, eligible_size: 50, note: "", reason: "", impl: "x_worker", health: h, ...over,
 });
 
@@ -60,7 +60,7 @@ describe("sourceHealthLines", () => {
       "Completeness 2026-10-28: 45 of 50 coin-days fetched. Attempted 50, fetched 45, missing 5 (timeout 3, rate-limited 2), capped 4, newest 2.5 h old",
     );
     expect(t.mode).toBe("Mode: baseline");
-    expect(t.accounts).toBe("X accounts: 2 of 3 active. acct-1 active, cookie 6 days old, reads today unknown / no limit, rest until unknown, ready unknown, last used 2026-10-29 13:00 UTC, parse strikes unknown, last strike unknown; acct-2 locked (login-wall), cookie age unknown, reads today unknown / no limit, rest until unknown, ready unknown, last used unknown, parse strikes unknown, last strike unknown");
+    expect(t.accounts).toBe("X accounts: 2 of 3 active. acct-1 active, cookie 6 days old, reads today unknown / no limit, rest until unknown, ready unknown, last used 2026-10-29 13:00 UTC, parse strikes unknown, last strike unknown, proxy unknown, proxy checked unknown, quarantine until unknown, region unknown, connection style unknown; acct-2 locked (login-wall), cookie age unknown, reads today unknown / no limit, rest until unknown, ready unknown, last used unknown, parse strikes unknown, last strike unknown, proxy unknown, proxy checked unknown, quarantine until unknown, region unknown, connection style unknown");
     expect(t.coverage).toBe("Coverage 2026-10-28: eligible 50, stored 45, exact 41, estimated 4, missing 5 (timeout 3, rate-limited 2)");
     expect(t.late).toBe("One day late: completeness covers 2026-10-28, the last full day; today's counts are still in progress.");
     expect(t.disk).toBe("Free disk: 50.0 GB");
