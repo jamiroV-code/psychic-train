@@ -28,7 +28,7 @@ PLAN §S-RCore-B, RC-9 registration (the worker registers the `reddit_core.resol
 
 ## 6. Tests and evidence
 Red first: the new tests were run before the implementation: **8 failed** (the `-k live` subset; TypeError on `live_methods`, missing snapshot), recorded before any implementation edit.
-Green: new tests subset **10 passed** (first run), then the full three files — see section 11 of the final message for counts.
+Green: `-k` subset **10 passed**; the three worker files (`test_attention_pc_refresh_stream.py`, `test_attention_pc_refresh.py`, `test_attention_pc_refresh_collector.py`) **179 passed** (533 s). Adjacent: `test_pc_collector_guards.py` + `test_reddit_collector_guards.py` + `test_sources_finish_status.py` **52 passed, 1 failed**; the failure is `browser_relay.py` (untracked S-Relay sibling work, not this slice) importing asyncio/socket/ssl under the reddit guard's `browser_*.py` glob.
 No full suite, lint or formatter run.
 
 ## 7. Interfaces
