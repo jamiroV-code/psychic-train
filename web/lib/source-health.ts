@@ -1,4 +1,8 @@
-import type { DiscoveryAccountHealth, DiscoverySourceHealth, DiscoverySourceReason, DiscoverySourceRow } from "@/lib/types/discovery";
+import type {
+  DiscoveryAccountHealth, DiscoveryBrowserHealth, DiscoveryDailyReportStatus, DiscoveryDoctorStatus,
+  DiscoveryQueryIdHealth, DiscoveryRedditAccountHealth, DiscoveryRedditMethodHealth, DiscoverySourceHealth,
+  DiscoverySourceReason, DiscoverySourceRow,
+} from "@/lib/types/discovery";
 
 /** One visible line of a PC worker source's health block (W8g); the API computes, this only formats. */
 export interface HealthLine {
@@ -59,13 +63,115 @@ function proxyText(a: DiscoveryAccountHealth): string {
     `quarantine until ${utc(a.proxy_quarantine_until ?? null)}, region ${region}, connection style ${style}`;
 }
 
+/** Closed-code lookup: a code outside the table (a newer or malformed API value) reads unknown, never healthy. */
+function word(table: Record<string, string>, code: string | null | undefined): string {
+  return code != null && Object.prototype.hasOwnProperty.call(table, code) ? table[code] : UNKNOWN;
+}
+
+const ENDPOINT_TEXT: Record<string, string> = { ok: "ok", restricted: "restricted" };
+const HARVEST_TEXT: Record<string, string> = {
+  none: "none", ok: "ok", needs_owner: "needs owner", refused: "refused", failed: "failed",
+};
+
+/** S-StatusAPI X fields; each group appears only when the API sends it, so the default-off line is unchanged. */
+function xFinishText(a: DiscoveryAccountHealth): string {
+  const parts: string[] = [];
+  if (a.endpoint_state !== undefined) parts.push(`endpoint ${word(ENDPOINT_TEXT, a.endpoint_state)}`);
+  const b = a.behaviour;
+  if (b) {
+    parts.push(`quiet until ${utc(b.quiet_until)}, cooldown until ${utc(b.cooldown_until)}` +
+      `${b.cooldown_reason ? ` (${b.cooldown_reason})` : ""}, warmup stage ${n(b.warmup_stage)}, ` +
+      `effective cap ${n(b.effective_cap)}, mixed calls today ${n(b.mixed_calls_today)}`);
+  }
+  const hv = a.harvest;
+  if (hv) {
+    parts.push(`cookie harvest ${word(HARVEST_TEXT, hv.state)}${hv.reason ? ` (${hv.reason})` : ""}` +
+      (hv.last_at ? ` at ${utc(hv.last_at)}` : ""));
+  }
+  if (a.ct0_rotations_seen !== undefined) parts.push(`ct0 rotations seen ${n(a.ct0_rotations_seen)}`);
+  return parts.map((p) => `, ${p}`).join("");
+}
+
 export function accountText(a: DiscoveryAccountHealth): string {
   const ready = a.ready == null ? UNKNOWN : a.ready ? "yes" : "no";
   return `${a.label} ${a.state}${a.reason ? ` (${a.reason})` : ""}, ` +
     (a.cookie_age_days == null ? `cookie age ${UNKNOWN}` : `cookie ${a.cookie_age_days} days old`) +
     `, reads today ${n(a.reads_today)} / ${a.cap == null ? "no limit" : n(a.cap)}` +
     `, rest until ${utc(a.rest_until ?? null)}, ready ${ready}, last used ${utc(a.last_used)}` +
-    `, parse strikes ${n(a.parse_strikes)}, last strike ${utc(a.parse_strike_last_at ?? null)}, ${proxyText(a)}`;
+    `, parse strikes ${n(a.parse_strikes)}, last strike ${utc(a.parse_strike_last_at ?? null)}, ${proxyText(a)}` +
+    xFinishText(a);
+}
+
+/** The API tags Reddit accounts with `site: "reddit"`; X accounts carry no site. */
+export function isRedditAccount(
+  a: DiscoveryAccountHealth | DiscoveryRedditAccountHealth,
+): a is DiscoveryRedditAccountHealth {
+  return "site" in a && a.site === "reddit";
+}
+
+const REDDIT_ACCOUNT_STATES: Record<string, string> = {
+  active: "active", resting: "resting", paused: "paused", locked: "locked",
+};
+
+export function redditAccountText(a: DiscoveryRedditAccountHealth): string {
+  const state = word(REDDIT_ACCOUNT_STATES, a.state);
+  const ready = a.ready == null ? UNKNOWN : a.ready ? "yes" : "no";
+  return `${a.label} ${state === UNKNOWN ? "state unknown" : state}${a.reason ? ` (${a.reason})` : ""}` +
+    `, reads today ${n(a.reads_today)} / ${a.cap == null ? "no limit" : n(a.cap)}` +
+    `, rest until ${utc(a.rest_until)}, ready ${ready}` +
+    `, session ${a.session_state ?? UNKNOWN} (checked ${utc(a.session_checked_at)})` +
+    `, proxy ${a.proxy_state && Object.prototype.hasOwnProperty.call(PROXY_STATES, a.proxy_state) ? a.proxy_state : UNKNOWN}`;
+}
+
+const METHOD_STATES: Record<string, string> = {
+  ok: "ok", degraded: "degraded", needs_probe: "needs probe", disabled: "off", blocked: "blocked", stale: "stale",
+};
+
+function share(v: number | undefined): string {
+  return v == null || !Number.isFinite(v) ? UNKNOWN : `${Math.round(v * 100)}%`;
+}
+
+export function methodText(m: DiscoveryRedditMethodHealth): string {
+  const lanes = m.lanes
+    ? `lanes posts ${share(m.lanes.posts)}, comments ${share(m.lanes.comments)}` +
+      (m.comments_scope === "threads_opened" ? " (threads opened only)" : "")
+    : `lanes ${UNKNOWN}`;
+  return `${m.label}: ${word(METHOD_STATES, m.state)}${m.reason ? ` (${m.reason})` : ""}` +
+    `, last settled ${m.last_settled_day ?? UNKNOWN}, ${lanes}, requests today ${n(m.requests_today)} of ${n(m.cap)}`;
+}
+
+const QUERYID_STATES: Record<string, string> = {
+  ok: "ok", candidate: "candidate pending", stale: "stale", blocked: "blocked", refused_by_policy: "refused by policy",
+};
+
+export function queryIdText(q: DiscoveryQueryIdHealth): string {
+  return `Query ids (${q.mode}): ${word(QUERYID_STATES, q.state)}, source ${q.active_source ?? UNKNOWN}` +
+    `, active for ${n(q.active_age_days)} days, last check ${utc(q.last_check ?? null)}`;
+}
+
+const DOCTOR_STATES: Record<string, string> = { PASS: "pass", WARN: "warnings", FAIL: "failing" };
+
+export function doctorText(d: DiscoveryDoctorStatus): string {
+  return `Doctor: ${word(DOCTOR_STATES, d.state)}, checked ${utc(d.checked_at)}` +
+    `, ${n(d.failures)} failures, ${n(d.warnings)} warnings`;
+}
+
+/** Head line plus one line per source/method; absent counts are unknown, never zero. */
+export function reportLines(r: DiscoveryDailyReportStatus): string[] {
+  const counts = r.per_source_method;
+  const verdict = counts == null ? "counts unknown"
+    : r.complete == null ? "completeness unknown" : r.complete ? "complete" : "incomplete";
+  const head = `Daily report ${r.day} (revision ${n(r.revision)}): ${verdict}`;
+  return [head, ...Object.entries(counts ?? {}).map(([key, c]) =>
+    `${key}: eligible ${c.eligible}, stored ${c.stored}, exact ${c.exact}, estimated ${c.estimated}, ` +
+    missingText(c.missing, c.reasons))];
+}
+
+const PROFILE_STATES: Record<string, string> = { ok: "ok", missing: "missing", policy_unsatisfied: "policy not satisfied" };
+
+export function browserText(b: DiscoveryBrowserHealth): string {
+  const refused = b.relay_refusals.map((r) => `${r.host} ${r.count}`).join(", ") || "none";
+  return `Browser profile: ${word(PROFILE_STATES, b.profile_state)}; relay refused ${refused}`;
 }
 
 /** Only sums/differences of the API's target-day counts, never today's counts or a reconstructed queue. */
@@ -112,12 +218,17 @@ export function sourceHealthLines(row: DiscoverySourceRow): HealthLine[] | null 
     },
     { key: "mode", text: `Mode: ${h.mode ?? UNKNOWN}` },
   ];
+  const redditAccounts = h.accounts.filter(isRedditAccount);
+  const xAccounts = h.accounts.filter((a): a is DiscoveryAccountHealth => !isRedditAccount(a));
   if (row.id === "xsearch" || h.accounts_total !== null || h.accounts.length > 0) {
-    const per = h.accounts.map(accountText);
-    const head = `X accounts: ${n(h.accounts_active)} of ${n(h.accounts_total)} active`;
+    const reddit = row.id === "reddit" || redditAccounts.length > 0;
+    const per = reddit ? redditAccounts.map(redditAccountText) : xAccounts.map(accountText);
+    const head = `${reddit ? "Reddit" : "X"} accounts: ${n(h.accounts_active)} of ${n(h.accounts_total)} active`;
     lines.push({ key: "accounts", text: per.length ? `${head}. ${per.join("; ")}` : head });
     lines.push({ key: "coverage", text: coverageText(h) });
   }
+  if (h.queryids) lines.push({ key: "queryids", text: queryIdText(h.queryids) });
+  for (const m of h.methods ?? []) lines.push({ key: `method-${m.method}`, text: methodText(m) });
   lines.push(
     {
       key: "late",

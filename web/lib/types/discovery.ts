@@ -178,6 +178,102 @@ export interface DiscoveryAccountHealth {
   region?: string;
   connection_style?: "plain" | "curl";
   identity_revision?: string;
+  /** Finish plan (S-StatusAPI): optional; absent on older APIs and while their producers are off. */
+  endpoint_state?: "ok" | "restricted" | "unknown";
+  behaviour?: XAccountBehaviour;
+  harvest?: XAccountHarvest;
+  ct0_rotations_seen?: number;
+}
+
+/** B3 per-account behaviour; every null is unknown. */
+export interface XAccountBehaviour {
+  quiet_until: string | null;
+  cooldown_until: string | null;
+  cooldown_reason: string | null;
+  warmup_stage: number | null;
+  effective_cap: number | null;
+  mixed_calls_today: number | null;
+}
+
+/** X cookie harvest outcome: codes and a time only, never a cookie. */
+export interface XAccountHarvest {
+  state: "none" | "ok" | "needs_owner" | "refused" | "failed" | "unknown";
+  reason: string | null;
+  last_at: string | null;
+}
+
+/** One Reddit throwaway account (its own model, tagged by `site`): opaque label only. */
+export interface DiscoveryRedditAccountHealth {
+  site: "reddit";
+  label: string;
+  state: "active" | "resting" | "paused" | "locked" | "unknown";
+  reason: string | null;
+  reads_today: number | null;
+  cap: number | null;
+  rest_until: string | null;
+  ready: boolean | null;
+  session_state: string | null;
+  session_checked_at: string | null;
+  proxy_state?: DiscoveryProxyState | null;
+}
+
+export type DiscoveryQueryIdState = "ok" | "candidate" | "stale" | "unknown" | "blocked" | "refused_by_policy";
+
+/** X GraphQL query-id registry state (X row only). */
+export interface DiscoveryQueryIdHealth {
+  mode: "off" | "sentinel" | "auto";
+  state: DiscoveryQueryIdState;
+  active_source?: "pinned" | "bundle" | "mixed" | null;
+  active_age_days?: number | null;
+  last_check?: string | null;
+}
+
+export type DiscoveryRedditMethodState =
+  | "ok" | "degraded" | "needs_probe" | "disabled" | "blocked" | "stale" | "unknown";
+
+/** One Reddit method's own status row; methods are never merged. */
+export interface DiscoveryRedditMethodHealth {
+  method: "reddit_live_browser" | "reddit_live_gql" | "reddit_web" | "reddit_stream";
+  label: string;
+  state: DiscoveryRedditMethodState;
+  reason: string | null;
+  last_settled_day: string | null;
+  /** coverage share of the last close poll, 0..1 */
+  lanes: Partial<Record<"posts" | "comments", number>> | null;
+  comments_scope: "threads_opened" | null;
+  requests_today: number | null;
+  cap: number | null;
+}
+
+export interface DiscoveryReportCounts {
+  eligible: number;
+  stored: number;
+  exact: number;
+  estimated: number;
+  missing: number;
+  reasons: Record<string, number>;
+}
+
+/** Newest durable daily report; unreadable counts are null (unknown), never zero. */
+export interface DiscoveryDailyReportStatus {
+  day: string;
+  revision: number | null;
+  /** "<source>/<method>" -> counts */
+  per_source_method: Record<string, DiscoveryReportCounts> | null;
+  complete: boolean | null;
+}
+
+export interface DiscoveryDoctorStatus {
+  state: "PASS" | "WARN" | "FAIL" | "UNKNOWN";
+  checked_at: string | null;
+  failures: number | null;
+  warnings: number | null;
+}
+
+/** Browser host: profile state and the top (at most 5) refused public hostnames. */
+export interface DiscoveryBrowserHealth {
+  relay_refusals: { host: string; count: number }[];
+  profile_state: "ok" | "missing" | "policy_unsatisfied" | "unknown";
 }
 
 /** W8e2 health line, computed by the API; the web only formats it. */
@@ -206,9 +302,13 @@ export interface DiscoverySourceHealth {
   completeness: string;
   accounts_active: number | null;
   accounts_total: number | null;
-  accounts: DiscoveryAccountHealth[];
+  accounts: (DiscoveryAccountHealth | DiscoveryRedditAccountHealth)[];
   free_disk_bytes: number | null;
   clock_sync_age_seconds: number | null;
+  /** X row only; absent while off and never checked. */
+  queryids?: DiscoveryQueryIdHealth;
+  /** Reddit row only; absent while no live method or Reddit account is configured. */
+  methods?: DiscoveryRedditMethodHealth[];
 }
 
 /** T180: an eligible coin the daily Google Trends pull skips (no data, never a 0). */
@@ -252,6 +352,8 @@ export interface DiscoveryCollectorSource {
   need_reads?: number | null;
   shortfall_reads?: number | null;
   backlog_reads?: number | null;
+  /** Reddit: per-method state from the same reader as the row. */
+  methods?: DiscoveryRedditMethodHealth[];
 }
 
 /** The attention collector process, read by the API from its heartbeat file; the web only formats it. */
@@ -266,6 +368,9 @@ export interface DiscoveryCollectorStatus {
   version: string | null;
   running_sources: string[];
   sources: DiscoveryCollectorSource[];
+  daily_report?: DiscoveryDailyReportStatus;
+  doctor?: DiscoveryDoctorStatus;
+  browser?: DiscoveryBrowserHealth;
 }
 
 export interface DiscoverySourcesResponse {

@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import { CollectorStatus } from "@/components/narrative/CollectorStatus";
 import { DiscoverySourcesPanel } from "@/components/narrative/DiscoverySourcesPanel";
 import type { DiscoveryCollectorSource, DiscoveryCollectorStatus, DiscoverySourcesResponse } from "@/lib/types/discovery";
-import type { DiscoverySourceHealth } from "@/lib/types/discovery";
+import type { DiscoveryAccountHealth, DiscoverySourceHealth } from "@/lib/types/discovery";
+
+const xAccount: DiscoveryAccountHealth = {
+  label: "acct_a", state: "locked", reason: "account_cap", last_used: null, cookie_age_days: null,
+  reads_today: 40, cap: 30, rest_until: null, ready: null,
+};
 
 const poolHealth: DiscoverySourceHealth = {
   last_unit_at: null, paused: false, pause_reason: null, pause_until: null,
@@ -11,10 +16,7 @@ const poolHealth: DiscoverySourceHealth = {
   completeness_attempted: 4, completeness_fetched: 3, missing: 2, missing_reasons: { account_failed: 2 },
   capped: 1, newest_age_hours: null, budget_used: 100, effective_budget: 800, budget_spent: false,
   mode: "degraded", expected_gap_s: 300, stale: false, completeness: "",
-  accounts_active: 0, accounts_total: 1, accounts: [{
-    label: "acct_a", state: "locked", reason: "account_cap", last_used: null, cookie_age_days: null,
-    reads_today: 40, cap: 30, rest_until: null, ready: null,
-  }], free_disk_bytes: null, clock_sync_age_seconds: null,
+  accounts_active: 0, accounts_total: 1, accounts: [xAccount], free_disk_bytes: null, clock_sync_age_seconds: null,
 };
 
 const noState = (id: string, label: string): DiscoveryCollectorSource => ({
@@ -134,7 +136,7 @@ describe("DiscoverySourcesPanel collector box", () => {
 describe("Stage 0 account and coverage evidence", () => {
   it.each(["account_cap", "resting", "rate_limited", "x_login_required", "x_account_suspect"])(
     "shows per-account reads/cap/rest/ready and reason %s", (reason) => {
-      const account = { ...poolHealth.accounts[0], reason,
+      const account = { ...xAccount, reason,
         state: reason === "x_login_required" ? "inactive" as const :
           reason === "x_account_suspect" ? "suspect" as const : "locked" as const,
         rest_until: "2026-11-03T10:00:00Z", ready: false };
@@ -155,7 +157,7 @@ describe("Stage 0 account and coverage evidence", () => {
 
   it("never invents reads or coverage from absent evidence; absent cap means no limit", () => {
     const h = { ...poolHealth, completeness_fetched: null, capped: null, missing: null,
-      missing_reasons: null, accounts: [{ ...poolHealth.accounts[0], reads_today: undefined, cap: undefined }] };
+      missing_reasons: null, accounts: [{ ...xAccount, reads_today: undefined, cap: undefined }] };
     render(<CollectorStatus collector={base} xHealth={h} />);
     const box = screen.getByTestId("collector-status");
     expect(box).toHaveTextContent("reads today unknown / no limit");

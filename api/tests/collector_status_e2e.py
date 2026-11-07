@@ -16,6 +16,11 @@ from uuid import UUID
 
 LABELS = ("legacy", "unknown", "healthy", "quarantined", "blocked")
 SECRET = "B2_SYNTHETIC_SECRET_NEVER_PUBLIC"
+# S-StatusUI: Reddit accounts (max 3 per config, so two finish scenarios cover all five states).
+REDDIT_SCENARIOS = {
+    "finish-a": (("r_active", "r_resting", "r_unknown"), ["browser", "gql_anon"], "sentinel"),
+    "finish-b": (("r_paused", "r_locked"), ["gql_anon"], "auto"),
+}
 
 
 def root() -> Path:
@@ -51,6 +56,14 @@ def seed() -> None:
     # Refuse an internally inconsistent fixture before the real server starts.
     web_queries.validate(direct)
     web_queries.validate(configured)
+    for scenario, (labels, methods, mode) in REDDIT_SCENARIOS.items():
+        finish = dict(config, reddit_live_methods=methods, reddit_surface_path=str(private / "surface.json"),
+                      browser_path=str(private / "browser.exe"), browser_profiles_dir=str(private / "profiles"),
+                      reddit_browser_accounts=[{"label": label, "profile": f"p_{label}"} for label in labels],
+                      x_queryid_mode=mode)
+        body = dict(configured, collector=finish)
+        web_queries.validate(body)
+        put(private / f"queries-{scenario}.json", body)
     # These marker-bearing private inputs must never be opened by the status
     # reader. Deliberately malformed bodies make accidental admission fail.
     for name in ("routes.txt", "assignments.json", "policy.json"):
@@ -92,6 +105,41 @@ def seed() -> None:
         "activity": {"day": now.date().isoformat(), "units": 0, "warned": False},
         "pause_until": None, "pause_reason": None, "last_unit_at": now.isoformat(),
     })
+    seed_finish(directory, now)
+
+
+def seed_finish(directory: Path, now: datetime) -> None:
+    """Producer files in the S-StatusAPI layouts (its report section 7). Secret-bearing and IP values are planted
+    where a reader must drop or count them, never show them."""
+    state = directory / "attention" / "_pc_state"
+    reports = directory / "attention" / "_reports"
+    today, yesterday = now.date(), now.date() - timedelta(days=1)
+    put(state / "reddit_accounts.json", {"accounts": {
+        "r_active": {"state": "active", "reads_day": today.isoformat(), "reads_used": 3, "session_state": "ok",
+                     "session_checked_at": now.isoformat(), "proxy_state": "healthy"},
+        "r_resting": {"state": "resting", "reason": "new_account_rest",
+                      "rest_until": (now + timedelta(days=3)).isoformat()},
+        "r_paused": {"state": "paused", "reason": "rate_limited", "reads_day": today.isoformat(), "reads_used": 9},
+        "r_locked": {"state": "locked", "reason": SECRET, "proxy_state": "blocked"},
+    }})
+    put(state / "reddit_account_ready.json", {"ready": {"r_active": yesterday.isoformat(),
+                                                         "r_resting": today.isoformat()}})
+    put(state / "reddit_live" / "reddit_live_browser_health.json", {"state": "needs_probe", "reason": "probe_missing"})
+    put(state / "reddit_live" / "reddit_live_gql_health.json", {
+        "state": "degraded", "reason": "rate_limited", "lanes": {"posts": 1, "comments": 0.4},
+        "comments_scope": "threads_opened", "requests_today": 30, "cap": 200})
+    put(state / "x_queryids.json", {"check_state": "candidate", "last_check": now.isoformat(), "operations": {
+        "SearchTimeline": {"active": {"id": SECRET, "source": "bundle",
+                                      "adopted_at": (now - timedelta(days=2)).isoformat()}}}})
+    put(state / "browser_health.json", {"profile_state": "policy_unsatisfied", "relay_refusals": {
+        "edge.microsoft.com": 3, "192.0.2.1": 9, SECRET: 7}})
+    put(reports / f"daily_report_{yesterday.isoformat()}.json", {"revision": 1, "per_source_method": {
+        "reddit/reddit_live_gql": {"eligible": 10, "stored": 8, "exact": 7, "estimated": 1, "missing": 2,
+                                   "reasons": {"blocked": 2}},
+        "xsearch/xsearch_web": {"eligible": 5, "stored": 5, "exact": 5, "estimated": 0, "missing": 0, "reasons": {}}}})
+    put(reports / "doctor.json", {"state": "WARN", "checked_at": now.isoformat(), "failures": [],
+                                  "warnings": [SECRET, "check text"]})
+
 
 def install_private_read_guard(directory: Path) -> None:
     """Fail the test server if any status path opens admission-only inputs."""
