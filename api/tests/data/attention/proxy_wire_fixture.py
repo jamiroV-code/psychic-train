@@ -10,7 +10,6 @@ import contextlib
 import ipaddress
 import json
 import select
-import shutil
 import socket
 import socketserver
 import ssl
@@ -22,18 +21,17 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 
-HOSTS = {"origin.test", "wrong-origin.test", "proxy.test", "wrong-proxy.test", "www.spamhaus.org", "raw.githubusercontent.com", "ipapi.co"}
+from api.tests.data.attention.fixture_seams import SYNTHETIC_HOSTS, openssl_binary
+
+
+ORIGIN_HOSTS = ["origin.test", "www.spamhaus.org", "raw.githubusercontent.com", "ipapi.co", *dict.fromkeys(SYNTHETIC_HOSTS)]
+HOSTS = {"origin.test", "wrong-origin.test", "proxy.test", "wrong-proxy.test", "www.spamhaus.org", "raw.githubusercontent.com", "ipapi.co", *SYNTHETIC_HOSTS}
 
 
 def certificates(directory):
-    binary = shutil.which("openssl")
-    if binary is None:
-        candidate = Path("C:/Program Files/Git/usr/bin/openssl.exe")
-        binary = str(candidate) if candidate.is_file() else None
-    if binary is None:
-        raise AssertionError("B2 mandatory TLS acceptance requires an OpenSSL executable")
+    binary = openssl_binary()
     result = {}
-    for name, hosts in (("origin", ["origin.test", "www.spamhaus.org", "raw.githubusercontent.com", "ipapi.co"]), ("proxy", ["proxy.test"])):
+    for name, hosts in (("origin", ORIGIN_HOSTS), ("proxy", ["proxy.test"])):
         root, root_key = directory / (name + "-root.pem"), directory / (name + "-root.key")
         leaf, key, csr = directory / (name + ".pem"), directory / (name + ".key"), directory / (name + ".csr")
         ext = directory / (name + ".ext")
@@ -108,7 +106,8 @@ class WireFixture:
                 self.do_GET()
             def do_GET(self):
                 host = self.headers.get("host", "")
-                owner.requests.append({"host": host, "path": self.path, "headers": dict(self.headers), "method": self.command})
+                owner.requests.append({"host": host, "path": self.path, "headers": dict(self.headers), "method": self.command,
+                                       "cookies": self.headers.get_all("cookie") or []})
                 response = owner.responses.get((host.split(":", 1)[0], self.path),
                     owner.responses.get(self.path, owner.responses.get("*")))
                 if callable(response):

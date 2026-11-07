@@ -1,18 +1,57 @@
 """Test-only spawned entrypoint: real protocol/HMAC and real routed clients.
 
 Installed-distribution/filesystem inspectors and upstream search dispatch are
-injected. There is no production bypass or secret in argv/environment.
+injected. There is no production bypass or secret in argv/environment. The
+entrypoint installs the Python-level network-denial guard first (see
+fixture_seams.NATIVE_CONTAINMENT_GAP for its limits).
 """
 import json
+import re
 import sys
 
 
+QUERY_ID = re.compile(r"[A-Za-z0-9_-]{16,32}")
+
+
+def expected_query_id(options):
+    """Envelope-v2 `query_id` the parent is expected to deliver (None = explicit null)."""
+    value = options.get("query_id")
+    if value is None:
+        return None
+    if not isinstance(value, str) or not QUERY_ID.fullmatch(value):
+        raise AssertionError("fixture query_id must match the envelope-v2 grammar")
+    return value
+
+
+def ct0_count(cookie_headers):
+    """Number of `ct0` cookies across every Cookie header of one request."""
+    return sum(1 for header in cookie_headers for part in header.split(";")
+               if part.strip().split("=", 1)[0] == "ct0")
+
+
+class FakeXCookies:
+    """Fake-X helper over a WireFixture: every Cookie header of every request, duplicate `ct0`."""
+
+    def __init__(self, wire):
+        self.wire = wire
+
+    def cookie_headers(self):
+        return [list(request["cookies"]) for request in self.wire.requests]
+
+    def duplicate_ct0(self):
+        """Indexes of recorded requests that carried more than one `ct0`."""
+        return [index for index, headers in enumerate(self.cookie_headers()) if ct0_count(headers) > 1]
+
+
 def main():
+    from api.tests.data.attention.fixture_seams import install_network_denial
+    install_network_denial()
     from api.data.attention import twscrape_reader as tr, x_proxy_snapshot as snap
     from api.data.attention import x_proxy_private as private, x_proxy_runtime as runtime
     from api.data.attention import x_proxy_curl as curl
     from api.tests.data.attention.test_x_proxy_snapshot import fixture_open
     options = json.loads(sys.argv[1])
+    query_id = expected_query_id(options)
     original_load = snap.load_snapshot
     snap.load_snapshot = lambda path, **kw: original_load(path, opener=fixture_open, **kw)
     private.verified_open = fixture_open
@@ -61,6 +100,9 @@ def main():
         xclid.XClIdGen.create = bootstrap
         return tr.main(["--curl-fallback"])
     async def search(self, query, limit=-1, kv=None):
+        if query_id is not None:
+            from twscrape import api as api_module
+            assert api_module.OP_SearchTimeline.split("/", 1)[0] == query_id
         if options.get("predicate_only"):
             from types import SimpleNamespace
             yield SimpleNamespace(json=lambda: {"data": {"entries": []}}, headers={})
