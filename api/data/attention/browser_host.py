@@ -617,13 +617,19 @@ class BrowserHost:
         self.profiles = profiles.ProfileStore(profiles_dir, cache_root=cache_root, policy=policy, inspector=acl_inspector)
 
     def launch(self, label, profile_name, relay_port, *, headless=False):
+        return self._launch(label, profile_name, relay_port, headless=headless, admission_run=False)
+
+    def _launch(self, label, profile_name, relay_port, *, headless=False, admission_run):
+        # admission_run=True is passed ONLY by browser_selftest (A19, guard-tested): the
+        # self-test produces the admission record, so it cannot require one.
         require(self.policy.ce1_approved and self.policy.ce2_approved, "profile_policy_unsatisfied")
         # Only the probed Stable channel is admitted. Constructor spawn is the test seam.
         if self.spawn is None:
             normal = str(self.binary).replace("\\", "/").casefold()
             require(normal.endswith("/microsoft/edge/application/msedge.exe"), "profile_policy_unsatisfied")
         version = executable_version(self.binary)
-        read_admission(self.cache_root, self.binary, version)
+        if admission_run is not True:
+            read_admission(self.cache_root, self.binary, version)
         try:
             memory = self.memory()
         except Exception:

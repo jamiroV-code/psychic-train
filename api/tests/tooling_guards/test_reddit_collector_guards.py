@@ -26,6 +26,9 @@ LIVE_CORE_PURE = {"reddit_core.py", "reddit_surface.py", "reddit_live.py"}
 # Narrow exemption: `reddit_core.py` resolves the `LiveMethod` factory table by lazy `importlib.import_module`
 # (RC-9), exactly once; nothing else in it may import or run code by name.
 FACTORY_IMPORT = {"reddit_core.py": 1}
+# Finish plan table H amendment (S-Relay): the loopback CONNECT relay and the A19 self-test are the ONLY
+# `browser_*` modules allowed network imports, each limited to exactly this set.
+BROWSER_NETWORK = {"browser_relay.py": {"asyncio", "socket", "ssl"}, "browser_selftest.py": {"socket", "subprocess"}}
 BROWSER_UA = re.compile(r"Mozilla/|AppleWebKit|Chrome/\d|Safari/\d|Gecko/|Firefox/|Edg/|OPR/", re.IGNORECASE)
 REDDIT_JSON = re.compile(r"reddit\.com\S*\.json|search\.json|/\.json|\.json\?|oauth\.reddit|api\.reddit|/api/v1/"
                          r"|old\.reddit")
@@ -94,7 +97,10 @@ def test_guard_fails_on_browser_ua_json_endpoint_or_archive_search_path(tmp_path
 
 
 def _exempted(name: str, bad: list[str]) -> list[str]:
-    """Drop a module's narrow exemption: the factory table's one lazy `importlib` call (RC-9)."""
+    """Drop a module's narrow exemption: the factory table's one lazy `importlib` call (RC-9), or the
+    relay/self-test network import set."""
+    if name in BROWSER_NETWORK:
+        return [b for b in bad if b not in BROWSER_NETWORK[name]]
     allowed = FACTORY_IMPORT.get(name, 0)
     if not allowed:
         return bad
@@ -119,6 +125,17 @@ def test_factory_exemption_is_narrow():
     assert _exempted("reddit_core.py", network_offenders(two))
     assert _exempted("reddit_core.py", network_offenders(one + "import httpx\n")) == ["httpx"]
     assert _exempted("reddit_live.py", network_offenders(one))
+
+
+def test_browser_network_exemption_is_narrow():
+    relay = "import asyncio\nimport socket\nimport ssl\n"
+    assert _exempted("browser_relay.py", network_offenders(relay)) == []
+    assert _exempted("browser_relay.py", network_offenders(relay + "import httpx\n")) == ["httpx"]
+    assert _exempted("browser_selftest.py", network_offenders("import socket\nimport subprocess\n")) == []
+    assert _exempted("browser_selftest.py", network_offenders("import ssl\n"))
+    for other in ("browser_host.py", "browser_cdp.py", "browser_profile.py", "browser_session.py", "reddit_web.py",
+                  "reddit_core.py"):
+        assert _exempted(other, network_offenders(relay)), other
 
 
 def test_no_fixed_utc_hour_in_reddit_modules():

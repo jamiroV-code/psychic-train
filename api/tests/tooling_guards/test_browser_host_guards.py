@@ -122,3 +122,66 @@ def test_cdp_guard_detects_planted_second_send_raw_send_and_input():
     assert chokepoint_problems(base + "U = 'ws://127.0.0.1/devtools/browser/x'\n")
     assert chokepoint_problems(base + "E = 'document.cookie'\nF = 'window.open(1)'\n")
     assert chokepoint_problems(base + "print(1)\n")
+
+
+# S-Relay (A5/A6b/A7/A9/A19): loopback-only relay, its constructor sites, the admission-run seam.
+API_ROOT = ATTENTION.parents[1]
+
+
+def _production_sources():
+    for path in API_ROOT.rglob("*.py"):
+        if "tests" not in path.relative_to(API_ROOT).parts:
+            yield path, path.read_text(encoding="utf-8")
+
+
+def test_relay_and_selftest_have_no_logging_fixture_or_tls_bypass():
+    for name in ("browser_relay.py", "browser_selftest.py"):
+        source = (ATTENTION / name).read_text(encoding="utf-8")
+        assert not problems(source)
+        for banned in ("api.tests", "fixture", "CERT_NONE", "check_hostname = False", "verify=False",
+                       "ignore-certificate", "set-cookie", "New-NetFirewallRule",
+                       "Set-NetFirewallRule", "Remove-NetFirewallRule", "netsh"):
+            assert banned not in source, (name, banned)
+
+
+def test_relay_binds_loopback_literal_only():
+    from api.data.attention import browser_relay as relay
+    assert relay.LISTEN_HOST == "127.0.0.1"
+    tree = ast.parse((ATTENTION / "browser_relay.py").read_text(encoding="utf-8"))
+    servers = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "start_server"]
+    assert len(servers) == 1 and isinstance(servers[0].args[1], ast.Name) and servers[0].args[1].id == "LISTEN_HOST"
+    text = ast.unparse(tree)
+    assert "0.0.0.0" not in text and "'::'" not in text and ".bind(" not in text
+
+
+def test_relay_constructed_only_by_browser_selftest_and_no_gateway():
+    constructors, admission_runs = set(), set()
+    for path, source in _production_sources():
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                name = getattr(node.func, "attr", getattr(node.func, "id", ""))
+                if name == "Relay":
+                    constructors.add(path.name)
+                for kw in node.keywords:
+                    if kw.arg == "admission_run" and not (isinstance(kw.value, ast.Constant) and kw.value.value is False):
+                        admission_runs.add(path.name)
+        assert "gateway" not in path.name
+    assert constructors == {"browser_selftest.py"}
+    assert admission_runs == {"browser_selftest.py"}
+    from api.data.attention import web_queries
+    assert not [k for k in web_queries.__dict__.get("COLLECTOR_DEFAULTS", {}) if "gateway" in k]
+    assert "gateway" not in (ATTENTION / "web_queries.py").read_text(encoding="utf-8").lower()
+
+
+def test_collection_launch_still_requires_matching_admission(tmp_path):
+    import sys as _sys
+    from api.data.attention import browser_profile as profile
+    source = (ATTENTION / "browser_host.py").read_text(encoding="utf-8")
+    assert "return self._launch(label, profile_name, relay_port, headless=headless, admission_run=False)" in source
+    assert "if admission_run is not True:\n            read_admission(" in source
+    b = host.BrowserHost(Path(_sys.executable), tmp_path / "p", cache_root=tmp_path,
+                         policy=profile.ProfilePolicy(True, True), spawn=lambda argv: argv, memory=lambda: 9999)
+    import pytest
+    with pytest.raises(host.BrowserFailure, match="browser_unadmitted"):
+        b.launch("a", "a", 12345)
