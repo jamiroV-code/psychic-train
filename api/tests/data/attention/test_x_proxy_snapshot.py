@@ -73,13 +73,46 @@ def test_discovery_policy_change_is_not_used_after_verification(tmp_path):
         snapshot.load_snapshot(path, repo_root=tmp_path / "repo", opener=race)
 
 
-def proof(tmp_path):
+def proof(tmp_path, query_id=None):
     roles = tuple((role, str(tmp_path / (str(index) + ".private")), b"raw-" + role.encode()) for index, role in enumerate(snapshot.ROLES))
     request = snapshot.SensitiveRequest({"label": "alpha", "proxy_id": str(UUID(int=1)), "identity_revision": str(uuid4()),
         "backend": "curl", "request_nonce": "1" * 64, "admission_expires_at": (NOW + timedelta(hours=1)).isoformat(),
-        "query": "$SOL", "kv": {"product": "Latest"}})
+        "query": "$SOL", "kv": {"product": "Latest"}, "query_id": query_id})
     snapshot.attest(roles, request)
     return roles, request
+
+
+def test_envelope_v2_domain_and_query_id_frame_follow_the_cursor(tmp_path):
+    assert snapshot.DOMAIN == b"collector-b2-child-v2\0"
+    _, absent = proof(tmp_path)
+    _, present = proof(tmp_path, "vLHjqbDv7TPFMBkIIO1nOA")
+    assert snapshot.work_envelope(absent)[-2:] == (b"null", b"")
+    assert snapshot.work_envelope(present)[-2:] == (b"present", b"vLHjqbDv7TPFMBkIIO1nOA")
+    assert snapshot.work_envelope(present)[-4:-2] == (b"null", b"")  # cursor frame stays in place
+
+
+@pytest.mark.parametrize("value", ["short", "x" * 33, "bad id with space!", 7, "", "vLHjqbDv7TPFMBkIIO1nOA\n"])
+def test_envelope_v2_malformed_query_id_refused(tmp_path, value):
+    _, request = proof(tmp_path)
+    request["query_id"] = value
+    with pytest.raises(p.ProxyFailure, match="proxy_config"):
+        snapshot.work_envelope(request)
+
+
+def test_envelope_v1_request_without_query_id_is_refused(tmp_path):
+    roles, request = proof(tmp_path)
+    request.pop("query_id")
+    with pytest.raises(p.ProxyFailure, match="proxy_config"):
+        snapshot.verify(roles, request)
+
+
+def test_envelope_v1_tag_does_not_verify_under_v2(tmp_path, monkeypatch):
+    roles, request = proof(tmp_path)
+    monkeypatch.setattr(snapshot, "DOMAIN", b"collector-b2-child-v1\0")
+    snapshot.attest(roles, request)
+    monkeypatch.undo()
+    with pytest.raises(p.ProxyFailure, match="proxy_revision"):
+        snapshot.verify(roles, request)
 
 
 def test_attestation_exact_frame_matches_independent_hmac_and_is_redacted(tmp_path):
@@ -107,6 +140,7 @@ def test_attestation_exact_frame_matches_independent_hmac_and_is_redacted(tmp_pa
     ("admission_expires_at", "2026-11-04T14:00:00+00:00"), ("query", "$BTC"),
     ("kv", {"product": "Top"}), ("kv", {"product": "Latest", "cursor": ""}),
     ("kv", {"product": "Latest", "cursor": "continuation"}), ("attestation_tag", "0" * 64),
+    ("query_id", "vLHjqbDv7TPFMBkIIO1nOA"), ("query_id", "BYppgupFFS2yqVmmRNjlsw"),
     ("attestation_key", "a" * 64), ("attestation_key", "A" * 64), ("attestation_key", "a" * 63)])
 def test_work_envelope_and_sensitive_pair_tampering_fails_before_clients(tmp_path, field, value):
     roles, request = proof(tmp_path)

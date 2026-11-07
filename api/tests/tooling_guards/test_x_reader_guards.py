@@ -257,3 +257,15 @@ def test_cookie_upsert_procedure_documented_and_guarded():
     cookie_flags = [f for f in flags if "cookie" in f.args[0].value]
     assert [f.args[0].value for f in cookie_flags] == ["--refresh-cookies"]
     assert {k.arg: k.value.value for k in cookie_flags[0].keywords}["metavar"] == "LABEL"
+
+
+def test_static_queryid_fetch_is_lazy_and_uses_only_b2_one_shot():
+    source = (READER.parent / "x_queryids_fetch.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    assert not _roots(_module_level_imports(tree), NETWORK_ROOTS + LIBRARY_ROOTS)
+    assert not _roots(imported(source), LIBRARY_ROOTS + ("httpx", "requests", "socket", "subprocess"))
+    assert "from api.data.attention.x_proxy_runtime import one_shot" in source
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+             and isinstance(n.func, ast.Name) and n.func.id == "one_shot"]
+    assert len(calls) == 1 and len(calls[0].args) == 4
+    assert {k.arg for k in calls[0].keywords} == {"headers"}

@@ -18,8 +18,9 @@ from api.tests.data.attention.test_x_proxy_policy import spamhaus, firehol
 from api.tests.data.attention.proxy_wire_fixture import fixture
 
 
-@pytest.mark.parametrize("tamper", [False, True], ids=["current-revision", "changed-raw-snapshot"])
-def test_spawned_child_hmac_current_snapshot_both_factories_no_secret_output(tmp_path, tamper):
+@pytest.mark.parametrize("tamper,query_id", [(False, None), (True, None), (False, "vLHjqbDv7TPFMBkIIO1nOA")],
+                         ids=["current-revision", "changed-raw-snapshot", "v2-query-id-bound"])
+def test_spawned_child_hmac_current_snapshot_both_factories_no_secret_output(tmp_path, tamper, query_id):
     now = datetime.now(UTC)
     with fixture(https_proxy=True) as wire:
         path = write_snapshot(tmp_path / "private")
@@ -47,13 +48,14 @@ def test_spawned_child_hmac_current_snapshot_both_factories_no_secret_output(tmp
         admission_path.write_bytes(admission_raw)
         request = snapshot.SensitiveRequest({"config_path": str(path), "label": "alpha", "proxy_id": admission["proxy_id"],
             "identity_revision": revision, "backend": "curl", "request_nonce": os.urandom(32).hex(),
-            "admission_expires_at": admission["expires_at"], "query": "$SOL", "kv": {"product": "Latest", "cursor": "fixture-continuation"}})
+            "admission_expires_at": admission["expires_at"], "query": "$SOL", "kv": {"product": "Latest", "cursor": "fixture-continuation"},
+            "query_id": query_id})
         snapshot.attest((*private.roles, ("safe-admission", str(admission_path.resolve()), admission_raw)), request)
         if tamper:
             path.write_bytes(path.read_bytes() + b"\n")
         wire.responses["/child"] = (200, {"content-type": "application/json"}, b'{"data":{"entries":[]}}')
         options = {"origin_url": wire.origin_url, "origin_root": str(wire.certs["origin"]["root"]),
-                   "proxy_root": str(wire.certs["proxy"]["root"])}
+                   "proxy_root": str(wire.certs["proxy"]["root"]), "query_id": query_id}
         command = [sys.executable, "-m", "api.tests.data.attention.proxy_child_fixture", json.dumps(options)]
         allowed = {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "LOCALAPPDATA", "USERPROFILE", "APPDATA"}
         environment = {key: value for key, value in os.environ.items() if key.upper() in allowed}
@@ -90,7 +92,7 @@ def test_spawned_explicit_direct_off_predicate_never_implicit_or_configured(tmp_
     path.write_text("{" if mutation == "malformed" else json.dumps(document), encoding="utf-8")
     request = {"config_path": str(path.resolve()), "label": "alpha", "backend": "curl",
         "identity_revision": tr.identity_revision({}), "query": "$SOL",
-        "kv": {"product": "Latest", "cursor": "fixture-continuation"}}
+        "kv": {"product": "Latest", "cursor": "fixture-continuation"}, "query_id": None}
     if mutation == "omitted":
         request.pop("config_path")
     allowed = {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "LOCALAPPDATA", "USERPROFILE", "APPDATA"}
@@ -280,7 +282,7 @@ def test_spawned_configured_route_never_uses_available_direct_wire(tmp_path, mod
         path.write_text(json.dumps(document), encoding="utf-8")
         request = {"config_path": str(path.resolve()), "label": "alpha", "backend": "curl",
             "identity_revision": tr.identity_revision({}), "query": "$SOL",
-            "kv": {"product": "Latest", "cursor": "fixture-continuation"}}
+            "kv": {"product": "Latest", "cursor": "fixture-continuation"}, "query_id": None}
         options = {"direct_wire": True, "origin_url": wire.origin_url,
                    "origin_root": str(wire.certs["origin"]["root"]),
                    "proxy_root": str(wire.certs["proxy"]["root"])}

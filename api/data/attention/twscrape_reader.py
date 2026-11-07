@@ -905,15 +905,38 @@ class TwscrapeReader:
 
 # --- the curl fallback child --------------------------------------------------------------------------------------
 
-def fallback_request(label: str, config_path: Path, query: str, kv: Mapping, *, cursor: str | None) -> dict:
+def current_query_id():
+    """Read the already-loaded operation at the fallback unit boundary."""
+    from api.data.attention import x_proxy as xp
+    module = sys.modules.get("twscrape.api")
+    if module is None:
+        return None
+    operation = getattr(module, "OP_SearchTimeline", None)
+    xp.require(isinstance(operation, str) and re.fullmatch(r"[A-Za-z0-9_-]{16,32}/SearchTimeline", operation),
+               "proxy_config")
+    return operation.split("/", 1)[0]
+
+
+def bind_query_id(query_id):
+    """Bind v2 work before any child request; refuse a changed library hook."""
+    from api.data.attention import x_proxy as xp
+    if query_id is None:
+        return
+    xp.require(isinstance(query_id, str) and re.fullmatch(r"[A-Za-z0-9_-]{16,32}", query_id), "proxy_config")
+    xp.require(current_query_id() is not None, "proxy_config")
+    sys.modules["twscrape.api"].OP_SearchTimeline = query_id + "/SearchTimeline"
+
+
+def fallback_request(label: str, config_path: Path, query: str, kv: Mapping, *, cursor: str | None, query_id=None) -> dict:
     """Bounded work only; the child derives the DB from this explicitly selected config."""
     if (not x_pool.LABEL_RE.fullmatch(label) or not config_path.is_absolute()
             or set(kv) != {"product"} or kv["product"] != "Latest"
+            or query_id is not None and (not isinstance(query_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{16,32}", query_id))
             or not isinstance(query, str) or not 0 < len(query.encode("utf-8")) <= 4096
             or cursor is not None and (not isinstance(cursor, str) or len(cursor.encode("utf-8")) > 4096)):
         raise ValueError("invalid child work")
     return {"label": label, "config_path": str(config_path.resolve()), "query": query, "backend": "curl",
-            "kv": {**kv, **({"cursor": cursor} if cursor is not None else {})}}
+            "kv": {**kv, **({"cursor": cursor} if cursor is not None else {})}, "query_id": query_id}
 
 
 def identity_revision(identity: Mapping[str, str]) -> str:
@@ -1010,11 +1033,14 @@ class CurlFallback:
         routed = self.runtime is not None and self.runtime.snapshot.policy is not None
         req, reply, failure = None, None, None
         try:
+            query_id = current_query_id()
             if routed:
-                req = prepare(self.runtime, label, query, {**kv, **({"cursor": cursor} if cursor is not None else {})})
+                req = prepare(self.runtime, label, query, {**kv, **({"cursor": cursor} if cursor is not None else {})},
+                              query_id=query_id)
             else:
                 path = self.runtime.config_path if self.runtime is not None else None
-                req = fallback_request(label, path or web_queries.QUERIES_PATH.resolve(), query, kv, cursor=cursor)
+                req = fallback_request(label, path or web_queries.QUERIES_PATH.resolve(), query, kv, cursor=cursor,
+                                       query_id=query_id)
                 req["identity_revision"] = identity_revision(self.identities.get(label, {}))
             reply = self.run(req, service_env(self.env, private_tmp=private_tmp(), fallback=True))
             if routed:
@@ -1354,7 +1380,7 @@ def _child_work(req: dict, env: Mapping[str, str]) -> dict:
         req.pop("attestation_key", None)
         req.pop("attestation_tag", None)
     else:
-        xp.exact(req, ("config_path", "label", "query", "kv", "backend", "identity_revision"))
+        xp.exact(req, ("config_path", "label", "query", "kv", "backend", "identity_revision", "query_id"))
         path = Path(req["config_path"])
         xp.require(path.is_absolute() and path.resolve(strict=True) == path, "proxy_private")
         from api.data.attention.x_proxy_private import read_bounded
@@ -1364,7 +1390,7 @@ def _child_work(req: dict, env: Mapping[str, str]) -> dict:
         xp.require(isinstance(req["kv"], dict) and set(req["kv"]) <= {"product", "cursor"}
                    and req["backend"] == "curl", "proxy_config")
         fallback_request(label, path, req["query"], {"product": req["kv"].get("product")},
-                         cursor=req["kv"].get("cursor"))
+                         cursor=req["kv"].get("cursor"), query_id=req["query_id"])
         db = Path(config.x_accounts_db_path) / f"{label}.db"
     xp.require(label in config.x_accounts and config.x_connection_style == "plain", "proxy_config")
     xp.require(not accounts_problems(config, repo_root=REPO_ROOT), "proxy_private")
@@ -1374,6 +1400,7 @@ def _child_work(req: dict, env: Mapping[str, str]) -> dict:
     query, kv = req["query"], dict(req["kv"])
     cursor = kv.pop("cursor", None)
     lib = load_library()
+    bind_query_id(req["query_id"])
     adapter = IdentityAdapter("curl", identities, runtime=runtime)
     reader = None
     try:

@@ -15,7 +15,7 @@ from api.data.attention import x_proxy as p
 from api.data.attention.x_proxy_snapshot import SensitiveRequest, attest, verify, work_envelope
 
 REQUEST_KEYS = frozenset({"config_path", "label", "proxy_id", "identity_revision", "backend", "request_nonce",
-    "admission_expires_at", "query", "kv", "attestation_key", "attestation_tag"})
+    "admission_expires_at", "query", "kv", "query_id", "attestation_key", "attestation_tag"})
 ADMISSION_KEYS = ("proxy_id", "identity_revision", "checked_at", "expires_at", "feeds")
 
 
@@ -56,7 +56,7 @@ def admission_role(private, label, revision, *, now, repo_root):
     return ("safe-admission", str(path), raw), record
 
 
-def prepare(runtime, label, query, kv):
+def prepare(runtime, label, query, kv, *, query_id=None):
     p.require(runtime.admitted(label), "proxy_revision")
     private = runtime.snapshot_loader(runtime.config_path, repo_root=runtime.repo_root)
     p.require(private.roles == runtime.snapshot.private_snapshot.roles, "proxy_revision")
@@ -65,7 +65,7 @@ def prepare(runtime, label, query, kv):
     request = SensitiveRequest({"config_path": private.roles[0][1], "label": label,
         "proxy_id": private.assignments[label].proxy_id, "identity_revision": revision,
         "backend": "curl", "request_nonce": secrets.token_hex(32),
-        "admission_expires_at": record["expires_at"], "query": query, "kv": dict(kv)})
+        "admission_expires_at": record["expires_at"], "query": query, "kv": dict(kv), "query_id": query_id})
     work_envelope(request)
     attest((*private.roles, role), request)
     return request

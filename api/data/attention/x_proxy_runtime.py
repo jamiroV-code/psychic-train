@@ -95,13 +95,16 @@ class FeedCache:
         return feed, revision
 
 
-async def one_shot(route, policy, url, limit):
-    """Dedicated one-shot HTTP client, bounded while streaming and during cleanup."""
-    from api.data.attention.x_proxy_transport import client
+async def one_shot(route, policy, url, limit, *, headers=None):
+    """Dedicated one-shot HTTP client; (None, None) explicitly selects direct."""
+    from api.data.attention.x_proxy_transport import client, direct_client
     reason = None
     try:
+        p.require((route is None) == (policy is None), "proxy_policy")
         async with asyncio.timeout(10):
-            async with client(route, policy, limit=limit, allow_content_encoding=True) as session:
+            session_client = (direct_client(headers=headers) if route is None else
+                              client(route, policy, headers=headers, limit=limit, allow_content_encoding=True))
+            async with session_client as session:
                 async with session.stream("GET", url, headers={"accept-encoding": "identity"}) as response:
                     p.require(response.status_code == 200, "proxy_response")
                     import zlib

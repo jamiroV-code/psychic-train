@@ -375,10 +375,59 @@ def test_no_ua_override_or_proxy_with_curl(tmp_path):
     assert env["TWS_HTTP_BACKEND"] == "curl"
     config_path = tmp_path / "queries.json"
     req = tr.fallback_request("acct1", config_path, QUERY, {"product": "Latest"}, cursor=None)
-    assert set(req) == {"label", "config_path", "query", "kv", "backend"} and set(req["kv"]) == {"product"}
-    assert req["config_path"] == str(config_path.resolve()) and req["backend"] == "curl"
+    assert set(req) == {"label", "config_path", "query", "kv", "backend", "query_id"} and set(req["kv"]) == {"product"}
+    assert req["config_path"] == str(config_path.resolve()) and req["backend"] == "curl" and req["query_id"] is None
     with pytest.raises(ValueError):
         tr.fallback_request("acct1", config_path, QUERY, {"product": "Latest", "proxy": "h"}, cursor=None)
+    v2 = tr.fallback_request("acct1", config_path, QUERY, {"product": "Latest"}, cursor=None,
+                             query_id="vLHjqbDv7TPFMBkIIO1nOA")
+    assert v2["query_id"] == "vLHjqbDv7TPFMBkIIO1nOA"
+    for bad in ("short", "x" * 33, "bad id!", 7, ""):
+        with pytest.raises(ValueError):
+            tr.fallback_request("acct1", config_path, QUERY, {"product": "Latest"}, cursor=None, query_id=bad)
+
+
+def test_bind_query_id_sets_the_library_operation_before_requests_and_refuses_a_changed_hook(monkeypatch):
+    import sys
+    from types import ModuleType
+    from api.data.attention import x_proxy as xp
+    fake = ModuleType("twscrape.api")
+    fake.OP_SearchTimeline = "BYppgupFFS2yqVmmRNjlsw/SearchTimeline"
+    monkeypatch.setitem(sys.modules, "twscrape.api", fake)
+    tr.bind_query_id(None)
+    assert fake.OP_SearchTimeline == "BYppgupFFS2yqVmmRNjlsw/SearchTimeline"
+    tr.bind_query_id("vLHjqbDv7TPFMBkIIO1nOA")
+    assert fake.OP_SearchTimeline == "vLHjqbDv7TPFMBkIIO1nOA/SearchTimeline"
+    fake.OP_SearchTimeline = "something-else"
+    with pytest.raises(xp.ProxyFailure):
+        tr.bind_query_id("vLHjqbDv7TPFMBkIIO1nOA")
+    monkeypatch.delitem(sys.modules, "twscrape.api")
+    with pytest.raises(xp.ProxyFailure):
+        tr.bind_query_id("vLHjqbDv7TPFMBkIIO1nOA")
+
+
+@pytest.mark.parametrize("mutation", ["v1", "malformed", "tampered_type"])
+def test_direct_child_refuses_v1_or_malformed_envelope_before_library_load(tmp_path, lib, monkeypatch, mutation):
+    d = accounts(tmp_path, labels=("acct1",))
+    config = cfg(d, labels=("acct1",))
+    document = {"version": 1, "note": "synthetic", "collector": config.as_dict(),
+                "subreddits": ["Bitcoin"], "ambiguous": {key: [] for key in wq.SOURCES}, "coins": {}}
+    config_path = tmp_path / "queries.json"
+    config_path.write_text(json.dumps(document), encoding="utf-8")
+    monkeypatch.setattr(tr, "find_dist", lookup(curl=curl_dist()))
+    monkeypatch.setattr(tr, "curl_status", lambda *args: "ok")
+    monkeypatch.setattr(tr, "identity_problem", lambda *args: None)
+    loaded = []
+    monkeypatch.setattr(tr, "load_library", lambda: loaded.append(True))
+    req = tr.fallback_request("acct1", config_path, QUERY, {"product": "Latest"}, cursor=None)
+    req["identity_revision"] = tr.identity_revision({})
+    if mutation == "v1":
+        req.pop("query_id")
+    else:
+        req["query_id"] = "bad id!" if mutation == "malformed" else 12345678901234567
+    env = tr.service_env(GOOD_ENV, private_tmp=tmp_path / "tmp", fallback=True)
+    assert tr._child(json.dumps(req), env)["status"] in ("fail", "refused")
+    assert loaded == []
 
 
 def test_fallback_child_refuses_enabled_identity_without_target_before_library_load(tmp_path, lib, monkeypatch):

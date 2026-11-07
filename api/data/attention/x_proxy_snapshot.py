@@ -16,7 +16,7 @@ from pathlib import Path
 from api.data.attention import web_queries, x_proxy as p
 from api.data.attention.x_proxy_private import handle_bytes, read_bounded, verified_open
 
-DOMAIN = b"collector-b2-child-v1\0"
+DOMAIN = b"collector-b2-child-v2\0"
 ROLES = ("query-config", "policy", "assignments", "list", "safe-admission")
 HEX32 = re.compile(r"[0-9a-f]{64}")
 
@@ -77,11 +77,15 @@ def work_envelope(request):
               and kv.get("product") == "Latest", "proxy_config")
     cursor = kv.get("cursor")
     p.require(cursor is None or isinstance(cursor, str) and len(cursor.encode("utf-8")) <= 4096, "proxy_config")
+    query_id = request.get("query_id")
+    p.require("query_id" in request and (query_id is None or isinstance(query_id, str)
+              and re.fullmatch(r"[A-Za-z0-9_-]{16,32}", query_id)), "proxy_config")
     expiry = request.get("admission_expires_at")
     p.require(isinstance(expiry, str) and len(expiry) <= 64, "proxy_config")
     return (request["label"].encode(), request["proxy_id"].encode(), request["identity_revision"].encode(),
             request["backend"].encode(), request["request_nonce"].encode(), expiry.encode(),
-            query.encode("utf-8"), b"Latest", b"null" if cursor is None else b"present", b"" if cursor is None else cursor.encode("utf-8"))
+            query.encode("utf-8"), b"Latest", b"null" if cursor is None else b"present", b"" if cursor is None else cursor.encode("utf-8"),
+            b"null" if query_id is None else b"present", b"" if query_id is None else query_id.encode("ascii"))
 
 
 def digest(key: bytes, roles, request) -> str:
