@@ -958,7 +958,8 @@ def test_stream_values_stored_under_reddit_stream_never_reddit_web():
 def test_reddit_impl_order_equals_discovery_source_impl_reddit():
     doc = json.loads(apr.DISCOVERY_PATH.read_text(encoding="utf-8"))
     order = doc["source_impl"]["reddit"]
-    assert tuple(order) == wq.load().config.reddit_impl_order == ("reddit_web", "reddit_stream")
+    assert tuple(order) == wq.load().config.reddit_impl_order == (
+        "reddit_live_browser", "reddit_live_gql", "reddit_web", "reddit_stream")
 
 
 def test_stream_store_used_when_reddit_web_has_no_usable_points(tmp_path, monkeypatch):

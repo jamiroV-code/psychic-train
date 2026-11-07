@@ -362,7 +362,7 @@ def test_stream_method_id_separate_store_from_reddit_web(q):
 def test_methods_never_mixed_in_one_window_config_order(q):
     days = [D - timedelta(days=i) for i in range(5)]
     series = {"reddit_stream": [(d, 1.0) for d in days[:4]], "reddit_web": [(d, 9.0) for d in days]}
-    assert q.config.reddit_impl_order == ("reddit_web", "reddit_stream")  # SPEC AC14 default (owner D3)
+    assert q.config.reddit_impl_order == ("reddit_live_browser", "reddit_live_gql", "reddit_web", "reddit_stream")
     method, pts = rs.pick_impl(q.config.reddit_impl_order, series, days[-1], D, min_points=3)
     assert method == "reddit_web" and all(v == 9.0 for _, v in pts)
     method, pts = rs.pick_impl(("reddit_stream", "reddit_web"), series, days[-1], D, min_points=3)

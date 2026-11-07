@@ -309,7 +309,7 @@ def test_stream_keys_committed_with_owner_defaults():
     assert c.reddit_comments_poll_interval_s == 7200 and c.reddit_posts_poll_interval_s == 21600
     assert c.reddit_stream_polls_per_day_cap == 12 and c.reddit_stream_min_coverage == 0.8
     assert c.reddit_comments_paging is True
-    assert c.reddit_impl_order == ("reddit_web", "reddit_stream")  # SPEC AC14 default (owner decision D3)
+    assert c.reddit_impl_order == NEW_ORDER  # finish plan C1: committed order, live methods first (S-RDisc)
 
 
 def test_stream_keys_default_when_absent(doc):
@@ -477,9 +477,9 @@ def test_reddit_method_enum_and_new_impl_order_default(doc):
     assert wq.validate(doc).config.reddit_impl_order == ("reddit_live_gql", "reddit_web")
 
 
-def test_old_committed_file_still_loads_and_keeps_its_explicit_order():
+def test_committed_file_carries_the_live_first_order():
     c = wq.load(placed_symbols=wq.placed_symbols()).config
-    assert c.reddit_impl_order == ("reddit_web", "reddit_stream")
+    assert c.reddit_impl_order == NEW_ORDER   # S-RDisc (contract C1) changed the committed key to the new order
     assert all(getattr(c, k) == v for k, v in FINISH_DEFAULTS.items())
 
 

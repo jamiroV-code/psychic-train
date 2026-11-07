@@ -13,6 +13,11 @@ D+1 (`trends_pulls/<D+1>.parquet`, the pull live scoring used on the run after D
 for the coin is D, gated like any series; else (3) Trends is missing on D, with a reason (`_TrendsPulls.at`), never
 0 and never from a later pull. Every other source reads its store as before.
 
+Reddit live methods (finish plan contract C2/C4): the live stores are PC stores (`registry.PC_STORES`), so they
+are admitted without a probe record, and only their points known at collection time count: the same per-method
+known-lag and backfilled exclusion as `registry.read_series(known_at_time=True)`, read from the evidence sidecar
+(part of the cache signature). The feed methods and every other source keep the probe-record gate.
+
 A category is a narrative (U1); an old CoinGecko category id resolves through the id map. Every day of a category
 chart uses TODAY'S membership (the narratives file, dated `membership_as_of`), never a past one.
 """
@@ -25,10 +30,10 @@ from pathlib import Path
 from statistics import mean
 
 from api.analytics.attention import narratives, signal_snapshots
-from api.analytics.attention.discovery import (_coin, _percentile, eligibility, load_config, series_names,
-                                               weights_for_day)
+from api.analytics.attention.discovery import (_coin, _percentile, eligibility, load_config, pick_source_impl,
+                                               series_names, weights_for_day)
 from api.analytics.attention.universe import load_universe_rows
-from api.data.attention import registry, store
+from api.data.attention import reddit_core, registry, store, web_evidence
 from api.data.attention.types import SourceSeries
 from api.models.discovery import (DiscoveryCategoryDay, DiscoveryCategoryHistory, DiscoveryCoinHistory,
                                   DiscoveryHistoryDay, DiscoverySource)
@@ -43,6 +48,8 @@ PULL_LAST_ROW_NOT_DAY = "pull-last-row-not-day"
 NOT_PROBED = "not-probed"
 CACHE_MAX = 64
 _cache: dict[tuple, object] = {}   # key -> response; see `_cached`
+# Reddit live stores: admitted as PC stores, filtered to the points known at collection time (C2, C4).
+LIVE_STORES = frozenset(reddit_core.STORES.values()) & registry.PC_STORES
 
 
 def clear_cache() -> None:
@@ -59,11 +66,13 @@ class _Stored:
     def __init__(self, source: str, symbol: str, probed: bool, min_days: int):
         self.source, self.symbol, self.min_days = source, symbol, min_days
         self.points: list[tuple[date, float]] = []
-        if probed:
+        if probed or source in LIVE_STORES:
             try:
                 self.points = sorted(store.read_points(source, symbol))
             except store.StoreReadError:
                 self.points = []
+        if source in LIVE_STORES:
+            self.points = registry._known_at_time(source, symbol, self.points)
         self.dates = [d for d, _ in self.points]
 
     def count(self, day: date) -> int:
@@ -174,7 +183,7 @@ def _file_ids(paths) -> tuple:
 def _signature(cfg: dict, symbols: list[str], probe_path: Path | None, window: int, end: date) -> tuple:
     """Everything a result depends on besides the arguments: config, probe records, and every stored file's
     identity (mtime, size, inode), so a backfill that rewrites old points also invalidates, not just a new day.
-    Includes the Trends pulls and the frozen snapshots of the chart's days."""
+    Includes the Trends pulls, the frozen snapshots of the chart's days and the live stores' evidence sidecars."""
     probed = registry.load_probe_records(probe_path)
     files = []
     for src in sorted(series_names(cfg)):
@@ -187,7 +196,9 @@ def _signature(cfg: dict, symbols: list[str], probe_path: Path | None, window: i
     days = _days(end, window)
     pulls = _file_ids(store.pull_archive_path(TRENDS, trends_pull_date(d)) for d in days)
     snaps = _file_ids(signal_snapshots.snapshot_dir() / f"{d.isoformat()}_w{window}.json" for d in days)
-    return (json.dumps(cfg, sort_keys=True), tuple(sorted(probed)), tuple(files), pulls, snaps)
+    evidence = _file_ids(web_evidence.evidence_path(src, sym) for src in sorted(series_names(cfg) & LIVE_STORES)
+                         for sym in symbols)
+    return (json.dumps(cfg, sort_keys=True), tuple(sorted(probed)), tuple(files), pulls, snaps, evidence)
 
 
 def _cached(key: tuple, compute):
@@ -243,6 +254,27 @@ def coin_history(symbol: str, window: int, *, today: date, probe_path: Path | No
                                     reason="" if days else NO_DATA, history_days=counts, days=days)
 
     return _cached(("coin", sym, window, end, _signature(cfg, [sym], probe_path, window, end)), compute)
+
+
+def method_switches(symbol: str, window: int, *, today: date, source: str = "reddit", probe_path: Path | None = None,
+                    config_path: Path | None = None) -> list[tuple[str, str | None, str | None]]:
+    """The discontinuities of one weighted source over the chart's days: (day, method before, method from that day)
+    whenever the store `pick_source_impl` reads changes (None = no method usable). Each day still reads one method
+    for its whole window; a switch means two consecutive days are scored from different stores (C5)."""
+    cfg = load_config(config_path)
+    end = today - timedelta(days=1)
+    sym = symbol.strip().upper()
+    stored = _load(cfg, [sym], probe_path)
+    recent, lag = int(cfg["recent_days"]), int(cfg["max_source_lag_days"])
+    out, prev = [], None
+    for i, day in enumerate(_days(end, window)):
+        data = {k: s.at(day) for k, s in stored.items()}
+        picked = pick_source_impl(source, cfg, data, sym, day, recent, window, lag)
+        impl = None if picked is None else picked[0]
+        if i and impl != prev:
+            out.append((day.isoformat(), prev, impl))
+        prev = impl
+    return out
 
 
 def category_history(category_id: str, window: int, *, today: date, probe_path: Path | None = None,

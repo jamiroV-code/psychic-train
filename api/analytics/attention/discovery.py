@@ -290,10 +290,10 @@ def _series_source(label, data, series, symbol, end, recent, window, max_lag) ->
     return None if c is None else DiscoverySource(source=label, change=c, as_of=_as_of(sr.points, end))
 
 
-def _weighted_source(src, cfg, data, symbol, end, recent, window, max_lag) -> DiscoverySource | None:
-    """One weighted source from the first of its `source_impl` stores that yields a change: that one store feeds
-    the whole window, points of two methods are never mixed (AC14). X in rotation mode uses `_rotation_change`
-    with `x_rotation_max_lag_days`; every other source keeps the window and `max_source_lag_days`."""
+def pick_source_impl(src, cfg, data, symbol, end, recent, window, max_lag) -> tuple[str, DiscoverySource] | None:
+    """The first of `src`'s `source_impl` stores that yields a change, and that change: that one store feeds the
+    whole window, points of two methods are never mixed (AC14). X in rotation mode uses `_rotation_change` with
+    `x_rotation_max_lag_days`; every other source keeps the window and `max_source_lag_days`."""
     rotation = src == X_SOURCE and x_setting(cfg, "x_discovery_mode") == "rotation"
     for impl in source_impls(cfg)[src]:
         sr = data.get((impl, symbol))
@@ -308,8 +308,13 @@ def _weighted_source(src, cfg, data, symbol, end, recent, window, max_lag) -> Di
         else:
             s = None
         if s is not None:
-            return s
+            return impl, s
     return None
+
+
+def _weighted_source(src, cfg, data, symbol, end, recent, window, max_lag) -> DiscoverySource | None:
+    picked = pick_source_impl(src, cfg, data, symbol, end, recent, window, max_lag)
+    return None if picked is None else picked[1]
 
 
 def _exchange_slot(symbol, sub_weights, data, end, recent, window, max_lag) -> DiscoverySource | None:

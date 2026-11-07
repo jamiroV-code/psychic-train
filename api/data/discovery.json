@@ -72,7 +72,7 @@
   },
   "source_impl": {
     "xsearch": "xsearch_web",
-    "reddit": ["reddit_web", "reddit_stream"]
+    "reddit": ["reddit_live_browser", "reddit_live_gql", "reddit_web", "reddit_stream"]
   },
   "x_discovery_mode": "rotation",
   "x_rotation_points": 3,

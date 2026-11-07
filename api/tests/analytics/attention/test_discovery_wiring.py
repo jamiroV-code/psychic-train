@@ -80,7 +80,7 @@ def test_fetch_side_rejects_unknown_value():
 def test_shipped_config_selects_web_methods_and_rotation():
     cfg = disc.load_config()
     assert disc.source_impls(cfg)["xsearch"] == ("xsearch_web",)
-    assert disc.source_impls(cfg)["reddit"] == ("reddit_web", "reddit_stream")
+    assert disc.source_impls(cfg)["reddit"] == ("reddit_live_browser", "reddit_live_gql", "reddit_web", "reddit_stream")
     assert (cfg["x_discovery_mode"], cfg["x_rotation_points"], cfg["x_rotation_max_lag_days"]) == ("rotation", 3, 7)
 
 
