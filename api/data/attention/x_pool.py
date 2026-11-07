@@ -49,7 +49,7 @@ from functools import wraps
 from contextvars import ContextVar
 
 from api.data import cache
-from api.data.attention import daily_facts, density, x_density, x_filters, x_raw, x_window
+from api.data.attention import daily_facts, density, x_behaviour, x_density, x_filters, x_raw, x_window
 from api.data.attention import pc_pace as pp
 from api.data.attention import x_queryids as xq
 from api.data.attention import x_reader as xr
@@ -74,13 +74,18 @@ ACCOUNT_KEYS = {"state", "reason", "last_used", "lock_until", "last_canary", "su
                 "reads_day", "reads_used", "rest_until", "parse_strikes", "parse_strike_last_at",
                 "proxy_id", "identity_revision", "proxy_health", "proxy_checked_at",
                 "proxy_quarantine_until", "proxy_reason", "proxy_changed_at",
-                "endpoint_404_day", "endpoint_404_count"}
+                "endpoint_404_day", "endpoint_404_count",
+                "warmup_start_day", "behaviour_cooldown_until", "behaviour_reason", "shrink_run", "result_history",
+                "mixed_day", "mixed_calls"}
 TIME_KEYS = ("last_used", "lock_until", "last_canary", "suspect_since", "rate_limit_seen", "rest_until",
              "parse_strike_last_at", "proxy_checked_at", "proxy_quarantine_until", "proxy_changed_at")
 READY_FILE = "account_ready.json"
 B2_ACCOUNT_KEYS = ("proxy_id", "identity_revision", "proxy_health", "proxy_checked_at",
                    "proxy_quarantine_until", "proxy_reason", "proxy_changed_at")
 XDRIFT_ACCOUNT_DEFAULTS = {"endpoint_404_day": None, "endpoint_404_count": 0}  # rollback contract G literals
+# S-B3P behaviour keys (rollback contract G strips exactly these seven); result_history is copied per account.
+B3_ACCOUNT_DEFAULTS = {"warmup_start_day": None, "behaviour_cooldown_until": None, "behaviour_reason": None,
+                       "shrink_run": 0, "result_history": [], "mixed_day": None, "mixed_calls": 0}
 ENDPOINT_404_REASON = "x_endpoint_404"
 ENDPOINT_404_LOCK = timedelta(hours=24)
 ENDPOINT_404_CLEAN_DAYS = 7
@@ -177,9 +182,29 @@ def from_config(config: CollectorConfig, *, clock: Callable[[], datetime]) -> XP
     return pool
 
 
+def _b3_defaults() -> dict:
+    return {k: list(v) if isinstance(v, list) else v for k, v in B3_ACCOUNT_DEFAULTS.items()}
+
+
 def _fresh_account() -> dict:
     return dict.fromkeys(ACCOUNT_KEYS) | {"state": "active", "reads_used": 0, "proxy_health": "unknown",
-                                          **XDRIFT_ACCOUNT_DEFAULTS}
+                                          **XDRIFT_ACCOUNT_DEFAULTS, **_b3_defaults()}
+
+
+def _valid_b3(a: dict) -> bool:
+    """Types and bounds of the seven B3 keys; history records are exactly {day, count, query_class}, nonsecret."""
+    until, history = a["behaviour_cooldown_until"], a["result_history"]
+    return (_day(a["warmup_start_day"]) and _day(a["mixed_day"])
+            and (until is None or _iso(until) and datetime.fromisoformat(until).utcoffset() == timedelta(0))
+            and (a["behaviour_reason"] is None or isinstance(a["behaviour_reason"], str)
+                 and a["behaviour_reason"] in x_behaviour.BEHAVIOUR_REASONS)
+            and type(a["shrink_run"]) is int and 0 <= a["shrink_run"] <= x_behaviour.SHRINK_RUN_MAX
+            and type(a["mixed_calls"]) is int and 0 <= a["mixed_calls"] <= x_behaviour.MIXED_DAILY_MAX
+            and isinstance(history, list) and len(history) <= x_behaviour.HISTORY_LEN
+            and all(isinstance(h, dict) and set(h) == {"day", "count", "query_class"}
+                    and h["day"] is not None and _day(h["day"]) and type(h["count"]) is int and h["count"] >= 0
+                    and isinstance(h["query_class"], str) and x_behaviour.QUERY_CLASS_RE.fullmatch(h["query_class"])
+                    for h in history))
 
 
 def _valid(s) -> bool:
@@ -196,7 +221,7 @@ def _valid(s) -> bool:
                 and type(a["reads_used"]) is int and a["reads_used"] >= 0
                 and (a["parse_strikes"] is None or type(a["parse_strikes"]) is int and a["parse_strikes"] >= 0)
                 and _day(a["endpoint_404_day"]) and type(a["endpoint_404_count"]) is int
-                and a["endpoint_404_count"] >= 0):
+                and a["endpoint_404_count"] >= 0 and _valid_b3(a)):
             return False
         if a["proxy_health"] not in ("unknown", "healthy", "quarantined") or (
                 a["proxy_reason"] is not None and (not isinstance(a["proxy_reason"], str) or a["proxy_reason"] not in xp.REASONS)):
@@ -293,6 +318,8 @@ class XPool:
                         for key in B2_ACCOUNT_KEYS:
                             a.setdefault(key, "unknown" if key == "proxy_health" else None)
                         for key, value in XDRIFT_ACCOUNT_DEFAULTS.items():
+                            a.setdefault(key, value)
+                        for key, value in _b3_defaults().items():
                             a.setdefault(key, value)
             if not _valid(s):
                 raise XPoolStateError("pool state invalid")

@@ -202,7 +202,9 @@ def test_no_machine_state_committed():
 
 X_MODULES = [API_DIR / "data" / "attention" / f for f in
              ("x_window.py", "x_filters.py", "x_density.py", "x_raw.py", "x_reader.py", "x_pool.py", "x_capacity.py",
-              "x_proxy.py", "x_proxy_private.py", "x_proxy_snapshot.py", "x_queryids.py")]
+              "x_proxy.py", "x_proxy_private.py", "x_proxy_snapshot.py", "x_queryids.py", "x_behaviour.py", "x_quiet.py")]
+# Table H (S-B3P): only x_quiet.py's zone-aware quiet-window math may read a local hour; detection stays elsewhere.
+FIXED_HOUR_EXEMPT = {"x_quiet.py"}
 # The X library, its optional HTTP backend and every network client stay out of the pure core (W8d2 wraps them).
 X_LIBRARY_ROOTS = ("twscrape", "curl_cffi")
 
@@ -244,8 +246,11 @@ def test_x_core_has_no_evasion_strings_no_fixed_hour_and_no_logger():
     hits = [f"{p.name}:{n}" for p in X_MODULES for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
             if EVASION.search(line)]
     assert not hits
-    hours = {p.name: bad for p in X_MODULES if (bad := fixed_hour_offenders(p.read_text(encoding="utf-8")))}
+    hours = {p.name: bad for p in X_MODULES
+             if p.name not in FIXED_HOUR_EXEMPT and (bad := fixed_hour_offenders(p.read_text(encoding="utf-8")))}
     assert not hours
+    assert FIXED_HOUR_EXEMPT == {"x_quiet.py"}
+    assert fixed_hour_offenders((API_DIR / "data" / "attention" / "x_quiet.py").read_text(encoding="utf-8"))
     logs = [p.name for p in X_MODULES if re.search(r"\blogg(ing|er)\b\.", p.read_text(encoding="utf-8"))]
     assert not logs
 

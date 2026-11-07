@@ -759,3 +759,65 @@ def test_both_accounts_404_with_a_candidate_triggers_evaluation_before_counting_
     out = drift_unit(pool, readers, src, config=cfg(x_queryid_mode="auto"), bind=Binder())
     assert out.result is None and xq.active_id(registry()) == CAND
     assert pool.health()["drift_streak"] == 0
+
+
+# --- S-B3P behaviour keys -----------------------------------------------------------------------------------------
+
+B3_DEFAULTS = {"warmup_start_day": None, "behaviour_cooldown_until": None, "behaviour_reason": None,
+               "shrink_run": 0, "result_history": [], "mixed_day": None, "mixed_calls": 0}
+
+
+def test_b3_keys_literal_defaults_for_fresh_and_migrated_accounts():
+    assert xp.B3_ACCOUNT_DEFAULTS == B3_DEFAULTS
+    xp.XPool(LABELS, clock=Clock()).begin_pass()
+    assert {k: account("acct_a")[k] for k in B3_DEFAULTS} == B3_DEFAULTS
+    write_old_state(("acct_a", "acct_b"))
+    xp.XPool(LABELS, clock=Clock()).begin_pass()
+    assert {k: account("acct_b")[k] for k in B3_DEFAULTS} == B3_DEFAULTS
+    # an S-XDrift-era file (all but the seven B3 keys) migrates too
+    doc = json.loads(state_file().read_text())
+    for a in doc["accounts"].values():
+        for k in B3_DEFAULTS:
+            del a[k]
+    state_file().write_text(json.dumps(doc))
+    xp.XPool(LABELS, clock=Clock()).begin_pass()
+    assert {k: account("acct_a")[k] for k in B3_DEFAULTS} == B3_DEFAULTS
+
+
+def test_b3_valid_values_round_trip():
+    xp.XPool(LABELS, clock=Clock()).begin_pass()
+    doc = json.loads(state_file().read_text())
+    good = {"warmup_start_day": "2026-10-20", "behaviour_cooldown_until": "2026-10-21T11:00:00+00:00",
+            "behaviour_reason": "shrink", "shrink_run": 3, "mixed_day": "2026-10-21", "mixed_calls": 3,
+            "result_history": [{"day": "2026-10-20", "count": 12, "query_class": "coin"}] * 7}
+    doc["accounts"]["acct_a"].update(good)
+    state_file().write_text(json.dumps(doc))
+    xp.XPool(LABELS, clock=Clock()).begin_pass()
+    assert {k: account("acct_a")[k] for k in good} == good
+
+
+@pytest.mark.parametrize("bad", [
+    {"warmup_start_day": "2026-10-20T00:00:00+00:00"}, {"warmup_start_day": 1},
+    {"behaviour_cooldown_until": "2026-10-21T11:00:00"}, {"behaviour_cooldown_until": "2026-10-21T11:00:00+02:00"},
+    {"behaviour_reason": "made_up"}, {"behaviour_reason": 1},
+    {"shrink_run": -1}, {"shrink_run": True}, {"shrink_run": None}, {"shrink_run": 10_001},
+    {"result_history": None}, {"result_history": [{"day": "2026-10-20", "count": 1, "query_class": "coin"}] * 8},
+    {"result_history": [{"day": "2026-10-20", "count": -1, "query_class": "coin"}]},
+    {"result_history": [{"day": "2026-10-20", "count": 1, "query_class": "Bad Class"}]},
+    {"result_history": [{"day": "2026-10-20", "count": 1, "query_class": "coin", "text": "x"}]},
+    {"result_history": [{"day": None, "count": 1, "query_class": "coin"}]},
+    {"mixed_day": "yesterday"}, {"mixed_calls": 4}, {"mixed_calls": -1}, {"mixed_calls": 1.0},
+])
+def test_b3_bad_values_are_rejected(bad):
+    xp.XPool(LABELS, clock=Clock()).begin_pass()
+    doc = json.loads(state_file().read_text())
+    doc["accounts"]["acct_a"].update(bad)
+    state_file().write_text(json.dumps(doc))
+    with pytest.raises(xp.XPoolStateError):
+        xp.XPool(LABELS, clock=Clock())
+
+
+def test_b3_rollback_strip_set_is_exactly_the_seven_keys():
+    assert set(xp.B3_ACCOUNT_DEFAULTS) <= xp.ACCOUNT_KEYS
+    assert len(xp.B3_ACCOUNT_DEFAULTS) == 7
+    assert not set(xp.B3_ACCOUNT_DEFAULTS) & (set(xp.B2_ACCOUNT_KEYS) | set(xp.XDRIFT_ACCOUNT_DEFAULTS))
