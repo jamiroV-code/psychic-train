@@ -15,6 +15,12 @@ UTC day. Older files without attempt or scheduling evidence report unknown, neve
 
 Standalone collector: `collector` reads the collector's heartbeat file (`collector_heartbeat.status`) and repeats
 each PC stream's health fields (X search, Reddit), also for a parked source; no worker state stays unknown.
+
+Finish plan 06-11-26 (S-StatusAPI): optional, allowlisted fields read from the producers' nonsecret files only (no
+network, writes or admission). `PC_STORES` keeps its stream-exclusion contract; each Reddit method gets its own row
+from the SEPARATE method-health reader (`reddit_methods`), Reddit accounts their own model (`reddit_accounts`). All
+of them stay omitted while their feature is off and no file exists, so the all-off wire shape is unchanged; a
+configured feature without evidence reports `unknown`, never a guessed state.
 """
 from __future__ import annotations
 
@@ -39,9 +45,12 @@ from api.data.attention import (collector_heartbeat, pc_pace, registry, store, t
                                 universe_store, web_queries, x_pool)
 from api.data.attention import pc_adapter as pa
 from api.data.attention.types import MIN_HISTORY_DAYS
-from api.models.discovery import (DiscoveryAccountHealth, DiscoveryCollectorSource, DiscoveryCollectorStatus,
-                                  DiscoveryKeywordGap, DiscoverySourceHealth, DiscoverySourceRow,
-                                  DiscoverySourcesResponse, DiscoveryTrendsKeyword, DiscoveryTrendsWatch)
+from api.models.discovery import (SAFE_CODE, DiscoveryAccountHealth, DiscoveryBrowserHealth, DiscoveryCollectorSource,
+                                  DiscoveryCollectorStatus, DiscoveryDailyReportStatus, DiscoveryDoctorStatus,
+                                  DiscoveryKeywordGap, DiscoveryQueryIdHealth, DiscoveryRedditAccountHealth,
+                                  DiscoveryRedditMethodHealth, DiscoveryRelayRefusal, DiscoverySourceHealth,
+                                  DiscoverySourceRow, DiscoverySourcesResponse, DiscoveryTrendsKeyword,
+                                  DiscoveryTrendsWatch)
 
 LABELS = {
     "wikipedia": "Wikipedia pageviews", "trends": "Google Trends", "reddit": "Reddit", "xsearch": "X search",
@@ -65,6 +74,11 @@ _PROXY_ACCOUNT_FIELDS = frozenset({
     "proxy_id", "proxy_state", "proxy_reason", "proxy_checked_at", "proxy_quarantine_until",
     "region", "connection_style", "identity_revision",
 })
+_FINISH_ACCOUNT_FIELDS = frozenset({"endpoint_state", "behaviour", "harvest", "ct0_rotations_seen"})
+# Reddit live method store -> its `reddit_live_methods` switch; the feeds have no switch.
+REDDIT_LIVE_STORES = {"reddit_live_browser": "browser", "reddit_live_gql": "gql_anon"}
+REDDIT_METHOD_LABELS = {"reddit_live_browser": "Reddit live (browser)", "reddit_live_gql": "Reddit live (GraphQL)",
+                        "reddit_web": "Reddit web feed", "reddit_stream": "Reddit stream"}
 
 
 def _json_file(path: Path) -> dict | None:
@@ -113,14 +127,7 @@ def _accounts(now: datetime, health: DiscoverySourceHealth) -> None:
             public = {key: value for key, value in account.items()
                       if key in DiscoveryAccountHealth.model_fields and key != "cookie_age_days"}
             public["cookie_age_days"] = max(0, (now - refreshed).days) if refreshed else None
-            try:
-                projected = DiscoveryAccountHealth(**public)
-            except ValidationError:
-                # Refuse the entire proxy tuple: retaining a healthy state with
-                # malformed evidence would turn an unknown into a false success.
-                legacy = {key: value for key, value in public.items() if key not in _PROXY_ACCOUNT_FIELDS}
-                projected = DiscoveryAccountHealth(**legacy, proxy_state="unknown", proxy_reason="proxy_response")
-            accounts.append(projected)
+            accounts.append(_project_account(public))
     except ValidationError:
         # Invalid legacy data makes the complete snapshot unreadable. Never
         # stringify validation errors: they contain the rejected input.
@@ -132,6 +139,225 @@ def _accounts(now: datetime, health: DiscoverySourceHealth) -> None:
         # One loaded snapshot: do not re-read a file that the producer may replace concurrently.
         health.paused, health.pause_reason = True, snapshot["pause_reason"]
         health.pause_until = None if pool._s["stopped"] else pool._s["pause_until"]
+
+
+def _project_account(public: dict) -> DiscoveryAccountHealth:
+    """Refuse a malformed group whole (proxy tuple, finish fields) and keep the rest: retaining a healthy state
+    with malformed evidence would turn an unknown into a false success. A malformed legacy field still raises."""
+    def without(fields: frozenset, extra: dict) -> dict:
+        return {**{k: v for k, v in public.items() if k not in fields}, **extra}
+
+    proxy = {"proxy_state": "unknown", "proxy_reason": "proxy_response"}
+    finish = {"endpoint_state": "unknown"} if _FINISH_ACCOUNT_FIELDS & public.keys() else {}
+    candidates = (public, without(_FINISH_ACCOUNT_FIELDS, finish), without(_PROXY_ACCOUNT_FIELDS, proxy),
+                  without(_PROXY_ACCOUNT_FIELDS | _FINISH_ACCOUNT_FIELDS, {**proxy, **finish}))
+    for candidate in candidates[:-1]:
+        try:
+            return DiscoveryAccountHealth(**candidate)
+        except ValidationError:
+            pass
+    return DiscoveryAccountHealth(**candidates[-1])
+
+
+def _days_since(value, now: datetime) -> int | None:
+    stamp = _timestamp(value)
+    return max(0, (now - stamp).days) if stamp else None
+
+
+def _utc_text(value) -> str | None:
+    """A producer timestamp passed on only when it is a UTC ISO timestamp, else unknown."""
+    try:
+        parsed = datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+    return value if parsed.tzinfo is not None and parsed.utcoffset() == timedelta(0) else None
+
+
+def _code(value) -> str | None:
+    return value if isinstance(value, str) and SAFE_CODE.fullmatch(value) else None
+
+
+def _count(value) -> int | None:
+    return value if type(value) is int and value >= 0 else None
+
+
+def _queryids(cfg, now: datetime) -> DiscoveryQueryIdHealth | None:
+    """X query-id registry state (`_pc_state/x_queryids.json`, S-XProto): omitted while off and never checked."""
+    mode = cfg.x_queryid_mode if cfg is not None else "off"
+    path = cache.CACHE_ROOT / "attention" / "_pc_state" / "x_queryids.json"
+    if mode == "off" and not path.exists():
+        return None
+    doc = _json_file(path)
+    operations = doc.get("operations") if doc else None
+    if not isinstance(operations, dict) or not all(isinstance(o, dict) for o in operations.values()):
+        return DiscoveryQueryIdHealth(mode=mode)
+    active = [o.get("active") for o in operations.values()]
+    active = [a for a in active if isinstance(a, dict)]
+    sources = {a.get("source") for a in active}
+    source = None if not sources or not sources <= {"pinned", "bundle"} else (
+        sources.pop() if len(sources) == 1 else "mixed")
+    ages = [_days_since(a.get("adopted_at"), now) for a in active]
+    state = doc.get("check_state")
+    return DiscoveryQueryIdHealth(
+        mode=mode, state=state if state in ("ok", "candidate", "stale", "blocked", "refused_by_policy") else "unknown",
+        active_source=source, active_age_days=max(ages) if ages and None not in ages else None,
+        last_check=_utc_text(doc.get("last_check")))
+
+
+def _settled_day(store_id: str) -> str | None:
+    """Newest UTC day with a valid completeness document for this store (the method's own, never another's)."""
+    directory = cache.CACHE_ROOT / "attention" / store_id / "_meta" / "_completeness"
+    days = []
+    for path in directory.glob("*.json"):
+        try:
+            day = date.fromisoformat(path.stem)
+        except ValueError:
+            continue
+        doc = _json_file(path)
+        if doc and isinstance(doc.get("coins"), dict):
+            days.append(day)
+    return max(days).isoformat() if days else None
+
+
+def _live_method(store_id: str, cfg) -> DiscoveryRedditMethodHealth:
+    """A live method's row from its worker-written `_pc_state/reddit_live/<store>_health.json` (S-RCore-B)."""
+    label = REDDIT_METHOD_LABELS[store_id]
+    if REDDIT_LIVE_STORES[store_id] not in cfg.reddit_live_methods:
+        return DiscoveryRedditMethodHealth(method=store_id, label=label, state="disabled", reason="method_disabled",
+                                           last_settled_day=_settled_day(store_id))
+    doc = _json_file(cache.CACHE_ROOT / "attention" / "_pc_state" / "reddit_live" / f"{store_id}_health.json") or {}
+    state = doc.get("state")
+    lanes = doc.get("lanes")
+    if not (isinstance(lanes, dict) and set(lanes) <= {"posts", "comments"} and all(
+            type(v) in (int, float) and not isinstance(v, bool) and 0 <= v <= 1 for v in lanes.values())):
+        lanes = None
+    return DiscoveryRedditMethodHealth(
+        method=store_id, label=label,
+        state=state if state in ("ok", "degraded", "needs_probe", "disabled", "blocked", "stale") else "unknown",
+        reason=_code(doc.get("reason")), last_settled_day=_settled_day(store_id), lanes=lanes,
+        comments_scope="threads_opened" if doc.get("comments_scope") == "threads_opened" else None,
+        requests_today=_count(doc.get("requests_today")), cap=_count(doc.get("cap")))
+
+
+def _feed_method(store_id: str, day: date, now: datetime, known: dict) -> DiscoveryRedditMethodHealth:
+    """A feed's row from the same worker health the Sources row uses (no second interpretation)."""
+    # The stream keeps no pace state (`pc_pace.SOURCE_DELAYS`): its row stays unknown rather than guessed.
+    h = known[store_id] if store_id in known else (
+        _health(store_id, day, now) if store_id in pc_pace.SOURCE_DELAYS else None)
+    fields = {"method": store_id, "label": REDDIT_METHOD_LABELS[store_id], "last_settled_day": _settled_day(store_id)}
+    if h is None:
+        return DiscoveryRedditMethodHealth(**fields)
+    state, reason = ("degraded", _code(h.pause_reason)) if h.paused else ("stale", None) if h.stale else (
+        "ok" if h.stale is False else "unknown", None)
+    return DiscoveryRedditMethodHealth(**fields, state=state, reason=reason, requests_today=h.budget_used,
+                                       cap=h.effective_budget)
+
+
+def reddit_methods(cfg, day: date, now: datetime, known: dict | None = None) -> list[DiscoveryRedditMethodHealth] | None:
+    """The separate method-health reader: one row per Reddit method, never merged. Omitted (None) while no live
+    method and no Reddit account is configured, so the all-off rows keep their pre-finish shape."""
+    if cfg is None or not (cfg.reddit_live_methods or cfg.reddit_browser_accounts):
+        return None
+    return [_live_method(m, cfg) if m in REDDIT_LIVE_STORES else _feed_method(m, day, now, known or {})
+            for m in web_queries.REDDIT_METHODS]
+
+
+def reddit_accounts(cfg, now: datetime) -> list[DiscoveryRedditAccountHealth] | None:
+    """Configured Reddit accounts from `_pc_state/reddit_accounts.json` (`{"accounts": {label: entry}}`, S-RAcct-A)
+    and `reddit_account_ready.json` (`{"ready": {label: marked ISO day}}`; ready from the next UTC day). Only
+    configured labels are shown; an absent or malformed entry is `unknown`. None while no account is configured."""
+    if cfg is None or not cfg.reddit_browser_accounts:
+        return None
+    root = cache.CACHE_ROOT / "attention" / "_pc_state"
+    doc = _json_file(root / "reddit_accounts.json")
+    entries = doc.get("accounts") if doc and isinstance(doc.get("accounts"), dict) else {}
+    ready_doc = _json_file(root / "reddit_account_ready.json")
+    marks = ready_doc.get("ready") if ready_doc and isinstance(ready_doc.get("ready"), dict) else None
+    today = now.date()
+    out = []
+    for account in cfg.reddit_browser_accounts:
+        label = account["label"]
+        entry = entries.get(label)
+        ready = None
+        if marks is not None:
+            try:
+                ready = label in marks and date.fromisoformat(marks[label]) < today
+            except (TypeError, ValueError):
+                ready = None
+        if not isinstance(entry, dict):
+            out.append(DiscoveryRedditAccountHealth(label=label, ready=ready,
+                                                    cap=cfg.reddit_browser_account_daily_cap))
+            continue
+        state = entry.get("state")
+        used = _count(entry.get("reads_used"))
+        proxy = entry.get("proxy_state")
+        out.append(DiscoveryRedditAccountHealth(
+            label=label, state=state if state in ("active", "resting", "paused", "locked") else "unknown",
+            reason=_code(entry.get("reason")),
+            reads_today=(used if entry.get("reads_day") == today.isoformat() else 0) if used is not None else None,
+            cap=cfg.reddit_browser_account_daily_cap, rest_until=_utc_text(entry.get("rest_until")), ready=ready,
+            session_state=_code(entry.get("session_state")),
+            session_checked_at=_utc_text(entry.get("session_checked_at")),
+            proxy_state=proxy if proxy in ("direct", "unknown", "healthy", "quarantined", "blocked") else None))
+    return out
+
+
+def _daily_report() -> DiscoveryDailyReportStatus | None:
+    """Newest `_reports/daily_report_<D>.json` (S-Report); a malformed one keeps its day with counts unknown."""
+    directory = cache.CACHE_ROOT / "attention" / "_reports"
+    days = []
+    for path in directory.glob("daily_report_*.json"):
+        try:
+            days.append((date.fromisoformat(path.stem.removeprefix("daily_report_")), path))
+        except ValueError:
+            continue
+    if not days:
+        return None
+    day, path = max(days)
+    doc = _json_file(path) or {}
+    try:
+        counts = doc.get("per_source_method")
+        report = DiscoveryDailyReportStatus(day=day.isoformat(), revision=_count(doc.get("revision")),
+                                            per_source_method=counts if isinstance(counts, dict) and counts else None)
+    except ValidationError:
+        return DiscoveryDailyReportStatus(day=day.isoformat(), revision=_count(doc.get("revision")))
+    if report.per_source_method:
+        report.complete = all(c.eligible > 0 and c.stored == c.eligible for c in report.per_source_method.values())
+    return report
+
+
+def _doctor() -> DiscoveryDoctorStatus | None:
+    """`_reports/doctor.json` (S-OpsDoctor): verdict and counts only; unreadable → UNKNOWN."""
+    path = cache.CACHE_ROOT / "attention" / "_reports" / "doctor.json"
+    if not path.exists():
+        return None
+    doc = _json_file(path) or {}
+    state = doc.get("state")
+    size = lambda v: len(v) if isinstance(v, list) else _count(v)
+    return DiscoveryDoctorStatus(state=state if state in ("PASS", "WARN", "FAIL") else "UNKNOWN",
+                                 checked_at=_utc_text(doc.get("checked_at")), failures=size(doc.get("failures")),
+                                 warnings=size(doc.get("warnings")))
+
+
+def _browser() -> DiscoveryBrowserHealth | None:
+    """`_pc_state/browser_health.json` (S-Relay): top refused hostnames (≤ 5) and the profile state."""
+    path = cache.CACHE_ROOT / "attention" / "_pc_state" / "browser_health.json"
+    if not path.exists():
+        return None
+    doc = _json_file(path) or {}
+    refusals = doc.get("relay_refusals")
+    rows = []
+    if isinstance(refusals, dict):
+        for host, count in sorted(refusals.items(), key=lambda kv: (-(_count(kv[1]) or 0), str(kv[0]))):
+            try:
+                rows.append(DiscoveryRelayRefusal(host=host, count=count))
+            except (ValidationError, TypeError):
+                continue
+            if len(rows) == 5:
+                break
+    state = doc.get("profile_state")
+    return DiscoveryBrowserHealth(relay_refusals=rows, profile_state=state if state in (
+        "ok", "missing", "policy_unsatisfied") else "unknown")
 
 
 def _completeness(store_id: str, day: date, now: datetime, health: DiscoverySourceHealth) -> None:
@@ -226,6 +452,7 @@ def _health(store_id: str, day: date, now: datetime) -> DiscoverySourceHealth | 
         h.stale = last is None or (now - last).total_seconds() > 2 * gap
     if store_id == "xsearch_web":
         _accounts(now, h)
+        h.queryids = _queryids(_collector(), now)
     _completeness(store_id, day, now, h)
     count = lambda value: "unknown" if value is None else str(value)
     h.completeness = (f"{day.isoformat()}: attempted {count(h.completeness_attempted)}, "
@@ -249,6 +476,7 @@ def _collector_status(rows: list[DiscoverySourceRow], day: date, now: datetime) 
     """The collector box: the heartbeat's state and each PC stream's health (reused from its row when computed)."""
     beat = collector_heartbeat.status(now)
     known = {r.impl: r.health for r in rows if r.impl in PC_STORES}
+    reddit_row = next((r.health for r in rows if r.id == "reddit" and r.health is not None), None)
     sources = []
     for sid, store_id in COLLECTOR_SOURCES:
         h = known[store_id] if store_id in known else _health(store_id, day, now)
@@ -266,10 +494,34 @@ def _collector_status(rows: list[DiscoverySourceRow], day: date, now: datetime) 
                     and all(type(schedule.get(k)) is int and schedule[k] >= 0 for k in keys)):
                 fields.update({k: schedule[k] for k in keys})
                 fields["sizing_day"] = target
+        if sid == "reddit":
+            fields["methods"] = (reddit_row.methods if reddit_row is not None
+                                 else reddit_methods(_collector(), day, now, {store_id: h} if h else None))
         sources.append(DiscoveryCollectorSource(id=sid, label=LABELS[sid], has_state=h is not None, **fields))
     return DiscoveryCollectorStatus(state=beat["state"], reason=beat["reason"], started_at=beat["started_at"],
                                     last_beat=beat["last_beat"], age_s=beat["age_s"], mode=beat["mode"],
-                                    version=beat["version"], running_sources=beat["sources"], sources=sources)
+                                    version=beat["version"], running_sources=beat["sources"], sources=sources,
+                                    daily_report=_daily_report(), doctor=_doctor(), browser=_browser())
+
+
+def _reddit_health(h: DiscoverySourceHealth | None, impl: str | None, day: date,
+                   now: datetime) -> DiscoverySourceHealth | None:
+    """Attach the Reddit method rows and the Reddit accounts to the Reddit row (whichever method it reports).
+    Without worker state for that method a bare health line carries them; all off leaves the row unchanged."""
+    cfg = _collector()
+    methods = reddit_methods(cfg, day, now, {impl: h} if h is not None else None)
+    accounts = reddit_accounts(cfg, now)
+    if methods is None and accounts is None:
+        return h
+    if h is None:
+        h = DiscoverySourceHealth(collection_day=now.date().isoformat(), completeness_day=day.isoformat(),
+                                  completeness="no worker state for this method")
+    h.methods = methods
+    if accounts is not None:
+        h.accounts = accounts
+        h.accounts_active = sum(a.state == "active" for a in accounts)
+        h.accounts_total = len(accounts)
+    return h
 
 
 def _scan(source: str, symbol: str) -> tuple[int, date | None]:
@@ -383,10 +635,13 @@ def build_sources(today: date, *, probe_path: Path | None = None, universe_path:
             (f for f in found if f[0][0].history_days), found[0])
 
     def row(sid, kind, weight, s, state, note, reason, impl=None) -> DiscoverySourceRow:
+        health = _health(impl, end, now) if impl in PC_STORES else None
+        if sid == "reddit":
+            health = _reddit_health(health, impl, end, now)
         return DiscoverySourceRow(id=sid, label=LABELS[sid], kind=kind, weight=weight, state=state,
                                   newest=_iso(s.newest), history_days=s.history_days,
                                   coins_with_data=len(s.usable), eligible_size=n, note=note, reason=reason,
-                                  impl=impl, health=_health(impl, end, now) if impl in PC_STORES else None)
+                                  impl=impl, health=health)
 
     impls = source_impls(cfg)
 

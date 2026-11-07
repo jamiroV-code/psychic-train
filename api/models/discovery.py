@@ -113,6 +113,197 @@ ProxyReason = Literal[
     "proxy_revision", "proxy_lock",
 ]
 
+# Finish plan 06-11-26 (S-StatusAPI): optional, allowlisted status fields. Every value is a closed code, a count,
+# a UTC timestamp or a date; never free text, a URL, an address, a cookie, a token or a private path.
+SAFE_CODE = re.compile(r"[a-z][a-z0-9_]{0,39}")
+
+
+def _utc_timestamp(value):
+    if value is not None:
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None or parsed.utcoffset().total_seconds() != 0:
+            raise ValueError("invalid UTC timestamp")
+    return value
+
+
+def _safe_code(value):
+    if value is not None and SAFE_CODE.fullmatch(value) is None:
+        raise ValueError("invalid code")
+    return value
+
+
+def _iso_day(value):
+    if value is not None:
+        from datetime import date
+        if date.fromisoformat(value).isoformat() != value:
+            raise ValueError("invalid day")
+    return value
+
+
+def _drop_none(row: dict, keys) -> dict:
+    for key in keys:
+        if row.get(key, 0) is None:
+            row.pop(key)
+    return row
+
+
+class XAccountBehaviour(BaseModel):
+    """B3 per-account behaviour (S-B3P producer); every field unknown (None) until the pool persists it."""
+    quiet_until: str | None = None
+    cooldown_until: str | None = None
+    cooldown_reason: str | None = None
+    warmup_stage: int | None = Field(default=None, ge=0)
+    effective_cap: int | None = Field(default=None, ge=0)
+    mixed_calls_today: int | None = Field(default=None, ge=0)
+
+    check_times = field_validator("quiet_until", "cooldown_until")(classmethod(lambda cls, v: _utc_timestamp(v)))
+    check_code = field_validator("cooldown_reason")(classmethod(lambda cls, v: _safe_code(v)))
+
+
+class XAccountHarvest(BaseModel):
+    """S-Cookie-X harvest outcome per account: a state code, a reason code and when; never a cookie."""
+    state: Literal["none", "ok", "needs_owner", "refused", "failed", "unknown"] = "unknown"
+    reason: str | None = None
+    last_at: str | None = None
+
+    check_code = field_validator("reason")(classmethod(lambda cls, v: _safe_code(v)))
+    check_time = field_validator("last_at")(classmethod(lambda cls, v: _utc_timestamp(v)))
+
+
+QueryIdState = Literal["ok", "candidate", "stale", "unknown", "blocked", "refused_by_policy"]
+
+
+class DiscoveryQueryIdHealth(BaseModel):
+    """X GraphQL query-id registry (S-XProto producer: `_pc_state/x_queryids.json`)."""
+    mode: Literal["off", "sentinel", "auto"]
+    state: QueryIdState = "unknown"
+    active_source: Literal["pinned", "bundle", "mixed"] | None = None
+    active_age_days: int | None = Field(default=None, ge=0)
+    last_check: str | None = None
+
+    check_time = field_validator("last_check")(classmethod(lambda cls, v: _utc_timestamp(v)))
+
+
+RedditMethod = Literal["reddit_live_browser", "reddit_live_gql", "reddit_web", "reddit_stream"]
+RedditMethodState = Literal["ok", "degraded", "needs_probe", "disabled", "blocked", "stale", "unknown"]
+
+
+class DiscoveryRedditMethodHealth(BaseModel):
+    """One Reddit method's own status row (separate method-health reader; methods never merge)."""
+    method: RedditMethod
+    label: str
+    state: RedditMethodState = "unknown"
+    reason: str | None = None
+    last_settled_day: str | None = None
+    lanes: dict[Literal["posts", "comments"], float] | None = None   # coverage share of the last close poll, 0..1
+    comments_scope: Literal["threads_opened"] | None = None
+    requests_today: int | None = Field(default=None, ge=0)
+    cap: int | None = Field(default=None, ge=0)
+
+    check_code = field_validator("reason")(classmethod(lambda cls, v: _safe_code(v)))
+    check_day = field_validator("last_settled_day")(classmethod(lambda cls, v: _iso_day(v)))
+
+    @field_validator("lanes")
+    @classmethod
+    def lane_share(cls, value):
+        if value is not None and not all(0.0 <= v <= 1.0 for v in value.values()):
+            raise ValueError("invalid lane coverage")
+        return value
+
+
+RedditAccountState = Literal["active", "resting", "paused", "locked", "unknown"]
+
+
+class DiscoveryRedditAccountHealth(BaseModel):
+    """One Reddit throwaway account (its OWN model; X states are not widened): opaque label only."""
+    site: Literal["reddit"] = "reddit"
+    label: str
+    state: RedditAccountState = "unknown"
+    reason: str | None = None
+    reads_today: int | None = Field(default=None, ge=0)
+    cap: int | None = Field(default=None, ge=0)
+    rest_until: str | None = None
+    ready: bool | None = None
+    session_state: str | None = None
+    session_checked_at: str | None = None
+    proxy_state: ProxyState | None = None
+
+    check_codes = field_validator("reason", "session_state")(classmethod(lambda cls, v: _safe_code(v)))
+    check_times = field_validator("rest_until", "session_checked_at")(classmethod(lambda cls, v: _utc_timestamp(v)))
+
+    @field_validator("label")
+    @classmethod
+    def opaque_label(cls, value):
+        if re.fullmatch(r"[A-Za-z0-9_-]{1,32}", value) is None:
+            raise ValueError("invalid label")
+        return value
+
+
+class DiscoveryRelayRefusal(BaseModel):
+    host: str
+    count: int = Field(ge=0)
+
+    @field_validator("host")
+    @classmethod
+    def hostname(cls, value):
+        if re.fullmatch(r"(?=.{1,253}$)[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63})+", value) is None or value.replace(
+                ".", "").isdigit():
+            raise ValueError("invalid hostname")
+        return value
+
+
+class DiscoveryBrowserHealth(BaseModel):
+    """Browser host (S-Relay producer: `_pc_state/browser_health.json`): bounded top refused hostnames only."""
+    relay_refusals: list[DiscoveryRelayRefusal] = Field(default_factory=list, max_length=5)
+    profile_state: Literal["ok", "missing", "policy_unsatisfied", "unknown"] = "unknown"
+
+
+class DiscoveryReportCounts(BaseModel):
+    eligible: int = Field(ge=0)
+    stored: int = Field(ge=0)
+    exact: int = Field(ge=0)
+    estimated: int = Field(ge=0)
+    missing: int = Field(ge=0)
+    reasons: dict[str, int] = {}
+
+    @field_validator("reasons")
+    @classmethod
+    def reason_codes(cls, value):
+        if not all(SAFE_CODE.fullmatch(k) and v >= 0 for k, v in value.items()):
+            raise ValueError("invalid reasons")
+        return value
+
+
+class DiscoveryDailyReportStatus(BaseModel):
+    """Newest `_reports/daily_report_<D>.json` (S-Report producer); unreadable → counts unknown, never zero."""
+    day: str
+    revision: int | None = Field(default=None, ge=0)
+    per_source_method: dict[str, DiscoveryReportCounts] | None = None   # "<source>/<method>" -> counts
+    complete: bool | None = None   # True only when every eligible coin-day is stored (and eligible > 0)
+
+    check_day = field_validator("day")(classmethod(lambda cls, v: _iso_day(v)))
+
+    @field_validator("per_source_method")
+    @classmethod
+    def method_keys(cls, value):
+        if value is not None and not all(re.fullmatch(r"[a-z_]{1,40}/[a-z_]{1,40}", k) for k in value):
+            raise ValueError("invalid source/method key")
+        return value
+
+
+class DiscoveryDoctorStatus(BaseModel):
+    """`_reports/doctor.json` (S-OpsDoctor producer): verdict and counts only, never check text."""
+    state: Literal["PASS", "WARN", "FAIL", "UNKNOWN"] = "UNKNOWN"
+    checked_at: str | None = None
+    failures: int | None = Field(default=None, ge=0)
+    warnings: int | None = Field(default=None, ge=0)
+
+    check_time = field_validator("checked_at")(classmethod(lambda cls, v: _utc_timestamp(v)))
+
+
+_X_FINISH_FIELDS = ("endpoint_state", "behaviour", "harvest", "ct0_rotations_seen")
+
+
 class DiscoveryAccountHealth(BaseModel):
     """One X account of the pool (AC47, AC52): opaque label only, never a cookie, token or username."""
     label: str
@@ -134,6 +325,10 @@ class DiscoveryAccountHealth(BaseModel):
     region: str | None = None
     connection_style: Literal["plain", "curl"] | None = None
     identity_revision: str | None = None
+    endpoint_state: Literal["ok", "restricted", "unknown"] | None = None   # S-XDrift per-account 404 isolation
+    behaviour: XAccountBehaviour | None = None
+    harvest: XAccountHarvest | None = None
+    ct0_rotations_seen: int | None = Field(default=None, ge=0)
 
     @field_validator("proxy_id", "identity_revision")
     @classmethod
@@ -165,7 +360,7 @@ class DiscoveryAccountHealth(BaseModel):
         row = handler(self)
         for key in ("reads_today", "cap", "rest_until", "ready", "parse_strikes", "parse_strike_last_at",
                     "proxy_id", "proxy_state", "proxy_reason", "proxy_checked_at", "proxy_quarantine_until",
-                    "region", "connection_style", "identity_revision"):
+                    "region", "connection_style", "identity_revision", *_X_FINISH_FIELDS):
             if row[key] is None:
                 row.pop(key)
         return row
@@ -197,9 +392,15 @@ class DiscoverySourceHealth(BaseModel):
     completeness: str
     accounts_active: int | None = None
     accounts_total: int | None = None
-    accounts: list[DiscoveryAccountHealth] = []
+    accounts: list[DiscoveryAccountHealth | DiscoveryRedditAccountHealth] = []
     free_disk_bytes: int | None = None
     clock_sync_age_seconds: float | None = None  # no clock-sync evidence persisted by this worker
+    queryids: DiscoveryQueryIdHealth | None = None             # X row only; omitted while off and never checked
+    methods: list[DiscoveryRedditMethodHealth] | None = None   # Reddit row only; omitted while no live method/account
+
+    @model_serializer(mode="wrap")
+    def serialize_health(self, handler):
+        return _drop_none(handler(self), ("queryids", "methods"))
 
 
 class DiscoverySourceRow(BaseModel):
@@ -269,14 +470,12 @@ class DiscoveryCollectorSource(BaseModel):
     need_reads: int | None = None
     shortfall_reads: int | None = None
     backlog_reads: int | None = None
+    methods: list[DiscoveryRedditMethodHealth] | None = None   # Reddit: per-method state, same reader as the row
 
     @model_serializer(mode="wrap")
     def serialize_source(self, handler):
-        row = handler(self)
-        for key in ("sizing_day", "capacity_reads", "need_reads", "shortfall_reads", "backlog_reads"):
-            if row[key] is None:
-                row.pop(key)
-        return row
+        return _drop_none(handler(self), ("sizing_day", "capacity_reads", "need_reads", "shortfall_reads",
+                                          "backlog_reads", "methods"))
 
 
 class DiscoveryCollectorStatus(BaseModel):
@@ -292,6 +491,13 @@ class DiscoveryCollectorStatus(BaseModel):
     version: str | None = None          # the commit the collector runs, when readable
     running_sources: list[str] = []     # streams the process runs (xsearch_web, reddit_web)
     sources: list[DiscoveryCollectorSource] = []
+    daily_report: DiscoveryDailyReportStatus | None = None
+    doctor: DiscoveryDoctorStatus | None = None
+    browser: DiscoveryBrowserHealth | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_collector(self, handler):
+        return _drop_none(handler(self), ("daily_report", "doctor", "browser"))
 
 
 class DiscoverySourcesResponse(BaseModel):
