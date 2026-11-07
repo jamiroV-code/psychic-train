@@ -16,10 +16,10 @@ Plan: `collector-identity-pool-finish_PLAN_06-11-26.md`, slice S-RAcct-B, contra
   - `ProxyRuntime.reconcile(pool, *, reddit=None)` is site-scoped. X effective state excludes `reddit_*` config keys. Reddit effective state is assignment + policy + `x_proxy_*` keys. The raw-only eviction fires only when neither site changed semantically. Pruning a label is site-aware. The method returns only the changed X labels.
   - `admit()` resolves the union assignment and refuses a missing one with `proxy_assignment` before any reservation.
   - `route_admission(site, label)` is the authoritative S-RAcct-A provider.
-- `api/tests/data/attention/test_x_proxy_reddit.py` (new, 16 tests).
+- `api/tests/data/attention/test_x_proxy_reddit.py` (new, 15 tests including 2 parametrized cases).
 
 ## 4. Tests
-Red first: the new file failed 15 of 15 before implementation (`proxy_assignment` from the X-only parser, missing APIs). The parametrized case brings the green count to 16.
+Red first: all 15 tests in the new file failed before implementation (`proxy_assignment` from the X-only parser, missing APIs); after implementation all 15 pass.
 Green, targeted: `UV_FROZEN=1 uv run --project api --frozen --group xreader pytest` over `test_x_proxy_reddit.py` and every other `test_x_proxy*.py`, plus `test_x_pool.py`, `test_reddit_accounts.py`, `test_twscrape_reader.py` and `test_identity_transport.py`. Result: **484 passed, 1 skipped** (POSIX mode bits), in 210 s.
 
 What the new tests cover:
