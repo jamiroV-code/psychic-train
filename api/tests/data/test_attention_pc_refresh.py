@@ -400,6 +400,40 @@ def test_universe_snapshot_failure_never_stops_a_pass(monkeypatch):
     assert reddit.searches
 
 
+def _one_pass_loop(monkeypatch, w, stream, clock):
+    def one_pass(stop_at=None):
+        w._stopping.set()
+        return "done"
+
+    monkeypatch.setattr(stream, "run_pass", one_pass)
+    monkeypatch.setattr(stream, "schedule", lambda outcome=None: clock())
+    w._loop(stream)
+
+
+def test_pass_end_rebuilds_the_recent_daily_reports(monkeypatch):
+    from api.analytics.attention import daily_report
+
+    calls = []
+    monkeypatch.setattr(daily_report, "rebuild_recent", lambda now, **k: calls.append(now) or [])
+    clock = Clock()
+    w, _reader, _reddit = make(clock)
+    _one_pass_loop(monkeypatch, w, w.streams[R], clock)
+    assert calls == [T0]
+
+
+def test_daily_report_failure_never_stops_the_loop(monkeypatch, caplog):
+    from api.analytics.attention import daily_report
+
+    caplog.set_level(logging.WARNING)
+    monkeypatch.setattr(daily_report, "rebuild_recent",
+                        lambda now, **k: (_ for _ in ()).throw(OSError("PLANTED-report-text")))
+    clock = Clock()
+    w, _reader, _reddit = make(clock)
+    _one_pass_loop(monkeypatch, w, w.streams[X], clock)
+    msgs = [r.getMessage() for r in caplog.records if "daily report" in r.getMessage()]
+    assert msgs and all("OSError" in m and "PLANTED" not in m for m in msgs)
+
+
 def test_no_unit_before_min_delay_after_restart():
     clock = Clock()
     w, reader, _ = make(clock)

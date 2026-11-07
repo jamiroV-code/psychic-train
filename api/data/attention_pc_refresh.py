@@ -1064,11 +1064,20 @@ class AttentionPcWorker:
                 self._wait_until(due - lead)
                 outcome = stream.run_pass()
                 log.info("attention pc %s pass: %s", stream.source, outcome)
+                self._daily_report()
             except _Stopped:
                 break
             except Exception as exc:  # noqa: BLE001 - the loop must never die; never the message
                 log.warning("attention pc %s pass failed: %s", stream.source, type(exc).__name__)
                 outcome = "failed"
+
+    def _daily_report(self) -> None:
+        """S-Report RP-3: at each pass end rebuild the recent days whose evidence changed (a settle revises D)."""
+        try:
+            from api.analytics.attention import daily_report  # analytics layer: imported at use
+            daily_report.rebuild_recent(_utc(self.clock()))
+        except Exception as exc:  # noqa: BLE001 - the report never stops collection; never the message
+            log.warning("attention pc daily report skipped: %s", type(exc).__name__)
 
 
 # --- log rotation -----------------------------------------------------------------------------------------------------
