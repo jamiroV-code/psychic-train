@@ -123,7 +123,8 @@ def main():
                     request_id = str(next_target) + ":" + str(len(bodies))
                     def event(name, value):
                         send({"method": name, "params": value, "sessionId": sid})
-                    event("Network.requestWillBeSent", {"requestId": request_id, "request": {"url": url, "method": "GET"}})
+                    event("Network.requestWillBeSent", {"requestId": request_id, "type": "Document",
+                                                        "request": {"url": url, "method": "GET"}})
                     event("Page.frameNavigated", {"frame": {"id": "f1", "url": session_url[sid]}})
                     try:
                         body = page_bytes(url, page)
