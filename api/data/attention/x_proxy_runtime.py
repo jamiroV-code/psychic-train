@@ -28,6 +28,7 @@ class Snapshot:
     revisions: dict
     config_path: Path | None
     private_snapshot: object | None = field(default=None, repr=False)
+    reddit_assignments: dict = field(default_factory=dict, repr=False)
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,73 @@ class Admission:
     checked_at: datetime
     expires_at: datetime
     feeds: tuple[tuple[str, str], ...] = ()
+
+
+class ProviderBudget:
+    """The single ipapi reservation authority (contract F): the X pool state file and its lock.
+
+    Reddit admission reserves through the same X pool; nothing creates a second budget. Without an
+    X pool there is no budget, so a provider request is refused before any send."""
+
+    def __init__(self, x_pool):
+        self._pool = x_pool
+
+    def request(self, send):
+        p.require(self._pool is not None, "proxy_budget")
+        return self._pool.provider_request(send)
+
+
+class RedditRouteView:
+    """Reddit side of the site-scoped account view over `reddit_accounts.RedditAccounts`.
+
+    Implements the B2 route protocol `ProxyRuntime` already drives for the X pool (reconcile, result,
+    unknown, provider request, lock path), so Reddit admission, quarantine and replacement reuse the
+    runtime unchanged. Writes go through `RedditAccounts.set_proxy` (the seven B2 fields only)."""
+
+    def __init__(self, accounts, budget: ProviderBudget, *, clock=lambda: datetime.now(UTC)):
+        self.accounts, self.budget, self.clock = accounts, budget, clock
+        self.path = accounts.path
+
+    def __repr__(self):
+        return "RedditRouteView(<private>)"
+
+    def labels(self):
+        return tuple(self.accounts.labels)
+
+    def _acct(self, label):
+        from api.data.attention.reddit_accounts import B2_ACCOUNT_KEYS
+        p.require(label in self.accounts.labels, "proxy_assignment")
+        with state_lock(self.accounts.path):
+            entry = self.accounts._load()["accounts"][label]
+        return {key: entry[key] for key in B2_ACCOUNT_KEYS}
+
+    def reconcile_proxy(self, label, proxy_id, revision):
+        p.opaque_id(revision)
+        if proxy_id is not None:
+            p.opaque_id(proxy_id)
+        current = self._acct(label)
+        if current["proxy_id"] == proxy_id and current["identity_revision"] == revision:
+            return False
+        self.accounts.set_proxy(label, proxy_id=proxy_id, identity_revision=revision, proxy_health="unknown",
+                                proxy_checked_at=None, proxy_quarantine_until=None, proxy_reason=None,
+                                proxy_changed_at=_utc(self.clock()).isoformat())
+        return True
+
+    def proxy_result(self, label, *, reason, quarantine_seconds=3600):
+        p.require(reason is None or reason in p.REASONS, "proxy_config")
+        now = _utc(self.clock())
+        self.accounts.set_proxy(label, proxy_health="healthy" if reason is None else "quarantined",
+                                proxy_reason=reason, proxy_checked_at=now.isoformat(),
+                                proxy_quarantine_until=None if reason is None else
+                                (now + timedelta(seconds=quarantine_seconds)).isoformat())
+
+    def proxy_unknown(self, label, reason, *, wake_at=None):
+        p.require(reason in p.REASONS, "proxy_config")
+        self.accounts.set_proxy(label, proxy_health="unknown", proxy_reason=reason,
+                                proxy_quarantine_until=None if wake_at is None else _utc(wake_at).isoformat())
+
+    def provider_request(self, send):
+        return self.budget.request(send)
 
 
 def _utc(value):
@@ -140,7 +208,11 @@ class ProxyRuntime:
         self._effective, self._revisions, self.admissions = {}, {}, {}
         self.snapshot = None
 
-    def reconcile(self, pool):
+    def reconcile(self, pool, *, reddit=None):
+        """Site-scoped reconciliation (contract F); returns the changed X labels.
+
+        `pool` is the X pool, `reddit` the optional `RedditRouteView`. Each site reconciles only its own
+        labels: a Reddit assignment edit never re-revisions an X account and vice versa."""
         config = self.initial_config
         if self.config_path is not None:
             p.require(self.config_path.is_absolute(), "proxy_private")
@@ -168,29 +240,48 @@ class ProxyRuntime:
                         changed.add(label)
                 if effective_changed and not baseline and pool.reconcile_proxy(label, None, self._revisions[label]):
                     changed.add(label)
+            for label in set(self._effective) - set(config.x_accounts):
+                self._effective.pop(label, None)
+                self._revisions.pop(label, None)
+                self.admissions.pop(label, None)
             self.snapshot = Snapshot(config, None, {}, dict(self._revisions), self.config_path)
             pool.proxy_direct, pool.proxy_required = True, False
             return changed
         p.require(all(paths) and self.config_path is not None, "proxy_config")
         private = self.snapshot_loader(self.config_path, repo_root=self.repo_root)
-        config, policy, assignments = private.config, private.policy, private.assignments
-        list_path, assignments_path, policy_path = map(Path, (config.x_proxy_list_path,
-            config.x_proxy_assignments_path, config.x_proxy_policy_path))
+        config, policy, union = private.config, private.policy, private.assignments
+        reddit_labels = tuple(a["label"] for a in config.reddit_browser_accounts)
+        assignments = {label: item for label, item in union.items() if label in config.x_accounts}
+        reddit_assignments = {label: item for label, item in union.items() if label in reddit_labels}
         p.require(set(assignments) == set(config.x_accounts), "proxy_assignment")
         effective_accounts = {}
         for label, assignment in assignments.items():
             # Credential-bearing comparison is process memory only; persisted revision is opaque.
-            safe_config = config.as_dict()
+            safe_config = {k: v for k, v in config.as_dict().items() if not k.startswith("reddit_")}
             safe_config["x_account_identities"] = {label: safe_config["x_account_identities"].get(label)}
             safe_config["x_accounts"] = [label]
             effective_accounts[label] = (assignment, policy, json.dumps(safe_config, sort_keys=True))
+        route_config = {k: v for k, v in config.as_dict().items() if k.startswith("x_proxy_")}
+        reddit_effective = {label: (reddit_assignments.get(label), policy, json.dumps(route_config, sort_keys=True))
+                            for label in reddit_labels}
         changed = {label for label, effective in effective_accounts.items()
                    if self._effective.get(label) != effective}
+        reddit_changed = {label for label, effective in reddit_effective.items()
+                          if self._effective.get(label) != effective}
         previous_private = self.snapshot.private_snapshot if self.snapshot is not None else None
-        if previous_private is not None and previous_private.roles != private.roles and not changed:
+        if previous_private is not None and previous_private.roles != private.roles and not (changed or reddit_changed):
             # A raw-only publication still changes the trusted snapshot. Semantic
             # per-account changes above evict only the affected account instead.
             changed.update(assignments)
+            reddit_changed.update(reddit_labels)
+        for label in reddit_labels:
+            if label in reddit_changed:
+                self._effective[label] = reddit_effective[label]
+                self._revisions[label] = str(uuid4())
+                self.admissions.pop(label, None)
+            if reddit is not None:
+                item = reddit_assignments.get(label)
+                reddit.reconcile_proxy(label, None if item is None else item.proxy_id, self._revisions[label])
         for label, assignment in assignments.items():
             effective = effective_accounts[label]
             if label in changed:
@@ -200,15 +291,19 @@ class ProxyRuntime:
                 changed.add(label)
             if pool.reconcile_proxy(label, assignment.proxy_id, self._revisions[label]):
                 changed.add(label)
-        for label in set(self._effective) - set(assignments):
+        previous_reddit = ({a["label"] for a in self.snapshot.config.reddit_browser_accounts}
+                           if self.snapshot is not None else set())
+        for label in set(self._effective) - set(assignments) - set(reddit_labels):
             self._effective.pop(label, None)
             self._revisions.pop(label, None)
             self.admissions.pop(label, None)
-            changed.add(label)
+            if label not in previous_reddit:
+                changed.add(label)
         pool.proxy_direct, pool.proxy_required = False, True
         pool.connection_style = config.x_connection_style
         pool.proxy_regions = {label: item.region for label, item in assignments.items()}
-        self.snapshot = Snapshot(config, policy, assignments, dict(self._revisions), self.config_path, private)
+        self.snapshot = Snapshot(config, policy, assignments, dict(self._revisions), self.config_path, private,
+                                 reddit_assignments)
         for label, admission in list(self.admissions.items()):
             try:
                 cache = FeedCache(policy.cache_dir, policy=policy, repo_root=self.repo_root)
@@ -216,8 +311,25 @@ class ProxyRuntime:
                 p.require(current == admission.feeds, "proxy_feed")
             except p.ProxyFailure:
                 self.admissions.pop(label, None)
-                pool.proxy_unknown(label, "proxy_feed")
+                if label in assignments:
+                    pool.proxy_unknown(label, "proxy_feed")
+                elif reddit is not None and label in reddit_labels:
+                    reddit.proxy_unknown(label, "proxy_feed")
         return changed
+
+    def route_admission(self, site, label):
+        """Reddit admission provider (`reddit_accounts` seam): pure lookup, never a network call.
+
+        'direct' only under the all-null direct configuration; 'proxy' only for a currently admitted,
+        current-revision Reddit assignment; everything else is 'unadmitted' (default deny)."""
+        snapshot = self.snapshot
+        if site != "reddit" or snapshot is None:
+            return "unadmitted"
+        if label not in {a["label"] for a in snapshot.config.reddit_browser_accounts}:
+            return "unadmitted"
+        if snapshot.policy is None:
+            return "direct" if not snapshot.config.x_proxy_required else "unadmitted"
+        return "proxy" if label in snapshot.reddit_assignments and self.admitted(label) else "unadmitted"
 
     def admitted(self, label):
         now = _utc(self.clock())
@@ -258,12 +370,13 @@ class ProxyRuntime:
             return
         if self.admitted(label) and _utc(self.clock()) < self.admissions[label].checked_at + timedelta(seconds=snapshot.config.x_proxy_health_interval_seconds):
             return
+        assignment = snapshot.assignments.get(label) or snapshot.reddit_assignments.get(label)
+        p.require(assignment is not None, "proxy_assignment")
         state = pool._acct(label)
         now = _utc(self.clock())
         if state["proxy_quarantine_until"]:
             p.require(now >= datetime.fromisoformat(state["proxy_quarantine_until"]), "proxy_quarantine")
         self._health_reserve(label, pool)
-        assignment = snapshot.assignments[label]
         policy = snapshot.policy
         started = time.monotonic()
         expires = [now + timedelta(seconds=snapshot.config.x_proxy_admission_max_age_seconds)]

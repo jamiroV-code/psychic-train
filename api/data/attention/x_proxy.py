@@ -205,12 +205,19 @@ class Assignment:
     route: PrivateRoute = field(repr=False)
 
 
-def parse_assignments(body: bytes, lines_body: bytes, labels, *, required: bool, identities: Mapping = None) -> dict[str, Assignment]:
+def parse_assignments(body: bytes, lines_body: bytes, labels, *, required: bool, identities: Mapping = None,
+                      reddit_labels=()) -> dict[str, Assignment]:
+    """Contract F: one v1 file over the union of X and Reddit labels (disjoint by config).
+
+    Unknown labels and duplicate proxy IDs/exits are refused across sites; `required` still demands
+    every X label, while a Reddit label without an entry is simply never admitted."""
     from api.data.attention import web_queries
+    require(not set(labels) & set(reddit_labels), "proxy_config")
     d = exact(strict_json(body), ("version", "lines", "accounts"))
     require(type(d["version"]) is int and d["version"] == 1, "proxy_assignment")
     require(isinstance(d["lines"], dict) and isinstance(d["accounts"], dict), "proxy_assignment")
-    require(set(d["accounts"]) <= set(labels) and (not required or set(d["accounts"]) == set(labels)), "proxy_assignment")
+    require(set(d["accounts"]) <= set(labels) | set(reddit_labels)
+            and (not required or set(labels) <= set(d["accounts"])), "proxy_assignment")
     require(len(lines_body) <= 1024 * 1024, "proxy_assignment")
     try:
         lines = lines_body.decode("utf-8").splitlines()

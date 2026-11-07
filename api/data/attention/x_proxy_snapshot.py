@@ -59,7 +59,8 @@ def load_snapshot(config_path: Path, *, repo_root: Path, opener=verified_open):
             policy = p.parse_policy(roles[1][2], root)
             assignments = p.parse_assignments(roles[2][2], roles[3][2], config.x_accounts,
                 required=config.x_proxy_required,
-                identities=config.x_account_identities if config.x_identity_enabled else None)
+                identities=config.x_account_identities if config.x_identity_enabled else None,
+                reddit_labels=tuple(a["label"] for a in config.reddit_browser_accounts))
         return PrivateSnapshot(config, policy, assignments, tuple(roles))
     except (OSError, web_queries.QueriesError, TypeError, ValueError):
         raise p.ProxyFailure("proxy_config") from None
