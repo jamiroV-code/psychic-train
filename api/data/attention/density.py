@@ -19,6 +19,10 @@ SPAN_FLOOR_H = 0.25
 ZERO_MEDIAN_MAX = 5.0
 SPAM_SPIKE_RATIO = 10.0  # same ratio as api.data.attention.xsearch
 MAX_PER_AUTHOR = 3
+# Zero commit policies (finish plan contract C3). `trailing_median` is the AC3 rule every existing source uses;
+# `positive_history` (Reddit live methods, option B) keeps a zero only for a complete result whose pass canary
+# passed and whose caller established the positive-history eligibility gate.
+ZERO_POLICIES = ("trailing_median", "positive_history")
 
 
 @dataclass(frozen=True)
@@ -96,15 +100,24 @@ def day_value(day: date, times: list[datetime], *, n_target: int, n_min: int, wi
     return None
 
 
-def finalize(result: DayResult | None, *, canary_ok: bool, trailing_median: float | None) -> float | None:
-    """The value to store, or None (failed or missing). A zero needs canary data and a trailing median below 5.
+def finalize(result: DayResult | None, *, canary_ok: bool, trailing_median: float | None,
+             zero_policy: str = "trailing_median", history_ok: bool = False) -> float | None:
+    """The value to store, or None (failed or missing). A zero needs canary data and a trailing median below 5;
+    under `positive_history` it needs canary data, `history_ok` and a complete (not capped, no page cap) result.
 
     A non-finite or negative value is never a count: None.
     """
+    if zero_policy not in ZERO_POLICIES:
+        raise ValueError("unknown zero policy")
     if result is None or not math.isfinite(result.value) or result.value < 0:
         return None
-    if result.value == 0 and not (canary_ok and trailing_median is not None and trailing_median < ZERO_MEDIAN_MAX):
-        return None
+    if result.value == 0:
+        if zero_policy == "positive_history":
+            ok = canary_ok and history_ok is True and not result.capped and not result.pagecap
+        else:
+            ok = canary_ok and trailing_median is not None and trailing_median < ZERO_MEDIAN_MAX
+        if not ok:
+            return None
     return result.value
 
 

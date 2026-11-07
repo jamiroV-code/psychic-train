@@ -134,3 +134,37 @@ def test_bad_symbol_rejected():
         ev.evidence_path(SRC, "../x")
     with pytest.raises(ValueError):
         ev.evidence_path("../src", "SOL")
+
+
+# --- finish plan contract C3: zero commit policy through commit_day (both live stores) ------------------------
+
+def zero() -> density.DayResult:
+    return density.DayResult(0.0, 0, 24.0, False, False)
+
+
+def test_default_policy_unchanged_for_zero():
+    assert commit(res=zero(), canary_ok=True, trailing_median=2.0) is True
+    assert commit(symbol="ETH", res=zero(), canary_ok=True, trailing_median=None) is False
+    assert nothing_stored("ETH")
+
+
+@pytest.mark.parametrize("src", ["reddit_live_browser", "reddit_live_gql"])
+@pytest.mark.parametrize("canary,history,want", [(True, True, True), (True, False, False), (False, True, False)])
+def test_positive_history_policy_table(src, canary, history, want):
+    got = ev.commit_day(src, "SOL", DAY, zero(), canary_ok=canary, trailing_median=None, now=NOW, method="m",
+                        zero_policy="positive_history", history_ok=history)
+    assert got is want
+    assert (store.read_points(src, "SOL") == [(DAY, 0.0)]) is want
+    assert (DAY in ev.read_rows(src, "SOL")) is want
+
+
+def test_positive_history_policy_keeps_first_write_wins_and_restoration():
+    kw = dict(canary_ok=True, trailing_median=None, now=NOW, method="m", zero_policy="positive_history",
+              history_ok=True)
+    src = "reddit_live_gql"
+    assert ev.commit_day(src, "SOL", DAY, zero(), **kw) is True
+    assert ev.commit_day(src, "SOL", DAY, result(5.0), **kw) is False
+    assert store.read_points(src, "SOL") == [(DAY, 0.0)]
+    store.store_path(src, "SOL").unlink()  # crash between the evidence row and the value
+    assert ev.commit_day(src, "SOL", DAY, result(5.0), **kw) is True
+    assert store.read_points(src, "SOL") == [(DAY, 0.0)]

@@ -72,11 +72,13 @@ def _write_value(source: str, symbol: str, day: date, value: float, now: datetim
 
 
 def commit_day(source: str, symbol: str, day: date, result: density.DayResult | None, *, canary_ok: bool,
-               trailing_median: float | None, now: datetime, method: str, backfilled: bool = False) -> bool:
+               trailing_median: float | None, now: datetime, method: str, backfilled: bool = False,
+               zero_policy: str = "trailing_median", history_ok: bool = False) -> bool:
     """Store one completed coin-day and its evidence row; return True when something new was written.
 
-    `canary_ok` and `trailing_median` have no default, so no caller can skip the zero rule. Nothing is written
-    for a missing day, a rejected zero, a day not yet complete or a day already stored.
+    `canary_ok` and `trailing_median` have no default, so no caller can skip the zero rule. `zero_policy` and
+    `history_ok` select the zero rule (`density.finalize`, contract C3); the default is the AC3 rule. Nothing is
+    written for a missing day, a rejected zero, a day not yet complete or a day already stored.
     """
     if not density.storable(day, now):
         return False
@@ -89,7 +91,8 @@ def commit_day(source: str, symbol: str, day: date, result: density.DayResult | 
         return _write_value(source, symbol, day, rows[day].value, now)
     if day in stored:
         return False
-    value = density.finalize(result, canary_ok=canary_ok, trailing_median=trailing_median)
+    value = density.finalize(result, canary_ok=canary_ok, trailing_median=trailing_median, zero_policy=zero_policy,
+                             history_ok=history_ok)
     if result is None or not _storable_value(value):
         return False
     rows[day] = EvidenceRow(day, float(value), result.n, result.span_hours, result.capped, result.pagecap,

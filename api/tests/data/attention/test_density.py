@@ -116,3 +116,45 @@ def test_bad_config_rejected():
         d.day_value(DAY, [], n_target=10, n_min=20, window_start_reached=True)
     with pytest.raises(ValueError):
         d.day_value(DAY, [], n_target=0, n_min=0, window_start_reached=True)
+
+
+# --- finish plan contract C3: the zero commit policy ---------------------------------------------------------
+
+ZERO_TABLE = [  # (canary_ok, trailing_median, history_ok, capped, pagecap) -> trailing_median, positive_history
+    ((True, 2.0, False, False, False), (0.0, None)),
+    ((True, 2.0, True, False, False), (0.0, 0.0)),
+    ((True, None, True, False, False), (None, 0.0)),
+    ((True, 50.0, True, False, False), (None, 0.0)),
+    ((False, 2.0, True, False, False), (None, None)),
+    ((True, 2.0, True, True, False), (0.0, None)),
+    ((True, 2.0, True, False, True), (0.0, None)),
+]
+
+
+@pytest.mark.parametrize("args,want", ZERO_TABLE)
+def test_zero_policy_table(args, want):
+    canary, median, history, capped, pagecap = args
+    zero = d.DayResult(0.0, 0, 24.0, capped, pagecap)
+    assert d.finalize(zero, canary_ok=canary, trailing_median=median, history_ok=history) == want[0]  # default
+    assert d.finalize(zero, canary_ok=canary, trailing_median=median, zero_policy="trailing_median",
+                      history_ok=history) == want[0]
+    assert d.finalize(zero, canary_ok=canary, trailing_median=median, zero_policy="positive_history",
+                      history_ok=history) == want[1]
+
+
+def test_positive_policy_keeps_positive_values_and_rejects_bad_ones():
+    some = d.DayResult(3.0, 3, 24.0, False, False)
+    assert d.finalize(some, canary_ok=False, trailing_median=None, zero_policy="positive_history") == 3.0
+    for bad in (float("nan"), -1.0, float("inf")):
+        assert d.finalize(d.DayResult(bad, 0, 24.0, False, False), canary_ok=True, trailing_median=0.0,
+                          zero_policy="positive_history", history_ok=True) is None
+    assert d.finalize(None, canary_ok=True, trailing_median=0.0, zero_policy="positive_history",
+                      history_ok=True) is None
+
+
+def test_unknown_zero_policy_rejected():
+    with pytest.raises(ValueError):
+        d.finalize(d.DayResult(1.0, 1, 24.0, False, False), canary_ok=True, trailing_median=None, zero_policy="x")
+    # history_ok must be the bool True, not a truthy value
+    assert d.finalize(d.DayResult(0.0, 0, 24.0, False, False), canary_ok=True, trailing_median=None,
+                      zero_policy="positive_history", history_ok=1) is None

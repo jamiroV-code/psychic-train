@@ -23,17 +23,31 @@ FETCHERS = {
 EXCLUDED_SOURCES = {"hyperliquid_volume": "same volume group as exchange_volume"}
 
 # Weighted Discovery source -> the methods (stores) that can feed it (SPEC AC14, Annex B). The first is the
-# official-API store fetched on GitHub; the others are written by the PC worker. Each is its own series.
-SOURCE_IMPLS = {"xsearch": ("xsearch", "xsearch_web"), "reddit": ("reddit", "reddit_web", "reddit_stream")}
-# Stores written by the in-API PC worker on the owner's host (W8c, W8c2, W8d, W8e). They have no separate probe
-# step: a stored file is itself the evidence that the worker ran there, so the probe-record gate does not apply.
-PC_STORES = frozenset({"xsearch_web", "reddit_web", "reddit_stream"})
+# official-API store fetched on GitHub; the others are written by the PC worker. Each is its own series; a window
+# reads one method only (`reddit_stream.pick_impl`), so the Reddit live methods are never mixed with the feeds.
+SOURCE_IMPLS = {"xsearch": ("xsearch", "xsearch_web"),
+                "reddit": ("reddit", "reddit_web", "reddit_stream", "reddit_live_browser", "reddit_live_gql")}
+# Stores written by the in-API PC worker on the owner's host (W8c, W8c2, W8d, W8e, finish plan RC-1). They have no
+# separate probe step: a stored file is itself the evidence that the worker ran there, so the probe-record gate
+# does not apply.
+PC_STORES = frozenset({"xsearch_web", "reddit_web", "reddit_stream", "reddit_live_browser", "reddit_live_gql"})
 
 # Spot exchange volume (Binance, Coinbase, Kraken) and DefiLlama fees, fetched daily by the PC worker
 # `spot_volume_refresh`: same reasoning, a stored file is the evidence. Unlike PC_STORES these are plain registry
 # series (fetch side `github`).
 WORKER_FETCHED_STORES = frozenset({"exchange_volume", "coinbase_volume", "kraken_volume", "defillama"})
 PROBE_EXEMPT = PC_STORES | WORKER_FETCHED_STORES
+
+# Known-lag per method (finish plan contract C4): a point counts as known at collection time only when its evidence
+# row was collected no later than this many days after its day. Every source, the live methods included, uses 1;
+# the history consumer (`discovery_history`) reads the same map through `known_lag_days`.
+DEFAULT_KNOWN_LAG_DAYS = 1
+KNOWN_LAG_DAYS = {"reddit_live_browser": 1, "reddit_live_gql": 1}
+
+
+def known_lag_days(source: str) -> int:
+    return KNOWN_LAG_DAYS.get(source, DEFAULT_KNOWN_LAG_DAYS)
+
 
 PROBE_RECORDS_PATH = Path(__file__).with_name("probe_records.json")
 
@@ -48,15 +62,17 @@ def load_probe_records(path: Path | None = None) -> dict:
 
 def _known_at_time(source: str, symbol: str, pts: list[tuple[date, float]]) -> list[tuple[date, float]]:
     """Drop points not known on the day after them (SPEC AC5, Annex B): an evidence row flagged `backfilled`, or
-    one collected after D+1. Points without an evidence row (sources with no sidecar) are kept."""
+    one collected later than the method's known-lag (`known_lag_days`, 1) after D. Points without an evidence row
+    (sources with no sidecar) are kept."""
     try:
         rows = web_evidence.read_rows(source, symbol)
     except (OSError, ValueError, KeyError, TypeError):
         return pts
+    lag = known_lag_days(source)
     out = []
     for d, v in pts:
         r = rows.get(d)
-        if r is not None and (r.backfilled or r.collected_at.date() > d + timedelta(days=1)):
+        if r is not None and (r.backfilled or r.collected_at.date() > d + timedelta(days=lag)):
             continue
         out.append((d, v))
     return out

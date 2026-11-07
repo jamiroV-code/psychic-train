@@ -1,7 +1,8 @@
-"""W8c guards for the Reddit collector modules (SPEC AC25, AC28, AC29, AC36; PLAN W8c).
+"""W8c guards for the Reddit collector modules (SPEC AC25, AC28, AC29, AC36; PLAN W8c; finish plan table H).
 
-Static checks over the explicit file list of the Reddit collector; a file whose slice has not landed yet (W8c2
-`reddit_stream.py`, W8c3 `reddit_engagement.py`) is skipped until it exists. Nothing is run against a provider.
+Static checks over every `reddit_*.py` and `browser_*.py` module under `api/data/attention/` (globs, so later Reddit
+and browser modules are scanned without list edits); each module that needs one has its own narrow exemption below.
+Nothing is run against a provider.
 """
 from __future__ import annotations
 
@@ -17,10 +18,14 @@ from api.tests.tooling_guards.test_pc_collector_guards import (
 )
 
 ATTENTION = API_DIR / "data" / "attention"
-REDDIT_FILES = [ATTENTION / f for f in
-                ("reddit_web.py", "reddit_items.py", "reddit_metrics.py", "reddit_stream.py", "reddit_engagement.py")]
+GLOBS = ("reddit_*.py", "browser_*.py")
 # Modules that may send HTTP through httpx (the connector and its later siblings); the ledger and metrics stay pure.
 HTTP_ALLOWED = {"reddit_web.py", "reddit_stream.py", "reddit_engagement.py"}
+# Pure modules of the Reddit live core (finish plan S-RCore-A): no network import at all.
+LIVE_CORE_PURE = {"reddit_core.py", "reddit_surface.py", "reddit_live.py"}
+# Narrow exemption: `reddit_core.py` resolves the `LiveMethod` factory table by lazy `importlib.import_module`
+# (RC-9), exactly once; nothing else in it may import or run code by name.
+FACTORY_IMPORT = {"reddit_core.py": 1}
 BROWSER_UA = re.compile(r"Mozilla/|AppleWebKit|Chrome/\d|Safari/\d|Gecko/|Firefox/|Edg/|OPR/", re.IGNORECASE)
 REDDIT_JSON = re.compile(r"reddit\.com\S*\.json|search\.json|/\.json|\.json\?|oauth\.reddit|api\.reddit|/api/v1/"
                          r"|old\.reddit")
@@ -32,7 +37,7 @@ LOG_METHODS = {"debug", "info", "warning", "error", "exception", "critical"}
 
 
 def present() -> list[Path]:
-    return [p for p in REDDIT_FILES if p.exists()]
+    return sorted({p for g in GLOBS for p in ATTENTION.glob(g)})
 
 
 def offenders(text: str) -> list[str]:
@@ -58,9 +63,11 @@ def log_offenders(text: str) -> list[str]:
     return bad
 
 
-def test_file_list_is_explicit_and_w8c_files_exist():
+def test_file_globs_cover_w8c_and_the_live_core():
     names = {p.name for p in present()}
     assert {"reddit_web.py", "reddit_items.py", "reddit_metrics.py"} <= names
+    assert LIVE_CORE_PURE <= names
+    assert "reddit.py" not in names  # the official-API fetcher has its own guards
 
 
 def test_no_browser_ua_json_endpoint_archive_search_or_evasion():
@@ -86,13 +93,32 @@ def test_guard_fails_on_browser_ua_json_endpoint_or_archive_search_path(tmp_path
     assert offenders(clean) == []
 
 
+def _exempted(name: str, bad: list[str]) -> list[str]:
+    """Drop a module's narrow exemption: the factory table's one lazy `importlib` call (RC-9)."""
+    allowed = FACTORY_IMPORT.get(name, 0)
+    if not allowed:
+        return bad
+    dynamic = [b for b in bad if b.startswith("dynamic import or exec")]
+    rest = [b for b in bad if b != "importlib" and b not in dynamic]
+    return rest if len(dynamic) == allowed else bad
+
+
 def test_ledger_and_metrics_are_pure_and_connector_uses_httpx_only():
     for path in present():
-        bad = network_offenders(path.read_text(encoding="utf-8"))
+        bad = _exempted(path.name, network_offenders(path.read_text(encoding="utf-8")))
         if path.name in HTTP_ALLOWED:
             assert set(bad) <= {"httpx", "urllib.parse"}, (path.name, bad)  # urllib.parse: string quoting only
         else:
             assert bad == [], (path.name, bad)
+
+
+def test_factory_exemption_is_narrow():
+    one = "import importlib\nm = importlib.import_module(name)\n"
+    assert _exempted("reddit_core.py", network_offenders(one)) == []
+    two = one + "n = importlib.import_module(other)\n"
+    assert _exempted("reddit_core.py", network_offenders(two))
+    assert _exempted("reddit_core.py", network_offenders(one + "import httpx\n")) == ["httpx"]
+    assert _exempted("reddit_live.py", network_offenders(one))
 
 
 def test_no_fixed_utc_hour_in_reddit_modules():

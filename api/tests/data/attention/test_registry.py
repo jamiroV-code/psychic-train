@@ -96,3 +96,40 @@ def test_reader_makes_no_network(attention_cache, tmp_path, monkeypatch):
     p = tmp_path / "probe.json"
     p.write_text("{}")
     registry.read_series("wikipedia", "BTC", today=TODAY, probe_path=p)
+
+
+# --- finish plan RC-1, contract C4 -------------------------------------------------------------------------------
+
+def test_live_methods_are_reddit_pc_stores_after_the_feeds():
+    assert registry.SOURCE_IMPLS["reddit"] == ("reddit", "reddit_web", "reddit_stream", "reddit_live_browser",
+                                               "reddit_live_gql")
+    assert registry.SOURCE_IMPLS["xsearch"] == ("xsearch", "xsearch_web")
+    assert {"reddit_live_browser", "reddit_live_gql"} <= registry.PC_STORES <= registry.PROBE_EXEMPT
+
+
+def test_known_lag_default_one_for_every_source():
+    for s in ("wikipedia", "xsearch_web", "reddit_stream", "reddit_live_browser", "reddit_live_gql"):
+        assert registry.known_lag_days(s) == 1
+
+
+def _live_point(source, day, collected, value=4.0, backfilled=False):
+    from datetime import datetime, time, timezone
+
+    from api.data.attention import density, web_evidence
+    now = datetime.combine(collected, time(1), tzinfo=timezone.utc)
+    web_evidence.commit_day(source, "SOL", day, density.DayResult(value, int(value), 24.0, False, False),
+                            canary_ok=True, trailing_median=None, now=now, method="m", backfilled=backfilled)
+
+
+def test_known_at_time_honours_the_lag_map_for_live_stores(attention_cache, monkeypatch):
+    src = "reddit_live_browser"
+    d1, d2, d3 = (TODAY - timedelta(days=k) for k in (5, 4, 3))
+    _live_point(src, d1, d1 + timedelta(days=1))  # known on D+1
+    _live_point(src, d2, d2 + timedelta(days=2))  # collected late
+    _live_point(src, d3, d3 + timedelta(days=1), backfilled=True)
+    s = registry.read_series(src, "SOL", today=TODAY, known_at_time=True)
+    assert [d for d, _ in s.points] == [d1]
+    monkeypatch.setitem(registry.KNOWN_LAG_DAYS, src, 2)
+    s = registry.read_series(src, "SOL", today=TODAY, known_at_time=True)
+    assert [d for d, _ in s.points] == [d1, d2]
+    assert registry.read_series(src, "SOL", today=TODAY).state == "insufficient-history"  # no probe record needed
