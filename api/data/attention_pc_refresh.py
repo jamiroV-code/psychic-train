@@ -67,6 +67,7 @@ from pathlib import Path
 from api.data import cache
 from api.data.attention import (
     collector_heartbeat,
+    daily_facts,
     pc_adapter,
     pc_pace,
     reddit_items,
@@ -257,6 +258,23 @@ class Stream:
         return None
 
     rotation = False
+    _snapshot_day: date | None = None
+
+    def _snapshot(self, q: web_queries.Queries, syms: list[str]) -> None:
+        """Contract D: the day's universe for this stream's Discovery source, once per UTC day (never stops a pass)."""
+        now = _utc(self.worker.clock())
+        if self._snapshot_day == now.date():
+            return
+        x = self.source == X_SOURCE
+        amb = q.ambiguous[X_SOURCE if x else REDDIT_SOURCE]
+        try:
+            daily_facts.write_universe_snapshot(
+                now.date(), "xsearch" if x else "reddit", eligible_symbols=[s for s in syms if s not in amb],
+                ambiguous_symbols=sorted(amb & set(q.coins)), now=now, switches=x_pool.facts_switches(q.config),
+                method_order=[X_SOURCE] if x else list(q.config.reddit_impl_order))
+            self._snapshot_day = now.date()
+        except Exception as exc:  # noqa: BLE001 - facts never stop collection
+            log.warning("attention pc %s universe snapshot skipped: %s", self.source, type(exc).__name__)
 
     def _health_schedule(self, q, src, syms) -> None:
         """Persist the actual scheduling mode and upper interval, never a consumer-side guess."""
@@ -386,6 +404,7 @@ class Stream:
                 log.warning("attention pc %s state unreadable: source paused, file kept", self.source)
                 return "state_error"
             syms = self._symbols(q)
+            self._snapshot(q, syms)
             control_reason = self._control(q, src)
             if control_reason is not None:
                 return control_reason
@@ -919,7 +938,7 @@ class AttentionPcWorker:
                  seed: int | None = None, discovery_path: Path | None = None,
                  ledger_retention_days: int = LEDGER_RETENTION_DAYS_DEFAULT, x_spread_over_day: bool = True,
                  x_rotation: bool = True, reddit_stream: bool | None = None,
-                 queries_path: Path | None = None):
+                 queries_path: Path | None = None, live_methods: Callable | None = None):
         self.clock = clock or _default_clock
         self.started_at = _utc(self.clock())  # refuses a naive clock
         if not isinstance(ledger_retention_days, int) or isinstance(ledger_retention_days, bool) \
@@ -950,6 +969,11 @@ class AttentionPcWorker:
         self.threads: dict[str, threading.Thread] = {}
         kinds = {X_SOURCE: XStream, REDDIT_SOURCE: RedditStream}
         self.streams: dict[str, Stream] = {s: kinds[s](self, s, random.Random(seed)) for s in pc_sources(discovery_path)}
+        if REDDIT_SOURCE in self.streams:  # S-RCore-B: one stream per enabled live method; none named: unchanged
+            from api.data import attention_pc_live  # lazy: it subclasses `Stream`
+            from api.data.attention import reddit_core
+            self.streams.update(attention_pc_live.build(self, live_methods or reddit_core.resolve_methods,
+                                                        random.Random(seed)))
 
     def mode(self, now: datetime) -> str:
         """`baseline` when up since before 00:00 UTC of `now`'s day, else `degraded` (host uptime, never an hour)."""

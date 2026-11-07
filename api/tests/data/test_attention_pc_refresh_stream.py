@@ -24,7 +24,7 @@ import pytest
 from api.data import attention_pc_refresh as apr
 from api.data import cache
 from api.data.attention import pc_adapter as pa
-from api.data.attention import pc_pace, reddit_items, store, web_evidence
+from api.data.attention import daily_facts, pc_pace, reddit_core, reddit_items, reddit_live, store, web_evidence
 from api.data.attention import reddit_stream as rs
 from api.data.attention import reddit_web as rw
 from api.data.attention import web_queries as wq
@@ -1291,3 +1291,251 @@ def test_logs_hold_no_url_subreddit_id_or_author_with_stream_on(caplog, monkeypa
     text = "\n".join(r.getMessage() for r in caplog.records if r.name.startswith("api."))
     for bad in ("reddit.com", "CryptoCurrency", "t1_", "t3_", "/u/", "after="):
         assert bad not in text, bad
+
+
+# --- S-RCore-B: each enabled live Reddit method is its own stream (fake methods, virtual clock) ---------------------
+
+class FakeLive:
+    """A `reddit_live.LiveMethod` on the fake clock: one complete (or `stop`) posts lane per subreddit per poll."""
+
+    def __init__(self, name, clock, *, gate="ready", stop="exhausted", requests=3, due=None):
+        self.name, self.clock, self.gate, self.stop, self.requests, self.due = name, clock, gate, stop, requests, due
+        self.store = reddit_core.STORES[name]
+        self.method_id, self.label = reddit_core.METHOD_IDS[self.store], reddit_core.LABELS[name]
+        self.ctxs, self.closed = [], False
+
+    def gate_state(self, now):
+        return self.gate
+
+    def next_poll_due(self, now):
+        return self.due
+
+    def run_poll(self, ctx):
+        self.ctxs.append(ctx)
+        now, pid = self.clock(), f"p{len(self.ctxs)}"
+        lanes = tuple(reddit_live.LaneEvidence(s, "posts", pid, now, ctx.floors[s], now, ctx.floors[s], 1, 1, (),
+                                               self.stop) for s in ctx.subreddits)
+        return reddit_live.PollResult(pid, now, lanes, (), self.requests, navigations=1)
+
+    def close(self):
+        self.closed = True
+
+
+def live(clock, names=("gql_anon",), *, q=None, **fake_kw):
+    """A worker with `names` enabled through an injected factory; returns the worker, the fakes and the deps seen."""
+    fakes, seen = {}, []
+
+    def factory(config, deps):
+        seen.append(deps)
+        fakes.update({n: FakeLive(n, clock, **fake_kw) for n in config.reddit_live_methods})
+        return dict(fakes)
+
+    q = q or queries(reddit_live_methods=tuple(names))
+    w, _ = make(clock, stream=False, q=q, live_methods=factory)
+    return w, fakes, seen
+
+
+def live_health(store_id: str) -> dict:
+    path = cache.CACHE_ROOT / "attention" / "_pc_state" / "reddit_live" / f"{store_id}_health.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_no_live_method_leaves_streams_unchanged_and_resolves_nothing():
+    def factory(config, deps):
+        raise AssertionError("no live method is named: nothing is resolved")
+
+    w, _ = make(Clock(), stream=False, live_methods=factory)
+    assert list(w.streams) == apr.pc_sources()
+    assert not (cache.CACHE_ROOT / "attention" / "_pc_state" / "reddit_live").exists()
+
+
+def test_enabled_live_method_gets_its_own_stream_lock_and_thread_name():
+    w, fakes, seen = live(Clock(), ("browser", "gql_anon"))
+    assert list(w.streams) == [*apr.pc_sources(), "reddit_live_browser", "reddit_live_gql"]
+    a, b = w.streams["reddit_live_browser"], w.streams["reddit_live_gql"]
+    assert a.method is fakes["browser"] and b.method is fakes["gql_anon"]
+    locks = [a.lock, b.lock, *apr.PASS_LOCKS.values()]
+    assert len({id(lk) for lk in locks}) == len(locks)
+    assert seen and seen[0].clock is w.clock
+
+
+def test_enable_then_disable_at_restart():
+    clock = Clock()
+    w, _, _ = live(clock)
+    assert "reddit_live_gql" in w.streams
+    w2, _ = make(clock, stream=False, q=queries(), live_methods=lambda c, d: (_ for _ in ()).throw(AssertionError()))
+    assert "reddit_live_gql" not in w2.streams and list(w2.streams) == apr.pc_sources()
+
+
+def test_live_methods_need_the_reddit_pc_side(tmp_path):
+    path = tmp_path / "discovery.json"
+    path.write_text(json.dumps({"fetch_side": {"reddit": "github"}}), encoding="utf-8")
+    w, _ = make(Clock(), stream=False, q=queries(reddit_live_methods=("gql_anon",)), discovery_path=path,
+                live_methods=lambda c, d: {"gql_anon": FakeLive("gql_anon", Clock())})
+    assert not any(s.startswith("reddit_live") for s in w.streams)
+
+
+def test_live_pass_polls_records_and_writes_health_and_facts():
+    clock = Clock()
+    w, fakes, _ = live(clock)
+    s = w.streams["reddit_live_gql"]
+    assert s.schedule() == T0
+    assert s.run_pass() == "polled"
+    ctx = fakes["gql_anon"].ctxs[0]
+    assert reddit_core.CANARY_SUBREDDIT in ctx.subreddits and ctx.requests_left == 600
+    assert reddit_live.read_lanes("reddit_live_gql", T0.date(), T0.date())
+    assert reddit_live.read_state("reddit_live_gql", T0)["requests"] == 3
+    h = live_health("reddit_live_gql")
+    assert h["state"] == "ok" and h["reason"] is None and h["comments_scope"] == "threads_opened"
+    assert h["requests_today"] == 3 and h["cap"] == 600
+    events = daily_facts.read_events(T0.date())
+    polls = [e for e in events if e["kind"] == "poll_result"]
+    assert polls == [dict(polls[0], source="reddit", method="reddit_live_gql", account=None, navigations=1,
+                          lanes=len(ctx.subreddits), stop_reason="exhausted")]
+    assert [e["requests"] for e in events if e["kind"] == "request_counter" and e["method"] == "reddit_live_gql"] == [3]
+    snap = daily_facts.read_universe_snapshot(T0.date(), "reddit")
+    assert snap["method_order"] == list(queries().config.reddit_impl_order)
+
+
+def test_live_schedule_spaces_polls_by_polls_per_day_and_method_due():
+    clock = Clock()
+    w, fakes, _ = live(clock)
+    s = w.streams["reddit_live_gql"]
+    s.run_pass()
+    assert s.schedule("polled") == T0 + timedelta(seconds=apr.DAY_S / 6)
+    fakes["gql_anon"].due = T0 + timedelta(hours=7)
+    assert s.schedule("polled") == T0 + timedelta(hours=7)
+    clock.t = T0 + timedelta(hours=1)
+    assert s.run_pass() == "not_due"
+    assert len(fakes["gql_anon"].ctxs) == 1
+
+
+@pytest.mark.parametrize("gate,state,reason,wait", [
+    ("needs_probe", "needs_probe", "needs_probe", apr.RECHECK_SECONDS),
+    ("no_ready_account", "blocked", "no_ready_account", apr.RECHECK_SECONDS),
+    ("method_unavailable", "blocked", "method_unavailable", None),
+    ("disabled", "disabled", "method_disabled", None),
+])
+def test_gate_not_ready_never_polls(gate, state, reason, wait):
+    clock = Clock()
+    w, fakes, _ = live(clock, gate=gate)
+    s = w.streams["reddit_live_gql"]
+    assert s.run_pass() == gate
+    assert fakes["gql_anon"].ctxs == []
+    h = live_health("reddit_live_gql")
+    assert (h["state"], h["reason"]) == (state, reason)
+    due = s.schedule(gate)
+    assert due == (apr._next_day(T0) if wait is None else T0 + timedelta(seconds=wait))
+
+
+def test_unresolvable_method_is_its_own_unavailable_stream():
+    w, _ = make(Clock(), stream=False, q=queries(reddit_live_methods=("gql_anon",)),
+                live_methods=lambda c, d: reddit_core.resolve_methods(c, d, table={"gql_anon": "api.nope:make"}))
+    s = w.streams["reddit_live_gql"]
+    assert isinstance(s.method, reddit_core.UnavailableMethod)
+    assert s.run_pass() == "method_unavailable"
+
+
+def test_breaker_after_three_failed_polls_waits_for_next_day():
+    clock = Clock()
+    w, fakes, _ = live(clock, stop="error")
+    s = w.streams["reddit_live_gql"]
+    for i in range(3):
+        clock.t = T0 + timedelta(hours=4 * i + 1)
+        assert s.run_pass() == "polled"
+    clock.t = T0 + timedelta(hours=13)
+    assert s.run_pass() == "breaker"
+    assert len(fakes["gql_anon"].ctxs) == 3
+    assert s.schedule("breaker") == apr._next_day(clock.t)
+    assert live_health("reddit_live_gql")["state"] == "degraded"
+
+
+def test_request_cap_stops_polls_until_next_day():
+    clock = Clock()
+    w, fakes, _ = live(clock, q=queries(reddit_live_methods=("gql_anon",), reddit_live_gql_daily_request_cap=50),
+                       requests=30)
+    s = w.streams["reddit_live_gql"]
+    assert s.run_pass() == "polled"
+    clock.t += timedelta(hours=5)
+    assert s.run_pass() == "polled"
+    clock.t += timedelta(hours=5)
+    assert s.run_pass() == "request_cap"
+    assert len(fakes["gql_anon"].ctxs) == 2
+    assert s.schedule("request_cap") == apr._next_day(clock.t)
+    h = live_health("reddit_live_gql")
+    assert (h["state"], h["reason"], h["requests_today"], h["cap"]) == ("degraded", "request_cap", 60, 50)
+
+
+def test_browser_cap_counts_navigations():
+    clock = Clock()
+    q = queries(reddit_live_methods=("browser",), reddit_browser_daily_navigation_cap=50)
+    w, fakes, _ = live(clock, ("browser",), q=q)
+    s = w.streams["reddit_live_browser"]
+    assert s.run_pass() == "polled"
+    assert fakes["browser"].ctxs[0].requests_left == 50
+    h = live_health("reddit_live_browser")
+    assert (h["requests_today"], h["cap"]) == (1, 50)
+
+
+def seed_live_poll(fake, when):
+    """One recorded poll at `when` (the method observed that day)."""
+    lane = reddit_live.LaneEvidence("CryptoCurrency", "posts", "seed", when, when - timedelta(hours=1), when, when,
+                                    1, 1, (), "exhausted")
+    reddit_live.record_poll(fake.store, reddit_live.PollResult("seed", when, (lane,), (), 0))
+
+
+def test_pass_commits_completed_days_and_reports_lane_coverage(monkeypatch):
+    clock = Clock()
+    w, fakes, _ = live(clock)
+    seed_live_poll(fakes["gql_anon"], datetime(2026, 10, 25, 12, tzinfo=timezone.utc))
+    calls = []
+
+    def commit(store_id, day, q, *, now, subreddits):
+        calls.append((store_id, day, tuple(subreddits)))
+        return {"posts_coverage": {"a": 1.0, "b": 0.5}, "comments_coverage": 0.25, "settled": False}
+
+    monkeypatch.setattr(reddit_live, "commit_day", commit)
+    w.streams["reddit_live_gql"].run_pass()
+    assert [c[1] for c in calls] == [YESTERDAY - timedelta(days=1), YESTERDAY]
+    assert all(c[0] == "reddit_live_gql" for c in calls)
+    assert live_health("reddit_live_gql")["lanes"] == {"posts": 0.5, "comments": 0.25}
+
+
+def test_settled_day_is_not_recommitted(monkeypatch):
+    clock = Clock()
+    w, fakes, _ = live(clock)
+    seed_live_poll(fakes["gql_anon"], datetime(2026, 10, 25, 12, tzinfo=timezone.utc))
+    path = reddit_live.completeness_path("reddit_live_gql", YESTERDAY)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"settled": True, "coins": {}}), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(reddit_live, "commit_day", lambda s, d, q, **k: calls.append(d))
+    w.streams["reddit_live_gql"].run_pass()
+    assert calls == [YESTERDAY - timedelta(days=1)]
+
+
+def test_live_stream_holds_its_lock_and_close_closes_method():
+    clock = Clock()
+    w, fakes, _ = live(clock)
+    s = w.streams["reddit_live_gql"]
+    with s.lock:
+        assert s.run_pass() == "locked"
+    assert s.schedule("locked") == T0 + timedelta(seconds=apr.LOCKED_RETRY_SECONDS)
+    with apr.PASS_LOCKS[R]:
+        assert s.run_pass() == "polled"  # never waits for the feed stream
+    w.stop()
+    assert fakes["gql_anon"].closed
+
+
+def test_live_drive_over_a_day_polls_about_polls_per_day():
+    clock = Clock(datetime(2026, 10, 27, 0, 30, tzinfo=timezone.utc))
+    w, fakes, _ = live(clock)
+    s, outcome = w.streams["reddit_live_gql"], None
+    until = datetime(2026, 10, 28, tzinfo=timezone.utc)
+    for _ in range(50):
+        due = s.schedule(outcome)
+        if due >= until:
+            break
+        clock.t = max(clock.t, due)
+        outcome = s.run_pass()
+    assert len(fakes["gql_anon"].ctxs) == 6

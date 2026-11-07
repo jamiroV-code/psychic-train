@@ -169,6 +169,29 @@ def test_runner_runs_both_streams_until_stopped_then_cleans_up():
                 if getattr(h, "attention_pc", False)]
 
 
+def test_runner_runs_an_enabled_live_method_on_its_own_thread_and_closes_it():
+    import dataclasses
+
+    from api.data.attention import reddit_core
+
+    kwargs = _worker_kwargs()
+    q = kwargs["queries"]()
+    q = dataclasses.replace(q, config=dataclasses.replace(q.config, reddit_live_methods=("gql_anon",)))
+    kwargs["queries"] = lambda: q
+    made = []
+
+    def factory(config, deps):
+        made.append(reddit_core.UnavailableMethod("gql_anon"))
+        made[-1].close = lambda: made.append("closed")
+        return {"gql_anon": made[0]}
+
+    t, stop, out = _run_in_thread(env=FLAG_ON, live_methods=factory, **kwargs)
+    assert wait_for(lambda: "attention-pc-reddit_live_gql" in _threads())
+    stop.set()
+    t.join(30)
+    assert not t.is_alive() and out["code"] == ac.EXIT_OK and "closed" in made and _threads() == []
+
+
 def test_runner_refuses_second_instance(monkeypatch):
     plant_other()
     other_alive(monkeypatch)

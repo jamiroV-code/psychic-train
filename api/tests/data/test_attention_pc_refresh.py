@@ -368,6 +368,38 @@ def test_x_and_reddit_streams_have_separate_locks():
     assert reader.coin_units()
 
 
+def test_universe_snapshot_once_per_source_per_utc_day():
+    from api.data.attention import daily_facts
+
+    clock = Clock()
+    q = queries()
+    w, _reader, _reddit = make(clock, q=q)
+    for _ in range(2):
+        clock.t = T0
+        w.streams[R].run_pass(stop_at=T0 + timedelta(minutes=5))
+        clock.t = T0
+        w.streams[X].run_pass(stop_at=T0 + timedelta(minutes=5))
+    events = [e for e in daily_facts.read_events(T0.date()) if e["kind"] == "universe_snapshot"]
+    assert sorted(e["source"] for e in events) == ["reddit", "xsearch"]
+    reddit = daily_facts.read_universe_snapshot(T0.date(), "reddit")
+    assert reddit["method_order"] == list(q.config.reddit_impl_order)
+    assert set(reddit["eligible_symbols"]) == set(COINS) - q.ambiguous[R]
+    assert daily_facts.read_universe_snapshot(T0.date(), "xsearch")["method_order"] == [X]
+    clock.t = MIDNIGHT + timedelta(hours=1)
+    w.streams[R].run_pass(stop_at=clock.t + timedelta(minutes=5))
+    assert daily_facts.read_universe_snapshot(MIDNIGHT.date(), "reddit") is not None
+
+
+def test_universe_snapshot_failure_never_stops_a_pass(monkeypatch):
+    from api.data.attention import daily_facts
+
+    monkeypatch.setattr(daily_facts, "write_universe_snapshot", lambda *a, **k: (_ for _ in ()).throw(OSError()))
+    clock = Clock()
+    w, _reader, reddit = make(clock)
+    assert w.streams[R].run_pass(stop_at=T0 + timedelta(minutes=10)) == "host_stopped"
+    assert reddit.searches
+
+
 def test_no_unit_before_min_delay_after_restart():
     clock = Clock()
     w, reader, _ = make(clock)
