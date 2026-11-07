@@ -918,6 +918,76 @@ class TwscrapeReader:
         locks = {k: _aware(v) for k, v in (acc.locks or {}).items()}
         return xr.PoolRow(bool(acc.active), acc.error_msg, locks, _aware(acc.last_used))
 
+
+    def ordinary(self, op: str, target: str, *, on_page: Callable[[int], None]) -> None:
+        """One pinned ordinary page, never a high-level generator or QueueClient retry loop.
+
+        The callback runs before response classification. No result enters the coin archive or ledger.
+        The existing identity-bound client supplies transport and cookies; queue cleanup stays upstream.
+        """
+        operations = {
+            "user_by_login": "AMIBMjtxEEATh4z8V9GtRg/UserByScreenName",
+            "tweet_details": "wjV7NuWEsHgTBFfW3zYKzQ/TweetDetail",
+            "user_tweets": "OdBLACRZ0-9NikpJotaT7g/UserTweets",
+        }
+        if op not in operations or not isinstance(target, str) or not re.fullmatch(
+                r"[A-Za-z0-9_]{1,15}" if op == "user_by_login" else r"[0-9]{1,20}", target):
+            raise ValueError("ordinary operation or target refused")
+        async def single_page():
+            from twscrape.api import GQL_FEATURES, ARTICLE_FIELD_TOGGLES
+            from twscrape.queue_client import QueueClient, XClIdGenStore
+
+            operation = operations[op]
+            path = "/i/api/graphql/" + operation
+            if op == "user_by_login":
+                variables = {"screen_name": target, "withSafetyModeUserFields": True}
+            elif op == "tweet_details":
+                variables = {"focalTweetId": target, "with_rux_injections": True,
+                             "includePromotedContent": True, "withCommunity": True,
+                             "withQuickPromoteEligibilityTweetFields": True, "withBirdwatchNotes": True,
+                             "withVoice": True, "withV2Timeline": True}
+            else:
+                variables = {"userId": target, "count": 20, "includePromotedContent": True,
+                             "withQuickPromoteEligibilityTweetFields": True, "withVoice": True,
+                             "withV2Timeline": True}
+            params = {"variables": json.dumps(variables), "features": json.dumps(GQL_FEATURES)}
+            if op == "tweet_details":
+                params["fieldToggles"] = json.dumps(ARTICLE_FIELD_TOGGLES)
+            async with QueueClient(self._api.pool, operation.split("/")[1], False) as client:
+                ctx = await client._get_ctx()
+                if ctx is None:
+                    raise xr.ReaderFailure("no_account")
+                gen = await XClIdGenStore.get(ctx.acc.username, proxy=ctx.proxy, cookies=ctx.acc.cookies)
+                ctx.req_count += 1
+                try:
+                    response = await ctx.clt.request("GET", "https://x.com" + path, params=params,
+                                                    headers={"x-client-transaction-id": gen.calc("GET", path)})
+                except Exception:
+                    on_page(0)
+                    raise
+                try:
+                    body = response.json()
+                except Exception:
+                    body = None
+                on_page(len(timeline_entry_ids(body)) if body is not None else 0)
+                if response.status_code == 404:  # an HTML 404 is still a 404 (pinned operation stale)
+                    raise xr.ReaderFailure("not_found")
+                if body is None:
+                    raise xr.ReaderFailure("parse")
+                errors = body.get("errors", []) if isinstance(body, dict) else []
+                codes = [e.get("code") for e in errors if isinstance(e, dict)
+                         and e.get("code") in xr.FAILURE_CODES]
+                if response.status_code >= 400 or errors:
+                    raise xr.ReaderFailure("api", status=response.status_code, codes=codes)
+        try:
+            if self._adapter is not None:
+                self._adapter.ensure_current(self.label)
+            self._run(single_page())
+        except Exception as exc:
+            failure = map_exception(exc, self._lib)
+        else:
+            return
+        raise failure from None
     def close(self) -> None:
         self._close_gen()
         self._loop.close()
@@ -961,7 +1031,8 @@ def query_hook_compatible() -> bool:
 def fallback_request(label: str, config_path: Path, query: str, kv: Mapping, *, cursor: str | None, query_id=None) -> dict:
     """Bounded work only; the child derives the DB from this explicitly selected config."""
     if (not x_pool.LABEL_RE.fullmatch(label) or not config_path.is_absolute()
-            or set(kv) != {"product"} or kv["product"] != "Latest"
+            or not set(kv) <= {"product", "count"} or kv.get("product") != "Latest"
+            or "count" in kv and (type(kv["count"]) is not int or kv["count"] not in (10, 20))
             or query_id is not None and (not isinstance(query_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{16,32}", query_id))
             or not isinstance(query, str) or not 0 < len(query.encode("utf-8")) <= 4096
             or cursor is not None and (not isinstance(cursor, str) or len(cursor.encode("utf-8")) > 4096)):
@@ -1447,9 +1518,9 @@ def _child_work(req: dict, env: Mapping[str, str]) -> dict:
         config = web_queries.validate(xp.strict_json(read_bounded(path, 1024 * 1024), limit=1024 * 1024)).config
         xp.require(not config.x_proxy_required and all(value is None for value in
             (config.x_proxy_list_path, config.x_proxy_assignments_path, config.x_proxy_policy_path)), "proxy_config")
-        xp.require(isinstance(req["kv"], dict) and set(req["kv"]) <= {"product", "cursor"}
+        xp.require(isinstance(req["kv"], dict) and set(req["kv"]) <= {"product", "cursor", "count"}
                    and req["backend"] == "curl", "proxy_config")
-        fallback_request(label, path, req["query"], {"product": req["kv"].get("product")},
+        fallback_request(label, path, req["query"], {k: v for k, v in req["kv"].items() if k != "cursor"},
                          cursor=req["kv"].get("cursor"), query_id=req["query_id"])
         db = Path(config.x_accounts_db_path) / f"{label}.db"
     xp.require(label in config.x_accounts and config.x_connection_style == "plain", "proxy_config")

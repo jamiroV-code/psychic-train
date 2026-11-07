@@ -168,3 +168,20 @@ def test_work_bounds_are_utf8_bytes_not_characters(tmp_path, query, cursor):
     request["kv"] = {"product": "Latest", "cursor": cursor}
     with pytest.raises(p.ProxyFailure):
         snapshot.verify(roles, request)
+
+
+def test_variation_count_is_authenticated_and_bounded(tmp_path):
+    roles, request = proof(tmp_path)
+    request["kv"]["count"] = 10
+    snapshot.attest(roles, request)
+    snapshot.verify(roles, request)
+    request["kv"]["count"] = 20
+    with pytest.raises(p.ProxyFailure):
+        snapshot.verify(roles, request)
+    for value in (None, True, 0, 11, 21, "10"):
+        request["kv"]["count"] = value
+        with pytest.raises(p.ProxyFailure):
+            snapshot.work_envelope(request)
+    request["kv"].pop("count")
+    with pytest.raises(p.ProxyFailure):
+        snapshot.verify(roles, request)

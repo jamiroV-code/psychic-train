@@ -387,6 +387,16 @@ def test_no_ua_override_or_proxy_with_curl(tmp_path):
             tr.fallback_request("acct1", config_path, QUERY, {"product": "Latest"}, cursor=None, query_id=bad)
 
 
+def test_fallback_request_accepts_only_variation_page_sizes(tmp_path):
+    config_path = tmp_path / "queries.json"
+    for size in (10, 20):
+        req = tr.fallback_request("acct1", config_path, QUERY, {"product": "Latest", "count": size}, cursor=None)
+        assert req["kv"] == {"product": "Latest", "count": size}
+    for bad in (0, 11, 21, True, "10", None):
+        with pytest.raises(ValueError):
+            tr.fallback_request("acct1", config_path, QUERY, {"product": "Latest", "count": bad}, cursor=None)
+
+
 def test_bind_query_id_sets_the_library_operation_before_requests_and_refuses_a_changed_hook(monkeypatch):
     import sys
     from types import ModuleType
@@ -1144,3 +1154,64 @@ def test_bind_query_restores_through_the_hook(lib, monkeypatch):
     s = tr.XStart({}, None, "flag_false")
     s.bind_query(CAND_ID)
     assert api.OP_SearchTimeline == CAND_ID + "/SearchTimeline"
+
+
+def test_ordinary_refuses_unapproved_operation_before_library_import():
+    reader = object.__new__(tr.TwscrapeReader)
+    with pytest.raises(ValueError):
+        reader.ordinary("home_timeline", "123", on_page=lambda n: None)
+
+
+@pytest.mark.parametrize("op,target,key", [
+    ("user_by_login", "public_name", "screen_name"),
+    ("tweet_details", "123", "focalTweetId"),
+    ("user_tweets", "456", "userId"),
+])
+@pytest.mark.parametrize("json_body", [True, False])
+def test_ordinary_is_one_bound_request_and_charges_before_status(op, target, key, json_body, monkeypatch):
+    calls = []
+    def body():
+        if not json_body:
+            raise ValueError("not json")  # an HTML 404 page is still a 404, never a parse failure
+        return {}
+    class Client:
+        async def request(self, method, url, **kwargs):
+            calls.append(("request", url, kwargs))
+            return types.SimpleNamespace(status_code=404, headers={}, json=body)
+    ctx = types.SimpleNamespace(acc=types.SimpleNamespace(username="acct1", cookies={}),
+                                proxy=None, clt=Client(), req_count=0)
+    class Queue:
+        def __init__(self, *args, **kwargs):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            calls.append(("closed",))
+        async def _get_ctx(self):
+            return ctx
+    class Store:
+        @classmethod
+        async def get(cls, *args, **kwargs):
+            return types.SimpleNamespace(calc=lambda *args: "transaction")
+    monkeypatch.setitem(sys.modules, "twscrape.queue_client",
+                        types.SimpleNamespace(QueueClient=Queue, XClIdGenStore=Store))
+    monkeypatch.setitem(sys.modules, "twscrape.api",
+                        types.SimpleNamespace(GQL_FEATURES={}, ARTICLE_FIELD_TOGGLES={}))
+    reader = object.__new__(tr.TwscrapeReader)
+    import asyncio
+    reader._loop = asyncio.new_event_loop()
+    reader._adapter = None
+    reader._api = types.SimpleNamespace(pool=object())
+    reader.label = "acct1"
+    reader._lib = make_lib()
+    try:
+        with pytest.raises(xr.ReaderFailure) as exc:
+            reader.ordinary(op, target, on_page=lambda n: calls.append(("charge", n)))
+        assert exc.value.kind == "not_found"
+        assert [c[0] for c in calls] == ["request", "charge", "closed"]
+        variables = json.loads(calls[0][2]["params"]["variables"])
+        assert variables[key] == target
+        if op == "user_tweets":
+            assert variables["count"] == 20
+    finally:
+        reader._loop.close()

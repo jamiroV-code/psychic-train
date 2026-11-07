@@ -114,9 +114,12 @@ def run_id(collected_at: datetime) -> int:
 def write_page(symbol: str, day: date, *, attempt: int, page: int, body: dict, entry_ids, retries: int,
                headers: Mapping, collected_at: datetime, parser_version: str, reader_version: str,
                reader_commit: str | None = None, backend: str = "default",
-               scrub_names: Mapping[str, str] | None = None, entry_times=()) -> Path:
+               scrub_names: Mapping[str, str] | None = None, entry_times=(),
+               requested_page_size: int | None = None) -> Path:
     if not (isinstance(attempt, int) and 1 <= attempt <= 99 and isinstance(page, int) and 0 <= page <= 99):
         raise ValueError("bad attempt or page")
+    if requested_page_size is not None and (type(requested_page_size) is not int or requested_page_size not in (10, 20)):
+        raise ValueError("bad requested page size")
     ids = [str(e) for e in entry_ids]
     rec = {"symbol": _symbol(symbol), "day": day.isoformat(), "attempt": attempt, "page": page,
            "collected_at": collected_at.astimezone(timezone.utc).isoformat(), "parser_version": parser_version,
@@ -124,6 +127,8 @@ def write_page(symbol: str, day: date, *, attempt: int, page: int, body: dict, e
            "entries": len(ids), "entry_ids": ids, "retries": int(retries), **_rate_numbers(headers),
            "entry_times": sorted(t.astimezone(timezone.utc).isoformat() for t in entry_times),
            "body": scrub(body, scrub_names)}
+    if requested_page_size is not None:
+        rec["requested_page_size"] = requested_page_size
     path = raw_dir(day, symbol) / f"r{run_id(collected_at)}_a{attempt}_p{page:02d}.json.gz"
     _atomic_bytes(gzip.compress(json.dumps(rec, sort_keys=True).encode("utf-8"), mtime=0), path)
     return path
@@ -191,7 +196,10 @@ def reparse(symbol: str, day: date, *, parse: Callable[[dict], list[x_filters.Tw
         return None
     read, seen, n_read, last, end, raw_times = [], set(), 0, None, None, []
     for rec in recs:
-        end = x_window.cursor_end(rec["entry_ids"], seen=seen, last_entries=last, page_size=x_window.PAGE_ENTRIES)
+        size = rec.get("requested_page_size", x_window.PAGE_ENTRIES)
+        if type(size) is not int or size not in (10, 20):
+            raise ValueError("bad archived requested page size")
+        end = x_window.cursor_end(rec["entry_ids"], seen=seen, last_entries=last, page_size=size)
         if end:
             break
         seen.update(rec["entry_ids"])

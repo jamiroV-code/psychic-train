@@ -34,10 +34,16 @@ unit across the pool. Pure logic over injected readers, clock, RNG and sleep; no
   with a ban code (64) deactivates its account and fails over once. In `auto` query-ID mode a confirmed drift
   with a registry candidate runs `XPool.evaluate_candidate` (forced, never the canary's daily cache) before
   `DRIFT_STOP` pauses; only passed evaluations adopt. Facts record isolation, locks and evaluations.
+- Finish plan S-B3I (B3 integration, every switch default off; off adds nothing): quiet hours and B3 cooldowns lock
+  an account like an in-flight lock (the pool waits for the earliest end, never the day); a challenge waits for the
+  owner; warm-up lowers the account cap through `effective_cap`; the shrink history and rate-limit/stripped-strike
+  cooldowns consume the existing signals; `run_mixed` makes at most one approved ordinary call (pinned library IDs,
+  a 404 suspends that operation as `ordinary_op_stale`) charged max(20, actual) to the account and global counters.
 - Quality over speed: nothing is cut for a time budget; only the safety limits above stop reading.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import random
 import re
@@ -49,7 +55,7 @@ from functools import wraps
 from contextvars import ContextVar
 
 from api.data import cache
-from api.data.attention import daily_facts, density, x_behaviour, x_density, x_filters, x_raw, x_window
+from api.data.attention import daily_facts, density, x_behaviour, x_density, x_filters, x_quiet, x_raw, x_window
 from api.data.attention import pc_pace as pp
 from api.data.attention import x_queryids as xq
 from api.data.attention import x_reader as xr
@@ -92,6 +98,9 @@ ENDPOINT_404_CLEAN_DAYS = 7
 EVALUATIONS_PER_DAY = 3
 EVALUATION_ACCOUNTS = 2
 CANDIDATE_REJECT = timedelta(hours=24)
+B3_WAIT_REASONS = ("quiet_hours", "behaviour_cooldown")  # timed B3 holds: the pool waits for them, never the day
+QUERY_CLASS = "coin_day"  # the one comparable unit class of the shrink history (coin-day SearchTimeline units)
+ORDINARY_STALE = "ordinary_op_stale"
 EVALUATION_FAILED_KINDS = frozenset({"not_found", "gql_outdated", "parse"})
 FACTS_SOURCE = "xsearch_web"
 
@@ -179,6 +188,11 @@ def from_config(config: CollectorConfig, *, clock: Callable[[], datetime]) -> XP
     pool.proxy_regions = {k: v.get("region") for k, v in config.x_account_identities.items()}
     pool.proxy_max_age = config.x_proxy_admission_max_age_seconds
     pool.switches = facts_switches(config)
+    pool.quiet_hours = dict(config.x_account_quiet_hours) if config.x_quiet_hours_enabled else {}
+    pool.warmup_enabled = config.x_warmup_enabled
+    pool.cooldown_enabled = config.x_adaptive_cooldown_enabled
+    pool.b3_status = any((config.x_quiet_hours_enabled, config.x_mixed_traffic_enabled, config.x_variation_enabled,
+                          config.x_adaptive_cooldown_enabled, config.x_warmup_enabled))
     return pool
 
 
@@ -282,6 +296,8 @@ class XPool:
         self.proxy_regions = {}
         self.proxy_max_age = 86400
         self.switches: dict = {}  # facts switch provenance; `from_config` sets the effective values
+        self.quiet_hours: dict = {}  # S-B3I effective quiet windows (empty while the switch is off)
+        self.warmup_enabled = self.cooldown_enabled = self.b3_status = False
         self._s = self._load()
 
     @property
@@ -341,8 +357,23 @@ class XPool:
 
     @_transaction
     def begin_pass(self) -> None:
-        """Persist registration/rest start even if no account reads. Status consumers never call this."""
+        """Persist registration/rest start even if no account reads. Status consumers never call this.
+        S-B3I: an expired B3 cooldown is cleared (a shrink cooldown also resets its run) and warm-up starts on the
+        first eligible day (rest over and ready; grandfathered accounts never enter the ladder)."""
         self._parse_failures.clear()
+        now = self._now()
+        for label in self.labels:
+            a = self._acct(label)
+            until = a["behaviour_cooldown_until"]
+            if until is not None and now >= datetime.fromisoformat(until):
+                if a["behaviour_reason"] == "shrink":
+                    a["shrink_run"] = 0
+                a["behaviour_cooldown_until"] = a["behaviour_reason"] = None
+                self.fact({"kind": "cooldown", "source": FACTS_SOURCE, "account": label, "action": "cleared"})
+            eligible = (a["rest_until"] is not None and now >= datetime.fromisoformat(a["rest_until"])
+                        and bool(self.ready_today(label)))
+            a["warmup_start_day"] = x_behaviour.warmup_start(a["warmup_start_day"], eligible=eligible,
+                                                             today=now.date(), enabled=self.warmup_enabled)
         self._save()
 
     def _now(self) -> datetime:
@@ -384,10 +415,31 @@ class XPool:
         mark = self.ready.get(label)
         return bool(mark and _iso(mark) and _utc(datetime.fromisoformat(mark)).date() < self._now().date())
 
+    def effective_cap(self, label: str) -> int | None:
+        """The configured cap, lowered by the warm-up ladder when `x_warmup_enabled` (grandfathered: unchanged)."""
+        a = self._acct(label)
+        return x_behaviour.effective_cap(self.cap, a["warmup_start_day"], self._now().date(),
+                                         enabled=self.warmup_enabled, grandfathered=a["rest_until"] is None)
+
     def remaining_caps(self) -> int | None:
-        if self.cap is None:
+        caps = {label: self.effective_cap(label) for label in self.usable()}
+        if self.cap is None and (not caps or None in caps.values()):
             return None
-        return sum(max(0, self.cap - (self.reads_today(label) or 0)) for label in self.usable())
+        return sum(max(0, cap - (self.reads_today(label) or 0)) for label, cap in caps.items() if cap is not None)
+
+    def b3_hold(self, label: str) -> tuple[str, datetime | None] | None:
+        """S-B3I: (reason, end) while a B3 measure holds the account; a challenge has no end (owner intervention)."""
+        a, now = self._acct(label), self._now()
+        if a["behaviour_reason"] == "challenge":
+            return "challenge", None
+        until = a["behaviour_cooldown_until"] if self.cooldown_enabled else None
+        cooldown = datetime.fromisoformat(until) if until else now
+        quiet = x_quiet.quiet_until(max(now, cooldown), label, self.quiet_hours, enabled=bool(self.quiet_hours))
+        end = max(cooldown, quiet or now)
+        if end <= now:
+            return None
+        return ("quiet_hours" if quiet else "behaviour_cooldown"), end
+
 
     def account_state(self, label: str) -> tuple[str, str | None]:
         a = self._acct(label)
@@ -402,6 +454,9 @@ class XPool:
         if a["rest_until"] and (self._now() < datetime.fromisoformat(a["rest_until"])
                                 or not self.ready_today(label)):
             return "locked", "resting"
+        hold = self.b3_hold(label)
+        if hold is not None:
+            return "locked", hold[0]
         if self.proxy_required:
             if a["proxy_health"] == "quarantined":
                 return "locked", "proxy_quarantine"
@@ -409,7 +464,8 @@ class XPool:
                 return "locked", a["proxy_reason"] or "proxy_revision"
             if not a["proxy_checked_at"] or not timedelta(0) <= self._now() - datetime.fromisoformat(a["proxy_checked_at"]) < timedelta(seconds=self.proxy_max_age):
                 return "locked", "proxy_revision"
-        if self.cap is not None and (self.reads_today(label) or 0) >= self.cap:
+        cap = self.effective_cap(label)
+        if cap is not None and (self.reads_today(label) or 0) >= cap:
             return "locked", "account_cap"
         return "active", None
 
@@ -495,6 +551,8 @@ class XPool:
         a = self._acct(label)
         if xr.near_rate_limit(remaining):
             a["rate_limit_seen"] = self._now().isoformat()
+            self.apply_cooldown(label, x_behaviour.cooldown(self._now(), enabled=self.cooldown_enabled,
+                                                           rate_remaining=remaining))
         elif remaining is not None and a["rate_limit_seen"] is not None:
             a["rate_limit_seen"] = None
         else:
@@ -538,6 +596,8 @@ class XPool:
         self._save()
         if a["parse_strikes"] >= 2 and a["state"] == "active":
             self.flag_suspect(label)
+        if a["parse_strikes"] >= 2 and kind == "content_stripped":  # the fix's confirmed strike (S-B3I consumes it)
+            self.apply_cooldown(label, x_behaviour.cooldown(now, enabled=self.cooldown_enabled, stripped_strike=True))
         return a["parse_strikes"]
 
     @_transaction
@@ -559,11 +619,40 @@ class XPool:
         a = self._acct(label)
         a["state"], a["reason"], a["suspect_since"] = "active", None, None
         a["parse_strikes"], a["parse_strike_last_at"] = 0, None
+        a["behaviour_cooldown_until"] = a["behaviour_reason"] = None
+        a["shrink_run"] = 0
         self._s["alerts"] = [x for x in self._s["alerts"] if x["label"] != label]
         self._save()
 
     def alerts(self) -> list[dict]:
         return [dict(a) for a in self._s["alerts"]]
+
+    @_transaction
+    def apply_cooldown(self, label: str, decision: x_behaviour.Cooldown | None) -> None:
+        if decision is None:
+            return
+        a = self._acct(label)
+        old = a["behaviour_cooldown_until"]
+        if a["behaviour_reason"] == "challenge":
+            return
+        if not decision.owner_pause and old and datetime.fromisoformat(old) >= decision.until:
+            return
+        a["behaviour_reason"] = decision.reason
+        a["behaviour_cooldown_until"] = decision.until.isoformat() if decision.until else None
+        self._save()
+        self.fact({"kind": "cooldown", "source": FACTS_SOURCE, "account": label,
+                   "action": "set", "until": decision.until.isoformat().replace("+00:00", "Z")
+                   if decision.until else None})
+
+    @_transaction
+    def note_result(self, label: str, day: date, count: int) -> None:
+        if not self.cooldown_enabled:
+            return
+        a = self._acct(label)
+        a["result_history"], a["shrink_run"] = x_behaviour.record_result(
+            a["result_history"], a["shrink_run"], day=day, count=count, query_class=QUERY_CLASS, canary=False)
+        self._save()
+        self.apply_cooldown(label, x_behaviour.cooldown(self._now(), enabled=True, shrink_run=a["shrink_run"]))
 
     # --- pause, stop, drift, fallback ---
     @_transaction
@@ -577,6 +666,11 @@ class XPool:
     def pause_for_locks(self) -> bool:
         """Pause X until the earliest in-flight lock end of the accounts that wait for one; False when none waits."""
         ends = [self._acct(x)["lock_until"] for x in self.labels if self.account_state(x) == ("locked", WAIT_REASON)]
+        for label in self.labels:
+            if self.account_state(label)[1] in B3_WAIT_REASONS:
+                hold = self.b3_hold(label)
+                if hold and hold[1]:
+                    ends.append(hold[1].isoformat())
         if not ends:
             return False
         self._s["pause_until"] = min(ends, key=datetime.fromisoformat)
@@ -923,6 +1017,14 @@ class XPool:
             if self.proxy_regions.get(x) is not None:
                 safe["region"] = self.proxy_regions[x]
             accts[-1].update(safe)
+            if self.b3_status:
+                quiet = x_quiet.quiet_until(self._now(), x, self.quiet_hours, enabled=bool(self.quiet_hours))
+                accts[-1]["behaviour"] = {
+                    "quiet_until": quiet.isoformat() if quiet else None,
+                    "cooldown_until": a["behaviour_cooldown_until"], "cooldown_reason": a["behaviour_reason"],
+                    "warmup_stage": x_behaviour.warmup_stage(a["warmup_start_day"], self._now().date()),
+                    "effective_cap": self.effective_cap(x),
+                    "mixed_calls_today": x_behaviour.mixed_today(a["mixed_day"], a["mixed_calls"], self._now().date())}
         paused = self.is_paused() and not self._s["stopped"]
         return {"active": sum(1 for a in accts if a["state"] == "active"), "total": len(self.labels),
                 "accounts": accts, "pause_reason": self.pause_reason(),
@@ -1199,14 +1301,18 @@ def _parse_drop_kind(body: dict, entry_ids: tuple[str, ...], parsed: int) -> str
 def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, query, rng, sleep, fallback, collected_at,
                  counts, evaluate=None) -> _Attempt:
     out, kv = _Attempt(), x_window.search_kv()
+    variation = x_behaviour.variation(label, pool._now().date(), page_cap=xr.PAGE_ENTRIES,
+                                      enabled=config.x_variation_enabled)
+    if config.x_variation_enabled:
+        kv["count"] = variation.page_size
     for page_no in range(config.x_page_cap):
         if pool.is_paused() or src.is_paused():
             return _Attempt("stop", "paused")
-        if not src.can_spend(xr.PAGE_ENTRIES):
+        if not src.can_spend(variation.page_size):
             src.mark_spent()
             return _Attempt("stop", "budget_spent")
         if page_no:
-            sleep(rng.uniform(config.x_page_gap_min_s, config.x_page_gap_max_s))
+            sleep(rng.uniform(config.x_page_gap_min_s, config.x_page_gap_max_s) * variation.pause_multiplier)
         backend = "default"
         src.stamp_attempt()  # before the request: a request killed in flight still counts for the spacing
         try:
@@ -1253,9 +1359,10 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
                          retries=raw.retries, headers=raw.headers(), collected_at=collected_at,
                          parser_version=xr.PARSER_VERSION, reader_version=reader.version,
                          reader_commit=reader.commit, backend=backend,
-                         scrub_names={name: label for name in reader.account_names}, entry_times=raw.entry_times)
+                         scrub_names={name: label for name in reader.account_names}, entry_times=raw.entry_times,
+                         requested_page_size=variation.page_size if config.x_variation_enabled else None)
         end = x_window.cursor_end(raw.entry_ids, seen=out.seen, last_entries=out.last_entries,
-                                  page_size=xr.PAGE_ENTRIES)
+                                  page_size=variation.page_size)
         if end:
             # Exhausted (exact, given the account passed today's canary) or stalled (never exact).
             out.reason = x_window.stop_reason(pages=page_no + 1, entries_read=out.n_read, oldest_read=out.oldest(),
@@ -1368,6 +1475,10 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
                                       cursor_stalled=att.reason == x_window.STALLED, raw_oldest=att.raw_oldest)
         if summary.result is None:
             return done(None, summary.missing_reason)
+        pool.note_result(label, day, att.n_read)
+        pool.fact({"kind": "unit_completed", "source": FACTS_SOURCE, "account": label, "coin": symbol,
+                   "coin_day": day.isoformat(), "reads": counts["reads"], "pages": counts["pages"],
+                   "raw_results": att.n_read})
         meta = {"attempt": attempts, "label": label, "attempts": attempts, "restarts": restarts,
                 "backend_events": att.events, "overhead_requests": reader.overhead_requests, "canary_ok": canary_ok}
         x_raw.mark_complete(symbol, day, meta, run=x_raw.run_id(now))
@@ -1378,3 +1489,69 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
     if waiting:  # not failed: the coin-day is tried again after the lock ends
         return done(None, pool.pause_no_account(src) if not pool.usable() else WAIT_REASON)
     return done(None, "account_failed")
+
+
+def mixed_pick(targets, label: str, day: date, calls: int, stale: set[str]):
+    candidates = [(op, target) for op in x_behaviour.MIXED_OPS if op not in stale for target in targets
+                  if (not target.isdecimal() if op == "user_by_login" else target.isdecimal())]
+    if not candidates:
+        return None, None
+    seed = int.from_bytes(hashlib.sha256(f"{label}|{day}".encode()).digest()[:8], "big")
+    return candidates[(seed + calls) % len(candidates)]
+
+
+def run_mixed(pool, readers, src, config, *, units_since_last: int, stale: set[str]) -> str | None:
+    """One optional ordinary page. Callback charging is authoritative, including failures; never coin writes."""
+    if not config.x_mixed_traffic_enabled or not config.x_mixed_targets or pool.is_paused() or src.is_paused():
+        return None
+    if not pool.canary_passed_today():
+        return None
+    label = pool.peek()
+    if label is None:
+        return None
+    a, today = pool._acct(label), pool._now().date()
+    calls = x_behaviour.mixed_today(a["mixed_day"], a["mixed_calls"], today)
+    op, target = mixed_pick(config.x_mixed_targets, label, today, calls, stale)
+    cap = pool.effective_cap(label)
+    room = src.remaining()
+    if cap is not None:
+        room = min(room, cap - (pool.reads_today(label) or 0))
+    if not x_behaviour.mixed_allowed(op, enabled=True, units_since_last=units_since_last,
+                                    calls_today=calls, room=room):
+        return None
+    with state_lock(pool.path) as ownership:
+        pool._lock_owned = ownership
+        try:
+            pool._s = pool._load()
+            a = pool._acct(label)
+            a["mixed_day"], a["mixed_calls"] = today.isoformat(), calls + 1
+            pool._save()
+        finally:
+            pool._lock_owned = None
+    charged = False
+    def on_page(actual):
+        nonlocal charged
+        if charged:
+            raise ValueError("ordinary call produced more than one page")
+        charged = True
+        reads = x_behaviour.mixed_charge(actual)
+        src.record_loaded(reads)
+        pool.charge(label, reads)
+        pool.fact({"kind": "mixed_call", "source": FACTS_SOURCE, "account": label, "target": op, "reads": reads})
+    src.stamp_attempt()
+    try:
+        readers[label].ordinary(op, target, on_page=on_page)
+    except xr.ReaderFailure as failure:
+        if failure.kind == "not_found":
+            stale.add(op)
+            pool.fact({"kind": "queryid_state", "operation": op, "from_state": "pinned",
+                       "to_state": ORDINARY_STALE, "reason": ORDINARY_STALE})
+        elif xr.inactive_reason(failure):
+            pool.mark_inactive(label, xr.inactive_reason(failure))
+        elif failure.kind == "proxy":
+            pool.proxy_result(label, reason=failure.proxy_reason,
+                              quarantine_seconds=config.x_proxy_quarantine_seconds)
+    finally:
+        if not charged:
+            on_page(0)
+    return op

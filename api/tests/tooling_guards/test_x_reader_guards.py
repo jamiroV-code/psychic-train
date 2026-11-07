@@ -97,7 +97,11 @@ def test_default_env_does_not_install_or_import_twscrape(monkeypatch):
     for path in boundaries:
         assert not _roots(_module_level_imports(ast.parse(path.read_text(encoding="utf-8"))), LIBRARY_ROOTS), path.name
     lazy = {fn for fn, mods in _function_imports(TREE).items() if _roots(mods, LIBRARY_ROOTS)}
-    assert lazy == {"load_library", "install"}  # B1: adapter installs only after transport verification.
+    # B1: adapter installs only after transport verification. S-B3I: the ordinary single page (and its enclosing
+    # method) is the one function-scoped approval for the pinned low-level request surface.
+    assert lazy == {"load_library", "install", "ordinary", "single_page"}
+    ordinary = _function_imports(TREE)["single_page"]
+    assert _roots(ordinary, LIBRARY_ROOTS) == {"twscrape.api", "twscrape.queue_client"}
 
 
 def test_reimport_check_leaves_the_original_module_in_place():
@@ -171,7 +175,8 @@ def test_debug_true_never_used():
 
 def test_wrapped_surface_allowlist_and_no_cli_telemetry_import():
     mods = imported(SOURCE)
-    assert _roots(mods, LIBRARY_ROOTS) == {"twscrape", "twscrape.models", "curl_cffi.requests"}
+    assert _roots(mods, LIBRARY_ROOTS) == {"twscrape", "twscrape.models", "curl_cffi.requests",
+                                           "twscrape.api", "twscrape.queue_client"}  # S-B3I: single_page only
     attrs = {n.attr for n in ast.walk(TREE) if isinstance(n, ast.Attribute)}
     assert not {a for a in attrs if REFUSED_ATTR.match(a)}
     assert {"add_account_cookies", "get", "search_raw", "parse_tweets", "API"} <= attrs

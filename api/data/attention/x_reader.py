@@ -262,6 +262,8 @@ class FakeXReader:
     overhead_requests: int = 0
     account_names: tuple[str, ...] = ()
     calls: list = field(default_factory=list)
+    ordinary_items: list = field(default_factory=list)  # S-B3I: each `ordinary` call's read units or failure
+    ordinary_calls: list = field(default_factory=list)
 
     @staticmethod
     def entry(t: x_filters.Tweet, broken: bool = False) -> dict:
@@ -289,6 +291,17 @@ class FakeXReader:
 
     def pool_row(self) -> PoolRow:
         return self.row
+
+    def ordinary(self, op: str, target: str, *, on_page) -> None:
+        """B3 mixed traffic (S-B3I): the read units of one approved ordinary call, or its scripted failure."""
+        self.ordinary_calls.append((op, target))
+        if not self.ordinary_items:
+            raise ReaderFailure("api")
+        item = self.ordinary_items.pop(0)
+        if isinstance(item, BaseException):
+            on_page(getattr(item, "charged_reads", 0))
+            raise item
+        on_page(item)
 
 
 def canary_ids(tweets, start: datetime, end: datetime) -> set[int]:

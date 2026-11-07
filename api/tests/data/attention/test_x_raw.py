@@ -189,3 +189,21 @@ def test_reparse_reads_raw_entry_times_for_the_oldest_read():
     xr.mark_complete("SOL", DAY, meta(canary_ok=True))
     row = xr.reparse("SOL", DAY, parse=fake_parse, coin=SOL, cfg=CFG, parser_version="x-parse-1")
     assert row["span_hours"] == pytest.approx(10.0) and row["capped"]
+
+
+@pytest.mark.parametrize("size", [10, 20])
+def test_reparse_uses_persisted_requested_page_size(size, monkeypatch):
+    entries = [entry(i, 1 + i / 10) for i in range(size)]
+    for page, body in enumerate((entries, [])):
+        xr.write_page("SOL", DAY, attempt=1, page=page, body={"entries": body},
+                      entry_ids=[e["entryId"] for e in body], retries=0, headers={}, collected_at=AT,
+                      parser_version="test", reader_version="fake", requested_page_size=size)
+    xr.mark_complete("SOL", DAY, meta())
+    observed = []
+    original = xr.x_window.cursor_end
+    def traced(*args, **kwargs):
+        observed.append(kwargs["page_size"])
+        return original(*args, **kwargs)
+    monkeypatch.setattr(xr.x_window, "cursor_end", traced)
+    xr.reparse("SOL", DAY, parse=fake_parse, coin=SOL, cfg=CFG, parser_version="test")
+    assert observed == [size, size]

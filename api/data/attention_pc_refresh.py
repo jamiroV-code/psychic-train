@@ -438,6 +438,8 @@ class XStream(Stream):
     def __init__(self, worker, source, rng):
         super().__init__(worker, source, rng)
         self._start = None
+        self._mixed_units = 0
+        self._ordinary_stale: set[str] = set()
 
     @property
     def rotation(self) -> bool:  # owner Q10: X runs in rotation mode
@@ -548,7 +550,7 @@ class XStream(Stream):
         finally:
             self.worker.x_cleanup()
 
-    def _next_due(self, trickle: pc_pace.Trickle, src: pc_pace.PcSource, config) -> datetime:
+    def _next_due(self, trickle: pc_pace.Trickle, src: pc_pace.PcSource, config, *, label=None, pool=None) -> datetime:
         """The configured delay from the end of the last unit; spread over the day in BASELINE."""
         w = self.worker
         now = _utc(w.clock())
@@ -556,7 +558,24 @@ class XStream(Stream):
         if w.x_spread_over_day and w.mode(now) == "baseline":
             units = max(1, src.effective_budget() // config.x_sample_n)
             due = max(due, now + timedelta(seconds=DAY_S / units))
+        if config.x_variation_enabled and label:
+            from api.data.attention import x_behaviour
+            variation = x_behaviour.variation(label, now.date(), page_cap=xr.PAGE_ENTRIES, enabled=True)
+            due = now + (due - now) * variation.pause_multiplier
+        if pool is not None and not pool.usable():
+            ends = [hold[1] for x in pool.labels if (hold := pool.b3_hold(x)) and hold[1]]
+            if ends:
+                due = max(due, min(ends))
         return due
+
+    @staticmethod
+    def vary_order(items, config, label, today):
+        from itertools import groupby
+        from api.data.attention import x_behaviour
+        variation = x_behaviour.variation(label or "", today, page_cap=xr.PAGE_ENTRIES,
+                                          enabled=config.x_variation_enabled)
+        return [item for group in variation.order_groups(
+            [list(group) for _, group in groupby(items, key=lambda item: item[1])]) for item in group]
 
     def _pass(self, q, src, syms, stop_at):
         w, c = self.worker, q.config
@@ -578,6 +597,7 @@ class XStream(Stream):
         tried: set[tuple[str, date]] = set()  # this pass only: a missing coin-day waits for a later pass
         while True:
             items = [item for item in self.queue(q, syms) if item not in tried]
+            items = self.vary_order(items, c, pool.peek(), _utc(w.clock()).date())
             if not items:
                 return "done"
             if src.is_paused() or (pool.is_paused() and pool.resume_at() is None):
@@ -649,7 +669,12 @@ class XStream(Stream):
                                reason="fetched" if stored else "zero_unconfirmed" if out.result else out.reason,
                                attempted=out.attempts > 0, result=out.result if stored else None)
             self._health_schedule(q, src, syms)
-            due = self._next_due(trickle, src, c)
+            if out.result is not None:
+                self._mixed_units += 1
+            if x_pool.run_mixed(pool, start.readers, src, c, units_since_last=self._mixed_units,
+                                stale=self._ordinary_stale):
+                self._mixed_units = 0
+            due = self._next_due(trickle, src, c, label=out.label, pool=pool)
             if out.reason in ("budget_spent", "too_early"):
                 return out.reason
             if pool.resume_at() is not None:

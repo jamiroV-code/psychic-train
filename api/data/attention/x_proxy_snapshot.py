@@ -74,8 +74,10 @@ def work_envelope(request):
               and HEX32.fullmatch(request["request_nonce"]) is not None, "proxy_config")
     query, kv = request.get("query"), request.get("kv")
     p.require(isinstance(query, str) and 0 < len(query.encode("utf-8")) <= 4096
-              and isinstance(kv, dict) and set(kv) <= {"product", "cursor"}
+              and isinstance(kv, dict) and set(kv) <= {"product", "cursor", "count"}
               and kv.get("product") == "Latest", "proxy_config")
+    count = kv.get("count")
+    p.require("count" not in kv or type(count) is int and count in (10, 20), "proxy_config")
     cursor = kv.get("cursor")
     p.require(cursor is None or isinstance(cursor, str) and len(cursor.encode("utf-8")) <= 4096, "proxy_config")
     query_id = request.get("query_id")
@@ -85,7 +87,9 @@ def work_envelope(request):
     p.require(isinstance(expiry, str) and len(expiry) <= 64, "proxy_config")
     return (request["label"].encode(), request["proxy_id"].encode(), request["identity_revision"].encode(),
             request["backend"].encode(), request["request_nonce"].encode(), expiry.encode(),
-            query.encode("utf-8"), b"Latest", b"null" if cursor is None else b"present", b"" if cursor is None else cursor.encode("utf-8"),
+            query.encode("utf-8"), b"Latest",
+            b"null" if count is None else b"present", b"" if count is None else str(count).encode("ascii"),
+            b"null" if cursor is None else b"present", b"" if cursor is None else cursor.encode("utf-8"),
             b"null" if query_id is None else b"present", b"" if query_id is None else query_id.encode("ascii"))
 
 
