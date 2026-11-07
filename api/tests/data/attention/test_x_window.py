@@ -153,3 +153,12 @@ def test_cursor_end_exhausted_only_after_a_short_last_page():
     kw = {'pages': 1, 'entries_read': 20, 'oldest_read': end - timedelta(minutes=10), 'day': day, 'sample_n': 40, 'page_cap': 3}
     assert xw.stop_reason(**kw, stalled=True) == "cursor_stalled"
     assert xw.stop_reason(**{**kw, "oldest_read": end - timedelta(days=2)}, stalled=True) == "window_start"
+
+
+def test_finish_optional_keys_never_required_by_the_x_window_fixture():
+    """S-Config fixture touch: the committed query file (this module's fixture) loads without any finish-plan key;
+    none of them joined the required X keys."""
+    doc = json.loads(wq.QUERIES_PATH.read_text(encoding="utf-8"))
+    assert not set(wq.FINISH_OPTIONAL_DEFAULTS) & (set(wq.X_DEFAULTS) | set(doc["collector"]))
+    c = wq.load(placed_symbols=wq.placed_symbols()).config
+    assert c.x_queryid_mode == "off" and c.x_cookie_harvest_enabled is False and c.x_window_syntax == "since_time"

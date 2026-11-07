@@ -8,6 +8,7 @@ list (AC20); widening it is a narratives or query-file change, never code. The f
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import asdict, dataclass, field
 from importlib.resources import files
@@ -86,7 +87,8 @@ REDDIT_STREAM_DEFAULTS = {
     "reddit_stream_polls_per_day_cap": 12,
     "reddit_stream_min_coverage": 0.8,
     "reddit_comments_paging": True,
-    "reddit_impl_order": ["reddit_web", "reddit_stream"],  # SPEC AC14 default order
+    # Finish plan 06-11-26 (S-Config, C6): live methods first; a window never mixes methods (`pick_impl`).
+    "reddit_impl_order": ["reddit_live_browser", "reddit_live_gql", "reddit_web", "reddit_stream"],
     "reddit_stream_poll_retention_days": 30,  # E2: the stream's poll files are kept and read this many days back
     "reddit_stream_max_pages_per_poll": 10,  # E3: requests one poll may send, fresh, reconnecting and resumed
     # W8c2w (owner Q1 option b): the stream's share of the day's Reddit request budget, a fraction in (0, 1]
@@ -101,9 +103,38 @@ X_POOL_OPTIONAL_DEFAULTS = {"x_account_daily_cap": None, "x_account_rest_days": 
                             "x_proxy_admission_max_age_seconds": 86400,
                             "x_proxy_health_interval_seconds": 3600,
                             "x_proxy_quarantine_seconds": 3600}
-REDDIT_METHODS = ("reddit_stream", "reddit_web")
+# Finish plan 06-11-26 (Public Contracts -> configuration; SPEC notes N1-N5 of 07-11-26): every key optional and off
+# by default; the committed query file need not contain them. Cross-key rules live in `_validate_finish_settings`.
+FINISH_OPTIONAL_DEFAULTS = {
+    "x_queryid_mode": "off", "x_queryid_static_budget_per_day": 6,
+    "x_cookie_harvest_enabled": False, "browser_path": None, "browser_profiles_dir": None,
+    "x_account_profiles": {}, "x_surface_path": None, "x_cookie_refresh_age_days": None,
+    "x_harvest_timeout_s": 120, "browser_memory_floor_mb": 1536, "browser_rss_ceiling_mb": 1200,
+    "x_quiet_hours_enabled": False, "x_mixed_traffic_enabled": False, "x_variation_enabled": False,
+    "x_adaptive_cooldown_enabled": False, "x_warmup_enabled": False, "x_account_quiet_hours": {},
+    "x_mixed_targets": [], "facts_retention_days": 180,
+    "reddit_live_methods": [], "reddit_surface_path": None, "reddit_live_probe_max_age_days": 7,
+    "reddit_live_polls_per_day": 6, "reddit_live_threads_per_poll": 30, "reddit_live_min_thread_coverage": 0.8,
+    "reddit_live_canary_min_items": 15, "reddit_zero_min_history_days": 7,
+    "reddit_browser_accounts": [], "reddit_browser_daily_navigation_cap": 400,
+    "reddit_browser_account_daily_cap": 200, "reddit_browser_account_rest_days": 7,
+    "reddit_browser_daily_minutes": 90, "reddit_session_check_enabled": False,
+    "reddit_live_gql_daily_request_cap": 600,
+}
+# The Reddit method enum (owned here; S-RCore-A consumes it) and the live-method switch names.
+REDDIT_METHODS = ("reddit_live_browser", "reddit_live_gql", "reddit_web", "reddit_stream")
+REDDIT_LIVE_METHODS = ("browser", "gql_anon")
+X_QUERYID_MODES = ("off", "sentinel", "auto")
+REDDIT_BROWSER_MAX_ACCOUNTS = 3
+X_MIXED_TARGETS_MAX = 20
+PROFILE_NAME_RE = re.compile(r"[a-z0-9_]{1,24}")
+HHMM_RE = re.compile(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]")
+# A public X login or a numeric user/tweet id (B3 mixed traffic, 02-11-26 PLAN).
+X_MIXED_TARGET_RE = re.compile(r"[A-Za-z0-9_]{1,15}|[0-9]{1,20}")
+REPO_ROOT = Path(__file__).resolve().parents[3]
 _INT_KEYS = tuple(DEFAULTS)
-DEFAULTS = {**DEFAULTS, **X_DEFAULTS, **REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **X_POOL_OPTIONAL_DEFAULTS}
+DEFAULTS = {**DEFAULTS, **X_DEFAULTS, **REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **X_POOL_OPTIONAL_DEFAULTS,
+            **FINISH_OPTIONAL_DEFAULTS}
 X_WINDOW_SYNTAXES = ("since_time", "date")
 LANG_RE = re.compile(r"[a-z]{2,3}")
 X_LABEL_RE = re.compile(r"[a-z0-9_]{1,24}")  # the same opaque labels as `x_pool.LABEL_RE`
@@ -181,6 +212,41 @@ class CollectorConfig:
     x_proxy_admission_max_age_seconds: int = 86400
     x_proxy_health_interval_seconds: int = 3600
     x_proxy_quarantine_seconds: int = 3600
+    # Finish plan 06-11-26 (FINISH_OPTIONAL_DEFAULTS); lists become tuples, maps are copied.
+    x_queryid_mode: str = "off"
+    x_queryid_static_budget_per_day: int = 6
+    x_cookie_harvest_enabled: bool = False
+    browser_path: str | None = None
+    browser_profiles_dir: str | None = None
+    x_account_profiles: dict[str, str] = field(default_factory=dict)
+    x_surface_path: str | None = None
+    x_cookie_refresh_age_days: int | None = None
+    x_harvest_timeout_s: int = 120
+    browser_memory_floor_mb: int = 1536
+    browser_rss_ceiling_mb: int = 1200
+    x_quiet_hours_enabled: bool = False
+    x_mixed_traffic_enabled: bool = False
+    x_variation_enabled: bool = False
+    x_adaptive_cooldown_enabled: bool = False
+    x_warmup_enabled: bool = False
+    x_account_quiet_hours: dict[str, dict[str, str]] = field(default_factory=dict)
+    x_mixed_targets: tuple[str, ...] = ()
+    facts_retention_days: int = 180
+    reddit_live_methods: tuple[str, ...] = ()
+    reddit_surface_path: str | None = None
+    reddit_live_probe_max_age_days: int = 7
+    reddit_live_polls_per_day: int = 6
+    reddit_live_threads_per_poll: int = 30
+    reddit_live_min_thread_coverage: float = 0.8
+    reddit_live_canary_min_items: int = 15
+    reddit_zero_min_history_days: int = 7
+    reddit_browser_accounts: tuple[dict[str, str], ...] = ()
+    reddit_browser_daily_navigation_cap: int = 400
+    reddit_browser_account_daily_cap: int = 200
+    reddit_browser_account_rest_days: int = 7
+    reddit_browser_daily_minutes: int = 90
+    reddit_session_check_enabled: bool = False
+    reddit_live_gql_daily_request_cap: int = 600
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -369,6 +435,122 @@ def _validate_identity_settings(block: dict) -> None:
         effective.add(current)
 
 
+def profile_identity(name: str) -> str:
+    """Normalized Windows path identity of a profile directory name (A11): case-insensitive, trailing dots and
+    spaces stripped (Win32 drops them). Names are `[a-z0-9_]{1,24}`, so no 8.3 short name can collide with
+    another accepted name; the final real path is re-checked by the browser profile owner at launch."""
+    return name.rstrip(". ").casefold()
+
+
+def _absolute_or_none(value) -> bool:
+    return value is None or (isinstance(value, str) and bool(value) and value == value.strip()
+                             and value.isprintable() and len(value) <= 400 and Path(value).is_absolute())
+
+
+def _outside_repo(value: str) -> bool:
+    path = Path(os.path.normcase(os.path.abspath(value)))
+    root = Path(os.path.normcase(str(REPO_ROOT)))
+    return path != root and root not in path.parents
+
+
+def _int_in(value, lower: int, upper: int | None = None) -> bool:
+    return type(value) is int and value >= lower and (upper is None or value <= upper)
+
+
+def _validate_finish_settings(block: dict) -> None:
+    """Finish plan 06-11-26 S-Config: types, ranges, enums, path rules, labels and cross-key rules.
+    Messages name the key, never a value."""
+    def fail(key: str, what: str = "is not a valid value"):
+        raise QueriesError(f"collector: {key} {what}")
+
+    if block["x_queryid_mode"] not in X_QUERYID_MODES:
+        fail("x_queryid_mode")
+    for key, lower, upper in (("x_queryid_static_budget_per_day", 1, 12), ("x_harvest_timeout_s", 30, 300),
+                              ("browser_memory_floor_mb", 512, None), ("browser_rss_ceiling_mb", 400, None),
+                              ("facts_retention_days", 30, None), ("reddit_live_probe_max_age_days", 1, None),
+                              ("reddit_live_polls_per_day", 2, 24), ("reddit_live_threads_per_poll", 1, 100),
+                              ("reddit_live_canary_min_items", 1, None), ("reddit_zero_min_history_days", 1, None),
+                              ("reddit_browser_daily_navigation_cap", 1, None),
+                              ("reddit_browser_account_daily_cap", 1, None),
+                              ("reddit_browser_account_rest_days", 0, None), ("reddit_browser_daily_minutes", 10, 240),
+                              ("reddit_live_gql_daily_request_cap", 50, None)):
+        if not _int_in(block[key], lower, upper):
+            fail(key)
+    refresh = block["x_cookie_refresh_age_days"]
+    if refresh is not None and not _int_in(refresh, 1):
+        fail("x_cookie_refresh_age_days")
+    coverage = block["reddit_live_min_thread_coverage"]
+    if not (isinstance(coverage, (int, float)) and not isinstance(coverage, bool) and 0 < coverage <= 1):
+        fail("reddit_live_min_thread_coverage")
+    for key in ("x_cookie_harvest_enabled", "x_quiet_hours_enabled", "x_mixed_traffic_enabled",
+                "x_variation_enabled", "x_adaptive_cooldown_enabled", "x_warmup_enabled",
+                "reddit_session_check_enabled"):
+        if type(block[key]) is not bool:
+            fail(key, "must be boolean")
+    for key in ("browser_path", "browser_profiles_dir", "x_surface_path", "reddit_surface_path"):
+        if not _absolute_or_none(block[key]):
+            fail(key, "must be absolute or null")
+    if block["x_surface_path"] is not None and not _outside_repo(block["x_surface_path"]):
+        fail("x_surface_path", "must be outside the repository")
+
+    x_labels = set(block["x_accounts"])
+    profiles = block["x_account_profiles"]
+    if not isinstance(profiles, dict) or any(
+            not isinstance(p, str) or not PROFILE_NAME_RE.fullmatch(p) for p in profiles.values()):
+        fail("x_account_profiles")
+    if set(profiles) - x_labels:
+        fail("x_account_profiles", "labels must be configured x_accounts")
+    quiet = block["x_account_quiet_hours"]
+    if not isinstance(quiet, dict):
+        fail("x_account_quiet_hours")
+    if set(quiet) - x_labels:
+        fail("x_account_quiet_hours", "labels must be configured x_accounts")
+    for window in quiet.values():
+        if (not isinstance(window, dict) or set(window) != {"timezone", "start", "end"}
+                or not all(isinstance(window[k], str) for k in window)
+                or not HHMM_RE.fullmatch(window["start"]) or not HHMM_RE.fullmatch(window["end"])
+                or window["start"] == window["end"]):
+            fail("x_account_quiet_hours")
+        try:
+            ZoneInfo(window["timezone"])
+        except (ZoneInfoNotFoundError, ValueError):
+            fail("x_account_quiet_hours", "has an invalid timezone")
+    targets = block["x_mixed_targets"]
+    if (not isinstance(targets, (list, tuple)) or len(targets) > X_MIXED_TARGETS_MAX
+            or not all(isinstance(t, str) and X_MIXED_TARGET_RE.fullmatch(t) for t in targets)
+            or len({t.casefold() for t in targets}) != len(targets)):
+        fail("x_mixed_targets")
+    methods = block["reddit_live_methods"]
+    if (not isinstance(methods, (list, tuple)) or not all(m in REDDIT_LIVE_METHODS for m in methods)
+            or len(set(methods)) != len(methods)):
+        fail("reddit_live_methods")
+    if methods and block["reddit_surface_path"] is None:
+        fail("reddit_surface_path", "is required when reddit_live_methods is not empty")
+    accounts = block["reddit_browser_accounts"]
+    if (not isinstance(accounts, (list, tuple)) or len(accounts) > REDDIT_BROWSER_MAX_ACCOUNTS
+            or not all(isinstance(a, dict) and set(a) == {"label", "profile"}
+                       and isinstance(a["label"], str) and X_LABEL_RE.fullmatch(a["label"])
+                       and isinstance(a["profile"], str) and PROFILE_NAME_RE.fullmatch(a["profile"])
+                       for a in accounts)):
+        fail("reddit_browser_accounts")
+    reddit_labels = [a["label"] for a in accounts]
+    if len(set(reddit_labels)) != len(reddit_labels):
+        fail("reddit_browser_accounts", "has a duplicate label")
+    if set(reddit_labels) & x_labels:
+        fail("reddit_browser_accounts", "labels must be disjoint from x_accounts")
+    # A11: one profile directory per account across BOTH sites.
+    identities = [profile_identity(p) for p in profiles.values()] + [profile_identity(a["profile"]) for a in accounts]
+    if len(set(identities)) != len(identities):
+        fail("browser profiles", "must be unique across X and Reddit accounts")
+
+    harvest = block["x_cookie_harvest_enabled"]
+    if harvest and set(profiles) != x_labels:
+        fail("x_account_profiles", "needs a profile per x_accounts label when harvest is enabled")
+    browser_use = harvest or block["reddit_session_check_enabled"] or "browser" in methods
+    if browser_use and (block["browser_path"] is None or block["browser_profiles_dir"] is None):
+        fail("browser_path and browser_profiles_dir", "are required for any browser use")
+
+
 def validate_config(block) -> CollectorConfig:
     if not isinstance(block, dict):
         raise QueriesError("collector: must be an object")
@@ -378,8 +560,10 @@ def validate_config(block) -> CollectorConfig:
     for key in X_DEFAULTS:
         if key not in block or not _x_value(key, block[key]):
             raise QueriesError(f"collector: {key} is missing or not a valid value")
-    block = {**REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **X_POOL_OPTIONAL_DEFAULTS, **block}
+    block = {**REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **X_POOL_OPTIONAL_DEFAULTS, **FINISH_OPTIONAL_DEFAULTS,
+             **block}
     _validate_identity_settings(block)
+    _validate_finish_settings(block)
     if type(block["x_proxy_required"]) is not bool:
         raise QueriesError("collector: x_proxy_required must be boolean")
     paths = [block[k] for k in ("x_proxy_list_path", "x_proxy_assignments_path", "x_proxy_policy_path")]
@@ -416,10 +600,13 @@ def validate_config(block) -> CollectorConfig:
             raise QueriesError(f"collector: {lo} must be <= {hi}")
     if len(block["x_accounts"]) > block["x_pool_max"]:
         raise QueriesError("collector: x_accounts must hold at most x_pool_max labels")
-    tupled = ("x_accounts", "reddit_impl_order")
+    tupled = ("x_accounts", "reddit_impl_order", "x_mixed_targets", "reddit_live_methods")
     out = {k: tuple(block[k]) if k in tupled else block[k] for k in DEFAULTS}
     if out["reddit_stream_subreddits"] is not None:
         out["reddit_stream_subreddits"] = tuple(out["reddit_stream_subreddits"])
+    out["x_account_profiles"] = dict(block["x_account_profiles"])
+    out["x_account_quiet_hours"] = {k: dict(v) for k, v in block["x_account_quiet_hours"].items()}
+    out["reddit_browser_accounts"] = tuple(dict(a) for a in block["reddit_browser_accounts"])
     return CollectorConfig(**out)
 
 
