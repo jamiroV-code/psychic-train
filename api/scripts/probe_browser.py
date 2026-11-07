@@ -150,18 +150,18 @@ def pr2_browser(run):
         return po.Outcome('fail', ('browser_refused',))
 
 
-def build_dependencies(config):
+def build_dependencies(config, *, config_path=None):
     """Production driver for an APPROVED PR2 run: the least recently used ready Reddit account's profile, its
     admitted route (`reddit_browser.RedditRoutes`, default deny), the `bootstrap` (bootstrap hosts) or `reddit_read`
     (published section hosts) CDP role."""
-    from api.data.attention import web_queries
+    # The CLI selects and validates the external owner file; routed mode never substitutes the committed file.
     host = rb.build_host(config)
     if host is None:
         raise po.ProbeRefused('browser_not_configured')
     refused = rb.admission_state(config)
     if refused is not None:
         raise po.ProbeRefused(refused)
-    routes = rb.RedditRoutes(config, config_path=web_queries.QUERIES_PATH)
+    routes = rb.RedditRoutes(config, config_path=config_path)
     pool = routes.refresh()
     for label in pool.labels:
         routes.admit(label)

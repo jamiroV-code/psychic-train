@@ -461,3 +461,26 @@ def test_cli_init_profile_creates_the_profile_via_a10(tmp_path):
     assert bs.main(["--site", "reddit", "--label", "acct1", "--init-profile"], config=Cfg(), host=host, out=out) == 0
     assert (tmp_path / "profiles" / "rprofile").is_dir()
     assert json.loads(out.getvalue()) == {"site": "reddit", "label": "acct1", "profile": "created"}
+
+def test_cli_private_config_loads_selected_path(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from api.data.attention import web_queries
+    seen = []
+    config = SimpleNamespace(x_proxy_required=False, x_proxy_list_path=None,
+        x_proxy_assignments_path=None, x_proxy_policy_path=None, reddit_browser_accounts=())
+    monkeypatch.setattr(web_queries, "load", lambda path=None: (
+        seen.append(path) or SimpleNamespace(config=config)))
+    path = tmp_path / "private.json"
+    out = io.StringIO()
+    assert bs.main(["--site", "reddit", "--label", "absent", "--queries", str(path)], out=out) == 2
+    assert seen == [path]
+    assert "label_unconfigured" in out.getvalue()
+
+
+@pytest.mark.parametrize("kind", ["relative", "repository"])
+def test_cli_private_config_rejects_unsafe_path(kind):
+    from api.data.attention import web_queries
+    path = "private.json" if kind == "relative" else str(web_queries.QUERIES_PATH)
+    with pytest.raises(SystemExit) as exc:
+        bs.main(["--site", "reddit", "--label", "a", "--queries", path])
+    assert exc.value.code == 2

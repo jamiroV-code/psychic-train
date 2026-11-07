@@ -277,15 +277,27 @@ def main(argv=None, *, cache_root=None, out=sys.stdout, executors=None, today=No
     parser.add_argument('--approve')
     parser.add_argument('--commit', default='0' * 40)
     parser.add_argument('--surface-path', type=Path)
+    parser.add_argument('--queries', type=Path, help='absolute private owner query file outside the repository')
     args = parser.parse_args(argv)
+    from api.data.attention import web_queries
+    if args.queries is not None:
+        if not args.queries.is_absolute() or not web_queries._outside_repo(str(args.queries.resolve())):
+            parser.error('--queries must be absolute and outside the repository')
     if cache_root is None:
         from api.data.cache import CACHE_ROOT
         cache_root = CACHE_ROOT
     if dependencies is None:
         def dependencies():
-            from api.data.attention import web_queries
             from api.scripts.probe_executors import build_dependencies
-            return build_dependencies(args.probe_id, web_queries.load().config)
+            try:
+                config = web_queries.load(args.queries).config
+            except (OSError, ValueError):
+                raise ProbeRefused('config_invalid') from None
+            configured = config.x_proxy_required or any(getattr(config, key) is not None for key in
+                ('x_proxy_list_path', 'x_proxy_assignments_path', 'x_proxy_policy_path'))
+            if configured and args.queries is None:
+                raise ProbeRefused('private_queries_required')
+            return build_dependencies(args.probe_id, config, config_path=args.queries)
     try:
         result = run(args.probe_id, approval=args.approve, cache_root=cache_root, commit=args.commit, today=today,
                      mode=args.mode, surface_path=args.surface_path, executors=executors, dependencies=dependencies)

@@ -168,3 +168,192 @@ def test_records_carry_no_values(tmp_path):
     assert set(json.loads(text)) == {'schema', 'probe_id', 'mode', 'date_utc', 'commit', 'egress_class', 'outcome',
                                      'section', 'section_sha256', 'surface_revision', 'counts', 'reason_codes',
                                      'limits_hit'}
+
+def test_px1_configured_uses_admitted_route(monkeypatch):
+    from types import SimpleNamespace
+    from api.data.attention import x_queryids_fetch
+    config = SimpleNamespace(x_proxy_required=True, x_proxy_list_path="private",
+                             x_proxy_assignments_path="private", x_proxy_policy_path="private")
+    route, policy = object(), object()
+    monkeypatch.setattr(pe, "_x_routes", lambda config, path: (
+        SimpleNamespace(admitted_route=lambda site, label: SimpleNamespace(
+            mode="proxy", route=route, admission=lambda: True)),
+        "account", SimpleNamespace(snapshot=SimpleNamespace(policy=policy))))
+    seen = []
+    async def get(r, p, url):
+        seen.append((r, p, url))
+        return b"fixture"
+    monkeypatch.setattr(x_queryids_fetch, "static_get", get)
+    deps = pe.build_dependencies("PX1", config, config_path="private")
+    assert deps["static_get"]("fixture") == b"fixture"
+    assert seen == [(route, policy, "fixture")]
+
+
+def test_px1_direct_does_not_build_routes(monkeypatch):
+    from types import SimpleNamespace
+    from api.data.attention import x_queryids_fetch
+    config = SimpleNamespace(x_proxy_required=False, x_proxy_list_path=None,
+                             x_proxy_assignments_path=None, x_proxy_policy_path=None)
+    monkeypatch.setattr(pe, "_x_routes", lambda *args: pytest.fail("direct route provider"))
+    seen = []
+    async def get(r, p, url):
+        seen.append((r, p))
+        return b"fixture"
+    monkeypatch.setattr(x_queryids_fetch, "static_get", get)
+    assert pe.build_dependencies("PX1", config)["static_get"]("fixture") == b"fixture"
+    assert seen == [(None, None)]
+
+
+def test_px1_expired_admission_refuses(monkeypatch):
+    from types import SimpleNamespace
+    config = SimpleNamespace(x_proxy_required=True)
+    monkeypatch.setattr(pe, "_x_routes", lambda *args: (
+        SimpleNamespace(admitted_route=lambda *args: "proxy_not_admitted"), "a", None))
+    with pytest.raises(po.ProbeRefused, match="route_not_admitted"):
+        pe.build_dependencies("PX1", config, config_path="private")["static_get"]("fixture")
+
+
+def _reddit_routes(monkeypatch, seen, *, ready=True, admitted=True):
+    from types import SimpleNamespace
+    from api.data.attention import reddit_browser
+    class Routes:
+        def __init__(self, config, *, config_path=None):
+            seen.append(("routes", config_path))
+            self.runtime = SimpleNamespace(snapshot=SimpleNamespace(policy="policy"))
+
+        def refresh(self):
+            return SimpleNamespace(labels=("r_acct1",), select=lambda: "r_acct1" if ready else None)
+
+        def admit(self, label):
+            seen.append(("admit", label))
+
+        def admitted_route(self, site, label):
+            return _Admitted(admitted) if admitted is not None else "proxy_not_admitted"
+
+    monkeypatch.setattr(reddit_browser, "RedditRoutes", Routes)
+    monkeypatch.setattr("api.data.attention.browser_session.AdmittedRoute", _Admitted)
+
+
+class _Admitted:
+    def __init__(self, ok):
+        self.ok = ok
+
+    def admission(self):
+        return self.ok
+
+
+def _routed():
+    from types import SimpleNamespace
+    return SimpleNamespace(x_proxy_required=True, x_proxy_list_path="C:/p/l.json",
+                           x_proxy_assignments_path="C:/p/a.json", x_proxy_policy_path="C:/p/p.json",
+                           reddit_surface_path="C:/p/surface.json")
+
+
+def test_pr5_configured_uses_admitted_reddit_route(monkeypatch):
+    seen = []
+    _reddit_routes(monkeypatch, seen)
+    deps = pe.build_dependencies("PR5", _routed(), config_path="C:/p/q.json")
+    assert seen == [("routes", "C:/p/q.json"), ("admit", "r_acct1")]
+    assert deps["routes"]["gql_anon"] is deps["routes"]["browser"] and deps["routes"]["browser"].ok
+
+
+@pytest.mark.parametrize("ready,admitted,reason", [(False, True, "no_ready_account"),
+                                                   (True, False, "route_not_admitted"),
+                                                   (True, None, "route_not_admitted")])
+def test_pr5_refuses_without_admission(monkeypatch, ready, admitted, reason):
+    _reddit_routes(monkeypatch, [], ready=ready, admitted=admitted)
+    with pytest.raises(po.ProbeRefused, match=reason):
+        pe.build_dependencies("PR5", _routed(), config_path="C:/p/q.json")
+
+
+def test_pr1_configured_uses_admitted_reddit_route(monkeypatch):
+    from types import SimpleNamespace
+    from api.data.attention import reddit_surface
+    from api.scripts import probe_gql
+    seen = []
+    _reddit_routes(monkeypatch, seen)
+    section = SimpleNamespace(hosts=("gql.example",))
+    monkeypatch.setattr(reddit_surface, "load_surface", lambda path, name: section)
+    calls = []
+
+    def transport(config, *, routes=None, policy=None, hosts=()):
+        calls.append((routes.admitted_route("reddit", probe_gql.rg.SECTION).ok,
+                      routes.admitted_route("x", probe_gql.rg.SECTION), policy, hosts))
+        return "transport"
+    monkeypatch.setattr(probe_gql.rg, "route_transport", transport)
+    deps = pe.build_dependencies("PR1", _routed(), config_path="C:/p/q.json")
+    assert deps == {"transport": "transport", "section": section}
+    assert seen[0] == ("routes", "C:/p/q.json")
+    assert calls == [(True, "proxy_not_admitted", "policy", ("gql.example",))]
+
+
+def test_pr1_configured_without_ready_account_refuses(monkeypatch):
+    from types import SimpleNamespace
+    from api.data.attention import reddit_surface
+    _reddit_routes(monkeypatch, [], ready=False)
+    monkeypatch.setattr(reddit_surface, "load_surface", lambda path, name: SimpleNamespace(hosts=()))
+    with pytest.raises(po.ProbeRefused, match="no_ready_account"):
+        pe.build_dependencies("PR1", _routed(), config_path="C:/p/q.json")
+
+
+def test_pr2_passes_the_private_path_to_reddit_routes(monkeypatch):
+    from api.scripts import probe_browser
+    seen = []
+    _reddit_routes(monkeypatch, seen)
+    monkeypatch.setattr(probe_browser.rb, "build_host", lambda config: "host")
+    monkeypatch.setattr(probe_browser.rb, "admission_state", lambda config: None)
+    monkeypatch.setattr(probe_browser.rb, "BrowserSessions", lambda config, *, host, routes: object())
+    deps = pe.build_dependencies("PR2", _routed(), config_path="C:/p/q.json")
+    assert callable(deps["driver"]) and seen[0] == ("routes", "C:/p/q.json")
+
+
+def test_pr2_refusal_is_kept_before_routes(monkeypatch):
+    from api.scripts import probe_browser
+    seen = []
+    _reddit_routes(monkeypatch, seen)
+    monkeypatch.setattr(probe_browser.rb, "build_host", lambda config: "host")
+    monkeypatch.setattr(probe_browser.rb, "admission_state", lambda config: "browser_gate_missing")
+    with pytest.raises(po.ProbeRefused, match="browser_gate_missing"):
+        pe.build_dependencies("PR2", _routed(), config_path="C:/p/q.json")
+    assert seen == []
+
+
+def test_px6_uses_the_admitted_x_route_provider(monkeypatch):
+    from types import SimpleNamespace
+    from api.data.attention import browser_host, browser_session
+    config = SimpleNamespace(x_account_profiles={"x_acct1": "x_acct1"}, browser_path="C:/b/msedge.exe",
+                             browser_profiles_dir="C:/b/profiles", browser_memory_floor_mb=1,
+                             browser_rss_ceiling_mb=1, x_harvest_timeout_s=60)
+    monkeypatch.setattr(browser_host, "BrowserHost", lambda *a, **k: "host")
+    provider = object()
+    paths = []
+    monkeypatch.setattr(pe, "_x_routes", lambda cfg, path: paths.append(path) or (provider, "x_acct1", None))
+    monkeypatch.setattr(browser_session, "_profile_name", lambda cfg, site, label: label)
+    checks = []
+    monkeypatch.setattr(browser_session, "check_session", lambda *a, **k: checks.append(k["routes"]) or "ok")
+    deps = pe.build_dependencies("PX6", config, config_path="C:/p/q.json")
+    assert paths == ["C:/p/q.json"] and deps["check_session"]() == "ok" and checks == [provider]
+
+
+def test_px6_refuses_when_admitted_label_differs(monkeypatch):
+    from types import SimpleNamespace
+    from api.data.attention import browser_host
+    config = SimpleNamespace(x_account_profiles={"x_acct1": "x_acct1"}, browser_path="C:/b/msedge.exe",
+                             browser_profiles_dir="C:/b/profiles", browser_memory_floor_mb=1,
+                             browser_rss_ceiling_mb=1, x_harvest_timeout_s=60)
+    monkeypatch.setattr(browser_host, "BrowserHost", lambda *a, **k: "host")
+    monkeypatch.setattr(pe, "_x_routes", lambda cfg, path: (object(), "x_acct2", None))
+    with pytest.raises(po.ProbeRefused, match="route_not_admitted"):
+        pe.build_dependencies("PX6", config, config_path="C:/p/q.json")
+
+
+@pytest.mark.parametrize("probe", ["PR1", "PR5"])
+def test_routed_reddit_without_private_path_refuses(monkeypatch, probe):
+    from types import SimpleNamespace
+    from api.data.attention import reddit_surface
+    seen = []
+    _reddit_routes(monkeypatch, seen)
+    monkeypatch.setattr(reddit_surface, "load_surface", lambda path, name: SimpleNamespace(hosts=()))
+    with pytest.raises(po.ProbeRefused, match="route_not_admitted"):
+        pe.build_dependencies(probe, _routed())
+    assert seen == []

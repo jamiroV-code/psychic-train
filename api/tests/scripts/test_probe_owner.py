@@ -86,3 +86,53 @@ def test_cli_prints_dry_run(tmp_path):
     out=io.StringIO()
     assert po.main(['PR2'],cache_root=tmp_path,out=out,executors={})==0
     assert json.loads(out.getvalue())['dry_run']
+
+@pytest.mark.parametrize("kind", ["relative", "repository"])
+def test_private_query_selection_rejects_unsafe_paths(kind, tmp_path):
+    from api.data.attention import web_queries
+    path = "private.json" if kind == "relative" else str(web_queries.QUERIES_PATH)
+    with pytest.raises(SystemExit) as exc:
+        po.main(["PX1", "--queries", path], cache_root=tmp_path, out=io.StringIO())
+    assert exc.value.code == 2
+
+
+def test_private_query_selection_is_lazy_during_dry_run(tmp_path):
+    out = io.StringIO()
+    assert po.main(["PX1", "--queries", str(tmp_path / "private.json")],
+                   cache_root=tmp_path, out=out) == 0
+    assert json.loads(out.getvalue())["dry_run"]
+
+
+def _approved_main(monkeypatch, tmp_path, argv, configured):
+    from types import SimpleNamespace
+    from api.data.attention import web_queries
+    from api.scripts import probe_executors as pe
+    config = SimpleNamespace(x_proxy_required=configured, x_proxy_list_path=None,
+                             x_proxy_assignments_path=None, x_proxy_policy_path=None)
+    loaded = []
+    monkeypatch.setattr(web_queries, "load", lambda path=None: loaded.append(path) or SimpleNamespace(config=config))
+    built = []
+    monkeypatch.setattr(pe, "build_dependencies",
+                        lambda probe, cfg, *, config_path=None: built.append((probe, config_path)) or {})
+    digest = po.plan("PX1")["approval_digest"]
+    out = io.StringIO()
+    po.main(["PX1", "--approve", digest, *argv], cache_root=tmp_path, out=out,
+            executors={"PX1": lambda run: po.Outcome("pass")})
+    return json.loads(out.getvalue()), loaded, built
+
+
+def test_routed_config_without_private_queries_refuses(monkeypatch, tmp_path):
+    result, loaded, built = _approved_main(monkeypatch, tmp_path, [], configured=True)
+    assert result["reason"] == "private_queries_required"
+    assert loaded == [None] and built == []
+
+
+def test_private_queries_path_reaches_the_builder(monkeypatch, tmp_path):
+    private = tmp_path / "private.json"
+    result, loaded, built = _approved_main(monkeypatch, tmp_path, ["--queries", str(private)], configured=True)
+    assert loaded == [private] and built == [("PX1", private)]
+
+
+def test_direct_config_keeps_committed_default(monkeypatch, tmp_path):
+    result, loaded, built = _approved_main(monkeypatch, tmp_path, [], configured=False)
+    assert loaded == [None] and built == [("PX1", None)]

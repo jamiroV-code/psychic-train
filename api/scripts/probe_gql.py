@@ -77,7 +77,7 @@ def pr1_gql_anon(run):
     return po.Outcome('pass')
 
 
-def build_dependencies(config):
+def build_dependencies(config, *, config_path=None):
     """Production transport for an APPROVED PR1 run: the section from `reddit_surface_path` (draft for bootstrap,
     published for verify) and the admitted transport (`reddit_gql.route_transport`, default deny)."""
     from pathlib import Path
@@ -89,7 +89,32 @@ def build_dependencies(config):
         section = rs.load_surface(Path(config.reddit_surface_path), rg.SECTION)
     except rs.SurfaceInvalid:
         raise po.ProbeRefused('surface_unpublished') from None
-    transport = rg.route_transport(config, hosts=section.hosts)
+    from api.data.attention import reddit_browser
+    from api.data.attention.browser_session import AdmittedRoute
+    configured = config.x_proxy_required or any(getattr(config, key) is not None for key in
+        ('x_proxy_list_path', 'x_proxy_assignments_path', 'x_proxy_policy_path'))
+    if configured:
+        if config_path is None:  # routed mode never falls back to the committed query file
+            raise po.ProbeRefused('route_not_admitted')
+        routes = reddit_browser.RedditRoutes(config, config_path=config_path)
+        pool = routes.refresh()
+        for label in pool.labels:
+            routes.admit(label)
+        label = pool.select()
+        if label is None:
+            raise po.ProbeRefused('no_ready_account')
+        class SelectedRoute:
+            def admitted_route(self, site, method):
+                if site != 'reddit' or method != rg.SECTION:
+                    return 'proxy_not_admitted'
+                route = routes.admitted_route(site, label)
+                if not isinstance(route, AdmittedRoute) or not route.admission():
+                    return 'proxy_not_admitted'
+                return route
+        transport = rg.route_transport(config, routes=SelectedRoute(),
+                                       policy=routes.runtime.snapshot.policy, hosts=section.hosts)
+    else:
+        transport = rg.route_transport(config, hosts=section.hosts)
     if transport is None:
         raise po.ProbeRefused('route_not_admitted')
     return {'transport': transport, 'section': section}

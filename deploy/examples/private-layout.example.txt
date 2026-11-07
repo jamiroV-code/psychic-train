@@ -1,0 +1,27 @@
+SYNTHETIC EXAMPLE: the private folder layout for the collector identity pool.
+Everything here lives OUTSIDE the repo, is owned by the Windows user the collector runs as,
+and is never committed, copied into the repo, pasted into chat or printed by any tool.
+
+C:\MySitePrivate\                      private root (owner: you; access: you Modify, SYSTEM read)
+  config\
+    attention_queries.private.json     your query file (start from collector-queries.example.json);
+                                       CollectorQueriesPath in deploy.psd1 points here
+  routes\
+    proxy_list.json                    route list (B2 schema; opaque route ids, no credentials)
+    proxy_assignments.json             account label -> route id (X and Reddit, distinct exits)
+    proxy_policy.json                  B2 policy; its service_sid must be YOUR user SID
+    cache\                             admission and feed caches (written by the collector)
+  x_accounts\
+    x_acct1.db ... x_acct4.db          one X cookie database per account (written by
+                                       twscrape_reader --refresh-cookies / --harvest-cookies)
+    account_ready.json                 X ready marks (twscrape_reader --mark-ready)
+  profiles\
+    x_acct1 ... x_acct4                one browser profile per X account (browser_session --init-profile)
+    r_acct1, r_acct2                   one browser profile per Reddit account (logged in by you, once)
+  surface\
+    reddit_surface.json                published Reddit surface (surface_tool --approve-surface)
+  browser\                             optional: a dedicated copy of the browser executable, so the
+                                       firewall rule does not block your everyday browser
+
+Never here or anywhere on disk: your X or Reddit passwords. Cookie values exist only inside the
+per-account databases above; Reddit cookie values are never read by any tool.

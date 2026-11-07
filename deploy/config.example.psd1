@@ -40,5 +40,9 @@
     # Optional absolute PRIVATE owner query config, outside RepoRoot. Required
     # for B2 proxy routing; contains only private file paths, never route URLs.
     # Empty retains the existing direct/off committed query file.
+    # Shared by start-collector -Doctor, doctor.ps1 and register-collector-tasks.ps1.
+    # See deploy/examples/ and README "Collector identity pool runbook" before enabling.
+    # Registration verifies the actual user SID against the private policy; tasks are
+    # Interactive/Limited and collect only while that user is logged on.
     CollectorQueriesPath = ''
 }

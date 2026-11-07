@@ -236,30 +236,69 @@ def pr6_durability(run):
     return po.Outcome('fail', ('facts_missing_days',)) if missing else po.Outcome('pass')
 
 
-def build_dependencies(probe_id, config):
+def _x_routes(config, config_path):
+    from datetime import datetime, timezone
+    from api.data.attention import web_queries, x_pool, x_proxy
+    from api.data.attention.twscrape_reader import XRouteProvider
+    from api.data.attention.x_proxy_runtime import ProxyRuntime
+    if not config.x_accounts:
+        raise po.ProbeRefused('no_ready_account')
+    runtime = ProxyRuntime(config, config_path=config_path, repo_root=web_queries.REPO_ROOT)
+    pool = x_pool.from_config(config, clock=lambda: datetime.now(timezone.utc))
+    label = sorted(config.x_accounts)[0]
+    try:
+        runtime.reconcile(pool)
+        if runtime.snapshot.policy is not None:
+            runtime.admit(label, pool)
+    except x_proxy.ProxyFailure:
+        raise po.ProbeRefused('route_not_admitted') from None
+    return XRouteProvider(runtime), label, runtime
+
+
+def build_dependencies(probe_id, config, *, config_path=None):
     """Production transport for an APPROVED run (never called on dry-run). Unwired routes stay default-deny."""
     from datetime import datetime, timezone
     if probe_id == 'PR1':
         from api.scripts.probe_gql import build_dependencies as gql_dependencies
-        return gql_dependencies(config)
+        return gql_dependencies(config, config_path=config_path)
     if probe_id == 'PR2':
         from api.scripts.probe_browser import build_dependencies as browser_dependencies
-        return browser_dependencies(config)
+        return browser_dependencies(config, config_path=config_path)
     if probe_id == 'PR6':
         from api.data.attention import daily_facts
         return {'read_events': daily_facts.read_events}
     if probe_id == 'PX1':
         configured = config.x_proxy_required or any(getattr(config, k) is not None for k in
             ('x_proxy_list_path', 'x_proxy_assignments_path', 'x_proxy_policy_path'))
-        if configured:
-            raise po.ProbeRefused('route_not_admitted')
         import asyncio
         from api.data.attention.x_queryids_fetch import static_get
-        return {'static_get': lambda url: asyncio.run(static_get(None, None, url))}
+        if not configured:
+            return {'static_get': lambda url: asyncio.run(static_get(None, None, url))}
+        provider, label, runtime = _x_routes(config, config_path)
+        def get(url):
+            route = provider.admitted_route('x', label)
+            if getattr(route, 'mode', None) != 'proxy' or not route.admission():
+                raise po.ProbeRefused('route_not_admitted')
+            return asyncio.run(static_get(route.route, runtime.snapshot.policy, url))
+        return {'static_get': get}
     if probe_id == 'PR5':
-        from api.data.attention.browser_session import DENY_ROUTES
-        return {'routes': {'gql_anon': DENY_ROUTES.admitted_route('reddit', None),
-                           'browser': DENY_ROUTES.admitted_route('reddit', None)}}
+        from api.data.attention import reddit_browser
+        from api.data.attention.browser_session import AdmittedRoute
+        configured = config.x_proxy_required or any(getattr(config, k) is not None for k in
+            ('x_proxy_list_path', 'x_proxy_assignments_path', 'x_proxy_policy_path'))
+        if configured and config_path is None:  # routed mode never falls back to the committed query file
+            raise po.ProbeRefused('route_not_admitted')
+        routes = reddit_browser.RedditRoutes(config, config_path=config_path)
+        pool = routes.refresh()
+        for label in pool.labels:
+            routes.admit(label)
+        label = pool.select()
+        if label is None:
+            raise po.ProbeRefused('no_ready_account')
+        route = routes.admitted_route('reddit', label)
+        if not isinstance(route, AdmittedRoute) or not route.admission():
+            raise po.ProbeRefused('route_not_admitted')
+        return {'routes': {'gql_anon': route, 'browser': route}}
     if probe_id == 'PX6':
         from api.data import cache
         from api.data.attention import browser_host as bh, browser_session as bs
@@ -269,9 +308,12 @@ def build_dependencies(probe_id, config):
         host = bh.BrowserHost(config.browser_path, config.browser_profiles_dir, cache_root=cache.CACHE_ROOT,
                               memory_floor=config.browser_memory_floor_mb, rss_ceiling=config.browser_rss_ceiling_mb,
                               timeout=min(300, config.x_harvest_timeout_s + 60))
+        provider, admitted_label, runtime = _x_routes(config, config_path)
+        if admitted_label != label:
+            raise po.ProbeRefused('route_not_admitted')
         return {'check_session': lambda: bs.check_session(
             'x', label, host=host, profile_name=bs._profile_name(config, 'x', label), day_guard=None,
-            routes=bs.DENY_ROUTES, mode='probe', timeout=min(180, config.x_harvest_timeout_s))}
+            routes=provider, mode='probe', timeout=min(180, config.x_harvest_timeout_s))}
     if probe_id in ('PX2', 'PX3', 'PX4', 'PX5'):
         import dataclasses
         from api.data.attention import twscrape_reader as tr, x_pool
@@ -280,16 +322,16 @@ def build_dependencies(probe_id, config):
         deps = {'query': x_pool.canary_query(config, start, end), 'window': (start, end),
                 'tolerance': config.x_canary_tolerance, 'min_overlap': config.x_canary_min_overlap}
         try:
-            boot = tr.start(config)
+            boot = tr.start(config, config_path=config_path)
         except tr.XStartRefused as exc:
             raise po.ProbeRefused('x_start_refused:' + ','.join(exc.reasons)) from None
         deps.update(readers=boot.readers, adapter=boot.adapter)
         if probe_id == 'PX4':
-            deps['fresh_reader'] = lambda label: tr.start(config).readers[label]
+            deps['fresh_reader'] = lambda label: tr.start(config, config_path=config_path).readers[label]
         if probe_id == 'PX5':
             labels = sorted(boot.readers)[:2]
             other = 'curl' if config.x_connection_style == 'plain' else 'plain'
-            alt = tr.start(dataclasses.replace(config, x_connection_style=other))
+            alt = tr.start(dataclasses.replace(config, x_connection_style=other), config_path=config_path)
             by_style = {config.x_connection_style: boot.readers, other: alt.readers}
             deps['runs'] = [(label, style, by_style[style][label]) for label in labels for style in ('plain', 'curl')]
         return deps

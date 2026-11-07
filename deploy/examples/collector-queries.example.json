@@ -1,0 +1,34 @@
+{
+  "_how_to_use": "SYNTHETIC EXAMPLE. Copy api/data/attention_queries.json to C:/MySitePrivate/config/attention_queries.private.json (outside the repo), then copy the keys of the collector block below into ITS collector block and edit the labels and paths. Delete this _how_to_use key. Every switch below is at its safe default (off); deploy/README.md 'Collector identity pool runbook' turns them on one at a time.",
+  "collector": {
+    "x_accounts": ["x_acct1", "x_acct2", "x_acct3", "x_acct4"],
+    "x_pool_max": 4,
+    "x_accounts_db_path": "C:\\MySitePrivate\\x_accounts",
+    "x_account_daily_cap": 200,
+    "x_account_rest_days": 7,
+    "x_proxy_required": true,
+    "x_proxy_list_path": "C:\\MySitePrivate\\routes\\proxy_list.json",
+    "x_proxy_assignments_path": "C:\\MySitePrivate\\routes\\proxy_assignments.json",
+    "x_proxy_policy_path": "C:\\MySitePrivate\\routes\\proxy_policy.json",
+    "x_queryid_mode": "off",
+    "x_cookie_harvest_enabled": false,
+    "browser_path": "C:\\MySitePrivate\\browser\\msedge.exe",
+    "browser_profiles_dir": "C:\\MySitePrivate\\profiles",
+    "x_account_profiles": {"x_acct1": "x_acct1", "x_acct2": "x_acct2", "x_acct3": "x_acct3", "x_acct4": "x_acct4"},
+    "x_surface_path": null,
+    "x_cookie_refresh_age_days": null,
+    "x_quiet_hours_enabled": false,
+    "x_mixed_traffic_enabled": false,
+    "x_variation_enabled": false,
+    "x_adaptive_cooldown_enabled": false,
+    "x_warmup_enabled": false,
+    "reddit_live_methods": [],
+    "reddit_surface_path": "C:\\MySitePrivate\\surface\\reddit_surface.json",
+    "reddit_browser_accounts": [
+      {"label": "r_acct1", "profile": "r_acct1"},
+      {"label": "r_acct2", "profile": "r_acct2"}
+    ],
+    "reddit_browser_account_rest_days": 7,
+    "reddit_session_check_enabled": false
+  }
+}

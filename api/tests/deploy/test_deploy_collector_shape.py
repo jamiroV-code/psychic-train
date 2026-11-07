@@ -28,7 +28,9 @@ def _section() -> str:
 
 def test_start_collector_runs_the_module_with_its_flag_and_dry_run():
     text = _read("start-collector.ps1")
-    assert "param([switch]$DryRun, [string]$QueriesPath = '')" in text and 'Import-MySiteConfig -LogName \'collector\'' in text
+    # S-OpsDeploy (table H): the whole param(...) now also carries the -Doctor pre-flight switch.
+    assert "param([switch]$DryRun, [string]$QueriesPath = '', [switch]$Doctor)" in text
+    assert 'Import-MySiteConfig -LogName \'collector\'' in text
     assert "'python', '-m', 'api.data.attention_collector'" in text
     assert f"$env:{apr.FLAG_ENV} = '1'" in text
     assert apr.STREAM_ENV in text  # printed, inherited as the owner sets it, never forced on here
@@ -86,3 +88,137 @@ def test_b2_launcher_freezes_locked_group_and_passes_explicit_bounded_query_path
         assert name in text
     assert "if ($hasRouting -and -not $privateQueries)" in text
     assert "Get-Content -Raw" not in text
+
+
+# --- S-OpsDeploy (finish plan 06-11-26, OD-2..OD-5): text-shape guards only; no PowerShell runs here. ---
+
+import json  # noqa: E402
+
+from api.data.attention import web_queries  # noqa: E402
+
+EXAMPLES = DEPLOY / "examples"
+RUNBOOK = "## Collector identity pool runbook (owner steps)"
+
+
+def _runbook() -> str:
+    text = _read("README.md")
+    start = text.find(RUNBOOK)
+    assert start != -1, "README must carry the owner runbook"
+    nxt = text.find("\n## ", start + 1)
+    return text[start:] if nxt == -1 else text[start:nxt]
+
+
+def test_start_collector_doctor_preflight_runs_before_the_collector_and_refuses_on_fail():
+    text = _read("start-collector.ps1")
+    assert "param([switch]$DryRun, [string]$QueriesPath = '', [switch]$Doctor)" in text
+    assert "'python', '-m', 'api.scripts.collector_doctor'" in text
+    assert text.index("if ($DryRun) {") < text.index("if ($Doctor) {") < text.index("& $config.UvPath @collectorArgs")
+    assert "& $config.UvPath @doctorArgs" in text
+    assert "if ($doctorCode -ge 2)" in text and "exit 5" in text
+    assert "--live" not in text and "--selftest" not in text  # pre-flight stays offline and fast
+
+
+def test_register_collector_tasks_shape():
+    text = _read("register-collector-tasks.ps1")
+    assert text.startswith("#") and "UNRUN" in text and text.isascii()
+    assert "param([switch]$Remove, [string]$QueriesPath = '', [string]$DoctorTime = '07:00')" in text
+    assert "'mysite-collector'" in text and "'mysite-collector-doctor'" in text
+    assert "-LogonType Interactive -RunLevel Limited" in text
+    assert "-AtLogOn -User $user" in text and "-Daily -At $DoctorTime" in text
+    assert "-RestartCount 3" in text and "-RestartInterval (New-TimeSpan -Minutes 1)" in text
+    assert "-MultipleInstances IgnoreNew" in text
+    assert "start-collector.ps1" in text and "-Doctor" in text and "doctor.ps1" in text
+    assert "Register-ScheduledTask" in text and "Unregister-ScheduledTask" in text and "-Force" in text
+    # identity: actual token SID, compared with the private policy SID; refusal, never ACL relaxation
+    assert "[System.Security.Principal.WindowsIdentity]::GetCurrent()" in text and ".User.Value" in text
+    assert "service_sid" in text and "exit 4" in text
+    assert "IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)" in text
+    for forbidden in ("SYSTEM", "S4U", "Highest", "ServiceAccount", "-Password", "icacls", "Set-Acl", "LocalService",
+                      "NetworkService"):
+        assert forbidden not in text, forbidden
+    lower = text.lower()
+    for word in ("password", "cookie", "token =", "apikey"):
+        assert word not in lower, word
+
+
+def test_register_tasks_and_collector_tasks_stay_separate():
+    assert "mysite-collector" not in _read("register-tasks.ps1")
+    assert "mysite-api" not in _read("register-collector-tasks.ps1")
+
+
+def test_examples_are_synthetic_and_the_collector_block_validates(tmp_path):
+    names = sorted(p.name for p in EXAMPLES.iterdir())
+    assert names == ["collector-queries.example.json", "deploy.example.psd1", "private-layout.example.txt"]
+    for path in EXAMPLES.iterdir():
+        text = path.read_text(encoding="utf-8")
+        assert text.isascii()
+        lower = text.lower()
+        for word in ("auth_token=", "ct0=", '"password":', "reddit_session=", "token_v2=", "http://", "https://", "socks"):
+            assert word not in lower, (path.name, word)
+    doc = json.loads((EXAMPLES / "collector-queries.example.json").read_text(encoding="utf-8"))
+    block = doc["collector"]
+
+    def relocate(value):  # synthetic absolute paths become real temp paths on any OS
+        if isinstance(value, str) and value.startswith("C:\\MySitePrivate\\"):
+            return str(tmp_path.joinpath(*value[len("C:\\MySitePrivate\\"):].split("\\")))
+        if isinstance(value, dict):
+            return {k: relocate(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [relocate(v) for v in value]
+        return value
+
+    committed = json.loads((DEPLOY.parent / "api" / "data" / "attention_queries.json").read_text(encoding="utf-8"))
+    merged = {**committed["collector"], **relocate(block)}
+    config = web_queries.validate_config(merged)
+    # the example shows every switch at its safe default: all optional measures OFF
+    assert config.x_queryid_mode == "off" and config.reddit_live_methods == ()
+    assert not any((config.x_cookie_harvest_enabled, config.x_quiet_hours_enabled, config.x_mixed_traffic_enabled,
+                    config.x_variation_enabled, config.x_adaptive_cooldown_enabled, config.x_warmup_enabled,
+                    config.reddit_session_check_enabled))
+    assert len(config.reddit_browser_accounts) == 2 and config.x_proxy_required is True
+
+
+def test_runbook_has_every_owner_step_with_exact_commands():
+    section = _runbook()
+    assert section.isascii()
+    for needle in (
+        # private layout, X cookies and ready marks
+        "private-layout.example.txt", "collector-queries.example.json", "CollectorQueriesPath",
+        "X_REFRESH_COOKIES", "--refresh-cookies", "twscrape_reader --mark-ready", "--harvest-cookies",
+        # Reddit profiles, login and ready marks
+        "browser_session --site reddit --label", "--init-profile", "--interactive", "reddit_accounts --mark-ready",
+        # probes in order, with --approve
+        "probe_owner", "--approve", "--mode bootstrap", "--mode verify", "surface_tool surface-propose",
+        "--approve-surface browser",
+        # firewall
+        "browser_firewall_rule --program", "Get-NetFirewallApplicationFilter", "Remove-NetFirewallRule",
+        "browser_selftest",
+        # switches, doctor, report, analyzer, tasks
+        "x_queryid_mode", "sentinel", "auto", "x_cookie_harvest_enabled", "reddit_live_methods",
+        "x_quiet_hours_enabled", "x_behaviour_report --from", "attention_daily_report --print",
+        "doctor.ps1", "start-collector.ps1 -Doctor", "register-collector-tasks.ps1", "-Remove",
+        # calendar, failure path, compliance, limits
+        "13-11-26", "12-01-27", "March 2027", "missing-not-zero", "BP12", "deletion",
+    ):
+        assert needle in section, needle
+    probe_order = [section.index(f"probe_owner {p}") for p in ("PX1", "PX2", "PX3", "PX4", "PX5", "PX6", "PR2", "PR1",
+                                                               "PR5", "PR6")]
+    assert probe_order == sorted(probe_order), "probes must appear in the enabling order"
+    for status in ("PASS", "WARN", "FAIL", "UNKNOWN", "needs_probe", "containment_residual_unaccepted",
+                   "accepted_residual", "contained", "browser_unadmitted", "x_login_required", "resting",
+                   "probe_stale", "surface_changed"):
+        assert status in section, status
+    assert section.count("UNRUN") >= 3
+    assert "Rollback" in section
+
+
+def test_stage3_gateway_stays_absent_and_relay_is_loopback_only():
+    """OD-4 / A9 / AC16: no gateway key, module or deploy setting; the relay binds only loopback."""
+    from api.data.attention import browser_relay
+    assert browser_relay.LISTEN_HOST == "127.0.0.1"
+    assert not [k for k in web_queries.DEFAULTS if "gateway" in k or "v2ray" in k]
+    for path in DEPLOY.rglob("*"):
+        if path.is_file() and path.suffix in {".ps1", ".psd1", ".json", ".txt"}:
+            lower = path.read_text(encoding="utf-8").lower()
+            assert "gateway" not in lower and "v2ray" not in lower, path.name
+    assert "is NOT a gateway" in _runbook()

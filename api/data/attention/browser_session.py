@@ -279,18 +279,29 @@ def main(argv=None, *, config=None, host=None, day_guard=None, routes=None, out=
     parser = argparse.ArgumentParser(prog="python -m api.data.attention.browser_session")
     parser.add_argument("--site", choices=sorted(SITES), required=True)
     parser.add_argument("--label", required=True)
+    from pathlib import Path
+    parser.add_argument("--queries", type=Path, help="absolute private query file outside the repository")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--init-profile", action="store_true")
     group.add_argument("--interactive", action="store_true")
     group.add_argument("--probe", action="store_true")
     args = parser.parse_args(argv)
+    from api.data.attention import web_queries
+    if args.queries is not None:
+        if not args.queries.is_absolute() or not web_queries._outside_repo(str(args.queries.resolve())):
+            parser.error("--queries must be absolute and outside the repository")
     mode = "interactive" if args.interactive else "probe" if args.probe else "automatic"
     head = {"site": args.site, "label": args.label}
-    config_path = None
+    config_path = args.queries
     if config is None:
-        from api.data.attention import web_queries
-        config_path = web_queries.QUERIES_PATH
-        config = web_queries.load().config
+        try:
+            config = web_queries.load(config_path).config
+        except (OSError, ValueError):
+            return _emit(out, {**head, "state": "failed", "reason": "config_invalid"}, 2)
+        configured = config.x_proxy_required or any(getattr(config, key) is not None for key in
+            ("x_proxy_list_path", "x_proxy_assignments_path", "x_proxy_policy_path"))
+        if configured and config_path is None:
+            return _emit(out, {**head, "state": "failed", "reason": "private_queries_required"}, 2)
     name = _profile_name(config, args.site, args.label)
     if name is None:
         return _emit(out, {**head, "state": "failed", "reason": "label_unconfigured"}, 2)

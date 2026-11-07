@@ -1,17 +1,20 @@
 # Start the attention collector (X and Reddit) as its own process, separate from the API.
 #
-#   powershell -NoProfile -ExecutionPolicy Bypass -File deploy\start-collector.ps1 [-DryRun]
+#   powershell -NoProfile -ExecutionPolicy Bypass -File deploy\start-collector.ps1 [-DryRun] [-Doctor] [-QueriesPath <abs>]
 #
 # Order: load the config -> set the environment the collector checks -> run
 # `python -m api.data.attention_collector` in the foreground until CTRL+C or the window closes.
 # -DryRun prints what would run and exits 0 without starting anything.
+# -Doctor first runs the offline collector doctor (`python -m api.scripts.collector_doctor`, no -Live, no
+# -SelfTest). Any FAIL (doctor exit 2 or more) refuses the start with exit 5; WARN/UNKNOWN (exit 1) is logged
+# and the collector starts, because pending live evidence must never stop collection.
 #
 # Restarting the API never touches this process. It does not pull code (start-api.ps1 does);
 # after a pull that changes the collector, restart this script. It refuses to start (exit 3)
 # while another collector, standalone or inside the API, still writes a fresh heartbeat.
 #
 # UNRUN: written without running PowerShell; see deploy\README.md "Collector (separate from the API)".
-param([switch]$DryRun, [string]$QueriesPath = '')
+param([switch]$DryRun, [string]$QueriesPath = '', [switch]$Doctor)
 
 . "$PSScriptRoot\_common.ps1"
 
@@ -78,7 +81,21 @@ if ($DryRun) {
     Write-Host "TWS_RAISE_WHEN_NO_ACCOUNT        = $env:TWS_RAISE_WHEN_NO_ACCOUNT"
     Write-Host "proxy variables                  = cleared"
     Write-Host "command                          = uv run --project api --frozen --group xreader python -m api.data.attention_collector --queries <selected>"
+    Write-Host "doctor pre-flight                = $(if ($Doctor) { 'on (offline; FAIL refuses the start)' } else { 'off' })"
     exit 0
+}
+
+if ($Doctor) {
+    $doctorArgs = @('run', '--project', 'api', '--frozen', '--group', 'xreader', 'python', '-m', 'api.scripts.collector_doctor')
+    if ($privateQueries) { $doctorArgs += @('--queries', $privateQueries) }
+    Set-Location $config.RepoRoot
+    & $config.UvPath @doctorArgs
+    $doctorCode = $LASTEXITCODE
+    if ($doctorCode -ge 2) {
+        Write-MySiteLog "Collector doctor reported FAIL (exit $doctorCode); collector NOT started. Run deploy\doctor.ps1 for details."
+        exit 5
+    }
+    Write-MySiteLog "Collector doctor pre-flight exit $doctorCode (0 all pass, 1 warn or unknown); starting the collector"
 }
 
 Write-MySiteLog "Starting attention collector; Reddit stream: $stream"

@@ -331,27 +331,23 @@ Two optional keys in the `collector` block of `api\data\attention_queries.json` 
 on); to keep it for the scheduled task, set it as a user variable:
 `[Environment]::SetEnvironmentVariable('SCREENER_ATTENTION_REDDIT_STREAM', '1', 'User')` (UNRUN).
 
-### Scheduled task `mysite-collector` (UNRUN: not registered by any script)
+### Scheduled collector tasks (UNRUN)
 
-`register-tasks.ps1` does not create it. To start the collector at your logon, run this once in a
-normal (not admin) PowerShell in the repo root; it mirrors `register-tasks.ps1` (your user, no
-elevation, restarts up to 3 times, no time limit) and is idempotent (`-Force` replaces it):
+`register-tasks.ps1` still registers only the API and web app. Use the separate
+`register-collector-tasks.ps1` for the collector and daily doctor. It uses
+`Register-ScheduledTask -Force`, so repeating registration replaces the definitions.
+The actual token SID must match the private policy; never elevate or loosen ACLs
+to bypass a refusal. See the owner runbook below before registering.
 
 ```powershell
-$user = "$env:USERDOMAIN\$env:USERNAME"
-$powershellExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-$script = Join-Path (Get-Location).Path 'deploy\start-collector.ps1'
-$action = New-ScheduledTaskAction -Execute $powershellExe -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$script`"" -WorkingDirectory (Get-Location).Path
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
-$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
-$settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
-Register-ScheduledTask -TaskName mysite-collector -Trigger $trigger -Principal $principal -Settings $settings -Action $action -Force | Out-Null
-Get-ScheduledTask mysite-collector | Select TaskName,State
+powershell -NoProfile -ExecutionPolicy Bypass -File deploy\register-collector-tasks.ps1
+Get-ScheduledTask mysite-collector,mysite-collector-doctor | Select TaskName,State
 ```
 
-Registering does not start it (it starts at your next logon, or now with
-`Start-ScheduledTask mysite-collector`). Remove it with
-`Unregister-ScheduledTask -TaskName mysite-collector -Confirm:$false` (UNRUN).
+UNRUN: registration does not start collection. After reviewing the doctor, run
+`Start-ScheduledTask mysite-collector`. To remove both definitions, run
+`powershell -NoProfile -ExecutionPolicy Bypass -File deploy\register-collector-tasks.ps1 -Remove`.
+Stop collection first; removing a definition is not a substitute for stopping its process.
 
 ## LSE API key (equities prices)
 
@@ -582,3 +578,291 @@ guard. The corrected test uses real `ProxyRuntime`, the normal OS environment
 through the production child allowlist, an existing isolated private temp directory
 and the exact bootstrap signature. No production guard was bypassed or relaxed.
 Independent consolidated acceptance and live release gates remain separate.
+
+## Collector identity pool runbook (owner steps)
+
+**UNRUN on the owner machine.** These are manual owner steps, not authorization
+for an agent to log in, create accounts, apply firewall rules, or contact providers.
+Keep optional features off until their step below. Fixture success means
+CODE-COMPLETE, not LIVE-READY. A failed live gate leaves data missing-not-zero.
+The per-account, per-session, in-process CONNECT relay binds only 127.0.0.1,
+uses an explicit host allowlist and is NOT a gateway.
+
+### 1. Prepare the private layout and accounts
+
+Use `deploy/examples/private-layout.example.txt` as the layout guide and
+`deploy/examples/collector-queries.example.json` as collector-block overrides,
+not as a complete query document. Copy the complete committed query file outside
+the repository, retain its coin/subreddit definitions, and edit its collector block.
+Do not paste the example's `_how_to_use` key into the actual query document.
+Use an installed Edge/Chrome executable, not a copied single executable: browser
+installations need their companion files. Profiles must be dedicated to collection.
+
+| Owner input | Exact form |
+|---|---|
+| Private queries | Absolute external JSON path; version 1 query document, strict collector keys |
+| Deployment config | `%LOCALAPPDATA%\my_site\deploy.psd1`; `CollectorQueriesPath` points to that JSON |
+| X labels | `x_accounts`: array of distinct lowercase `[a-z0-9_]{1,24}` labels, not credentials |
+| X database folder | `x_accounts_db_path`: absolute external folder; one `<label>.db` per account |
+| Reddit labels/profiles | `reddit_browser_accounts`: `[{"label":"r_acct1","profile":"r_acct1"},{"label":"r_acct2","profile":"r_acct2"}]` |
+| Browser | `browser_path`: installed executable absolute path; `browser_profiles_dir`: private external folder |
+| X profiles | `x_account_profiles`: object mapping each X label to a unique profile name |
+| Routes | All three absolute `x_proxy_list_path`, `x_proxy_assignments_path`, `x_proxy_policy_path`; `x_proxy_required:true` |
+| Surface | `reddit_surface_path`: absolute private published JSON; optional separate `x_surface_path` |
+
+Labels and normalized profile names must be unique across both sites. Set
+`x_account_rest_days:7`, `reddit_browser_account_rest_days:7` and an appropriate
+per-account cap. About four X accounts, six worst case, is the sizing estimate
+for this universe, not a coverage promise. The two Reddit accounts created
+07-11-26 reach one week on 14-11-26; collector rest and next-day ready gates
+still apply. Only the owner creates or logs into accounts.
+
+Run from the repository root in a normal PowerShell:
+
+```powershell
+$q = 'C:\MySitePrivate\config\attention_queries.private.json'
+$surface = 'C:\MySitePrivate\surface\reddit_surface.json'
+$browser = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+$cache = 'C:\MySitePrivate\cache'
+$env:SCREENER_CACHE_ROOT = $cache
+$env:TWS_TELEMETRY = '0'
+$env:DO_NOT_TRACK = '1'
+$env:TWS_LOG_LEVEL = 'WARNING'
+$env:TWS_RAISE_WHEN_NO_ACCOUNT = '1'
+uv sync --project api --frozen --group xreader
+```
+
+Set the same CacheRoot in deploy.psd1. Never store real values in examples.
+Private-root ACLs must satisfy the existing B2 owner/SYSTEM policy, including
+ancestors; the doctor refuses unsuitable roots rather than repairing them.
+
+### 2. Load X cookies, ready marks and routes
+
+Use the owner's browser to obtain the cookie string. Read it without echoing or
+putting its literal value in shell history; the refresh command's existing
+environment boundary is transient. Never put cookies in arguments or logs.
+
+```powershell
+$secure = Read-Host 'X cookie string for x_acct1' -AsSecureString
+$ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+try {
+    $env:X_REFRESH_COOKIES = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
+    uv run --project api --frozen --group xreader python -m api.data.attention.twscrape_reader --refresh-cookies x_acct1 --queries $q
+} finally {
+    Remove-Item Env:X_REFRESH_COOKIES -ErrorAction SilentlyContinue
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
+    $secure.Dispose()
+}
+uv run --project api --frozen --group xreader python -m api.data.attention.twscrape_reader --mark-ready x_acct1 --queries $q
+uv run --project api --frozen --group xreader python -m api.data.attention.reddit_accounts --mark-ready r_acct1 --queries $q
+```
+
+Repeat for each configured label. Ready means eligible from the next UTC day,
+after rest, not immediate activation. Supply the existing B2 policy/list/assignment
+files privately; preserve opaque route IDs, distinct exits across X and Reddit,
+the policy's actual user SID, baseline hash and bounded feed caches. Do not
+disable `x_proxy_required` to bypass unadmitted or quarantined routes.
+Direct/off is only `false` plus **all three route paths null**.
+
+### 3. Establish the daily report baseline
+
+Reports are automatic at pass end; there is no enable switch to invent.
+
+```powershell
+uv run --project api --frozen --group xreader python -m api.scripts.attention_daily_report --print
+```
+
+Read `<cache>\attention\_reports\daily_report_<UTC-day>.json`.
+Eligible must equal stored plus missing; exact and estimated describe stored
+data. No evidence means unknown or missing, never an invented zero.
+
+### 4. Review firewall text and admit the browser
+
+The owner chose firewall containment and accepted CE-1/CE-2 profile exceptions.
+This is not yet proof of installed-browser containment. Keep the sandbox enabled.
+Generate text without changing any firewall state:
+
+```powershell
+uv run --project api --frozen --group xreader python -m api.scripts.browser_firewall_rule --program $browser
+# For a dedicated Windows user, add --user 'MACHINE\collector'.
+```
+
+Review the output. The rule affects EVERY use of that executable unless scoped
+to a dedicated Windows user. Only the owner applies the chosen command in an
+administrator PowerShell. The netsh alternative is not user-scoped; do not use
+it as a substitute for the scoped PowerShell rule.
+
+```powershell
+New-NetFirewallRule -DisplayName "mysite-collector-browser-block" -Direction Outbound -Action Block -Program $browser -Profile Any
+Get-NetFirewallRule -DisplayName "mysite-collector-browser-block" | Get-NetFirewallApplicationFilter
+# Removal, if needed:
+Remove-NetFirewallRule -DisplayName "mysite-collector-browser-block"
+```
+
+After applying, return to the normal collector user's shell:
+
+```powershell
+uv run --project api --frozen --group xreader python -m api.data.attention.browser_selftest --binary $browser --cache-root $cache
+powershell -NoProfile -ExecutionPolicy Bypass -File deploy\doctor.ps1 -QueriesPath $q
+```
+
+`contained` requires attested rule, zero Established non-loopback endpoints and
+working loopback relay. Rule presence alone is insufficient. Record BP1b and
+BP3c results; reject unexpected ACLs rather than broadening exceptions.
+Version/path/flag changes invalidate admission. TCP polling cannot prove absence
+of short-lived connections, all UDP, or activity of unrelated processes.
+
+### 5. Initialize profiles and log in manually
+
+UNRUN: only after browser gates are admitted:
+
+```powershell
+uv run --project api --frozen --group xreader python -m api.data.attention.browser_session --site reddit --label r_acct1 --init-profile --queries $q
+uv run --project api --frozen --group xreader python -m api.data.attention.browser_session --site reddit --label r_acct1 --interactive --queries $q
+uv run --project api --frozen --group xreader python -m api.data.attention.browser_session --site reddit --label r_acct2 --init-profile --queries $q
+uv run --project api --frozen --group xreader python -m api.data.attention.browser_session --site reddit --label r_acct2 --interactive --queries $q
+```
+
+The owner types credentials in the browser, never in the terminal. Stop at
+login/challenge; do not automate challenge solving. Reddit cookie values are
+never harvested. For X, initialize each configured X profile similarly with
+`--site x`, then explicitly request owner-interactive harvesting:
+
+```powershell
+uv run --project api --frozen --group xreader python -m api.data.attention.twscrape_reader --harvest-cookies x_acct1 --interactive --queries $q
+```
+
+### 6. Run bounded owner probes in this order
+
+Each command below is initially a **dry run**. Read its purpose, limits and
+`approval_digest`. Re-run that exact command adding `--approve <that digest>`
+only when the owner approves its provider requests/browser launches.
+Do not reuse another probe's digest. Add `--commit (git rev-parse HEAD)` to
+record the running revision.
+
+```powershell
+uv run --project api --frozen --group xreader python -m api.scripts.probe_owner PX1 --queries $q
+uv run --project api --frozen --group xreader python -m api.scripts.probe_owner PX2 --queries $q
+uv run --project api --frozen --group xreader python -m api.scripts.probe_owner PX3 --queries $q
+uv run --project api --frozen --group xreader python -m api.scripts.probe_owner PX4 --queries $q
+uv run --project api --frozen --group xreader python -m api.scripts.probe_owner PX5 --queries $q
+uv run --project api --frozen --group xreader python -m api.scripts.probe_owner PX6 --queries $q
+```
+
+PX1 checks query IDs; PX2 compares candidates; PX3 checks each account; PX4
+observes cookie rotation; PX5 compares transports; PX6 checks harvesting.
+Enable `x_queryid_mode:"sentinel"` first, inspect evidence, then `"auto"`.
+Enable `x_cookie_harvest_enabled:true` only after PX6; optional
+`x_cookie_refresh_age_days` controls the age trigger. Suspensions are terminal,
+not a reason to repeatedly harvest.
+
+Then capture, review and explicitly publish Reddit grammar:
+
+```powershell
+uv run --project api --frozen --group xreader python -m api.scripts.probe_owner PR2 --mode bootstrap --queries $q
+uv run --project api --frozen --group xreader python -m api.scripts.surface_tool surface-propose --section browser
+uv run --project api --frozen --group xreader python -m api.scripts.surface_tool --approve-surface browser --surface-path $surface
+uv run --project api --frozen --group xreader python -m api.scripts.probe_owner PR2 --mode verify --surface-path $surface --queries $q
+uv run --project api --frozen --group xreader python -m api.scripts.probe_owner PR1 --mode bootstrap --surface-path $surface --queries $q
+uv run --project api --frozen --group xreader python -m api.scripts.surface_tool surface-propose --section gql_anon
+uv run --project api --frozen --group xreader python -m api.scripts.surface_tool --approve-surface gql_anon --surface-path $surface
+uv run --project api --frozen --group xreader python -m api.scripts.probe_owner PR1 --mode verify --surface-path $surface --queries $q
+uv run --project api --frozen --group xreader python -m api.scripts.probe_owner PR5 --queries $q
+uv run --project api --frozen --group xreader python -m api.scripts.probe_owner PR6 --queries $q
+```
+
+The probe commands still need their own `--approve` digest; publication is a
+separate owner decision. PR1 needs a valid gql_anon draft surface; absence must
+refuse, not guess request grammar. PR5 compares admitted route classes; PR6
+needs seven completed UTC days of local facts. Archive and cookie-HTTP routes
+are not fallback options. If PR1/PR2 fail or captures do not fit, retain
+missing-not-zero and use the owner-authorized parser-extension workflow on
+real captures; do not pretend unsupported responses are empty results.
+
+### 7. Enable measured optional behavior
+
+Change the private JSON and restart after each change. Enable one B3 switch
+at a time: `x_quiet_hours_enabled` (with per-account timezone/start/end),
+`x_mixed_traffic_enabled` (with bounded `x_mixed_targets`), `x_variation_enabled`,
+`x_adaptive_cooldown_enabled`, then `x_warmup_enabled`.
+
+```powershell
+uv run --project api --frozen --group xreader python -m api.data.attention.x_behaviour_report --from 2026-11-07 --to 2026-11-14
+```
+
+Use actual completed dates. Compare costs and outcomes; no anti-ban benefit is
+claimed. Finally enable `reddit_live_methods:["browser"]`, adding `"gql_anon"`
+only after its independent verify gate passes. It remains partial for comments.
+Enable `reddit_session_check_enabled:true` only for the separate daily session
+check; every browser launch still checks login regardless of that switch.
+
+### 8. Daily checks and status meanings
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File deploy\doctor.ps1 -QueriesPath $q -Json
+powershell -NoProfile -ExecutionPolicy Bypass -File deploy\doctor.ps1 -QueriesPath $q -Live
+uv run --project api --frozen --group xreader python -m api.scripts.attention_daily_report --print
+```
+
+Check heartbeat freshness, account capacity/rest, missing reasons, probe age,
+quarantine and disk space. Doctor PASS means that check passed; WARN needs
+attention; FAIL is a failed prerequisite; UNKNOWN means not measured/readable,
+never healthy. Exit codes are 0 all PASS, 1 WARN/UNKNOWN, 2 any FAIL.
+
+| State | Owner response |
+|---|---|
+| resting / not ready | Wait for rest and previous-UTC-day ready mark; do not reset counters |
+| budget_spent | Wait for UTC rollover; do not reset charged reads |
+| x_login_required | Refresh/harvest once after manual login; preserve accounting |
+| x_account_suspended / locked | Stop using that account; no automatic recovery |
+| quarantined / proxy_not_admitted | Diagnose route/exit/feed freshness; never bypass to direct |
+| needs_probe / probe_stale | Run the specific approved live verify probe |
+| surface_changed / surface_unpublished | Review/publish the section and re-verify |
+| containment_residual_unaccepted | Browser blocked; complete firewall/admission steps |
+| accepted_residual | Residual was accepted, NOT OS containment; owner's selected route is firewall |
+| contained | A19 evidence passed for the exact admitted version; not absolute network proof |
+| browser_unadmitted / cdp_pipe_unavailable / profile_policy_unsatisfied | Stop browser use; fix the named gate, never disable sandbox |
+| missing / unknown / partial | Preserve that evidence classification; never relabel as zero or complete |
+
+Reddit calendar: old feeds stop 13-11-26; API removal begins 12-01-27; public API
+ends March 2027. Gaps between feed cutoff and first live settle cannot be
+backfilled by this implementation. Respect provider terms and deletion requests;
+do not preserve deleted content as a workaround for unavailable sources.
+
+### 9. Register, restart and rollback
+
+UNRUN: run as the same normal Windows user whose actual SID owns the private
+policy. Tasks use Interactive/Limited, never elevated or stored credentials.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File deploy\start-collector.ps1 -Doctor -DryRun -QueriesPath $q
+powershell -NoProfile -ExecutionPolicy Bypass -File deploy\register-collector-tasks.ps1 -QueriesPath $q -DoctorTime 07:00
+Get-ScheduledTask mysite-collector,mysite-collector-doctor | Select TaskName,State
+Start-ScheduledTask mysite-collector
+```
+
+Collector starts at logon, restarts three times one minute apart and ignores
+duplicate starts. Doctor runs daily at local 07:00. Logged-out collection is
+not provided. Locked/disconnected rendering still requires owner probe BP12.
+Record the first native run; text-shape tests do not prove Task Scheduler.
+The launcher `-Doctor` runs offline: FAIL refuses start with exit 5; WARN/UNKNOWN
+are logged without treating pending live evidence as a hard collection blocker.
+
+Before a code update stop the collector, back up private state securely, pull
+the approved revision, sync frozen dependencies, run doctor and restart.
+Browser updates require fresh admission and profile checks before live use.
+
+**Rollback:** stop writers first (`Stop-ScheduledTask mysite-collector`).
+For optional-feature rollback set query IDs to `"off"`, harvest and all five
+B3 booleans false, session check false, and `reddit_live_methods:[]`; restart.
+For transport rollback follow the B1/B2 sections above and preserve charged
+reads/rest/ready marks. Never point pre-B2 code at routed private databases.
+For task rollback remove both definitions:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File deploy\register-collector-tasks.ps1 -Remove
+```
+
+For firewall rollback the owner runs the removal command from step 4, then
+keeps browser-dependent features disabled until fresh containment evidence
+exists. Do not remove private account data or reset quarantine as a rollback.
