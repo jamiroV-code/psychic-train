@@ -452,6 +452,9 @@ class IdentityAdapter:
         self._installed = False
         self.runtime = runtime
         self._route_failures = {}
+        # Observe-only (REF-X rec 8, §3.2): rotated `ct0` values seen on responses; None = never observed. A rotated
+        # value replaces the old one inside the live client only; it is never written back to the account.
+        self.ct0_rotations_seen = None
         self._db_guard = None
 
     @contextlib.contextmanager
@@ -511,19 +514,29 @@ class IdentityAdapter:
                 return self.client.cookies
 
             async def request(self, method, url, **kwargs):
+                from api.data.attention.x_proxy_curl import cookie_values, scope_cookies
                 reason = adapter._route_failures.get(self.label)
                 if reason:
                     raise RouteAbort(reason)
+                previous = cookie_values(self.client.cookies)
+                if "x-csrf-token" in self.client.headers and "ct0" in previous:
+                    self.client.headers["x-csrf-token"] = previous["ct0"]
                 try:
                     if self.routed:
                         xp.require(adapter.runtime.admitted(self.label), "proxy_revision")
                     if self.curl:
-                        return await self.client.request(method, url, **kwargs)
-                    import asyncio
-                    async with asyncio.timeout(10):
-                        return http.Response(await self.client.request(method, url, **kwargs))
+                        response = await self.client.request(method, url, **kwargs)
+                    else:
+                        import asyncio
+                        async with asyncio.timeout(10):
+                            response = http.Response(await self.client.request(method, url, **kwargs))
                 except Exception as error:
                     reason = error.reason if isinstance(error, xp.ProxyFailure) else "proxy_transport"
+                else:
+                    rotated = "ct0" in scope_cookies(self.client.cookies, previous)
+                    if "ct0" in previous:
+                        adapter.ct0_rotations_seen = (adapter.ct0_rotations_seen or 0) + rotated
+                    return response
                 if not self.routed:
                     raise DirectAbort() from None
                 adapter._route_failures[self.label] = reason
@@ -555,6 +568,11 @@ class IdentityAdapter:
         self._factory = factory
         self._get = self._store.__dict__["get"]
 
+        def scoped_jar(cookies):
+            import httpx
+            from api.data.attention.x_proxy_curl import seed_cookies
+            return seed_cookies(httpx.Cookies(), cookies)
+
         def make_client(backend=None, *, proxy=None, headers=None, cookies=None, seed=None):
             label = self._label.get()
             identity = self.identities.get(label)
@@ -580,7 +598,7 @@ class IdentityAdapter:
                 if self.style == "plain":
                     from api.data.attention.x_proxy_transport import client as route_client
                     supplied["user-agent"] = http._resolve_browser(supplied.get("user-agent"), seed=seed)[0]
-                    client = route_client(route, snapshot.policy, headers=supplied, cookies=cookies)
+                    client = route_client(route, snapshot.policy, headers=supplied, cookies=scoped_jar(cookies))
                 else:
                     from api.data.attention.x_proxy_curl import CurlRouteClient
                     client = CurlRouteClient(route, snapshot.policy,
@@ -592,7 +610,7 @@ class IdentityAdapter:
             if self.style == "plain":
                 from api.data.attention.x_proxy_transport import direct_client
                 supplied["user-agent"] = http._resolve_browser(supplied.get("user-agent"), seed=seed)[0]
-                client = direct_client(headers=supplied, cookies=cookies)
+                client = direct_client(headers=supplied, cookies=scoped_jar(cookies))
             else:
                 from api.data.attention.x_proxy_curl import CurlRouteClient
                 client = CurlRouteClient(None, None,

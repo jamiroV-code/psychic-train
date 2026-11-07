@@ -7,6 +7,37 @@ from urllib.parse import urlsplit
 from api.data.attention import x_proxy as p
 from api.data.attention.x_proxy_transport import resolve_public
 
+X_COOKIE_DOMAIN = ".x.com"
+
+
+def seed_cookies(cookies, values):
+    """Load `values` into an httpx/curl_cffi cookie jar scoped to `.x.com`, so a refreshed cookie replaces it."""
+    for name, value in dict(values or {}).items():
+        cookies.set(name, value, domain=X_COOKIE_DOMAIN, path="/")
+    return cookies
+
+
+def scope_cookies(cookies, previous):
+    """Collapse the jar to one `.x.com` cookie per name (REF-X rec 8, upstream PR #363 semantics).
+
+    `previous` is the name -> value view taken before the request; any entry whose value differs from it (a
+    domain or host-only `Set-Cookie`) replaces the old value. Returns the names whose value changed.
+    """
+    merged, changed = dict(previous), set()
+    for cookie in list(cookies.jar):
+        if cookie.value != previous.get(cookie.name):
+            merged[cookie.name] = cookie.value
+            if cookie.name in previous:
+                changed.add(cookie.name)
+    cookies.jar.clear()
+    seed_cookies(cookies, merged)
+    return changed
+
+
+def cookie_values(cookies):
+    """Name -> value view of a scoped jar."""
+    return {cookie.name: cookie.value for cookie in cookies.jar}
+
 
 class Slist:
     def __init__(self, values):
@@ -116,7 +147,7 @@ class CurlRouteClient:
         self.origin_root = origin_root or certifi.where()
         self.proxy_root = proxy_root or certifi.where()
         self.headers = Headers({k: v for k, v in (headers or {}).items() if k.lower() != "user-agent"})
-        self.cookies = Cookies(cookies)
+        self.cookies = seed_cookies(Cookies(), cookies)
         self._active = set()
         self._retained = []
         self.closed = False
@@ -169,6 +200,7 @@ class CurlRouteClient:
                            CurlOpt.CAPATH: ffi.NULL, CurlOpt.PROXY_CAPATH: ffi.NULL,
                            CurlOpt.MAXFILESIZE_LARGE: p.X_LIMIT,
                            CurlOpt.FOLLOWLOCATION: 0, CurlOpt.MAXREDIRS: 0})
+                previous = cookie_values(self.cookies)
                 session = AsyncSession(proxy=self.route.url if self.route else "", impersonate=self.target,
                     headers=self.headers, cookies=self.cookies, trust_env=False, verify=True,
                     allow_redirects=False, retry=0, max_clients=1, curl_options=options)
@@ -182,6 +214,7 @@ class CurlRouteClient:
                     p.require(len(body) <= p.X_LIMIT, "proxy_response")
                     result.content = bytes(body)
                     self.cookies.update(session.cookies)
+                    scope_cookies(self.cookies, previous)
                     return Response(result)
                 finally:
                     # No shielded orphan task may survive reader-loop disposal.

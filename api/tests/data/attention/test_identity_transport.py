@@ -254,3 +254,66 @@ def test_fallback_child_uses_configured_target_on_both_paths(tmp_path, monkeypat
     assert all("Chrome/131.0.0.0" in headers["user-agent"] for headers in seen)
     assert all(headers["accept-language"] == identity["accept_language"] for headers in seen)
     assert "auth_token" not in json.dumps(req) and "auth_token" not in json.dumps(env)
+
+
+@pytest.mark.parametrize("scoped", [True, False], ids=["domain-cookie", "host-only-cookie"])
+@pytest.mark.parametrize("style", ["plain", "curl"])
+def test_refreshed_ct0_replaces_old_one_on_the_wire(tmp_path, monkeypatch, style, scoped):
+    """S-XCookie (REF-X rec 8): one `ct0` per Cookie header, equal to `x-csrf-token`, after a refresh."""
+    from types import SimpleNamespace
+    from uuid import uuid4
+    from api.data.attention import x_proxy as p, x_proxy_curl as curl, x_proxy_transport as transport
+    from api.tests.data.attention.proxy_child_fixture import FakeXCookies, ct0_count
+    from api.tests.data.attention.proxy_wire_fixture import fixture, verified_context
+
+    with fixture(https_proxy=True) as wire:
+        origin = f"https://x.com:{wire.origin_port}"
+        configuration = p.Policy(frozenset({origin}), origin + "/echo", origin + "/baseline", "a" * 64, None,
+                                 "S-1-5-21-1-2-3-1001", tmp_path / "cache", tmp_path)
+        identity = {"accept_language": "en-US", "region": "US", "timezone": "America/New_York",
+                    "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36", "impersonation_target": "chrome131"}
+        route = p.parse_proxy(wire.proxy_url)
+        state = SimpleNamespace(snapshot=SimpleNamespace(policy=configuration,
+            assignments={"alpha": p.Assignment(str(uuid4()), "8.8.8.8", "US", "America/New_York", "en-US", route)},
+            revisions={"alpha": str(uuid4())}), admitted=lambda label: True, admissions={})
+        original_plain, original_curl = transport.client, curl.CurlRouteClient
+        monkeypatch.setattr(transport, "client", lambda route, configuration, **kwargs: original_plain(
+            route, configuration, resolver=wire.resolve, origin_context=verified_context(wire.certs["origin"]["root"]),
+            proxy_context=verified_context(wire.certs["proxy"]["root"]), **kwargs))
+        monkeypatch.setattr(curl, "CurlRouteClient", lambda route, configuration, **kwargs: original_curl(
+            route, configuration, resolver=wire.resolve, origin_root=wire.certs["origin"]["root"],
+            proxy_root=wire.certs["proxy"]["root"], **kwargs))
+        rotate = "ct0=NEW; Path=/" + ("; Domain=.x.com" if scoped else "")
+        for path in ("/i/api/graphql/q/SearchTimeline", "/bootstrap"):
+            wire.responses[("x.com", path + "?first")] = (200, {"set-cookie": rotate}, b"{}")
+        adapter = tr.IdentityAdapter(style, {"alpha": identity}, runtime=state)
+        adapter.install()
+        acc = account.Account("alpha", "_", "_", "_", "old", True, cookies={"auth_token": "tok", "ct0": "OLD"})
+
+        async def run():
+            with adapter.bind("alpha"):
+                for session, path in ((acc.make_client(), "/i/api/graphql/q/SearchTimeline"),
+                                      (xclid._make_client(cookies=acc.cookies), "/bootstrap")):
+                    try:
+                        for suffix in ("?first", "?second"):
+                            assert (await session.get(origin + path + suffix)).status_code == 200
+                    finally:
+                        await session.aclose()
+        try:
+            assert adapter.ct0_rotations_seen is None
+            asyncio.run(run())
+        finally:
+            adapter.close()
+        assert len(wire.requests) == 4
+        assert FakeXCookies(wire).duplicate_ct0() == []
+        values = []
+        for request in wire.requests:
+            assert ct0_count(request["cookies"]) == 1
+            pairs = dict(part.strip().split("=", 1) for header in request["cookies"] for part in header.split(";"))
+            values.append(pairs["ct0"])
+            csrf = {k.lower(): v for k, v in request["headers"].items()}.get("x-csrf-token")
+            if request["path"].startswith("/i/api/graphql/"):
+                assert csrf == pairs["ct0"]
+        assert values == ["OLD", "NEW", "OLD", "NEW"]
+        assert adapter.ct0_rotations_seen == 2
+        assert acc.cookies["ct0"] == "OLD"  # observe-only: the stored account is never adopted
