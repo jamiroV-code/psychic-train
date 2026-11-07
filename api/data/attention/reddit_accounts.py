@@ -378,9 +378,9 @@ def main(argv: list[str] | None = None) -> int:
         write_ready(args.mark_ready, datetime.now(timezone.utc),
                     labels=[a["label"] for a in config.reddit_browser_accounts])
     except (OSError, ValueError, xp.ProxyFailure):
-        print("ready status=refused")
+        sys.stdout.write("ready status=refused\n")
         return 2
-    print(f"ready status=ok label={args.mark_ready}")
+    sys.stdout.write(f"ready status=ok label={args.mark_ready}\n")  # configured label, validated by write_ready
     return 0
 
 
