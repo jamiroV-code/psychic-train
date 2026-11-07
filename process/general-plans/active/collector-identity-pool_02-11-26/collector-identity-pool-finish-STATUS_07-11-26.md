@@ -50,3 +50,7 @@ Stage 5: S-XCookie, S-B3P, S-RCore-B, S-Relay. Stage 6: S-RAcct-B, S-Cookie-C, S
 
 ## Verification state
 Slice-level targeted tests green per reports. No full-suite or browser run on the combined tree since B2. Known unrelated failure: `test_equities_store::test_path_override_honoured_at_call_time` (another session). CI on PR #246 not yet checked.
+
+## Update 07-11-26 (later): Stages 4-6 landed
+S-XDrift 3510c1e4, S-BrowserCDP 8b2a2eb2, S-XCookie e0ac966b, S-B3P bdee4513, S-RCore-B 6540bc0e/7b78bb13, S-Relay 1f4447a7, S-StatusUI 1707c958, S-Cookie-C f18b8f42, S-RAcct-B 27faf8dd/3005a055. Stage 5 gate on combined tree: 3509 passed, 1 failed (known unrelated equities Windows test), 4 skips. Resume at Stage 7: S-OpsProbe, S-B3I; then Stage 8 S-RGQL, S-Cookie-X, S-B3R; Stage 9 S-RBrowser; Stage 10 S-Report; Stage 11 S-OpsDoctor; Stage 12 S-OpsDeploy, S-E2E-Cycle; Stage 13 S-E2E-UI; Stage 14 G-FINAL.
+Open wiring items: Reddit admission provider/route adapter (AdmittedRoute from snapshot.reddit_assignments + revisions) is S-RBrowser/S-Cookie-X; X day guard wiring is S-Cookie-X; method_switches diagnostic not on the API (S-Report/S-StatusAPI follow-up); X new status fields not yet produced (S-B3I/S-Cookie-X); POSIX browser launch path undone.
