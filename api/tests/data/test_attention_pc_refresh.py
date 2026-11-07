@@ -1042,3 +1042,31 @@ def test_stage0_new_registration_rest_and_ready_next_day_canary(tmp_path):
                                  rng=random.Random(1), sleep=clock.sleep)
     assert result.passed and pool.canary_labels() == ["acct_a", "acct_b"]
     print("STAGE0 SMOKE: rest gate, ready survives running save, next-day canary includes new account")
+
+
+# --- S-XDrift: the query-ID boundary runs at every unit boundary before any X request -----------------------------
+
+def test_query_boundary_runs_before_each_request_and_a_hook_refusal_pauses_the_pass():
+    from api.data.attention import x_proxy as xpx
+    clock = Clock()
+    kwargs, reader, _ = fakes(clock, q=queries(x_backfill_days=0))
+    calls, binds = [], []
+
+    def boundary(config, pool, cache_root, now):
+        calls.append((len(reader.calls), cache_root, now))
+
+    start = SimpleNamespace(readers={"acct_a": reader}, fallback=None, close=lambda: None,
+                            query_boundary=boundary, bind_query=binds.append)
+    kwargs["x_start"] = lambda _cfg: start
+    w = apr.AttentionPcWorker(**kwargs)
+    w.streams[X].run_pass()
+    assert calls[0][:2] == (0, cache.CACHE_ROOT) and calls[0][2].tzinfo is not None  # before the first request
+    assert len(calls) >= 2  # every unit boundary, the canary's included
+
+    def refuse(*args):
+        raise xpx.ProxyFailure("proxy_config")
+
+    start2 = SimpleNamespace(readers={"acct_a": reader}, fallback=None, close=lambda: None, query_boundary=refuse)
+    kwargs2, _, _ = fakes(Clock(clock() + timedelta(days=1)), q=queries(x_backfill_days=0))
+    kwargs2["x_start"] = lambda _cfg: start2
+    assert apr.AttentionPcWorker(**kwargs2).streams[X].run_pass() == "proxy_config"

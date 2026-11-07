@@ -1131,3 +1131,39 @@ def test_attempt_stamped_before_each_request():
     with pytest.raises(Killed):
         unit(pool, {"acct_a": Cut("acct_a")}, src)
     assert seen == [T0]  # stamped before the request went out, so a kill still counts for the spacing
+
+
+# --- S-XDrift XD-2: suspension code 64 from an API error ---------------------------------------------------------
+
+def test_code_64_is_a_suspension_and_failures_carry_only_allowlisted_codes():
+    assert xrd.INACTIVE_CODES[64] == "x_account_suspended"
+    f = xrd.ReaderFailure("api", codes=(64, 999, 88))
+    assert f.codes == (64, 88) and "64" not in str(f)
+    assert xrd.inactive_reason(f) == "x_account_suspended"
+    assert xrd.inactive_reason(xrd.ReaderFailure("api", codes=(88,))) is None  # a rate limit is not a ban
+    assert xrd.inactive_reason(xrd.ReaderFailure("api")) is None
+    assert xrd.ReaderFailure("api").codes == ()
+    with pytest.raises(TypeError):
+        xrd.ReaderFailure("api", codes=("64",))
+    assert xrd.no_account_cause(inactive_row("(64) Your account is suspended"), T0,
+                                rate_limit_evidence=False) == ("inactive", "x_account_suspended")
+
+
+def test_code_64_deactivates_fails_over_once_and_counts_once():
+    _, pool, src = setup(("acct_a", "acct_b"))
+    pass_canary(pool)
+    a = reader("acct_a", [xrd.ReaderFailure("api", codes=(64,), charged_reads=0)])
+    out = unit(pool, {"acct_a": a, "acct_b": reader("acct_b", day_pages())}, src)
+    assert out.result is not None and out.label == "acct_b" and out.restarts == 1 and out.reads == 40
+    assert pool.account_state("acct_a") == ("inactive", "x_account_suspended")
+    assert [x["reason"] for x in pool.alerts()] == ["x_account_suspended"]
+    assert pool.health()["drift_streak"] == 0
+
+
+def test_code_64_on_the_restart_account_too_leaves_the_unit_missing():
+    _, pool, src = setup(("acct_a", "acct_b"))
+    pass_canary(pool)
+    out = unit(pool, {"acct_a": reader("acct_a", [xrd.ReaderFailure("api", codes=(64,))]),
+                      "acct_b": reader("acct_b", [xrd.ReaderFailure("api", codes=(64,))])}, src)
+    assert out.result is None and out.reason == "account_failed" and out.restarts == 1
+    assert pool.usable() == []

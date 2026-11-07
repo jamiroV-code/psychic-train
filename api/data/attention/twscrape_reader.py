@@ -669,7 +669,7 @@ def map_exception(exc: BaseException, lib: Library) -> xr.ReaderFailure:
     if isinstance(exc, xr.ReaderFailure):
         text = {"cloudflare": xr.CLOUDFLARE_PREFIX, "html": xr.HTML_PREFIX}.get(exc.abort)
         return xr.ReaderFailure(exc.kind, text=text, status=exc.status,
-                                proxy_reason=exc.proxy_reason, charged_reads=exc.charged_reads)
+                                proxy_reason=exc.proxy_reason, charged_reads=exc.charged_reads, codes=exc.codes)
     if isinstance(exc, ProxyFailure):
         return xr.ReaderFailure("proxy", proxy_reason=exc.reason)
     reason = getattr(exc, "proxy_reason", None)
@@ -685,7 +685,9 @@ def map_exception(exc: BaseException, lib: Library) -> xr.ReaderFailure:
     if isinstance(exc, lib.XClIdParseError):
         return xr.ReaderFailure("xclid_parse")
     if isinstance(exc, lib.ApiError):
-        return xr.ReaderFailure("api")
+        errors = getattr(exc, "errors", None)
+        codes = [xr.error_code(e) for e in errors if isinstance(e, str)] if isinstance(errors, list) else []
+        return xr.ReaderFailure("api", codes=[c for c in codes if c is not None])
     if isinstance(exc, lib.AbortReqError):
         text = str(exc)
         if text.startswith(XCLID_404_PREFIX):
@@ -927,6 +929,17 @@ def bind_query_id(query_id):
     sys.modules["twscrape.api"].OP_SearchTimeline = query_id + "/SearchTimeline"
 
 
+def query_hook_compatible() -> bool:
+    """The pinned library reads its module-level `OP_SearchTimeline` at call time in `API.search_raw`
+    (`twscrape/api.py:287-288`); binding a query ID through that hook is only sound while that shape holds."""
+    module = sys.modules.get("twscrape.api")
+    api = getattr(module, "API", None)
+    operation = getattr(module, "OP_SearchTimeline", None)
+    code = getattr(getattr(api, "search_raw", None), "__code__", None)
+    return (isinstance(operation, str) and re.fullmatch(r"[A-Za-z0-9_-]{16,32}/SearchTimeline", operation) is not None
+            and code is not None and "OP_SearchTimeline" in code.co_names)
+
+
 def fallback_request(label: str, config_path: Path, query: str, kv: Mapping, *, cursor: str | None, query_id=None) -> dict:
     """Bounded work only; the child derives the DB from this explicitly selected config."""
     if (not x_pool.LABEL_RE.fullmatch(label) or not config_path.is_absolute()
@@ -1120,6 +1133,33 @@ class XStart:
                     if failure.reason not in ("proxy_quarantine", "proxy_budget"):
                         self.adapter._route_failures[label] = failure.reason
 
+    def bind_query(self, query_id: str) -> None:
+        bind_query_id(query_id)
+
+    def query_boundary(self, config: CollectorConfig, pool, cache_root, now: datetime) -> str | None:
+        """S-XDrift XD-4 at a synchronous unit boundary: the day's static check on the next selected account's
+        admitted route (direct when no proxy policy; none without admission), then the registry's active
+        SearchTimeline ID bound through the library hook before the next request. Off is inert."""
+        if config.x_queryid_mode == "off":
+            return None
+        from api.data.attention import x_queryids as xq
+        from api.data.attention import x_queryids_fetch as xqf
+        state = xq.load(xq.state_path(cache_root))
+        last = state["last_check"]
+        if last is None or datetime.fromisoformat(last).date() != now.date():
+            route, policy = self._static_route(pool.peek())
+            state = xqf.run_check(config, cache_root=cache_root, now=now, route=route, policy=policy) or state
+        query_id = xq.active_id(state)
+        bind_query_id(query_id)
+        return query_id
+
+    def _static_route(self, label):
+        snapshot = getattr(self.runtime, "snapshot", None)
+        if (snapshot is None or snapshot.policy is None or label is None or label not in snapshot.assignments
+                or not self.runtime.admitted(label)):
+            return None, None
+        return snapshot.assignments[label].route, snapshot.policy
+
     def close(self) -> None:
         for r in self.readers.values():
             r.close()
@@ -1173,6 +1213,8 @@ def start(config: CollectorConfig, *, env: Mapping[str, str] = os.environ, repo_
         raise XStartRefused([failure.reason]) from None
     clean_dumps([LIBRARY_DUMP_ROOT, private_tmp()] if dump_roots is None else dump_roots)
     lib = load()
+    if config.x_queryid_mode != "off" and not query_hook_compatible():
+        raise XStartRefused(["query_hook_incompatible"])
     adapter = IdentityAdapter(config.x_connection_style,
                               config.x_account_identities if config.x_identity_enabled else {}, runtime=runtime)
     adapter.install()

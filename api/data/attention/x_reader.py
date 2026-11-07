@@ -51,7 +51,9 @@ PARSER_VERSION = "x-parse-1"
 PAGE_ENTRIES = x_window.PAGE_ENTRIES
 PARSE_DROP_MIN_ENTRIES = 2  # "several" raw entries with zero parsed is a layout change
 PARSE_DROP_RATE_MIN_ENTRIES = 10  # the drop-rate test needs a page this large
-INACTIVE_CODES = {88: "x_account_suspended", 326: "x_account_suspended", 32: "x_login_required"}
+INACTIVE_CODES = {88: "x_account_suspended", 326: "x_account_suspended", 32: "x_login_required",
+                  64: "x_account_suspended"}
+FAILURE_CODES = frozenset(INACTIVE_CODES)  # the integer codes an `api` failure may carry, nothing else
 FAILURE_KINDS = ("no_account", "abort", "api", "gql_outdated", "xclid_parse", "not_found", "parse", "proxy")
 DRIFT_KINDS = frozenset({"gql_outdated", "xclid_parse", "not_found", "parse"})
 _CODE_RE = re.compile(r"\((\d{1,4})\)")
@@ -91,7 +93,7 @@ class ReaderFailure(Exception):
     the text, and `str()` is the class and kind only, so nothing from a response reaches a log."""
 
     def __init__(self, kind: str, *, text: str | None = None, status: int | None = None,
-                 proxy_reason: str | None = None, charged_reads: int = 0):
+                 proxy_reason: str | None = None, charged_reads: int = 0, codes=()):
         if kind not in FAILURE_KINDS:
             raise ValueError("unknown failure kind")
         if status is not None and (not isinstance(status, int) or isinstance(status, bool)):
@@ -103,9 +105,19 @@ class ReaderFailure(Exception):
         if type(charged_reads) is not int or charged_reads < 0:
             raise ValueError("charged reads must be nonnegative")
         self.charged_reads = charged_reads
+        if any(type(c) is not int for c in codes):
+            raise TypeError("codes must be integer error codes")
+        self.codes = tuple(sorted({c for c in codes if c in FAILURE_CODES}))
 
     def __str__(self) -> str:
         return f"ReaderFailure {self.kind}" + (f" {self.abort}" if self.abort else "")
+
+
+def inactive_reason(failure: ReaderFailure) -> str | None:
+    """An API error naming a ban or logout code deactivates its account; the rate-limit code 88 never does."""
+    if failure.kind != "api":
+        return None
+    return next((INACTIVE_CODES[c] for c in failure.codes if c != RATE_LIMIT_CODE), None)
 
 
 @runtime_checkable

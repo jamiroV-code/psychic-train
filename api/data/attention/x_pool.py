@@ -27,6 +27,13 @@ unit across the pool. Pure logic over injected readers, clock, RNG and sleep; no
   an inconclusive canary sits the canaried accounts out for the UTC day while the others continue (no account
   passed, so their units are missing `account_not_canaried`); three consecutive parse, 404 or transaction-id
   failures count toward `layout_changed`; page parse drops first strike the account and retry elsewhere.
+- Finish plan S-XDrift: a SearchTimeline 404 (`not_found`) first reruns the SAME unit once on another selectable
+  account (charged normally, counted once); when that succeeds the first account is `endpoint_restricted` for the
+  rest of the UTC day, and a second restricted event on a different day locks it for 24 h (`x_endpoint_404`;
+  the count resets after 7 clean days). A 404 on both accounts, or with no other account, is drift. An API error
+  with a ban code (64) deactivates its account and fails over once. In `auto` query-ID mode a confirmed drift
+  with a registry candidate runs `XPool.evaluate_candidate` (forced, never the canary's daily cache) before
+  `DRIFT_STOP` pauses; only passed evaluations adopt. Facts record isolation, locks and evaluations.
 - Quality over speed: nothing is cut for a time budget; only the safety limits above stop reading.
 """
 from __future__ import annotations
@@ -42,10 +49,11 @@ from functools import wraps
 from contextvars import ContextVar
 
 from api.data import cache
-from api.data.attention import density, x_density, x_filters, x_raw, x_window
+from api.data.attention import daily_facts, density, x_density, x_filters, x_raw, x_window
 from api.data.attention import pc_pace as pp
+from api.data.attention import x_queryids as xq
 from api.data.attention import x_reader as xr
-from api.data.attention.web_queries import CollectorConfig
+from api.data.attention.web_queries import FINISH_OPTIONAL_DEFAULTS, CollectorConfig
 from api.data.attention import x_proxy as xp
 from api.data.attention.x_proxy_private import atomic_json, read_bounded, state_lock
 
@@ -65,12 +73,28 @@ TOP_KEYS = {"accounts", "alerts", "pause_until", "pause_reason", "stopped", "dri
 ACCOUNT_KEYS = {"state", "reason", "last_used", "lock_until", "last_canary", "suspect_since", "rate_limit_seen",
                 "reads_day", "reads_used", "rest_until", "parse_strikes", "parse_strike_last_at",
                 "proxy_id", "identity_revision", "proxy_health", "proxy_checked_at",
-                "proxy_quarantine_until", "proxy_reason", "proxy_changed_at"}
+                "proxy_quarantine_until", "proxy_reason", "proxy_changed_at",
+                "endpoint_404_day", "endpoint_404_count"}
 TIME_KEYS = ("last_used", "lock_until", "last_canary", "suspect_since", "rate_limit_seen", "rest_until",
              "parse_strike_last_at", "proxy_checked_at", "proxy_quarantine_until", "proxy_changed_at")
 READY_FILE = "account_ready.json"
 B2_ACCOUNT_KEYS = ("proxy_id", "identity_revision", "proxy_health", "proxy_checked_at",
                    "proxy_quarantine_until", "proxy_reason", "proxy_changed_at")
+XDRIFT_ACCOUNT_DEFAULTS = {"endpoint_404_day": None, "endpoint_404_count": 0}  # rollback contract G literals
+ENDPOINT_404_REASON = "x_endpoint_404"
+ENDPOINT_404_LOCK = timedelta(hours=24)
+ENDPOINT_404_CLEAN_DAYS = 7
+EVALUATIONS_PER_DAY = 3
+EVALUATION_ACCOUNTS = 2
+CANDIDATE_REJECT = timedelta(hours=24)
+EVALUATION_FAILED_KINDS = frozenset({"not_found", "gql_outdated", "parse"})
+FACTS_SOURCE = "xsearch_web"
+
+
+def facts_switches(config: CollectorConfig) -> dict:
+    """The effective optional switches recorded with each day's facts (names only safe tokens)."""
+    keys = [k for k, v in FINISH_OPTIONAL_DEFAULTS.items() if isinstance(v, bool) and "cookie" not in k]
+    return {"x_queryid_mode": config.x_queryid_mode, **{k: getattr(config, k) for k in keys}}
 
 
 def _transaction(method):
@@ -149,11 +173,13 @@ def from_config(config: CollectorConfig, *, clock: Callable[[], datetime]) -> XP
     pool.connection_style = config.x_connection_style
     pool.proxy_regions = {k: v.get("region") for k, v in config.x_account_identities.items()}
     pool.proxy_max_age = config.x_proxy_admission_max_age_seconds
+    pool.switches = facts_switches(config)
     return pool
 
 
 def _fresh_account() -> dict:
-    return dict.fromkeys(ACCOUNT_KEYS) | {"state": "active", "reads_used": 0, "proxy_health": "unknown"}
+    return dict.fromkeys(ACCOUNT_KEYS) | {"state": "active", "reads_used": 0, "proxy_health": "unknown",
+                                          **XDRIFT_ACCOUNT_DEFAULTS}
 
 
 def _valid(s) -> bool:
@@ -168,7 +194,9 @@ def _valid(s) -> bool:
         if not (isinstance(a, dict) and set(a) == ACCOUNT_KEYS and a["state"] in STATES
                 and all(_iso(a[k]) for k in TIME_KEYS) and _day(a["reads_day"])
                 and type(a["reads_used"]) is int and a["reads_used"] >= 0
-                and (a["parse_strikes"] is None or type(a["parse_strikes"]) is int and a["parse_strikes"] >= 0)):
+                and (a["parse_strikes"] is None or type(a["parse_strikes"]) is int and a["parse_strikes"] >= 0)
+                and _day(a["endpoint_404_day"]) and type(a["endpoint_404_count"]) is int
+                and a["endpoint_404_count"] >= 0):
             return False
         if a["proxy_health"] not in ("unknown", "healthy", "quarantined") or (
                 a["proxy_reason"] is not None and (not isinstance(a["proxy_reason"], str) or a["proxy_reason"] not in xp.REASONS)):
@@ -228,6 +256,7 @@ class XPool:
         self.connection_style = None
         self.proxy_regions = {}
         self.proxy_max_age = 86400
+        self.switches: dict = {}  # facts switch provenance; `from_config` sets the effective values
         self._s = self._load()
 
     @property
@@ -263,6 +292,8 @@ class XPool:
                         a.setdefault("parse_strike_last_at", None)
                         for key in B2_ACCOUNT_KEYS:
                             a.setdefault(key, "unknown" if key == "proxy_health" else None)
+                        for key, value in XDRIFT_ACCOUNT_DEFAULTS.items():
+                            a.setdefault(key, value)
             if not _valid(s):
                 raise XPoolStateError("pool state invalid")
             if set(s["accounts"]) - set(self.labels):
@@ -336,7 +367,11 @@ class XPool:
         if a["state"] != "active":
             return a["state"], a["reason"]
         if a["lock_until"] and self._now() < datetime.fromisoformat(a["lock_until"]):
+            if a["reason"] == ENDPOINT_404_REASON:
+                return "locked", "endpoint_404"
             return "locked", WAIT_REASON if a["reason"] == WAIT_REASON else "rate_limited"
+        if a["endpoint_404_day"] == self._now().date().isoformat():
+            return "locked", "endpoint_restricted"  # skipped for SearchTimeline units for the rest of the UTC day
         if a["rest_until"] and (self._now() < datetime.fromisoformat(a["rest_until"])
                                 or not self.ready_today(label)):
             return "locked", "resting"
@@ -354,14 +389,22 @@ class XPool:
     def usable(self) -> list[str]:
         return [x for x in self.labels if self.account_state(x)[0] == "active"]
 
+    def _least_recent(self, cands: list[str]) -> str | None:
+        last = {x: self._acct(x)["last_used"] or "" for x in cands}
+        return min(cands, key=lambda x: (last[x], self.labels.index(x))) if cands else None
+
+    def peek(self) -> str | None:
+        """The account `select` would choose next, without logging a selection."""
+        return self._least_recent(self.usable())
+
     def select(self, *, exclude=()) -> Selection | None:
         """Least recently used usable account; never-used first; ties by registration order."""
         cands = [label for label in self.usable() if label not in exclude]
-        if not cands:
+        pick = self._least_recent(cands)
+        if pick is None:
             return None
-        last = {x: self._acct(x)["last_used"] or "" for x in cands}
-        pick = min(cands, key=lambda x: (last[x], self.labels.index(x)))
-        tie = sum(1 for x in cands if last[x] == last[pick]) > 1
+        last = self._acct(pick)["last_used"] or ""
+        tie = sum(1 for x in cands if (self._acct(x)["last_used"] or "") == last) > 1
         reason = "least recently used" + ("; tie by registration order" if tie else "")
         self.log.append(f"x pool: selected {pick} ({reason})")
         return Selection(pick, reason)
@@ -376,9 +419,38 @@ class XPool:
         """A rate limit: no retry on this account until the next 00:00 UTC; it stays active."""
         a = self._acct(label)
         a["lock_until"] = self._next_midnight()
-        if a["reason"] == WAIT_REASON:
+        if a["reason"] in (WAIT_REASON, ENDPOINT_404_REASON):
             a["reason"] = None
         self._save()
+
+    @_transaction
+    def note_endpoint_404(self, label: str) -> str:
+        """XD-1: a SearchTimeline 404 that another account did not see. `restricted` for the rest of the UTC day;
+        a second restricted event on a different day `locked` for 24 h. The count resets after 7 clean days."""
+        a, now = self._acct(label), self._now()
+        today, previous = now.date(), a["endpoint_404_day"]
+        if previous is not None and (today - date.fromisoformat(previous)).days > ENDPOINT_404_CLEAN_DAYS:
+            a["endpoint_404_count"] = 0
+        second = a["endpoint_404_count"] >= 1 and previous != today.isoformat()
+        a["endpoint_404_count"] += 1
+        a["endpoint_404_day"] = today.isoformat()
+        if second:
+            a["lock_until"], a["reason"] = (now + ENDPOINT_404_LOCK).isoformat(), ENDPOINT_404_REASON
+        self.log.append(f"x pool: {label} SearchTimeline 404 seen only here: "
+                        + ("locked for 24 h" if second else "restricted for the UTC day"))
+        self._save()
+        self.fact({"kind": "account_state", "source": FACTS_SOURCE, "account": label,
+                   "state": "lock" if second else "pause",
+                   "reason": ENDPOINT_404_REASON if second else "endpoint_restricted"})
+        return "locked" if second else "restricted"
+
+    def fact(self, event: dict) -> None:
+        """A durable nonsecret daily fact; a refused or failed write never stops collection."""
+        try:
+            if not daily_facts.append(event, now=self._now(), switches=self.switches):
+                self.log.append("x pool: facts file for the day is full")
+        except (OSError, ValueError):
+            self.log.append(f"x pool: fact {event.get('kind')} not recorded")
 
     @_transaction
     def wait_for_lock(self, label: str, lock_end: datetime) -> None:
@@ -548,6 +620,120 @@ class XPool:
         if self._s["drift_streak"]:
             self._s["drift_streak"] = 0
             self._save()
+
+    def evaluate_candidate(self, operation: str, candidate_id: str, *, readers: Mapping[str, xr.XReader],
+                           src: pp.PcSource, config: CollectorConfig, bind: Callable[[str], None],
+                           observed_by: str | None = None) -> str:
+        """XD-3 forced candidate evaluation (contract E), never the daily canary: today's `already_passed` cache
+        is ignored. One canary page per account with `candidate_id` bound through `bind`, charged normally, on up
+        to two distinct selectable accounts (others than `observed_by` first); one evidence record per executed
+        evaluation. `adopted` iff every executed evaluation passed and N equals the selectable accounts capped at
+        2; any failure `rejected` (+24 h); anything else `inconclusive` (the candidate stays). At most 3
+        evaluations per UTC day (`budget`); `no_candidate` when the registry holds no live candidate with that ID.
+        The registry's active ID is bound again before returning."""
+        if operation != xq.TRACKED or not xq.valid_id(candidate_id):
+            raise ValueError("only a SearchTimeline candidate is evaluated")
+        path, now = xq.state_path(cache.CACHE_ROOT), self._now()
+        state = xq.load(path)
+        entry = state["operations"][operation]
+        cand = entry["candidate"]
+        if cand is None or cand["id"] != candidate_id or (
+                cand["rejected_until"] and datetime.fromisoformat(cand["rejected_until"]) > now):
+            return "no_candidate"
+        done_today = sum(1 for e in state["evidence"] if e["operation"] == operation
+                         and datetime.fromisoformat(e["evaluated_at"]).date() == now.date())
+        if done_today >= EVALUATIONS_PER_DAY:
+            return "budget"
+        usable = self.usable()
+        required = min(EVALUATION_ACCOUNTS, len(usable))
+        order = [x for x in usable if x != observed_by] + [x for x in usable if x == observed_by]
+        start, end = canary_window(now)
+        query = canary_query(config, start, end)
+        results = []
+        final_id = entry["active"]["id"]
+        try:
+            for label in order[:min(required, EVALUATIONS_PER_DAY - done_today)]:
+                if not src.can_spend(xr.PAGE_ENTRIES):
+                    src.mark_spent()
+                    break
+                results.append((label, *self._evaluate_once(label, readers[label], src, config, bind, candidate_id,
+                                                            query, start, end)))
+            ids = {e["evidence_id"] for e in state["evidence"]}
+            for i, (label, result, entries, parse_ok) in enumerate(results):
+                evidence_id = f"ev{int(now.timestamp())}_{i}_{label}"
+                while evidence_id in ids:
+                    evidence_id += "x"
+                ids.add(evidence_id)
+                state["evidence"].append({"evidence_id": evidence_id, "operation": operation,
+                                          "candidate_id": candidate_id, "account_label": label,
+                                          "evaluated_at": now.isoformat(), "result": result, "entries": entries,
+                                          "parse_ok": parse_ok})
+            outcomes = [r[1] for r in results]
+            before = state["check_state"]
+            if "failed" in outcomes:
+                verdict = "rejected"
+                cand.update(rejected_until=(now + CANDIDATE_REJECT).isoformat(), reason="evaluation_failed")
+                state["check_state"] = "stale"
+            elif outcomes and all(r == "passed" for r in outcomes) and len(outcomes) == required:
+                verdict = "adopted"
+                passed = [e for e in state["evidence"] if e["candidate_id"] == candidate_id
+                          and e["evaluated_at"] == now.isoformat() and e["result"] == "passed"]
+                entry["active"] = {"id": candidate_id, "source": "bundle", "adopted_at": now.isoformat(),
+                                   "evidence_id": passed[-1]["evidence_id"]}
+                entry["candidate"], state["check_state"] = None, "ok"
+                final_id = candidate_id
+            else:
+                verdict = "inconclusive"
+                cand["reason"] = "inconclusive"
+            keep = entry["active"]["evidence_id"]
+            while len(state["evidence"]) > xq.EVIDENCE_LIMIT:
+                drop = next(i for i, e in enumerate(state["evidence"]) if e["evidence_id"] != keep)
+                del state["evidence"][drop]
+            xq.save(path, state)
+        finally:
+            bind(final_id)
+        self.log.append(f"x pool: query-id candidate evaluation {verdict} ({len(results)} of {required})")
+        self.fact({"kind": "queryid_state", "operation": operation, "from_state": before, "to_state": verdict,
+                   "reason": "forced_evaluation"})
+        return verdict
+
+    def _evaluate_once(self, label, reader, src, config, bind, candidate_id, query, start, end):
+        """(result, parseable entries, parse_ok) of one forced evaluation page on `label`."""
+        self.mark_used(label)
+        src.stamp_attempt()  # before the request: a request killed in flight still counts for the spacing
+        try:
+            bind(candidate_id)
+            raw = reader.search_raw(query, x_window.search_kv(), 0)
+        except xr.ReaderFailure as f:
+            src.stamp_attempt()
+            if f.charged_reads:
+                src.record_loaded(f.charged_reads)
+                self.charge(label, f.charged_reads)
+            if f.kind == "proxy":
+                self.proxy_result(label, reason=f.proxy_reason, quarantine_seconds=config.x_proxy_quarantine_seconds)
+            elif _is_block(f):
+                self.pause_day(f"{f.abort}_block")
+            elif f.kind == "no_account":
+                _account_failure(self, label, reader, f)
+            elif xr.inactive_reason(f):
+                self.mark_inactive(label, xr.inactive_reason(f))
+            return ("failed" if f.kind in EVALUATION_FAILED_KINDS else "inconclusive"), 0, False
+        if raw is None:
+            raw = xr.RawPage({}, ())
+        n = len(raw.entry_ids)
+        src.record_loaded(n)
+        self.charge(label, n)
+        self.note_remaining(label, raw.rate_limit_remaining)
+        src.record_unit()
+        try:
+            tweets = reader.parse_tweets(raw.body)
+        except Exception:  # noqa: BLE001 - a broken page is a failed evaluation, never a pass
+            tweets = []
+        if xr.parse_drop(entries=n, parsed=len(tweets), threshold=config.x_parse_drop_threshold) or \
+                xr.small_page_drop(entries=n, parsed=len(tweets)):
+            return "failed", 0, False
+        found = len(xr.canary_ids(tweets, start, end))
+        return ("passed" if found >= config.x_canary_min_results else "inconclusive"), found, True
 
     def curl_used_today(self) -> bool:
         """The day's one curl retry (rule 19) is spent: the next block pauses the day for the pool."""
@@ -868,6 +1054,8 @@ def run_daily_canary(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcS
             if not _is_block(f):
                 if f.kind == "no_account":
                     waited |= _account_failure(pool, label, reader, f) == "wait"
+                elif xr.inactive_reason(f):
+                    pool.mark_inactive(label, xr.inactive_reason(f))
                 continue
             raw, block = _on_block(pool, f, config, fallback, label, query, kv, 0, events, src=src)
             if block:
@@ -939,8 +1127,24 @@ class _Attempt:
         return x_density.oldest_read(self.tweets, self.raw_oldest)
 
 
-def _drift(pool: XPool) -> str:
+def _drift(pool: XPool, evaluate: Callable[[], str | None] | None = None, *, confirmed: bool = False) -> str:
+    """Count one drift. A confirmed drift (the one that would stop X, or a 404 on two accounts) first runs the
+    forced candidate evaluation when one is wired; an adoption clears the streak instead of stopping."""
+    if evaluate is not None and (confirmed or pool._s["drift_streak"] + 1 >= DRIFT_STOP) and evaluate() == "adopted":
+        pool.clear_drift()
+        return "drift"
     return "layout_changed" if pool.note_drift() >= DRIFT_STOP else "drift"
+
+
+def _evaluate_pending(pool: XPool, readers, src, config: CollectorConfig, bind, observed_by: str) -> str | None:
+    """XD-4: only in `auto` mode, with a bind hook and a registry candidate."""
+    if bind is None or config.x_queryid_mode != "auto":
+        return None
+    cand = xq.load(xq.state_path(cache.CACHE_ROOT))["operations"][xq.TRACKED]["candidate"]
+    if cand is None:
+        return None
+    return pool.evaluate_candidate(xq.TRACKED, cand["id"], readers=readers, src=src, config=config, bind=bind,
+                                   observed_by=observed_by)
 
 
 def _parse_drop_kind(body: dict, entry_ids: tuple[str, ...], parsed: int) -> str:
@@ -966,7 +1170,7 @@ def _parse_drop_kind(body: dict, entry_ids: tuple[str, ...], parsed: int) -> str
 
 
 def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, query, rng, sleep, fallback, collected_at,
-                 counts) -> _Attempt:
+                 counts, evaluate=None) -> _Attempt:
     out, kv = _Attempt(), x_window.search_kv()
     for page_no in range(config.x_page_cap):
         if pool.is_paused() or src.is_paused():
@@ -998,8 +1202,13 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
             elif f.kind == "no_account":
                 step = _account_failure(pool, label, reader, f)
                 return _Attempt("restart" if step in ("restart", "wait") else "stop", step)
+            elif f.kind == "not_found":
+                return _Attempt("restart", "not_found")  # run_unit decides: rerun elsewhere once, or drift
+            elif xr.inactive_reason(f):
+                pool.mark_inactive(label, xr.inactive_reason(f))
+                return _Attempt("restart", xr.inactive_reason(f))
             elif f.kind in xr.DRIFT_KINDS or f.kind == "abort":
-                return _Attempt("stop", _drift(pool))
+                return _Attempt("stop", _drift(pool, evaluate))
             else:
                 return _Attempt("stop", "failed")
         except Exception:
@@ -1061,7 +1270,7 @@ def _run_attempt(pool, reader, src, config, *, label, attempt, symbol, day, quer
 def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, config: CollectorConfig, *,
              symbol: str, day: date, query: str, coin: x_filters.Coin, policy: x_filters.FilterPolicy,
              rng: random.Random, sleep: Callable[[float], None],
-             fallback: Fallback | None = None) -> XUnitOutcome:
+             fallback: Fallback | None = None, bind: Callable[[str], None] | None = None) -> XUnitOutcome:
     """One X coin-day across the pool: one account end to end, at most `x_unit_max_restarts` restarts.
 
     `fallback(label, query, kv, page)` is the owner-allowed curl process of rule 19 (W8d2); it is called at most
@@ -1088,7 +1297,9 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
 
     waiting = False  # the last attempt's account waits for the library's in-flight lock
     failed_labels = set()
-    while attempts < 1 + config.x_unit_max_restarts:
+    first_404 = None  # XD-1: the account whose SearchTimeline 404 this unit reruns elsewhere once
+    extra = 0
+    while attempts < 1 + config.x_unit_max_restarts + extra:
         sel = pool.select(exclude=failed_labels)
         if sel is None:
             return done(None, "account_failed" if failed_labels else pool.pause_no_account(src))
@@ -1097,8 +1308,17 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
         attempts += 1
         label, reader = sel.label, readers[sel.label]
         pool.mark_used(label)
+        evaluate = (lambda observed=label: _evaluate_pending(pool, readers, src, config, bind, observed))
         att = _run_attempt(pool, reader, src, config, label=label, attempt=attempts, symbol=symbol, day=day,
-                           query=query, rng=rng, sleep=sleep, fallback=fallback, collected_at=now, counts=counts)
+                           query=query, rng=rng, sleep=sleep, fallback=fallback, collected_at=now, counts=counts,
+                           evaluate=evaluate)
+        if att.status == "restart" and att.reason == "not_found":
+            if first_404 is None and any(x != label and x not in failed_labels for x in pool.usable()):
+                first_404, extra = label, 1
+                failed_labels.add(label)
+                pool.log.append(f"x pool: {label} SearchTimeline 404; the unit reruns once on another account")
+                continue
+            return done(None, _drift(pool, evaluate, confirmed=first_404 is not None))
         if att.status == "restart":
             if att.reason == "account_failed":
                 failed_labels.add(label)
@@ -1106,6 +1326,11 @@ def run_unit(pool: XPool, readers: Mapping[str, xr.XReader], src: pp.PcSource, c
             continue
         if att.status == "stop":
             return done(None, att.reason)
+        if first_404 is not None:
+            pool.note_endpoint_404(first_404)
+            pool.fact({"kind": "handoff", "source": FACTS_SOURCE, "from_account": first_404, "to_account": label,
+                       "reason": "endpoint_404"})
+            first_404 = None
         src.record_unit()
         canary_ok = label in pool.canary_labels()
         summary = x_density.summarize(day, att.tweets, n_read=att.n_read,

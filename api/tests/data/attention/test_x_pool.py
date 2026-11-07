@@ -451,3 +451,311 @@ def test_clock_rollback_cannot_clear_cap():
     clock.advance(days=-1)
     assert pool.reads_today("acct_a") == 20
     assert pool.account_state("acct_a") == ("locked", "account_cap")
+
+
+# --- S-XDrift: per-account 404 isolation, forced candidate evaluation, adoption (finish plan XD-1, XD-3, XD-4) ---
+
+from api.data.attention import daily_facts as dfacts  # noqa: E402
+from api.data.attention import x_queryids as xq  # noqa: E402
+
+CAND = "vLHjqbDv7TPFMBkIIO1nOA"
+CANARY_END = END  # the canary window is the last hour of the previous UTC day
+
+
+def not_found():
+    return xrd.ReaderFailure("not_found")
+
+
+def canary_page(n=20):
+    tws = []
+    for i in range(n):
+        tid = next(_ids)
+        u = xf.XUser(tid, datetime(2024, 1, 1, tzinfo=timezone.utc), 100, 100, "https://img/p.jpg", False)
+        tws.append(xf.Tweet(tid, CANARY_END - timedelta(minutes=1 + i * 2), f"bitcoin {tid}", u, "en", ()))
+    return xrd.FakeXReader.page_of(tws, remaining=40)
+
+
+def registry_with_candidate(now=T0, candidate=CAND):
+    state = xq.apply_check(xq.initial_state(), now, outcome="ok", mapping={"SearchTimeline": candidate},
+                           sha256="a" * 64)
+    xq.save(xq.state_path(cache.CACHE_ROOT), state)
+    return state
+
+
+def registry():
+    return xq.load(xq.state_path(cache.CACHE_ROOT))
+
+
+def account(label):
+    return json.loads(state_file().read_text())["accounts"][label]
+
+
+def drift_unit(pool, readers, src, config=None, bind=None, symbol="SOL"):
+    return xp.run_unit(pool, readers, src, config or cfg(), symbol=symbol, day=DAY, query=QUERY, coin=SOL,
+                       policy=xf.FilterPolicy(), rng=random.Random(1), sleep=lambda s: None, bind=bind)
+
+
+def facts(kind):
+    return [e for e in dfacts.read_events(T0.date()) if e["kind"] == kind]
+
+
+def test_fresh_and_migrated_accounts_get_literal_404_defaults():
+    pool = xp.XPool(LABELS, clock=Clock())
+    pool.begin_pass()
+    assert (account("acct_a")["endpoint_404_day"], account("acct_a")["endpoint_404_count"]) == (None, 0)
+    write_old_state(("acct_a", "acct_b"))
+    xp.XPool(LABELS, clock=Clock()).begin_pass()
+    assert (account("acct_b")["endpoint_404_day"], account("acct_b")["endpoint_404_count"]) == (None, 0)
+    doc = json.loads(state_file().read_text())
+    for bad in ({"endpoint_404_day": "x"}, {"endpoint_404_count": -1}, {"endpoint_404_count": True},
+                {"endpoint_404_count": None}, {"endpoint_404_day": "2026-10-21T00:00:00+00:00"}):
+        doc["accounts"]["acct_a"] = {**account("acct_b"), **bad}
+        state_file().write_text(json.dumps(doc))
+        with pytest.raises(xp.XPoolStateError):
+            xp.XPool(LABELS, clock=Clock())
+
+
+def test_404_single_account_is_unchanged_drift():
+    clock = Clock()
+    pool, src = xp.XPool(["acct_a"], clock=clock), source(clock)
+    pool.set_canary_passed(labels=["acct_a"])
+    out = unit(pool, {"acct_a": reader("acct_a", [not_found()])}, src)
+    assert out.result is None and out.reason == "drift" and out.restarts == 0
+    assert pool.health()["drift_streak"] == 1 and account("acct_a")["endpoint_404_count"] == 0
+
+
+def test_404_reruns_the_same_unit_once_on_another_account_and_restricts_the_first_for_the_day():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock), source(clock)
+    pool.set_canary_passed(labels=LABELS)
+    b = reader("acct_b", day_pages())
+    out = unit(pool, {"acct_a": reader("acct_a", [not_found()]), "acct_b": b}, src)
+    assert out.result is not None and out.label == "acct_b" and out.restarts == 1
+    assert pool.health()["drift_streak"] == 0 and pool.stopped_reason() is None
+    assert pool.account_state("acct_a") == ("locked", "endpoint_restricted")
+    assert (account("acct_a")["endpoint_404_day"], account("acct_a")["endpoint_404_count"]) == ("2026-10-21", 1)
+    assert pool.select().label == "acct_b"
+    handoff = facts("handoff")
+    assert [(e["from_account"], e["to_account"], e["reason"]) for e in handoff] == [("acct_a", "acct_b", "endpoint_404")]
+    clock.advance(days=1)
+    assert pool.account_state("acct_a") == ("active", None)
+
+
+def test_404_with_three_accounts_reruns_on_another_and_counts_the_unit_once():
+    clock = Clock()
+    labels = ["acct_a", "acct_b", "acct_c"]
+    pool, src = xp.XPool(labels, clock=clock), source(clock)
+    pool.set_canary_passed(labels=labels)
+    readers = {"acct_a": reader("acct_a", [not_found()]), "acct_b": reader("acct_b", day_pages()),
+               "acct_c": reader("acct_c", day_pages())}
+    out = unit(pool, readers, src)
+    assert out.result is not None and out.label == "acct_b" and out.attempts == 2 and out.restarts == 1
+    assert readers["acct_c"].calls == [] and out.reads == 40 and pool.reads_today("acct_b") == 40
+    assert pool.account_state("acct_a") == ("locked", "endpoint_restricted")
+    assert pool.account_state("acct_c") == ("active", None)
+
+
+def test_second_restricted_event_on_a_different_day_locks_the_account_for_24h():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock), source(clock)
+    for day_no in range(2):
+        pool.set_canary_passed(labels=LABELS)
+        out = unit(pool, {"acct_a": reader("acct_a", [not_found()]), "acct_b": reader("acct_b", day_pages())},
+                   src, symbol=f"C{day_no}")
+        assert out.label == "acct_b" and out.result is not None
+        if day_no == 0:
+            assert pool.account_state("acct_a") == ("locked", "endpoint_restricted")
+            clock.advance(days=1)
+            pool = xp.XPool(LABELS, clock=clock)  # the day guard survives a restart
+            assert pool.account_state("acct_a") == ("active", None)
+    assert pool.account_state("acct_a") == ("locked", "endpoint_404")
+    assert account("acct_a")["endpoint_404_count"] == 2 and account("acct_a")["reason"] == "x_endpoint_404"
+    locks = [e for e in dfacts.read_events(clock.now.date()) if e["kind"] == "account_state"]
+    assert [(e["account"], e["state"], e["reason"]) for e in locks] == [("acct_a", "lock", "x_endpoint_404")]
+    clock.advance(hours=23, minutes=59)
+    assert pool.account_state("acct_a") == ("locked", "endpoint_404")
+    clock.advance(minutes=2)
+    assert pool.account_state("acct_a") == ("active", None)
+
+
+def test_404_count_resets_after_seven_clean_days():
+    clock = Clock()
+    pool = xp.XPool(LABELS, clock=clock)
+    assert pool.note_endpoint_404("acct_a") == "restricted"
+    clock.advance(days=7)
+    assert pool.note_endpoint_404("acct_a") == "locked"  # only six clean days in between
+    pool = xp.XPool(LABELS, clock=clock)
+    pool.owner_clear("acct_a")
+    clock.advance(days=8)
+    assert pool.note_endpoint_404("acct_a") == "restricted"
+    assert account("acct_a")["endpoint_404_count"] == 1
+
+
+def test_both_accounts_404_is_drift_and_nobody_is_restricted():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock), source(clock)
+    pool.set_canary_passed(labels=LABELS)
+    out = unit(pool, {"acct_a": reader("acct_a", [not_found()]), "acct_b": reader("acct_b", [not_found()])}, src)
+    assert out.result is None and out.reason == "drift" and out.attempts == 2
+    assert pool.health()["drift_streak"] == 1
+    assert account("acct_a")["endpoint_404_count"] == account("acct_b")["endpoint_404_count"] == 0
+
+
+class Binder:
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, query_id):
+        self.calls.append(query_id)
+
+
+def test_forced_evaluation_ignores_already_passed_canary_and_adopts_on_two_distinct_passes():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock), source(clock)
+    pool.set_canary_passed(labels=LABELS)
+    assert xp.run_daily_canary(pool, {}, src, cfg(), rng=random.Random(1), sleep=lambda s: None).reason == "already_passed"
+    registry_with_candidate()
+    bind = Binder()
+    readers = {"acct_a": reader("acct_a", [canary_page()]), "acct_b": reader("acct_b", [canary_page()])}
+    result = pool.evaluate_candidate("SearchTimeline", CAND, readers=readers, src=src, config=cfg(), bind=bind,
+                                     observed_by="acct_a")
+    assert result == "adopted"
+    state = registry()
+    active = state["operations"]["SearchTimeline"]["active"]
+    assert (active["id"], active["source"]) == (CAND, "bundle") and state["operations"]["SearchTimeline"]["candidate"] is None
+    assert [e["account_label"] for e in state["evidence"]] == ["acct_b", "acct_a"]  # the observer last
+    assert all(e["result"] == "passed" and e["parse_ok"] and e["entries"] == 20 for e in state["evidence"])
+    assert bind.calls[0] == CAND and bind.calls[-1] == CAND
+    assert pool.reads_today("acct_a") == 20 and pool.reads_today("acct_b") == 20
+    assert [e["to_state"] for e in facts("queryid_state")] == ["adopted"]
+
+
+def test_inconclusive_mixes_never_adopt_and_the_candidate_stays():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock), source(clock)
+    registry_with_candidate()
+    bind = Binder()
+    readers = {"acct_a": reader("acct_a", [canary_page()]), "acct_b": reader("acct_b", [canary_page(3)])}
+    assert pool.evaluate_candidate("SearchTimeline", CAND, readers=readers, src=src, config=cfg(),
+                                   bind=bind) == "inconclusive"
+    state = registry()
+    assert state["operations"]["SearchTimeline"]["active"]["source"] == "pinned"
+    cand = state["operations"]["SearchTimeline"]["candidate"]
+    assert cand["id"] == CAND and cand["reason"] == "inconclusive" and cand["rejected_until"] is None
+    assert sorted(e["result"] for e in state["evidence"]) == ["inconclusive", "passed"]
+    assert bind.calls[-1] == xq.PINNED["SearchTimeline"]
+
+
+def test_fewer_evaluations_than_required_is_inconclusive():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock), source(clock)
+    registry_with_candidate()
+    readers = {"acct_a": reader("acct_a", [canary_page()]),
+               "acct_b": reader("acct_b", [xrd.ReaderFailure("abort", text="Blocked by Cloudflare")])}
+    assert pool.evaluate_candidate("SearchTimeline", CAND, readers=readers, src=src, config=cfg(),
+                                   bind=Binder()) == "inconclusive"
+    assert registry()["operations"]["SearchTimeline"]["active"]["source"] == "pinned"
+
+
+def test_any_failed_evaluation_rejects_the_candidate_for_24h():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock), source(clock)
+    registry_with_candidate()
+    readers = {"acct_a": reader("acct_a", [canary_page()]), "acct_b": reader("acct_b", [not_found()])}
+    assert pool.evaluate_candidate("SearchTimeline", CAND, readers=readers, src=src, config=cfg(),
+                                   bind=Binder()) == "rejected"
+    cand = registry()["operations"]["SearchTimeline"]["candidate"]
+    assert cand["reason"] == "evaluation_failed"
+    assert datetime.fromisoformat(cand["rejected_until"]) == T0 + timedelta(hours=24)
+    assert registry()["operations"]["SearchTimeline"]["active"]["source"] == "pinned"
+
+
+def test_single_selectable_account_needs_one_pass():
+    clock = Clock()
+    pool, src = xp.XPool(["acct_a"], clock=clock), source(clock)
+    registry_with_candidate()
+    assert pool.evaluate_candidate("SearchTimeline", CAND, readers={"acct_a": reader("acct_a", [canary_page()])},
+                                   src=src, config=cfg(), bind=Binder()) == "adopted"
+    assert xq.active_id(registry()) == CAND
+
+
+def test_at_most_three_evaluations_per_utc_day():
+    clock = Clock()
+    pool, src = xp.XPool(["acct_a"], clock=clock), source(clock)
+    registry_with_candidate()
+    for _ in range(3):
+        r = {"acct_a": reader("acct_a", [canary_page(2)])}
+        assert pool.evaluate_candidate("SearchTimeline", CAND, readers=r, src=src, config=cfg(),
+                                       bind=Binder()) == "inconclusive"
+    r = {"acct_a": reader("acct_a", [canary_page()])}
+    assert pool.evaluate_candidate("SearchTimeline", CAND, readers=r, src=src, config=cfg(),
+                                   bind=Binder()) == "budget"
+    assert r["acct_a"].calls == [] and len(registry()["evidence"]) == 3
+
+
+def test_only_search_timeline_and_the_registry_candidate_are_evaluated():
+    clock = Clock()
+    pool, src = xp.XPool(["acct_a"], clock=clock), source(clock)
+    registry_with_candidate()
+    r = {"acct_a": reader("acct_a", [canary_page()])}
+    with pytest.raises(ValueError):
+        pool.evaluate_candidate("UserTweets", CAND, readers=r, src=src, config=cfg(), bind=Binder())
+    assert pool.evaluate_candidate("SearchTimeline", "zzzzzzzzzzzzzzzzzzzzzz", readers=r, src=src, config=cfg(),
+                                   bind=Binder()) == "no_candidate"
+    assert r["acct_a"].calls == []
+
+
+def drift_to_two(pool, src, clock):
+    for i in range(2):
+        out = drift_unit(pool, {"acct_a": reader("acct_a", [xrd.ReaderFailure("parse")])}, src, symbol=f"D{i}")
+        assert out.reason == "drift"
+        clock.advance(minutes=10)
+
+
+def test_confirmed_drift_with_a_candidate_is_evaluated_before_the_stop_and_adoption_avoids_it():
+    clock = Clock()
+    pool, src = xp.XPool(["acct_a"], clock=clock), source(clock)
+    pool.set_canary_passed(labels=["acct_a"])
+    registry_with_candidate()
+    drift_to_two(pool, src, clock)
+    bind = Binder()
+    a = reader("acct_a", [xrd.ReaderFailure("parse"), canary_page()])
+    out = drift_unit(pool, {"acct_a": a}, src, config=cfg(x_queryid_mode="auto"), bind=bind)
+    assert out.result is None and pool.stopped_reason() is None and pool.health()["drift_streak"] == 0
+    assert xq.active_id(registry()) == CAND and bind.calls[-1] == CAND
+
+
+def test_confirmed_drift_with_a_failing_candidate_stops_and_rejects():
+    clock = Clock()
+    pool, src = xp.XPool(["acct_a"], clock=clock), source(clock)
+    pool.set_canary_passed(labels=["acct_a"])
+    registry_with_candidate()
+    drift_to_two(pool, src, clock)
+    a = reader("acct_a", [xrd.ReaderFailure("parse"), not_found()])
+    out = drift_unit(pool, {"acct_a": a}, src, config=cfg(x_queryid_mode="auto"), bind=Binder())
+    assert out.reason == "layout_changed" and pool.stopped_reason() == "layout_changed"
+    assert registry()["operations"]["SearchTimeline"]["candidate"]["reason"] == "evaluation_failed"
+
+
+def test_sentinel_mode_never_evaluates_or_adopts():
+    clock = Clock()
+    pool, src = xp.XPool(["acct_a"], clock=clock), source(clock)
+    pool.set_canary_passed(labels=["acct_a"])
+    registry_with_candidate()
+    drift_to_two(pool, src, clock)
+    a = reader("acct_a", [xrd.ReaderFailure("parse"), canary_page()])
+    out = drift_unit(pool, {"acct_a": a}, src, config=cfg(x_queryid_mode="sentinel"), bind=Binder())
+    assert out.reason == "layout_changed" and len(a.items) == 1
+    assert registry()["operations"]["SearchTimeline"]["active"]["source"] == "pinned"
+
+
+def test_both_accounts_404_with_a_candidate_triggers_evaluation_before_counting_drift():
+    clock = Clock()
+    pool, src = xp.XPool(LABELS, clock=clock), source(clock)
+    pool.set_canary_passed(labels=LABELS)
+    registry_with_candidate()
+    readers = {"acct_a": reader("acct_a", [not_found(), canary_page()]),
+               "acct_b": reader("acct_b", [not_found(), canary_page()])}
+    out = drift_unit(pool, readers, src, config=cfg(x_queryid_mode="auto"), bind=Binder())
+    assert out.result is None and xq.active_id(registry()) == CAND
+    assert pool.health()["drift_streak"] == 0

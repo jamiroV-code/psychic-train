@@ -1030,3 +1030,117 @@ def test_mark_ready_cli_never_loads_library_or_cookie_secrets(tmp_path, monkeypa
     assert tr.main(["--mark-ready", "unknown"]) == 2
     assert (Path(config.x_accounts_db_path) / xp.READY_FILE).read_bytes() == before
     assert "ready status=ok label=acct1" in capsys.readouterr().out
+
+
+# --- S-XDrift: code 64 carried from ApiError, query-ID hook binding at the unit boundary (XD-2, XD-4) ---------------
+
+CAND_ID = "vLHjqbDv7TPFMBkIIO1nOA"
+PINNED_OP = "BYppgupFFS2yqVmmRNjlsw/SearchTimeline"
+
+
+def fake_api_module(op=PINNED_OP, reads_global=True):
+    module = types.ModuleType("twscrape.api")
+    body = "op = OP_SearchTimeline" if reads_global else "op = 'fixed'"
+    exec(f"OP_SearchTimeline = {op!r}\nclass API:\n    async def search_raw(self, q, limit=-1, kv=None):\n"
+         f"        {body}\n        yield op\n", module.__dict__)
+    return module
+
+
+def test_api_error_codes_are_carried_allowlisted_and_never_the_text(lib):
+    lib_ = tr.load_library()
+    f = tr.map_exception(ApiError("API error: " + SECRET, ["(64) Your account is suspended " + SECRET,
+                                                          "(999) whatever", "no code"]), lib_)
+    assert f.kind == "api" and f.codes == (64,) and SECRET not in str(f)
+    assert tr.map_exception(ApiError("(88) Rate limit exceeded"), lib_).codes == ()
+    assert tr.map_exception(ApiError("x", ["(88) Rate limit exceeded", "(326) locked"]), lib_).codes == (88, 326)
+    assert tr.map_exception(f, lib_).codes == (64,)  # a re-map keeps them
+    assert xr.inactive_reason(f) == "x_account_suspended"
+
+
+@pytest.mark.parametrize("module", [None, "changed_op", "no_global_read"])
+def test_start_refuses_a_changed_query_hook_when_query_ids_are_on(tmp_path, lib, monkeypatch, module):
+    if module is None:
+        monkeypatch.delitem(sys.modules, "twscrape.api", raising=False)
+    else:
+        fake = fake_api_module("x/SearchTimeline") if module == "changed_op" else fake_api_module(reads_global=False)
+        monkeypatch.setitem(sys.modules, "twscrape.api", fake)
+    d = accounts(tmp_path)
+    with pytest.raises(tr.XStartRefused) as e:
+        tr.start(cfg(d, x_queryid_mode="auto"), env=GOOD_ENV, repo_root=tmp_path / "repo", dist_lookup=lookup(),
+                 load=tr.load_library, platform="manylinux_x86_64", dump_roots=[tmp_path / "tmp"])
+    assert e.value.reasons == ["query_hook_incompatible"]
+    s = tr.start(cfg(d), env=GOOD_ENV, repo_root=tmp_path / "repo", dist_lookup=lookup(), load=tr.load_library,
+                 platform="manylinux_x86_64", dump_roots=[tmp_path / "tmp"])  # off: unchanged behaviour
+    s.close()
+
+
+def adopted_registry(now):
+    from api.data.attention import x_queryids as xq
+    state = xq.apply_check(xq.initial_state(), now, outcome="ok", mapping={"SearchTimeline": CAND_ID},
+                           sha256="b" * 64)
+    state["evidence"] = [{"evidence_id": "ev1", "operation": "SearchTimeline", "candidate_id": CAND_ID,
+                          "account_label": "acct1", "evaluated_at": now.isoformat(), "result": "passed",
+                          "entries": 20, "parse_ok": True}]
+    state["operations"]["SearchTimeline"]["active"] = {"id": CAND_ID, "source": "bundle",
+                                                       "adopted_at": now.isoformat(), "evidence_id": "ev1"}
+    state["operations"]["SearchTimeline"]["candidate"] = None
+    state["last_check"] = None
+    xq.save(xq.state_path(cache.CACHE_ROOT), state)
+    return state
+
+
+def test_query_boundary_runs_the_check_once_a_day_and_binds_the_active_id(tmp_path, lib, monkeypatch):
+    from api.data.attention import x_queryids as xq
+    from api.data.attention import x_queryids_fetch as xqf
+    api = fake_api_module()
+    monkeypatch.setitem(sys.modules, "twscrape.api", api)
+    d = accounts(tmp_path)
+    config = cfg(d, x_queryid_mode="auto")
+    s = tr.start(config, env=GOOD_ENV, repo_root=tmp_path / "repo", dist_lookup=lookup(), load=tr.load_library,
+                 platform="manylinux_x86_64", dump_roots=[tmp_path / "tmp"])
+    adopted_registry(T0)
+    calls = []
+
+    def run_check(config_, *, cache_root, now, route=None, policy=None):
+        calls.append((route, policy))
+        state = xq.apply_check(xq.load(xq.state_path(cache_root)), now, outcome="blocked")
+        xq.save(xq.state_path(cache_root), state)
+        return state
+
+    monkeypatch.setattr(xqf, "run_check", run_check)
+    pool = xp.XPool(["acct1", "acct2"], clock=lambda: T0)
+    try:
+        assert s.query_boundary(config, pool, cache.CACHE_ROOT, T0) == CAND_ID
+        assert api.OP_SearchTimeline == CAND_ID + "/SearchTimeline"
+        assert s.query_boundary(config, pool, cache.CACHE_ROOT, T0 + timedelta(hours=1)) == CAND_ID
+        assert calls == [(None, None)]  # direct: no route, once per UTC day
+        s.query_boundary(config, pool, cache.CACHE_ROOT, T0 + timedelta(days=1))
+        assert len(calls) == 2
+        api.OP_SearchTimeline = "changed"
+        from api.data.attention import x_proxy as xpx
+        with pytest.raises(xpx.ProxyFailure):
+            s.query_boundary(config, pool, cache.CACHE_ROOT, T0 + timedelta(days=1))
+    finally:
+        s.close()
+
+
+def test_query_boundary_off_is_inert(tmp_path, lib, monkeypatch):
+    from api.data.attention import x_queryids as xq
+    from api.data.attention import x_queryids_fetch as xqf
+    api = fake_api_module()
+    monkeypatch.setitem(sys.modules, "twscrape.api", api)
+    s, d = start(tmp_path, lib)
+    monkeypatch.setattr(xqf, "run_check", lambda *a, **k: pytest.fail("off never checks"))
+    try:
+        assert s.query_boundary(cfg(d), xp.XPool(["acct1", "acct2"], clock=lambda: T0), cache.CACHE_ROOT, T0) is None
+        assert api.OP_SearchTimeline == PINNED_OP and not xq.state_path(cache.CACHE_ROOT).exists()
+    finally:
+        s.close()
+
+
+def test_bind_query_restores_through_the_hook(lib, monkeypatch):
+    api = fake_api_module()
+    monkeypatch.setitem(sys.modules, "twscrape.api", api)
+    s = tr.XStart({}, None, "flag_false")
+    s.bind_query(CAND_ID)
+    assert api.OP_SearchTimeline == CAND_ID + "/SearchTimeline"

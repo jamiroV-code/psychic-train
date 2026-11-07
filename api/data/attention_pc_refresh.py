@@ -575,14 +575,17 @@ class XStream(Stream):
             # a pending canary. A route revision never shares a partial sample.
             q = w.queries()
             c = q.config
-            if hasattr(start, "reconcile"):
-                try:
+            boundary = getattr(start, "query_boundary", None)  # S-XDrift: static check, then bind the active ID
+            try:
+                if hasattr(start, "reconcile"):
                     start.reconcile(c, pool)
-                except Exception as exc:
-                    from api.data.attention.x_proxy import ProxyFailure
-                    if isinstance(exc, ProxyFailure):
-                        return exc.reason
-                    raise
+                if boundary is not None:
+                    boundary(c, pool, cache.CACHE_ROOT, _utc(w.clock()))
+            except Exception as exc:
+                from api.data.attention.x_proxy import ProxyFailure
+                if isinstance(exc, ProxyFailure):
+                    return exc.reason
+                raise
             if not pool.canary_passed_today():
                 canary = x_pool.run_daily_canary(pool, start.readers, src, c, rng=self.rng, sleep=w._sleep,
                                                  fallback=start.fallback)
@@ -608,7 +611,8 @@ class XStream(Stream):
             try:
                 out = x_pool.run_unit(pool, start.readers, src, c, symbol=symbol, day=day, query=query,
                                       coin=x_filters.Coin(symbol, entry["name"]), policy=policy, rng=self.rng,
-                                      sleep=w._sleep, fallback=start.fallback)
+                                      sleep=w._sleep, fallback=start.fallback,
+                                      bind=getattr(start, "bind_query", None))
                 for message in pool.log[log_start:]:
                     if " parse drop " in message:
                         log.warning("attention pc %s", message)
