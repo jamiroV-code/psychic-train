@@ -14,7 +14,8 @@ Transport is injected through `run.dependencies` (built by `build_dependencies` 
   refused_hosts() -> dict                       PX6: relay refusals, background_refused excluded
   routes {section: AdmittedRoute | str}         PR5: admitted routes of gql_anon and browser
   read_events(day) -> list                      PR6: daily_facts.read_events
-PR1/PR2 are registered by S-RGQL/S-RBrowser; PR3 is refused (A17) and PR4 reserved in `probe_owner.run`.
+PR1 is registered by S-RGQL (`api/scripts/probe_gql.py`, imported below so the default registry holds it) and
+PR2 by S-RBrowser; PR3 is refused (A17) and PR4 reserved in `probe_owner.run`.
 """
 from __future__ import annotations
 
@@ -238,6 +239,9 @@ def pr6_durability(run):
 def build_dependencies(probe_id, config):
     """Production transport for an APPROVED run (never called on dry-run). Unwired routes stay default-deny."""
     from datetime import datetime, timezone
+    if probe_id == 'PR1':
+        from api.scripts.probe_gql import build_dependencies as gql_dependencies
+        return gql_dependencies(config)
     if probe_id == 'PR6':
         from api.data.attention import daily_facts
         return {'read_events': daily_facts.read_events}
@@ -287,3 +291,6 @@ def build_dependencies(probe_id, config):
             deps['runs'] = [(label, style, by_style[style][label]) for label in labels for style in ('plain', 'curl')]
         return deps
     raise po.ProbeRefused('executor_pending:' + po.PENDING.get(probe_id, 'S-OpsProbe'))
+
+
+from api.scripts import probe_gql  # noqa: E402,F401 - registers PR1 (S-RGQL) in the default registry

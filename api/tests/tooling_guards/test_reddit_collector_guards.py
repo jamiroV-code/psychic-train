@@ -29,6 +29,9 @@ FACTORY_IMPORT = {"reddit_core.py": 1}
 # Finish plan table H amendment (S-Relay): the loopback CONNECT relay and the A19 self-test are the ONLY
 # `browser_*` modules allowed network imports, each limited to exactly this set.
 BROWSER_NETWORK = {"browser_relay.py": {"asyncio", "socket", "ssl"}, "browser_selftest.py": {"socket", "subprocess"}}
+# S-RGQL: `reddit_gql.py` runs the hardened B2 async clients (`x_proxy_transport`) from its sync method, so it may
+# import `asyncio` and nothing else network-capable (no httpx/socket/ssl of its own).
+GQL_NETWORK = {"reddit_gql.py": {"asyncio"}}
 BROWSER_UA = re.compile(r"Mozilla/|AppleWebKit|Chrome/\d|Safari/\d|Gecko/|Firefox/|Edg/|OPR/", re.IGNORECASE)
 REDDIT_JSON = re.compile(r"reddit\.com\S*\.json|search\.json|/\.json|\.json\?|oauth\.reddit|api\.reddit|/api/v1/"
                          r"|old\.reddit")
@@ -99,8 +102,9 @@ def test_guard_fails_on_browser_ua_json_endpoint_or_archive_search_path(tmp_path
 def _exempted(name: str, bad: list[str]) -> list[str]:
     """Drop a module's narrow exemption: the factory table's one lazy `importlib` call (RC-9), or the
     relay/self-test network import set."""
-    if name in BROWSER_NETWORK:
-        return [b for b in bad if b not in BROWSER_NETWORK[name]]
+    if name in BROWSER_NETWORK or name in GQL_NETWORK:
+        allowed_set = BROWSER_NETWORK.get(name) or GQL_NETWORK[name]
+        return [b for b in bad if b not in allowed_set]
     allowed = FACTORY_IMPORT.get(name, 0)
     if not allowed:
         return bad
@@ -136,6 +140,14 @@ def test_browser_network_exemption_is_narrow():
     for other in ("browser_host.py", "browser_cdp.py", "browser_profile.py", "browser_session.py", "reddit_web.py",
                   "reddit_core.py"):
         assert _exempted(other, network_offenders(relay)), other
+
+
+def test_gql_network_exemption_is_narrow():
+    assert _exempted("reddit_gql.py", network_offenders("import asyncio\n")) == []
+    for extra in ("httpx", "socket", "ssl", "subprocess"):
+        assert _exempted("reddit_gql.py", network_offenders(f"import asyncio\nimport {extra}\n")) == [extra]
+    for other in ("reddit_live.py", "reddit_core.py", "reddit_browser.py"):
+        assert _exempted(other, network_offenders("import asyncio\n")), other
 
 
 def test_no_fixed_utc_hour_in_reddit_modules():

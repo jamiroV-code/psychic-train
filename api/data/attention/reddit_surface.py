@@ -244,6 +244,8 @@ class Section:
     max_body_bytes: int
     sha256: str
     endpoints: tuple[Endpoint, ...]
+    # `gql_anon` only: the raw B7 request grammar block, validated by `reddit_gql` (hash-bound with the section).
+    requests: dict | None = None
 
 
 def canonical(section: dict) -> bytes:
@@ -387,7 +389,10 @@ def load_section(name: str, raw) -> Section:
         raise SurfaceInvalid("surface_invalid", "section")
     if len(canonical(raw)) > MAX_SECTION_BYTES:
         raise SurfaceInvalid("surface_invalid", "section size")
-    _keys(raw, {"revision", "hosts", "body_format", "endpoints"}, {"max_body_bytes", "sha256"}, "section")
+    _keys(raw, {"revision", "hosts", "body_format", "endpoints"},
+          {"max_body_bytes", "sha256"} | ({"requests"} if name == "gql_anon" else set()), "section")
+    if "requests" in raw and not isinstance(raw["requests"], dict):
+        raise SurfaceInvalid("surface_invalid", "requests")
     if raw["body_format"] not in BODY_FORMATS:
         raise SurfaceInvalid("unsupported_format", "body_format")
     rev, hosts = raw["revision"], raw["hosts"]
@@ -409,7 +414,7 @@ def load_section(name: str, raw) -> Section:
     endpoints = tuple(_endpoint(e, c) for e in eps)
     if len({e.name for e in endpoints}) != len(endpoints):
         raise SurfaceInvalid("surface_invalid", "endpoint names")
-    return Section(name, rev, tuple(hosts), mb, digest, endpoints)
+    return Section(name, rev, tuple(hosts), mb, digest, endpoints, copy.deepcopy(raw.get("requests")))
 
 
 def load_surface(path: Path, name: str) -> Section:

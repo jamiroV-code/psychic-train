@@ -295,3 +295,19 @@ def test_empty_listing_is_an_empty_page_not_a_failure(section):
 
 def test_bad_cursor_type_is_a_mismatch(section):
     assert failure(section, listing(post(1), after=5)) == "schema_mismatch"
+
+
+def test_requests_block_only_in_gql_anon_raw_and_hash_bound():
+    """S-RGQL (owner-approved amendment): the B7 request block rides inside the hashed `gql_anon` section."""
+    raw = listing_section()
+    raw["requests"] = {"client_id": "abcdefgh12"}
+    sec = rs.load_section("gql_anon", raw)
+    assert sec.requests == {"client_id": "abcdefgh12"} and sec.sha256 == rs.section_sha256(raw)
+    raw["requests"]["client_id"] = "changed1234"
+    assert sec.requests == {"client_id": "abcdefgh12"}  # a copy: editing the source never changes the loaded section
+    assert rs.load_section("gql_anon", raw).sha256 != sec.sha256
+    assert rs.load_section("browser", listing_section()).requests is None
+    with pytest.raises(rs.SurfaceInvalid):
+        rs.load_section("browser", raw)
+    with pytest.raises(rs.SurfaceInvalid):
+        rs.load_section("gql_anon", {**listing_section(), "requests": ["x"]})
