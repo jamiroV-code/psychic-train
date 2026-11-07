@@ -62,3 +62,10 @@ Tip: re-dispatch on FRESH sessions (resumed sessions fall back to an exhausted m
 
 ## Update 07-11-26: owner created 2 Reddit throwaway accounts
 Owner reports 2 Reddit throwaway accounts created on 07-11-26 (usernames/passwords held privately by the owner, never in the repo). One-week rest runs to 14-11-26 (config `reddit_account_rest_days` applies). Profiles are created by the collector (browser_profile) and logged in once via `browser_session --init-profile` then `--interactive`; that stays refused until O-1/O-1b/O-2 are decided. S-OpsProbe committed 818c3bd6 (53 tests green).
+
+## Owner decisions 07-11-26 (recorded)
+- O-2 containment: FIREWALL RULE (generate-only text from S-OpsDeploy `browser_firewall_rule.py`; owner reviews and applies; note it applies to the Edge executable path for every use unless scoped to a dedicated Windows user).
+- O-1 and O-1b: ACCEPTED (CE-1 derived capability-SID ACEs at the pinned locations/masks; CE-2 Everyone S-1-1-0 execute-only mask 32 on LevelDB files). Sandbox stays on. Still pending: BP3c pin verification at first admitted session; owner `--approve` for the acceptance record is a runtime step.
+- Reddit fit: EXTEND PARSER authorized once real captures exist (grammar extension via the capture-to-surface workflow; archive route stays declined).
+- Reddit accounts: 2 created 07-11-26 (rest to 14-11-26). X accounts/proxies: owner asked how many are needed (sizing: about 4 X accounts, 6 worst case at the 800-read cap for the 72-coin universe; Reddit browser needs 2, one active at a time).
+Stage 7 done: S-OpsProbe 818c3bd6, S-B3I efaceab7 (security re-read pending for child envelope `count` and single-page `ordinary()` helper).
