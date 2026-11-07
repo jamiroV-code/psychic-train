@@ -37,6 +37,10 @@ Owner procedures (exact commands in the W8d2 report):
   put the cookie string in the environment variable `X_REFRESH_COOKIES` (never on the command line) and run
   `python -m api.data.attention.twscrape_reader --refresh-cookies <label>`; it records the refresh time for the
   cookie age in the health line and sets the file to owner-only on POSIX. Then remove the variable.
+- Session harvest (S-Cookie-X, default off): `--harvest-cookies <label> [--interactive]` opens X once in that
+  account's collector browser profile (S-Cookie-C helper, the account's admitted route, never typing a
+  credential) and hands a logged-in session's `auth_token`/`ct0` in memory to the same upsert. Automatic use is at
+  most once per account per UTC day (pool key `harvest_day`); `--interactive` is the owner's manual login.
 """
 from __future__ import annotations
 
@@ -1201,16 +1205,8 @@ class XStart:
         if self.fallback is not None:
             self.fallback.identities = self.adapter.identities
         for label in changed:
-            previous = self.readers.pop(label, None)
-            names = previous.account_names if previous is not None else ()
-            if previous is not None:
-                previous.close()
-            self.adapter._items = {key: item for key, item in self.adapter._items.items() if key[0] != label}
             self.adapter._route_failures.pop(label, None)
-            if label in config.x_accounts:
-                self.readers[label] = TwscrapeReader(label, Path(config.x_accounts_db_path) / f"{label}.db",
-                    self.library, max_entries=config.x_page_cap * xr.PAGE_ENTRIES,
-                    version=self.version, adapter=self.adapter, account_names=names)
+            self._rebuild(label, config)
         for label in config.x_accounts:
             if self.runtime.snapshot.policy is not None:
                 try:
@@ -1221,6 +1217,38 @@ class XStart:
                         pool.proxy_unknown(label, failure.reason, wake_at=self.runtime.next_health(label))
                     if failure.reason not in ("proxy_quarantine", "proxy_budget"):
                         self.adapter._route_failures[label] = failure.reason
+
+    def _rebuild(self, label: str, config: CollectorConfig) -> None:
+        """Evict one account's reader and bootstrap cache; its next real read opens the account file afresh."""
+        previous = self.readers.pop(label, None)
+        names = previous.account_names if previous is not None else ()
+        if previous is not None:
+            previous.close()
+        self.adapter._items = {key: item for key, item in self.adapter._items.items() if key[0] != label}
+        if label in config.x_accounts:
+            self.readers[label] = TwscrapeReader(label, Path(config.x_accounts_db_path) / f"{label}.db",
+                self.library, max_entries=config.x_page_cap * xr.PAGE_ENTRIES,
+                version=self.version, adapter=self.adapter, account_names=names)
+
+    def harvest(self, config: CollectorConfig, pool, now: datetime, *, check: Callable | None = None) -> dict:
+        """S-Cookie-X at a unit boundary (never inside a unit): each due account's automatic harvest, its upsert on
+        that account's own reader (the installed adapter and the B2 protected writer), then its eviction."""
+        due = pool.harvest_due(cookie_ages(config, now=now), enabled=config.x_cookie_harvest_enabled,
+                               refresh_age_days=config.x_cookie_refresh_age_days)
+        if not due:
+            return {}
+        check = check or session_check(config, pool, self.runtime)
+        policy = getattr(getattr(self.runtime, "snapshot", None), "policy", None)
+
+        def upsert(label, cookies, *, reactivate):
+            reader = self.readers[label]
+            try:
+                reader._run(_upsert_account(reader._api, label, cookies, config, reactivate=reactivate))
+            except Exception as exc:  # noqa: BLE001 - only the class is reported; the message can hold the cookies
+                raise RefreshFailed(type(exc).__name__) from None
+            _record_age(config, label, now, getattr(policy, "service_sid", None), protected=policy is not None)
+        return {label: harvest_account(label, config=config, pool=pool, check=check, upsert=upsert,
+                                       evict=lambda x: self._rebuild(x, config))[0] for label in due}
 
     def bind_query(self, query_id: str) -> None:
         bind_query_id(query_id)
@@ -1388,9 +1416,57 @@ def status_lines(h: dict) -> list[str]:
     return lines
 
 
+async def _upsert_account(api, label: str, cookies: str, config: CollectorConfig, *, reactivate: bool = False) -> None:
+    """The one cookie upsert. Identity mode keeps the row's locks, counters and active state; `reactivate` is the
+    caller's reason-checked login recovery (CX-3), the only path that sets an inactive row active again."""
+    keep = config.x_identity_enabled or reactivate
+    previous = None
+    if keep:
+        try:
+            previous = await api.pool.get(label)
+        except ValueError:
+            pass
+    await api.pool.add_account_cookies(label, cookies)
+    if not keep:
+        return
+    current = await api.pool.get(label)
+    if previous is not None:
+        current.active, current.error_msg = previous.active, previous.error_msg
+        current.locks, current.stats = previous.locks, previous.stats
+    if reactivate:
+        current.active, current.error_msg = True, None
+    if config.x_identity_enabled:
+        identity = config.x_account_identities[label]
+        current.headers = {k: v for k, v in current.headers.items() if k.lower() != "accept-language"}
+        current.headers["accept-language"] = identity["accept_language"]
+        if config.x_connection_style == "plain":
+            current.user_agent = identity["user_agent"]
+    await api.pool.save(current)
+
+
+def _record_age(config: CollectorConfig, label: str, now: datetime, service_sid=None, *, protected: bool) -> None:
+    """The refresh time for the cookie age (never a value); through the B2 protected writer when a policy holds."""
+    path = Path(config.x_accounts_db_path) / f"{label}.db"
+    if os.name == "posix":
+        os.chmod(path, 0o600)
+    ages_path = _ages_path(config)
+    try:
+        ages = json.loads(ages_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        ages = {}
+    ages[label] = now.astimezone(UTC).isoformat()
+    if not protected:
+        cache._atomic_write_json(ages, ages_path)
+    else:
+        from api.data.attention.x_proxy_private import atomic_json
+        atomic_json(ages_path, ages, service_sid=service_sid)
+    if os.name == "posix":
+        os.chmod(ages_path, 0o600)
+
+
 def refresh_cookies(label: str, cookies: str, *, config: CollectorConfig, env: Mapping[str, str] = os.environ,
                     now: datetime, repo_root: Path = REPO_ROOT, load: Callable[[], Library] = load_library,
-                    config_path: Path | None = None) -> None:
+                    config_path: Path | None = None, reactivate: bool = False) -> None:
     """The cookie upsert `pool.add_account_cookies(label, cookies)` on that account's own file."""
     import asyncio
 
@@ -1429,27 +1505,7 @@ def refresh_cookies(label: str, cookies: str, *, config: CollectorConfig, env: M
                 config.x_account_identities if config.x_identity_enabled else {}, runtime=runtime)
             adapter.install()
         api = library.API(str(path), raise_when_no_account=True, wait_timeout=0)
-        async def refresh():
-            previous = None
-            if config.x_identity_enabled:
-                try:
-                    previous = await api.pool.get(label)
-                except ValueError:
-                    pass
-            await api.pool.add_account_cookies(label, cookies)
-            if not config.x_identity_enabled:
-                return
-            current = await api.pool.get(label)
-            if previous is not None:
-                current.active, current.error_msg = previous.active, previous.error_msg
-                current.locks, current.stats = previous.locks, previous.stats
-            identity = config.x_account_identities[label]
-            current.headers = {k: v for k, v in current.headers.items() if k.lower() != "accept-language"}
-            current.headers["accept-language"] = identity["accept_language"]
-            if config.x_connection_style == "plain":
-                current.user_agent = identity["user_agent"]
-            await api.pool.save(current)
-        asyncio.run(refresh())
+        asyncio.run(_upsert_account(api, label, cookies, config, reactivate=reactivate))
     except Exception as exc:  # noqa: BLE001 - only the class is reported; the message can hold the cookies
         cls = type(exc).__name__
     else:
@@ -1459,21 +1515,149 @@ def refresh_cookies(label: str, cookies: str, *, config: CollectorConfig, env: M
             adapter.close()
     if cls:
         raise RefreshFailed(cls)
-    if os.name == "posix":
-        os.chmod(path, 0o600)
-    ages_path = _ages_path(config)
-    try:
-        ages = json.loads(ages_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        ages = {}
-    ages[label] = now.astimezone(UTC).isoformat()
-    if runtime is None:
-        cache._atomic_write_json(ages, ages_path)
-    else:
-        from api.data.attention.x_proxy_private import atomic_json
-        atomic_json(ages_path, ages, service_sid=runtime.snapshot.policy.service_sid)
-    if os.name == "posix":
-        os.chmod(ages_path, 0o600)
+    _record_age(config, label, now, runtime.snapshot.policy.service_sid if runtime is not None else None,
+                protected=runtime is not None)
+
+
+# --- S-Cookie-X: X session harvest wiring (CX-1..CX-3) -------------------------------------------------------------
+
+DIRECT_ADMISSION_S = 3600.0  # relay-clock validity of a direct route's admission snapshot (re-read per CONNECT)
+_HARVEST_VALUE = re.compile(r"[0-9A-Za-z]{16,512}")
+
+
+class XRouteProvider:
+    """CK-6 `RouteProvider` for site `x` over the B2 runtime: the account's current admitted route, a pure lookup
+    (never a network call). Direct only under the all-null direct configuration; proxy only for a currently
+    admitted, current-revision assignment; anything else is refused."""
+
+    def __init__(self, runtime, *, clock: Callable[[], float] | None = None):
+        import time
+        self.runtime, self.clock = runtime, clock or time.monotonic
+
+    def admitted_route(self, site: str, label: str):
+        from api.data.attention import browser_relay as relay
+        from api.data.attention import browser_session as bs
+        runtime = self.runtime
+        snapshot = getattr(runtime, "snapshot", None)
+        if site != "x" or snapshot is None or label not in snapshot.config.x_accounts:
+            return "proxy_not_admitted"
+        revision = snapshot.revisions.get(label)
+        if revision is None:
+            return "proxy_not_admitted"
+        if snapshot.policy is None:
+            if snapshot.config.x_proxy_required:
+                return "proxy_not_admitted"
+            return bs.AdmittedRoute("direct", revision,
+                                    lambda: relay.Admission(revision, self.clock() + DIRECT_ADMISSION_S))
+        if label not in snapshot.assignments or not runtime.admitted(label):
+            return "proxy_not_admitted"
+
+        def admission():
+            item = runtime.admissions.get(label)
+            if item is None or item.revision != revision or not runtime.admitted(label):
+                return None
+            return relay.Admission(revision, self.clock() + (item.expires_at - runtime.clock()).total_seconds())
+
+        return bs.AdmittedRoute("proxy", revision, admission, route=snapshot.assignments[label].route)
+
+
+def harvest_cookie_string(cookies) -> str:
+    """CX-2 validation of the helper's in-memory `(name, value, expires)` jar: exactly one `auth_token` and one
+    `ct0` value, alphanumeric and bounded; the error carries no value."""
+    found: dict[str, str] = {}
+    for item in cookies:
+        name, value = item[0], item[1]
+        if name not in ("auth_token", "ct0"):
+            continue
+        if not isinstance(value, str) or not _HARVEST_VALUE.fullmatch(value) or found.get(name, value) != value:
+            raise ValueError("cookie_invalid")
+        found[name] = value
+    if set(found) != {"auth_token", "ct0"}:
+        raise ValueError("cookie_invalid")
+    return f"auth_token={found['auth_token']}; ct0={found['ct0']}"
+
+
+def harvest_account(label: str, *, config: CollectorConfig, pool, check: Callable, upsert: Callable,
+                    evict: Callable[[str], None] | None = None, mode: str = "automatic") -> tuple[str, str | None]:
+    """One harvest of one account: (harvest state, reason code). `check(label, mode)` is the S-Cookie-C session
+    check (it claims the pool's day guard for an automatic run); `upsert(label, cookies, reactivate=)` is the
+    protected DB upsert. A suspended account is never touched."""
+    if label not in config.x_accounts:
+        raise ValueError("label is not configured")
+    _state, reason = pool.account_state(label)
+    if reason == "x_account_suspended":
+        return "failed", "account_suspended"
+    if mode == "automatic" and not config.x_cookie_harvest_enabled:
+        return "failed", "harvest_disabled"
+    result = check(label, mode)
+    if result.state == "failed" and result.reason == "daily_check_used":
+        return "failed", "daily_check_used"
+    pool.fact({"kind": "session_check", "source": x_pool.FACTS_SOURCE, "account": label,
+               "result_class": result.state, "cookie_age_class": result.expiry_class or "unknown"})
+    if result.state == "logged_in":
+        try:
+            cookies = harvest_cookie_string(result.cookies)
+        except ValueError:
+            pool.note_harvest(label, "failed", "cookie_invalid")
+            return "failed", "cookie_invalid"
+        try:
+            upsert(label, cookies, reactivate=reason == "x_login_required")
+        except (RefreshFailed, XStartRefused, OSError, ValueError):
+            pool.note_harvest(label, "failed", "refresh_failed")
+            return "failed", "refresh_failed"
+        finally:
+            del cookies
+        pool.note_harvest(label, "ok")
+        if evict is not None:
+            evict(label)
+        return "ok", None
+    state = "needs_owner" if result.state in ("login_required", "challenge") else result.state
+    pool.note_harvest(label, state, result.reason)
+    return state, result.reason
+
+
+def session_check(config: CollectorConfig, pool, runtime) -> Callable:
+    """The real `check(label, mode)`: S-Cookie-C's helper with the pool as the X day guard and the account's
+    admitted route. The browser host is built on first use, never at import."""
+    from api.data.attention import browser_session as bs
+    routes, host = XRouteProvider(runtime), None
+
+    def check(label, mode):
+        nonlocal host
+        name = dict(config.x_account_profiles).get(label)
+        fail = None if name else "label_unconfigured"
+        if fail is None and not (config.browser_path and config.browser_profiles_dir):
+            fail = "browser_not_configured"
+        if fail is not None:
+            return bs.SessionResult("x", label, "failed", fail, mode, mode != "automatic")
+        if host is None:
+            host = bs.bh.BrowserHost(config.browser_path, config.browser_profiles_dir, cache_root=cache.CACHE_ROOT,
+                                     memory_floor=config.browser_memory_floor_mb,
+                                     rss_ceiling=config.browser_rss_ceiling_mb,
+                                     timeout=min(300, config.x_harvest_timeout_s + 60))
+        return bs.check_session("x", label, host=host, profile_name=name, day_guard=pool, routes=routes, mode=mode,
+                                timeout=config.x_harvest_timeout_s)
+    return check
+
+
+def harvest_cli(label: str, *, config: CollectorConfig, now: datetime, config_path: Path | None = None,
+                interactive: bool = False, runtime_factory=None, check: Callable | None = None,
+                env: Mapping[str, str] = os.environ, repo_root: Path = REPO_ROOT) -> tuple[str, str | None]:
+    """The owner command: admit the account's route (B2), check the session, upsert through `refresh_cookies`."""
+    from api.data.attention.x_proxy_runtime import ProxyRuntime
+    if label not in config.x_accounts:
+        raise ValueError("label is not configured")
+    pool = x_pool.from_config(config, clock=lambda: datetime.now(UTC))
+    runtime = (runtime_factory or ProxyRuntime)(config, config_path=config_path, repo_root=repo_root)
+    runtime.reconcile(pool)
+    if runtime.snapshot.policy is not None:
+        runtime.admit(label, pool)
+
+    def upsert(lbl, cookies, *, reactivate):
+        refresh_cookies(lbl, cookies, config=config, env=env, now=now, repo_root=repo_root, config_path=config_path,
+                        reactivate=reactivate)
+    return harvest_account(label, config=config, pool=pool, check=check or session_check(config, pool, runtime),
+                           upsert=upsert, mode="interactive" if interactive else "automatic")
 
 
 # --- command line: the fallback child, the install record, the cookie refresh -------------------------------------
@@ -1582,9 +1766,13 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--curl-fallback", action="store_true", help="internal: the curl fallback child")
     g.add_argument("--write-curl-record", action="store_true", help="record the curl_cffi wheel for this platform")
     g.add_argument("--refresh-cookies", metavar="LABEL", help="cookie upsert; cookies from X_REFRESH_COOKIES")
+    g.add_argument("--harvest-cookies", metavar="LABEL", help="session harvest from the collector browser profile")
     g.add_argument("--mark-ready", metavar="LABEL", help="mark a configured account ready for the next UTC day")
     p.add_argument("--queries", type=Path, help="explicit absolute owner query configuration")
+    p.add_argument("--interactive", action="store_true", help="with --harvest-cookies: the owner logs in by hand")
     args = p.parse_args(argv)
+    if args.interactive and not args.harvest_cookies:
+        p.error("--interactive needs --harvest-cookies")
     if args.curl_fallback:
         from api.data.attention import x_proxy as xp
         raw = sys.stdin.buffer.read(xp.CHILD_STDOUT_LIMIT + 1)
@@ -1634,6 +1822,17 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(f"ready status=ok label={_word(args.mark_ready)}")
         return 0
+
+    if args.harvest_cookies:
+        try:
+            config = web_queries.load(args.queries).config if args.queries else web_queries.load().config
+            state, reason = harvest_cli(args.harvest_cookies, config=config, now=datetime.now(UTC),
+                                        config_path=args.queries, interactive=args.interactive)
+        except (XStartRefused, ValueError, ProxyFailure, x_pool.XPoolStateError) as e:
+            print(f"harvest status=refused detail={_word(type(e).__name__)}")
+            return 2
+        print(f"harvest status={_word(state)} reason={_word(reason)} label={_word(args.harvest_cookies)}")
+        return 0 if state == "ok" else 2
 
     cookies = os.environ.get("X_REFRESH_COOKIES", "")
     if not cookies:

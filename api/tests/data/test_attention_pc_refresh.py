@@ -1102,3 +1102,27 @@ def test_query_boundary_runs_before_each_request_and_a_hook_refusal_pauses_the_p
     kwargs2, _, _ = fakes(Clock(clock() + timedelta(days=1)), q=queries(x_backfill_days=0))
     kwargs2["x_start"] = lambda _cfg: start2
     assert apr.AttentionPcWorker(**kwargs2).streams[X].run_pass() == "proxy_config"
+
+
+def test_harvest_runs_only_at_unit_boundaries_when_enabled_and_never_stops_a_pass():
+    """S-Cookie-X CX-1: the start's harvest hook runs between units (never while one is in flight), only with
+    `x_cookie_harvest_enabled`; a failing harvest is logged by class and collection continues."""
+    clock = Clock()
+    kwargs, reader, _ = fakes(clock, q=queries(x_backfill_days=0, x_cookie_harvest_enabled=True))
+    calls = []
+
+    def harvest(config, pool, now):
+        calls.append((len(reader.sent), now, pool.labels))
+        raise RuntimeError("boom")
+
+    start = SimpleNamespace(readers={"acct_a": reader}, fallback=None, close=lambda: None, harvest=harvest)
+    kwargs["x_start"] = lambda _cfg: start
+    assert apr.AttentionPcWorker(**kwargs).streams[X].run_pass() == "done"
+    assert calls[0][0] == 0 and calls[0][1].tzinfo is not None and calls[0][2] == ["acct_a"]
+    assert len(calls) >= 2 and reader.coin_units()  # every boundary; the failure never stopped collection
+    off, reader_off, _ = fakes(Clock(clock() + timedelta(days=1)), q=queries(x_backfill_days=0))
+    off["x_start"] = lambda _cfg: SimpleNamespace(readers={"acct_a": reader_off}, fallback=None,
+                                                  close=lambda: None, harvest=harvest)
+    n = len(calls)
+    apr.AttentionPcWorker(**off).streams[X].run_pass()
+    assert len(calls) == n and reader_off.coin_units()  # default off: never called

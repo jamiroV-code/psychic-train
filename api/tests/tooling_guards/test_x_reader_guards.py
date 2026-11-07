@@ -256,12 +256,13 @@ def test_cookie_upsert_procedure_documented_and_guarded():
     attrs = [n.attr for n in ast.walk(TREE) if isinstance(n, ast.Attribute)]
     assert attrs.count("add_account_cookies") == 1 and "add_account" not in attrs
     # Cookies come from an environment variable, never from the command line or a file in the repo: the only
-    # command-line value of the refresh is the label.
+    # command-line value of the refresh is the label. S-Cookie-X: the harvest takes them from the collector's
+    # browser profile in memory, also with only the label on the command line.
     assert '"X_REFRESH_COOKIES"' in SOURCE
     flags = [n for n in ast.walk(TREE) if isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "add_argument"]
     cookie_flags = [f for f in flags if "cookie" in f.args[0].value]
-    assert [f.args[0].value for f in cookie_flags] == ["--refresh-cookies"]
-    assert {k.arg: k.value.value for k in cookie_flags[0].keywords}["metavar"] == "LABEL"
+    assert [f.args[0].value for f in cookie_flags] == ["--refresh-cookies", "--harvest-cookies"]
+    assert all({k.arg: k.value.value for k in f.keywords}["metavar"] == "LABEL" for f in cookie_flags)
 
 
 def test_static_queryid_fetch_is_lazy_and_uses_only_b2_one_shot():

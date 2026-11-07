@@ -625,6 +625,12 @@ class XStream(Stream):
                 if isinstance(exc, ProxyFailure):
                     return exc.reason
                 raise
+            harvest = getattr(start, "harvest", None)  # S-Cookie-X CX-1: between units, never inside one
+            if harvest is not None and c.x_cookie_harvest_enabled:
+                try:
+                    harvest(c, pool, _utc(w.clock()))
+                except Exception as exc:  # noqa: BLE001 - a harvest never stops collection; the class only
+                    log.warning("attention pc %s harvest failed: %s", X_SOURCE, type(exc).__name__)
             if not pool.canary_passed_today():
                 canary = x_pool.run_daily_canary(pool, start.readers, src, c, rng=self.rng, sleep=w._sleep,
                                                  fallback=start.fallback)

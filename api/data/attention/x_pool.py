@@ -82,7 +82,7 @@ ACCOUNT_KEYS = {"state", "reason", "last_used", "lock_until", "last_canary", "su
                 "proxy_quarantine_until", "proxy_reason", "proxy_changed_at",
                 "endpoint_404_day", "endpoint_404_count",
                 "warmup_start_day", "behaviour_cooldown_until", "behaviour_reason", "shrink_run", "result_history",
-                "mixed_day", "mixed_calls"}
+                "mixed_day", "mixed_calls", "harvest_day", "harvest_state", "harvest_reason"}
 TIME_KEYS = ("last_used", "lock_until", "last_canary", "suspect_since", "rate_limit_seen", "rest_until",
              "parse_strike_last_at", "proxy_checked_at", "proxy_quarantine_until", "proxy_changed_at")
 READY_FILE = "account_ready.json"
@@ -92,6 +92,16 @@ XDRIFT_ACCOUNT_DEFAULTS = {"endpoint_404_day": None, "endpoint_404_count": 0}  #
 # S-B3P behaviour keys (rollback contract G strips exactly these seven); result_history is copied per account.
 B3_ACCOUNT_DEFAULTS = {"warmup_start_day": None, "behaviour_cooldown_until": None, "behaviour_reason": None,
                        "shrink_run": 0, "result_history": [], "mixed_day": None, "mixed_calls": 0}
+# S-Cookie-X harvest keys (rollback contract G strips exactly these three).
+HARVEST_ACCOUNT_DEFAULTS = {"harvest_day": None, "harvest_state": "none", "harvest_reason": None}
+HARVEST_STATES = ("none", "ok", "needs_owner", "refused", "failed")
+# Closed reason codes of a harvest (S-Cookie-C CK-1/CK-7 codes plus the hand-off's); anything else is stored as
+# `session_failed`, so the state file never holds free text.
+HARVEST_REASONS = frozenset({
+    "browser_unadmitted", "containment_residual_unaccepted", "cdp_pipe_unavailable", "profile_policy_unsatisfied",
+    "proxy_not_admitted", "browser_busy", "low_memory", "host_mismatch", "login_page", "challenge_page", "not_home",
+    "session_cookie_missing", "navigation_off_allowlist", "browser_not_configured", "label_unconfigured",
+    "cookie_invalid", "refresh_failed", "session_failed"})
 ENDPOINT_404_REASON = "x_endpoint_404"
 ENDPOINT_404_LOCK = timedelta(hours=24)
 ENDPOINT_404_CLEAN_DAYS = 7
@@ -193,6 +203,7 @@ def from_config(config: CollectorConfig, *, clock: Callable[[], datetime]) -> XP
     pool.cooldown_enabled = config.x_adaptive_cooldown_enabled
     pool.b3_status = any((config.x_quiet_hours_enabled, config.x_mixed_traffic_enabled, config.x_variation_enabled,
                           config.x_adaptive_cooldown_enabled, config.x_warmup_enabled))
+    pool.harvest_status = config.x_cookie_harvest_enabled
     return pool
 
 
@@ -202,7 +213,7 @@ def _b3_defaults() -> dict:
 
 def _fresh_account() -> dict:
     return dict.fromkeys(ACCOUNT_KEYS) | {"state": "active", "reads_used": 0, "proxy_health": "unknown",
-                                          **XDRIFT_ACCOUNT_DEFAULTS, **_b3_defaults()}
+                                          **XDRIFT_ACCOUNT_DEFAULTS, **_b3_defaults(), **HARVEST_ACCOUNT_DEFAULTS}
 
 
 def _valid_b3(a: dict) -> bool:
@@ -235,7 +246,10 @@ def _valid(s) -> bool:
                 and type(a["reads_used"]) is int and a["reads_used"] >= 0
                 and (a["parse_strikes"] is None or type(a["parse_strikes"]) is int and a["parse_strikes"] >= 0)
                 and _day(a["endpoint_404_day"]) and type(a["endpoint_404_count"]) is int
-                and a["endpoint_404_count"] >= 0 and _valid_b3(a)):
+                and a["endpoint_404_count"] >= 0 and _valid_b3(a) and _day(a["harvest_day"])
+                and isinstance(a["harvest_state"], str) and a["harvest_state"] in HARVEST_STATES
+                and (a["harvest_reason"] is None
+                     or isinstance(a["harvest_reason"], str) and a["harvest_reason"] in HARVEST_REASONS)):
             return False
         if a["proxy_health"] not in ("unknown", "healthy", "quarantined") or (
                 a["proxy_reason"] is not None and (not isinstance(a["proxy_reason"], str) or a["proxy_reason"] not in xp.REASONS)):
@@ -297,7 +311,7 @@ class XPool:
         self.proxy_max_age = 86400
         self.switches: dict = {}  # facts switch provenance; `from_config` sets the effective values
         self.quiet_hours: dict = {}  # S-B3I effective quiet windows (empty while the switch is off)
-        self.warmup_enabled = self.cooldown_enabled = self.b3_status = False
+        self.warmup_enabled = self.cooldown_enabled = self.b3_status = self.harvest_status = False
         self._s = self._load()
 
     @property
@@ -336,6 +350,8 @@ class XPool:
                         for key, value in XDRIFT_ACCOUNT_DEFAULTS.items():
                             a.setdefault(key, value)
                         for key, value in _b3_defaults().items():
+                            a.setdefault(key, value)
+                        for key, value in HARVEST_ACCOUNT_DEFAULTS.items():
                             a.setdefault(key, value)
             if not _valid(s):
                 raise XPoolStateError("pool state invalid")
@@ -624,6 +640,62 @@ class XPool:
         self._s["alerts"] = [x for x in self._s["alerts"] if x["label"] != label]
         self._save()
 
+    # --- S-Cookie-X: X session harvest (CX-1..CX-3) ---
+    @_transaction
+    def try_claim(self, site: str, label: str, day: str) -> bool:
+        """The X `DayGuard` (CK-2): at most one automatic session check per account per UTC day. Atomic under the
+        pool's state lock, so the worker and the owner CLI share one claim, and persisted across restarts."""
+        if site != "x" or day is None or not _day(day):
+            return False
+        a = self._acct(label)
+        if a["harvest_day"] == day:
+            return False
+        a["harvest_day"] = day
+        self._save()
+        return True
+
+    def harvest_due(self, ages: Mapping[str, int | None], *, enabled: bool,
+                    refresh_age_days: int | None) -> list[str]:
+        """CX-1 automatic triggers, in registration order: an account paused `x_login_required`, or an active one
+        whose cookie age reached `x_cookie_refresh_age_days`. Never a suspended account, never twice a UTC day,
+        never again after a result that needs the owner (`needs_owner` until an owner-initiated harvest succeeds)."""
+        if not enabled:
+            return []
+        today = self._now().date().isoformat()
+        due = []
+        for label in self.labels:
+            a = self._acct(label)
+            if a["harvest_day"] == today or a["harvest_state"] == "needs_owner":
+                continue
+            age = ages.get(label)
+            login = a["state"] == "inactive" and a["reason"] == "x_login_required"
+            aged = (refresh_age_days is not None and a["state"] == "active" and age is not None
+                    and age >= refresh_age_days)
+            if login or aged:
+                due.append(label)
+        return due
+
+    @_transaction
+    def note_harvest(self, label: str, state: str, reason: str | None = None) -> None:
+        """Record a harvest outcome. `ok` schedules this account's canary before its next unit and reactivates it
+        only from `x_login_required` (CX-3; `x_account_suspended` stays terminal); `needs_owner` pauses it
+        `x_login_required`. Spent reads and counters are kept."""
+        if state not in HARVEST_STATES[1:]:
+            raise ValueError("unknown harvest state")
+        a = self._acct(label)
+        a["harvest_state"] = state
+        a["harvest_reason"] = None if reason is None else reason if reason in HARVEST_REASONS else "session_failed"
+        if state == "ok":
+            a["last_canary"] = None
+            if a["state"] == "inactive" and a["reason"] == "x_login_required":
+                a["state"], a["reason"] = "active", None
+                self._s["alerts"] = [x for x in self._s["alerts"]
+                                     if not (x["label"] == label and x["reason"] == "x_login_required")]
+        elif state == "needs_owner" and a["reason"] != "x_account_suspended":
+            a["state"], a["reason"] = "inactive", "x_login_required"
+            self._alert(label, "x_login_required")
+        self._save()
+
     def alerts(self) -> list[dict]:
         return [dict(a) for a in self._s["alerts"]]
 
@@ -880,9 +952,13 @@ class XPool:
         self._s["canary_labels"] = [x for x in self.labels if x in passed and self._acct(x)["state"] == "active"]
         self._save()
 
+    def _canary_pending(self, label: str) -> bool:
+        """A changed route (B2) or fresh harvested cookies (CX-2) need this account's canary before a unit."""
+        a = self._acct(label)
+        return a["last_canary"] is None and (a["proxy_changed_at"] is not None or a["harvest_state"] == "ok")
+
     def canary_passed_today(self) -> bool:
-        pending = any(self._acct(label)["proxy_changed_at"] is not None
-                      and self._acct(label)["last_canary"] is None for label in self.usable())
+        pending = any(self._canary_pending(label) for label in self.usable())
         return not pending and self._s["canary_day"] == self._now().date().isoformat()
 
     def canary_labels(self) -> list[str]:
@@ -892,8 +968,7 @@ class XPool:
     def canary_accounts(self) -> list[str]:
         """The least recently canaried usable accounts: two, or three when there are three or more (a majority)."""
         cands = sorted(self.usable(), key=lambda x: (
-            not (self._acct(x)["proxy_changed_at"] is not None and self._acct(x)["last_canary"] is None),
-            self._acct(x)["last_canary"] or "", self.labels.index(x)))
+            not self._canary_pending(x), self._acct(x)["last_canary"] or "", self.labels.index(x)))
         return cands[:3] if len(cands) >= 3 else cands
 
     @_transaction
@@ -1025,6 +1100,9 @@ class XPool:
                     "warmup_stage": x_behaviour.warmup_stage(a["warmup_start_day"], self._now().date()),
                     "effective_cap": self.effective_cap(x),
                     "mixed_calls_today": x_behaviour.mixed_today(a["mixed_day"], a["mixed_calls"], self._now().date())}
+            if self.harvest_status:
+                accts[-1]["harvest"] = {"state": a["harvest_state"], "reason": a["harvest_reason"],
+                                        "last_at": a["harvest_day"]}
         paused = self.is_paused() and not self._s["stopped"]
         return {"active": sum(1 for a in accts if a["state"] == "active"), "total": len(self.labels),
                 "accounts": accts, "pause_reason": self.pause_reason(),
