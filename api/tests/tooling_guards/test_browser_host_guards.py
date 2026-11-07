@@ -167,7 +167,8 @@ def test_relay_constructed_only_by_browser_selftest_and_no_gateway():
                     if kw.arg == "admission_run" and not (isinstance(kw.value, ast.Constant) and kw.value.value is False):
                         admission_runs.add(path.name)
         assert "gateway" not in path.name
-    assert constructors == {"browser_selftest.py"}
+    # S-Cookie-C (CK-1) constructs one relay per session; collection launches stay admission-gated.
+    assert constructors == {"browser_selftest.py", "browser_session.py"}
     assert admission_runs == {"browser_selftest.py"}
     from api.data.attention import web_queries
     assert not [k for k in web_queries.__dict__.get("COLLECTOR_DEFAULTS", {}) if "gateway" in k]
@@ -185,3 +186,33 @@ def test_collection_launch_still_requires_matching_admission(tmp_path):
     import pytest
     with pytest.raises(host.BrowserFailure, match="browser_unadmitted"):
         b.launch("a", "a", 12345)
+
+
+# S-Cookie-C (CK-3): the session helper never types credentials and keeps no secret.
+SESSION_BANNED = ("Input.", "insertText", "dispatchKeyEvent", "dispatchMouseEvent", "password", "passwd",
+                  "credential", "totp", "imap", "pyotp", "keyring", "Network.setCookie", "document.cookie",
+                  "api.tests", "fake-script", "browser_fake_main")
+
+
+def session_problems(source):
+    lowered = source.lower()
+    found = [b for b in SESSION_BANNED if b.lower() in lowered]
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            names = [a.name for a in node.names] + ([node.module] if getattr(node, "module", None) else [])
+            if any(n.split(".")[0] in {"logging", "imaplib", "getpass", "pyotp", "keyring"} for n in names):
+                found.append("import")
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in {"_call", "_frame"}:
+            found.append("raw cdp")
+    return found + problems(source)
+
+
+def test_session_helper_never_types_credentials_or_logs():
+    assert session_problems((ATTENTION / "browser_session.py").read_text(encoding="utf-8")) == []
+
+
+def test_session_guard_detects_planted_input_credentials_and_logging():
+    for planted in ("M = 'Input.insertText'\n", "password = 1\n", "import imaplib\n", "import logging\n",
+                    "TOTP = 2\n", "c._call(None, 'Browser.close', {})\n", "print(1)\n"):
+        assert session_problems(planted), planted
