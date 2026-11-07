@@ -19,12 +19,12 @@ def go(probe, deps, tmp_path, **kw):
 def test_default_registry_covers_owned_probes_only():
     po.run('PX1', approval=None, cache_root='.', commit='a' * 40)  # dry run; import side effect only via run
     assert pe.EXECUTORS_OWNED == ('PX1', 'PX2', 'PX3', 'PX4', 'PX5', 'PX6', 'PR5', 'PR6')
-    assert not {'PR2', 'PR3', 'PR4'} & set(po.EXECUTORS)
+    assert not {'PR3', 'PR4'} & set(po.EXECUTORS)
     assert 'PR1' in po.EXECUTORS  # S-RGQL registers it (api/scripts/probe_gql.py)
+    assert 'PR2' in po.EXECUTORS  # S-RBrowser registers it (api/scripts/probe_browser.py)
 
 
-@pytest.mark.parametrize('probe,reason', [('PR2', 'executor_pending:S-RBrowser'),
-                                          ('PR3', 'executor_refused:a17_cookie_boundary')])
+@pytest.mark.parametrize('probe,reason', [('PR3', 'executor_refused:a17_cookie_boundary')])
 def test_default_registry_refuses_without_touching_dependencies(probe, reason, tmp_path):
     def forbidden():
         pytest.fail('dependencies (cookies) built')

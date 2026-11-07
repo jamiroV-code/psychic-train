@@ -150,6 +150,15 @@ def test_gql_network_exemption_is_narrow():
         assert _exempted(other, network_offenders("import asyncio\n")), other
 
 
+def test_browser_method_has_no_network_exemption_and_no_reddit_json_endpoint():
+    """S-RBrowser: `reddit_browser.py` reads ONLY through the browser (host/CDP/relay modules); no exemption."""
+    source = (ATTENTION / "reddit_browser.py").read_text(encoding="utf-8")
+    assert "reddit_browser.py" not in BROWSER_NETWORK and "reddit_browser.py" not in GQL_NETWORK
+    assert _exempted("reddit_browser.py", network_offenders(source)) == []
+    assert offenders(source) == [] and log_offenders(source) == []
+    assert _exempted("reddit_browser.py", network_offenders(source + "import socket\n")) == ["socket"]
+
+
 def test_no_fixed_utc_hour_in_reddit_modules():
     bad = {p.name: hits for p in present() if (hits := fixed_hour_offenders(p.read_text(encoding="utf-8")))}
     assert not bad

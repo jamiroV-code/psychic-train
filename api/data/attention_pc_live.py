@@ -35,8 +35,9 @@ HELD = ("breaker", "request_cap")
 
 
 def deps(worker: apr.AttentionPcWorker) -> SimpleNamespace:
-    """What a method factory may use from the worker: its clock and its stop-aware sleep."""
-    return SimpleNamespace(clock=worker.clock, sleep=worker._sleep)
+    """What a method factory may use from the worker: its clock, its stop-aware sleep and the absolute queries
+    path (the browser method's B2 route runtime reads the private route snapshot through it)."""
+    return SimpleNamespace(clock=worker.clock, sleep=worker._sleep, config_path=getattr(worker, "queries_path", None))
 
 
 def health_path(store_id: str):
@@ -156,7 +157,8 @@ class LiveStream(apr.Stream):
         switches = x_pool.facts_switches(q.config)
         try:
             daily_facts.append({"kind": "poll_result", "source": FACTS_SOURCE, "method": self.source,
-                                "account": None, "navigations": result.navigations, "lanes": len(result.lanes),
+                                "account": getattr(self.method, "last_account", None),
+                                "navigations": result.navigations, "lanes": len(result.lanes),
                                 "stop_reason": stop}, now=result.collected_at, switches=switches)
             daily_facts.append({"kind": "request_counter", "source": FACTS_SOURCE, "method": self.source,
                                 "requests": result.requests}, now=result.collected_at, switches=switches)

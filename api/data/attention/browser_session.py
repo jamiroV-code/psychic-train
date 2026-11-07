@@ -16,6 +16,7 @@ import argparse
 import json
 import sys
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Protocol
@@ -32,6 +33,8 @@ REFUSED_REASONS = ("browser_unadmitted", "containment_residual_unaccepted", "cdp
 ROLES = {"automatic": "session_check", "interactive": "session_check", "probe": "bootstrap"}
 POLL_SECONDS = 2.0
 DAY_SECONDS = 86400
+# A Reddit session outcome as the account pool records it (`reddit_accounts.SESSION_STATES`).
+SESSION_RECORD = {"logged_in": "logged_in", "login_required": "logged_out", "challenge": "challenge"}
 
 
 @dataclass(frozen=True)
@@ -192,6 +195,43 @@ def observe(client, site, *, interactive, timeout, clock=time.monotonic, sleep=t
             "expiry_class": klass, "cookies": kept}
 
 
+class SessionRefused(Exception):
+    """The browser session could not be opened (or failed under the host/relay); `reason` is a closed code."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+@contextmanager
+def open_browser(site, label, *, host, profile_name, routes, role, policy, max_body_bytes=None,
+                 clock=time.monotonic):
+    """One admitted relay, one launched profile, one CDP client with `Browser.getVersion` proven; yields
+    `(client, session, relay)`. Teardown is the host's job-object close and the relay close, never CDP.
+    Shared by the session check (CK-1) and the Reddit browser reader (S-RBrowser)."""
+    route = routes.admitted_route(site, label)
+    if not isinstance(route, AdmittedRoute) or route.mode not in ("proxy", "direct"):
+        raise SessionRefused("proxy_not_admitted")
+    try:
+        relay = relay_mod.Relay(site, label, route.mode, revision=route.revision, admission=route.admission,
+                                hosts=route.hosts, route=route.route)
+    except relay_mod.RelayFailure as exc:
+        raise SessionRefused("proxy_not_admitted" if exc.reason == "proxy_not_admitted" else exc.reason) from None
+    try:
+        port = relay.start()
+        with host.launch(label, profile_name, port) as session:
+            try:
+                client = cdp.CdpClient(session.pipe, role, policy, max_body_bytes=max_body_bytes, clock=clock)
+                client.version()
+            except bh.BrowserFailure:
+                raise SessionRefused("cdp_pipe_unavailable") from None
+            yield client, session, relay
+    except (bh.BrowserFailure, relay_mod.RelayFailure, profiles.ProfileFailure) as exc:
+        raise SessionRefused(exc.reason if hasattr(exc, "reason") else "profile_acl_unverified") from None
+    finally:
+        relay.close()
+
+
 def check_session(site, label, *, host, profile_name, day_guard, routes, mode="automatic", timeout=120,
                   clock=time.monotonic, sleep=time.sleep, wall=time.time) -> SessionResult:
     """CK-1/CK-2/CK-7. Behind the machine-wide lock (taken by `host.launch`); never retries."""
@@ -209,22 +249,9 @@ def check_session(site, label, *, host, profile_name, day_guard, routes, mode="a
         day = datetime.fromtimestamp(wall(), timezone.utc).date().isoformat()
         if not day_guard.try_claim(site, label, day):
             return result("failed", "daily_check_used")
-    route = routes.admitted_route(site, label)
-    if not isinstance(route, AdmittedRoute) or route.mode not in ("proxy", "direct"):
-        return stop("proxy_not_admitted")
     try:
-        relay = relay_mod.Relay(site, label, route.mode, revision=route.revision, admission=route.admission,
-                                hosts=route.hosts, route=route.route)
-    except relay_mod.RelayFailure as exc:
-        return stop("proxy_not_admitted" if exc.reason == "proxy_not_admitted" else exc.reason)
-    try:
-        port = relay.start()
-        with host.launch(label, profile_name, port) as session:
-            try:
-                client = cdp.CdpClient(session.pipe, ROLES[mode], cdp.UrlPolicy(site), clock=clock)
-                client.version()
-            except bh.BrowserFailure:
-                return stop("cdp_pipe_unavailable")
+        with open_browser(site, label, host=host, profile_name=profile_name, routes=routes, role=ROLES[mode],
+                          policy=cdp.UrlPolicy(site), clock=clock) as (client, session, _relay):
             try:
                 fields = observe(client, site, interactive=mode == "interactive", timeout=timeout, clock=clock,
                                  sleep=sleep, wall=wall, check=session.check)
@@ -232,12 +259,9 @@ def check_session(site, label, *, host, profile_name, day_guard, routes, mode="a
                 if exc.reason == "navigation_off_allowlist":
                     return result("login_required", exc.reason)
                 return stop(exc.reason)
-            # Teardown is the host's job-object close (session exit), never a CDP command.
             return result(fields.pop("state"), fields.pop("reason"), **fields)
-    except (bh.BrowserFailure, relay_mod.RelayFailure, profiles.ProfileFailure) as exc:
-        return stop(exc.reason if hasattr(exc, "reason") else "profile_acl_unverified")
-    finally:
-        relay.close()
+    except SessionRefused as exc:
+        return stop(exc.reason)
 
 
 def _profile_name(config, site, label):
@@ -262,8 +286,10 @@ def main(argv=None, *, config=None, host=None, day_guard=None, routes=None, out=
     args = parser.parse_args(argv)
     mode = "interactive" if args.interactive else "probe" if args.probe else "automatic"
     head = {"site": args.site, "label": args.label}
+    config_path = None
     if config is None:
         from api.data.attention import web_queries
+        config_path = web_queries.QUERIES_PATH
         config = web_queries.load().config
     name = _profile_name(config, args.site, args.label)
     if name is None:
@@ -287,8 +313,17 @@ def main(argv=None, *, config=None, host=None, day_guard=None, routes=None, out=
         except profiles.ProfileFailure as exc:
             return _emit(out, {**head, "state": "failed", "reason": exc.reason}, 2)
         return _emit(out, {**head, "profile": "created"}, 0)
+    if routes is None and args.site == "reddit":  # S-RBrowser: the Reddit label's B2 route (default deny)
+        from api.data.attention import reddit_browser
+        routes = reddit_browser.RedditRoutes(config, config_path=config_path)
+        routes.refresh()
+        routes.admit(args.label)
     result = check_session(args.site, args.label, host=host, profile_name=name, day_guard=day_guard,
                            routes=routes or DENY_ROUTES, mode=mode, timeout=config.x_harvest_timeout_s)
+    if args.site == "reddit" and result.state in SESSION_RECORD:
+        from api.data.attention import reddit_accounts
+        reddit_accounts.from_config(config, clock=lambda: datetime.now(timezone.utc)).record_session(
+            args.label, SESSION_RECORD[result.state])  # an owner relogin reopens a login/challenge pause (BR-4)
     return _emit(out, result.public(), 0 if result.state == "logged_in" else 2)
 
 

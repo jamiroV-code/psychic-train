@@ -43,7 +43,8 @@ def go(tmp_path, mode, deps, surface_path=None):
 
 def test_pr1_is_registered_by_s_rgql():
     assert po.EXECUTORS["PR1"] is pg.pr1_gql_anon
-    assert "PR2" not in po.EXECUTORS
+    from api.scripts import probe_browser
+    assert po.EXECUTORS["PR2"] is probe_browser.pr2_browser  # S-RBrowser owns PR2
 
 
 def test_dry_run_builds_nothing(tmp_path):

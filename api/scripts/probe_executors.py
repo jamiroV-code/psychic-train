@@ -14,8 +14,8 @@ Transport is injected through `run.dependencies` (built by `build_dependencies` 
   refused_hosts() -> dict                       PX6: relay refusals, background_refused excluded
   routes {section: AdmittedRoute | str}         PR5: admitted routes of gql_anon and browser
   read_events(day) -> list                      PR6: daily_facts.read_events
-PR1 is registered by S-RGQL (`api/scripts/probe_gql.py`, imported below so the default registry holds it) and
-PR2 by S-RBrowser; PR3 is refused (A17) and PR4 reserved in `probe_owner.run`.
+PR1 is registered by S-RGQL (`api/scripts/probe_gql.py`) and PR2 by S-RBrowser (`api/scripts/probe_browser.py`),
+both imported below so the default registry holds them; PR3 is refused (A17) and PR4 reserved in `probe_owner.run`.
 """
 from __future__ import annotations
 
@@ -242,6 +242,9 @@ def build_dependencies(probe_id, config):
     if probe_id == 'PR1':
         from api.scripts.probe_gql import build_dependencies as gql_dependencies
         return gql_dependencies(config)
+    if probe_id == 'PR2':
+        from api.scripts.probe_browser import build_dependencies as browser_dependencies
+        return browser_dependencies(config)
     if probe_id == 'PR6':
         from api.data.attention import daily_facts
         return {'read_events': daily_facts.read_events}
@@ -293,4 +296,5 @@ def build_dependencies(probe_id, config):
     raise po.ProbeRefused('executor_pending:' + po.PENDING.get(probe_id, 'S-OpsProbe'))
 
 
+from api.scripts import probe_browser  # noqa: E402,F401 - registers PR2 (S-RBrowser) in the default registry
 from api.scripts import probe_gql  # noqa: E402,F401 - registers PR1 (S-RGQL) in the default registry

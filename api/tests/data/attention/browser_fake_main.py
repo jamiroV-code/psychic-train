@@ -44,11 +44,33 @@ def main():
                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     session_url, bodies, limits = {}, {}, {"maxResourceBufferSize": 65536, "maxTotalBufferSize": 262144}
     next_target = 0
+    # S-RBrowser: a page's scripted `xhr` captures follow its document; each `window.scrollBy` releases the next
+    # batch of its `scrolls` (synthetic bodies from the test's surface fixtures, never a network request).
+    scroll_batches, xhr_count = {}, [0]
 
     def send(value):
         data = json.dumps(value, separators=(",", ":")).encode() + b"\0"
         while data:
             data = data[os.write(write_fd, data):]
+
+    def emit_xhr(sid, items):
+        for item in items:
+            xhr_count[0] += 1
+            rid = "x" + str(xhr_count[0])
+            body = item.get("body", "").encode()
+            bodies[rid] = body if len(body) <= limits["maxResourceBufferSize"] else None
+            frame = {"requestId": rid, "type": "XHR"}
+            send({"method": "Network.requestWillBeSent", "sessionId": sid, "params": {
+                **frame, "request": {"url": item["url"], "method": item.get("method", "GET")}}})
+            if item.get("failed"):
+                send({"method": "Network.loadingFailed", "sessionId": sid,
+                      "params": {"requestId": rid, "errorText": "fixture_xhr_failed"}})
+                continue
+            send({"method": "Network.responseReceived", "sessionId": sid, "params": {**frame, "response": {
+                "url": item["url"], "status": item.get("status", 200),
+                "mimeType": item.get("mime", "application/json")}}})
+            send({"method": "Network.loadingFinished", "sessionId": sid,
+                  "params": {"requestId": rid, "encodedDataLength": len(body)}})
 
     def page_bytes(url, page):
         if not page.get("wire"):
@@ -115,6 +137,10 @@ def main():
                 elif method == "Network.getCookies":
                     result = {"cookies": cookies}
                 elif method == "Runtime.evaluate":
+                    if params.get("expression", "").startswith("window.scrollBy("):
+                        batches = scroll_batches.get(sid) or []
+                        if batches:
+                            emit_xhr(sid, batches.pop(0))
                     result = {"result": {"type": "string", "value": session_url.get(sid, "about:blank")}}
                 elif method == "Page.navigate":
                     url = params["url"]
@@ -137,6 +163,8 @@ def main():
                             "fromDiskCache": page.get("fromDiskCache", False)}})
                         event("Network.loadingFinished", {"requestId": request_id, "encodedDataLength": len(body)})
                         result = {"frameId": "f1"}
+                        emit_xhr(sid, page.get("xhr", []))
+                        scroll_batches[sid] = [list(b) for b in page.get("scrolls", [])]
                     except (OSError, KeyError, IndexError):
                         event("Network.loadingFailed", {"requestId": request_id, "errorText": "fixture_route_failed"})
                         result = {"errorText": "fixture_route_failed"}

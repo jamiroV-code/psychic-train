@@ -216,3 +216,12 @@ def test_session_guard_detects_planted_input_credentials_and_logging():
     for planted in ("M = 'Input.insertText'\n", "password = 1\n", "import imaplib\n", "import logging\n",
                     "TOTP = 2\n", "c._call(None, 'Browser.close', {})\n", "print(1)\n"):
         assert session_problems(planted), planted
+
+
+# S-RBrowser (BR-2/A3): the Reddit browser method opens sessions only through `browser_session.open_browser`
+# (no relay of its own), types nothing, keeps no secret, sends no raw CDP frame and never logs.
+def test_reddit_browser_method_reads_through_the_session_seam_only():
+    source = (ATTENTION / "reddit_browser.py").read_text(encoding="utf-8")
+    assert session_problems(source) == []
+    assert "open_browser(" in source and "Relay(" not in source and "admission_run" not in source
+    assert "_open_page" not in source and ".pipe" not in source
