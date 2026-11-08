@@ -74,3 +74,6 @@ Stage 7 done: S-OpsProbe 818c3bd6, S-B3I efaceab7 (security re-read pending for 
 Landed: S-OpsProbe 818c3bd6, S-B3I efaceab7, S-B3R 15b37868, S-RGQL 203f4b5a, S-Cookie-X 742727e6, S-RBrowser 98645de5, S-Report 57ec4293, S-OpsDoctor 399ccddc, S-OpsDeploy 32eb1da5 (runbook in deploy/README.md; firewall tool generate-only).
 IN PROGRESS: S-E2E-Cycle (api/tests/cycle/*): UNCOMMITTED partial (C1-C2 pass, C4 being fixed, C3/C5-C14 not written); saved on branch `claude/b2-wip`. Resume on a FRESH session (resumed sessions fall back to an exhausted model). Then Stage 13 S-E2E-UI, Stage 14 G-FINAL (evidence pack, consolidated regression C15, security re-reads for: child envelope count field, single-page ordinary() helper, open_browser/RedditRoutes, relay).
 Owner actions pending: create 2 more X accounts (rest week), firewall rule apply, private files per runbook, probes with --approve.
+
+## Update 08-11-26 (later): all slices landed, G-FINAL report written
+S-E2E-Cycle 34cb845b and S-E2E-UI 15e60f8b are committed (the earlier "in progress" note above is superseded). Guard fix fd90e69a. Closeout: `collector-identity-pool-finish-final_REPORT_08-11-26.md`. Remaining: owner actions, PR review/merge, optional follow-up slice (ordinary() classification, relay caps).

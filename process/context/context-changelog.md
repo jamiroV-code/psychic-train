@@ -34,6 +34,10 @@ Since Last Update below, newest first, for all of the above plus everything each
 workflows now exist and all five cron times moved again — every clock time quoted in older entries
 below (17:47/18:17/18:47 UTC, "~2h" delay) is superseded; see the newest entry directly below.
 
+## Changes Since Last Update (2026-11-08, collector identity pool finish, G-FINAL)
+
+Stages 0-13 of the finish plan landed on `claude/b2-validate`; acceptance C1-C14 and the consolidated gate recorded in `collector-identity-pool-finish-final_REPORT_08-11-26.md`. Fixed a no-logging guard failure (`parser.error` in `browser_session.py`). Not merged, not LIVE-READY.
+
 ## Changes Since Last Update (2026-10-01, P1 pipeline completeness — general-plans)
 
 Task folder: `process/general-plans/active/pipeline-completeness_28-09-26/` (three plans: schedules +

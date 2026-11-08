@@ -62,3 +62,7 @@ About 188 of the 200 USD ceiling (planner figures, 21-10-26). Spend after 21-10-
 1. The owner reviews and merges open PRs (D-28), #198 first for W8c2.
 2. Re-verify this state at the next planner session.
 3. Owner probes above.
+
+## Collector identity pool finish (08-11-26, branch `claude/b2-validate`, not merged)
+
+All finish-plan slices through S-E2E-UI are committed (CODE DONE, fixture-proven, default off). `python -m api.tests.cycle.acceptance` C1-C14 passed on the owner's PC (08-11-26). Consolidated gate: 2927 passed, 2 skipped, one guard failure fixed in `fd90e69a`. NOT LIVE-READY: no live X/Reddit run, BG-1 FAIL until the firewall rule is applied, owner probes not run. Security re-read: no blocking finding; the `ordinary()` helper skips rate-limit and block classification (follow-up). Details: `process/general-plans/active/collector-identity-pool_02-11-26/collector-identity-pool-finish-final_REPORT_08-11-26.md`.
