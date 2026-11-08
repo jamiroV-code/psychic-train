@@ -289,7 +289,7 @@ def main(argv=None, *, config=None, host=None, day_guard=None, routes=None, out=
     from api.data.attention import web_queries
     if args.queries is not None:
         if not args.queries.is_absolute() or not web_queries._outside_repo(str(args.queries.resolve())):
-            parser.error("--queries must be absolute and outside the repository")
+            parser.exit(2, f"{parser.prog}: error: --queries must be absolute and outside the repository\n")
     mode = "interactive" if args.interactive else "probe" if args.probe else "automatic"
     head = {"site": args.site, "label": args.label}
     config_path = args.queries
