@@ -5,6 +5,9 @@ import path from "node:path";
 const API = `http://127.0.0.1:${process.env.E2E_API_PORT}`;
 const ROOT = process.env.E2E_CACHE_ROOT;
 const SECRET = "B2_SYNTHETIC_SECRET_NEVER_PUBLIC";
+// S-E2E-UI: set by `python -m api.tests.cycle.acceptance --ui`; the server then serves that finished cycle's cache
+// (collector_status_e2e.seed_cycle) instead of the B2 fixture, and only the cycle tests below are defined.
+const CYCLE = process.env.CYCLE_E2E_ROOT;
 const NEW_FIELDS = ["proxy_id", "proxy_state", "proxy_reason", "proxy_checked_at", "proxy_quarantine_until", "region", "connection_style", "identity_revision"];
 
 interface Finish {
@@ -61,7 +64,7 @@ async function snapshot(directory: string): Promise<Record<string, string>> {
   return result;
 }
 
-for (const width of [375, 768, 1280]) {
+if (!CYCLE) for (const width of [375, 768, 1280]) {
   test(`B2 real status API to screen at ${width}px: all route states, legacy and no secrets`, async ({ page, request }, testInfo) => {
     test.setTimeout(180_000);
     expect(process.env.B2_E2E, "Run this acceptance with B2_E2E=1 and explicit isolated API/web ports").toBe("1");
@@ -165,3 +168,106 @@ for (const width of [375, 768, 1280]) {
     }
   });
 }
+
+interface CycleSizing {
+  sizing_day: string;
+  capacity_reads: number;
+  need_reads: number;
+  shortfall_reads: number;
+  backlog_reads: number;
+}
+
+// Recorded by the cycle (C10-C13): the real producers' states, read back through the real API and screen.
+const CYCLE_METHODS: Record<string, [string, string]> = {
+  reddit_live_browser: ["needs_probe", "Reddit live (browser): needs probe"],
+  reddit_live_gql: ["ok", "Reddit live (GraphQL): ok"],
+  reddit_stream: ["unknown", "Reddit stream: unknown"],
+};
+const CYCLE_X_ACCOUNTS = ["acc_a", "acc_b", "acc_c", "acc_d", "acc_e"];
+const IPV4 = /\b(?:\d{1,3}\.){3}\d{1,3}\b/;
+
+// One renderer, no GPU (the constrained-host flags of the D18 gate); file scope because launch options need it.
+if (CYCLE) test.use({ launchOptions: { args: ["--renderer-process-limit=1", "--disable-gpu"] } });
+
+if (CYCLE) test.describe("S-E2E-UI over the cycle cache", () => {
+  // Browser launch counts against this timeout on a memory-constrained host.
+  test.describe.configure({ timeout: 180_000 });
+  for (const width of [375, 768, 1280]) {
+  test(`cycle cache through the real API to screen at ${width}px: sizing shortfall, Reddit, doctor, no secrets`, async ({ page, request }, testInfo) => {
+    const cycle = CYCLE!;
+    expect(process.env.B2_E2E, "Run through python -m api.tests.cycle.acceptance --ui").toBe("1");
+    expect(ROOT).toBeTruthy();
+    const markers: string[] = JSON.parse(await readFile(path.join(cycle, "ui-markers.json"), "utf-8"));
+    const sizing: CycleSizing = JSON.parse(await readFile(path.join(cycle, "ui-expect.json"), "utf-8")).sizing;
+    expect(markers.length).toBeGreaterThan(0);
+    expect(sizing.shortfall_reads).toBeGreaterThan(0);
+    const paths = [cycle, ROOT!].flatMap((p) => [p, JSON.stringify(p).slice(1, -1), p.replaceAll("\\", "/")]);
+    const clean = (text: string) => {
+      for (const value of [...markers, ...paths]) expect(text).not.toContain(value);
+      expect(text).not.toMatch(IPV4);
+      expect(text).not.toMatch(/undefined|NaN|\[object/);
+    };
+    const poolRoot = path.join(ROOT!, "attention", "_pc_state");
+    const before = await snapshot(poolRoot);
+    const response = await request.get(`${API}/api/narrative/sources`);
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const wire = await response.text();
+    clean(wire);
+    const body = JSON.parse(wire);
+    const collectorX = body.collector.sources.find((s: { id: string }) => s.id === "xsearch");
+    const { sizing_day, capacity_reads, need_reads, shortfall_reads, backlog_reads } = sizing;
+    expect(collectorX).toMatchObject({ has_state: true, sizing_day, capacity_reads, need_reads, shortfall_reads, backlog_reads });
+    const collectorReddit = body.collector.sources.find((s: { id: string }) => s.id === "reddit");
+    const methods = Object.fromEntries(collectorReddit.methods.map((m: { method: string; state: string }) => [m.method, m.state]));
+    for (const [method, [state]] of Object.entries(CYCLE_METHODS)) expect(methods[method]).toBe(state);
+    expect(body.collector.doctor.state).toBe("FAIL");
+    const xAccounts = body.sources.find((row: { id: string }) => row.id === "xsearch").health.accounts;
+    expect(xAccounts.map((a: { label: string }) => a.label).sort()).toEqual(CYCLE_X_ACCOUNTS);
+    const redditAccounts = (body.sources.find((row: { id: string }) => row.id === "reddit").health.accounts ?? [])
+      .filter((a: { site?: string }) => a.site === "reddit");
+    expect(redditAccounts.length).toBeGreaterThan(0);
+    // The GET reads only: no pool or worker state is migrated or written.
+    expect((await request.get(`${API}/api/narrative/sources`)).ok()).toBeTruthy();
+    expect(await snapshot(poolRoot)).toEqual(before);
+
+    await page.setViewportSize({ width, height: 900 });
+    const statusResponse = page.waitForResponse((r) => r.url() === `${API}/api/narrative/sources` && r.status() === 200);
+    await page.goto("/narrative");
+    await page.getByRole("tab", { name: "Discovery", exact: true }).click();
+    await statusResponse;
+    const box = page.getByTestId("collector-status");
+    await expect(box).toBeVisible();
+    const fits = async (testId: string) => {
+      const line = page.getByTestId(testId);
+      await expect(line).toBeVisible();
+      expect(await line.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), testId).toBe(true);
+      return line;
+    };
+    // x_sizing_shortfall: the status-box warning text, word for word from the seeded scheduling record.
+    await expect(await fits("collector-capacity")).toHaveText(
+      `Capacity for ${sizing.sizing_day}: ${sizing.capacity_reads} reads available, ${sizing.need_reads} needed; ` +
+      `shortfall ${sizing.shortfall_reads} reads; older backlog ${sizing.backlog_reads} reads`);
+    for (const [method, [, text]] of Object.entries(CYCLE_METHODS)) {
+      await expect(await fits(`collector-method-${method}`)).toContainText(text);
+    }
+    for (const account of redditAccounts) {
+      const line = await fits(`collector-reddit-account-${account.label}`);
+      await expect(line).toContainText(account.state === "unknown" ? `${account.label} state unknown` : `${account.label} ${account.state}`);
+      if ((account.proxy_state ?? "unknown") === "unknown") await expect(line).toContainText("proxy unknown");
+    }
+    await expect(page.getByTestId("collector-reddit-accounts")).toContainText("Reddit accounts:");
+    for (const account of xAccounts) {
+      const line = await fits(`collector-account-${account.label}`);
+      // Unknown is never shown as healthy.
+      if ((account.proxy_state ?? "unknown") === "unknown") await expect(line).not.toContainText("proxy healthy");
+    }
+    await expect(await fits("collector-doctor")).toContainText("Doctor: failing");
+    await expect(page.getByTestId("collector-daily-report")).toContainText("Daily report");
+    clean(await box.innerText());
+    clean(await page.locator("body").innerText());
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`cycle-${width}.png`), fullPage: true });
+    expect(await snapshot(poolRoot)).toEqual(before);
+  });
+  }
+});

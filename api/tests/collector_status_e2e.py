@@ -21,6 +21,8 @@ REDDIT_SCENARIOS = {
     "finish-a": (("r_active", "r_resting", "r_unknown"), ["browser", "gql_anon"], "sentinel"),
     "finish-b": (("r_paused", "r_locked"), ["gql_anon"], "auto"),
 }
+# S-E2E-UI: `python -m api.tests.cycle.acceptance --ui` points this at its finished cycle root (cache/, private/).
+CYCLE_ENV = "CYCLE_E2E_ROOT"
 
 
 def root() -> Path:
@@ -38,6 +40,9 @@ def seed() -> None:
     from copy import deepcopy
     from api.analytics.attention.discovery import load_config
     directory = root()
+    if os.environ.get(CYCLE_ENV):
+        seed_cycle(directory, Path(os.environ[CYCLE_ENV]))
+        return
     private = directory / "collector-private"
     private.mkdir(parents=True, exist_ok=True)
     now = datetime.now(UTC)
@@ -139,6 +144,50 @@ def seed_finish(directory: Path, now: datetime) -> None:
         "xsearch/xsearch_web": {"eligible": 5, "stored": 5, "exact": 5, "estimated": 0, "missing": 0, "reasons": {}}}})
     put(reports / "doctor.json", {"state": "WARN", "checked_at": now.isoformat(), "failures": [],
                                   "warnings": [SECRET, "check text"]})
+
+
+def shortfall_sizing(*, global_room: int, remaining_caps: int | None, coins: int, per_unit: int) -> dict:
+    """x_sizing_shortfall: the real capacity arithmetic with the whole universe queued for the sizing day; a
+    universe that fits is a broken fixture, not a pass."""
+    from api.data.attention import x_capacity, x_reader
+    values = x_capacity.sizing(global_room=global_room, remaining_caps=remaining_caps, queued_target=coins,
+                               backlog=0, per_unit=per_unit, canary_pages=0, page_size=x_reader.PAGE_ENTRIES)
+    assert values["shortfall_reads"] > 0, values
+    return values
+
+
+def seed_cycle(directory: Path, source: Path) -> None:
+    """Serve the finished cycle's cache unchanged plus today's x_sizing_shortfall scheduling record.
+
+    The cycle cache is copied over the fresh E2E root; the owner query file the cycle's C13 wrote becomes the
+    served one. Sizing: the cycle's real pool (`x_pool.from_config` over the cycle's config at today's clock; its
+    usable accounts give the remaining caps), with the cycle's whole coin universe queued, through
+    `x_capacity.sizing`."""
+    import shutil
+    from api.analytics.attention.discovery import load_config
+    from api.data.attention import pc_pace, web_queries, x_capacity, x_pool, x_reader
+    queries = source / "private" / "queries.json"
+    if not (source / "cache").is_dir() or not queries.is_file():
+        sys.exit(f"REFUSING: {CYCLE_ENV} is not a finished cycle root (cache/ and private/queries.json)")
+    shutil.copytree(source / "cache", directory, dirs_exist_ok=True)
+    private = directory / "collector-private"
+    private.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(queries, private / "queries.json")
+    put(directory / "discovery.json", load_config())
+    q = web_queries.load(private / "queries.json")
+    now = datetime.now(UTC)
+    pool = x_pool.from_config(q.config, clock=lambda: now)
+    usable = pool.usable()
+    per_unit = x_capacity.per_unit_reads(sample_n=q.config.x_sample_n, page_cap=q.config.x_page_cap,
+                                         page_size=x_reader.PAGE_ENTRIES)
+    sizing = shortfall_sizing(global_room=q.config.x_daily_post_budget, remaining_caps=pool.remaining_caps(),
+                              coins=len(q.coins), per_unit=per_unit)
+    path = pc_pace.state_path("xsearch_web").with_name("xsearch_web_health.json")
+    record = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    record.update(observed_at=now.isoformat(), sizing_day=(now.date() - timedelta(days=1)).isoformat(), **sizing)
+    put(path, record)
+    put(source / "ui-expect.json", {"sizing": dict(sizing, sizing_day=record["sizing_day"], usable_accounts=usable,
+                                                   coins=len(q.coins), per_unit=per_unit)})
 
 
 def install_private_read_guard(directory: Path) -> None:
