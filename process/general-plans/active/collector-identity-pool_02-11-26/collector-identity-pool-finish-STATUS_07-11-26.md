@@ -69,3 +69,8 @@ Owner reports 2 Reddit throwaway accounts created on 07-11-26 (usernames/passwor
 - Reddit fit: EXTEND PARSER authorized once real captures exist (grammar extension via the capture-to-surface workflow; archive route stays declined).
 - Reddit accounts: 2 created 07-11-26 (rest to 14-11-26). X accounts/proxies: owner asked how many are needed (sizing: about 4 X accounts, 6 worst case at the 800-read cap for the 72-coin universe; Reddit browser needs 2, one active at a time).
 Stage 7 done: S-OpsProbe 818c3bd6, S-B3I efaceab7 (security re-read pending for child envelope `count` and single-page `ordinary()` helper).
+
+## Update 08-11-26: stages 7-12 landed except S-E2E-Cycle (paused at rate limit)
+Landed: S-OpsProbe 818c3bd6, S-B3I efaceab7, S-B3R 15b37868, S-RGQL 203f4b5a, S-Cookie-X 742727e6, S-RBrowser 98645de5, S-Report 57ec4293, S-OpsDoctor 399ccddc, S-OpsDeploy 32eb1da5 (runbook in deploy/README.md; firewall tool generate-only).
+IN PROGRESS: S-E2E-Cycle (api/tests/cycle/*): UNCOMMITTED partial (C1-C2 pass, C4 being fixed, C3/C5-C14 not written); saved on branch `claude/b2-wip`. Resume on a FRESH session (resumed sessions fall back to an exhausted model). Then Stage 13 S-E2E-UI, Stage 14 G-FINAL (evidence pack, consolidated regression C15, security re-reads for: child envelope count field, single-page ordinary() helper, open_browser/RedditRoutes, relay).
+Owner actions pending: create 2 more X accounts (rest week), firewall rule apply, private files per runbook, probes with --approve.
