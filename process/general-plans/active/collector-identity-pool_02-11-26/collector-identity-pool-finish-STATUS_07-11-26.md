@@ -77,3 +77,11 @@ Owner actions pending: create 2 more X accounts (rest week), firewall rule apply
 
 ## Update 08-11-26 (later): all slices landed, G-FINAL report written
 S-E2E-Cycle 34cb845b and S-E2E-UI 15e60f8b are committed (the earlier "in progress" note above is superseded). Guard fix fd90e69a. Closeout: `collector-identity-pool-finish-final_REPORT_08-11-26.md`. Remaining: owner actions, PR review/merge, optional follow-up slice (ordinary() classification, relay caps).
+
+## Update 09-11-26: route source (free public proxies), private volume, persistent feeder
+**Gap found:** nothing produced B2's route list; the plan assumed an owner-supplied private list and parked the V2Ray gateway. Fixed by D-33: `route_source.py` / `route_feeder` (PR #247, commits 0036fff9, 37804d14), experiment tier, default off.
+**Live measurement (owner PC, 09-11-26):** 5,946 candidates from 3 lists; 400-sample prescreen passed 3 (0.75%); full passes find about 15-19 verified live exits across ~13 countries (US ~3). Free exits last minutes to hours. Not yet proven: X/Reddit acceptance of these exits, long-term yield.
+**B2 ancestor rule:** every ancestor of the private root must have no non-privileged write/control rights; `C:\` and `D:\` fail (Authenticated Users). Solution on the owner PC: 4 GB expandable VHDX `D:\MySitePrivate.vhdx` mounted as `P:` (boot task `mysite-attach-private-volume`, SYSTEM), root = SYSTEM + Administrators + owner RX, `P:\MySitePrivate` owner RX, subfolders exact owner Modify / SYSTEM RX. Private files live in `P:\MySitePrivate` (queries, policy, routes, state).
+**Config:** 2 X labels (`x_acct1`, `x_acct2`), both US identities (pool coverage), `route_source_enabled` true, experiment labels both.
+**Persistence:** detached checkout `C:\Users\jamir\mysite-feeder` at 37804d14 plus user task `mysite-route-feeder` (logon + every 15 min, IgnoreNew, no elevation). Update the checkout after #246/#247 merge.
+**Open:** no X accounts exist yet (throwaway creation plan given); routes publish automatically once 2 distinct US exits are live together; then doctor, probes, cookies.

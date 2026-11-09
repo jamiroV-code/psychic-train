@@ -579,6 +579,120 @@ through the production child allowlist, an existing isolated private temp direct
 and the exact bootstrap signature. No production guard was bypassed or relaxed.
 Independent consolidated acceptance and live release gates remain separate.
 
+## Route source feeder (free public proxies, EXPERIMENT tier; D-33)
+
+**Feeder UNRUN live; fixture-proven only.** Owner decision 02-11-26: free public proxies
+are allowed, with automatic switching when one is down, and no money is spent. Use it
+ONLY for disposable accounts: public exits are datacenter or burned addresses, so ban
+risk is high. Measured 09-11-26 (home PC, a throwaway script using the feeder's own
+prescreen, not the feeder itself): 3 lists gave 5946 candidates; a random 400 passed
+0.75% (3), dead hosts dominated the wall time, and 2 of the 3 passers were gone minutes
+later. Expect a few dozen live exits per full scan with lives of minutes to hours; the
+v2 bank, whole-list scan and pre-emptive replacement below exist for that. Nothing here
+changes B2: the collector still admits every route itself.
+
+What it does, per pass (v2, 09-11-26): fetch each `route_source_list_urls` entry (https,
+host must be in `route_source_allowed_hosts`, same-host https redirects only, 2 MiB /
+50000 lines); keep numeric, public, credential-free HTTP proxies (SOCKS,
+HTTPS-with-credentials, hostnames, private addresses and mail/admin ports are dropped)
+and merge them into a persistent private candidate **bank** (`<cache_dir>/route_source/
+state.json`: per candidate first seen, last ok, ok/fail streaks, exit, country, latency
+EWMA, dead-until; at most 20000 entries, unlisted-and-not-live entries forgotten after 3
+days). Then ONE scan of the whole bank under `route_source_scan_budget_seconds` (default
+240, 10..3600) with `route_source_scan_concurrency` probes in flight (default 96, 1..256)
+and a 3 s connect timeout, in this order: assigned routes, never-probed candidates, then
+known ones by score. A failure sets dead-until (never-ok: 6 h, once-ok: 30 min; doubling
+per failure, at most 24 h) and the scan skips the candidate until then; candidates the
+budget did not reach are counted `scan_budget` and come first next pass. Each probe: raw
+CONNECT to the policy echo origin with real TLS verification (an intercepting proxy
+fails), two echoes that must agree (rotating exits fail), 5 s latency cap, policy
+baseline digest (known candidates: one echo of the same exit). The exit country comes
+from ipapi.co's keyless JSON through the SAME verified tunnel (at most 60 lookups per
+pass, cached 7 days). Then, for exits in an identity country, the **site check**
+(`route_source_site_checks`, default `{"x": true, "reddit": true}`): through the same
+proxy, verified TLS to `x.com:443` (X labels) or `www.reddit.com:443` (Reddit labels),
+`GET /` of the public landing page with no cookies; anything but 200, or a known block
+or interstitial marker in the first 256 KiB, makes the candidate unusable for that site
+(`reach_x` / `reach_reddit`; rechecked hourly). No paid API and no local GeoIP file are
+used.
+
+Assignment: candidates are scored (ok streak, age in the bank, latency, recent
+failures); a usable one is verified THIS pass, in the label's B1 identity country (and
+timezone when the policy's `metadata_provider` is `ipapi`), site check passed, distinct
+exit, not quarantined. Healthy routes are sticky. A managed route is replaced
+PRE-EMPTIVELY when the X pool marks it quarantined, its probe failed once
+(`probe_failed`), its site check failed (`site_blocked`) or its latency EWMA passed 3 s
+(`degraded`), and only by a better-scored usable candidate. All replacements of a pass
+are ONE publication (B2 re-revisions accounts on any list change, so changes are
+batched); the old exit is quarantined for `x_proxy_quarantine_seconds`, an alert
+(`route_replaced`) goes to the status file and an opaque change record (label, old ID,
+new ID, reason, time) to the private state. After replacements, the best
+`route_source_spares_per_country` usable candidates per identity country are kept as
+spares and refilled every pass. A country with no usable candidate (for a needed
+replacement, or for its spares) is recorded as `no_spare:<country>`; the failing route
+stays and B2 refuses that account: never a home-IP fallback. Lines and IDs of every
+other label are carried over unchanged; the list is published before the assignments
+and a slot the old file references is never rewritten.
+
+Owner keys (collector block; all default off/empty):
+
+```json
+"route_source_enabled": true,
+"route_source_list_urls": ["https://raw.githubusercontent.com/<owner>/<repo>/<ref>/http.txt"],
+"route_source_allowed_hosts": ["raw.githubusercontent.com"],
+"route_source_spares_per_country": 2,
+"route_source_scan_concurrency": 96,
+"route_source_scan_budget_seconds": 240,
+"route_source_site_checks": {"x": true, "reddit": true},
+"x_proxy_experiment_labels": ["<disposable x label>"],
+"reddit_proxy_experiment_identities": {"<reddit label>": {"region": "US", "timezone": "America/New_York", "accept_language": "en-US"}}
+```
+
+Requirements: the three B2 proxy paths are set; X experiment labels need
+`x_identity_enabled` (their identity fixes the country); the policy's
+`allowed_origins` includes `https://ipapi.co`. Every X label must already have an
+assignment unless it is an experiment label, or nothing is published
+(`x_labels_unassigned`). Reddit labels are replaced on the feeder's own probe failures
+(the Reddit pool's quarantine is not read).
+
+Run (owner; the feeder is the single writer of the two route files while enabled, under
+its own lock `<cache_dir>/route_source/state.json.proxy-provider-budget.lock`):
+
+```powershell
+uv run --project api --frozen python -m api.scripts.route_feeder --queries C:\private\collector\queries.json --once --dry-run
+uv run --project api --frozen python -m api.scripts.route_feeder --queries C:\private\collector\queries.json --once
+uv run --project api --frozen python -m api.scripts.route_feeder --queries C:\private\collector\queries.json --coverage
+uv run --project api --frozen python -m api.scripts.route_feeder --queries C:\private\collector\queries.json --loop --interval 600
+```
+
+`--coverage` is read-only (no network, no lock, no write): verified exits per country
+from the bank (last 2 h). Use it to pick identity countries the pool actually has before
+naming experiment labels; a `no_spare:<country>` alert means that country is not covered.
+
+Autonomous schedule (UNRUN; owner): `deploy\register-route-feeder-task.ps1` registers
+`mysite-route-feeder` at your logon (Interactive, Limited, never elevated; the token SID
+must equal the policy `service_sid`, otherwise exit 4 and nothing changes) running
+`route_feeder --loop` via uv with the private query path; restart 3 times 1 minute apart,
+one instance, no time limit. While `route_source_enabled` is false the loop exits after
+writing its status.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File deploy\register-route-feeder-task.ps1 -QueriesPath C:\private\collector\queries.json -IntervalSeconds 600
+powershell -NoProfile -ExecutionPolicy Bypass -File deploy\register-route-feeder-task.ps1 -Remove
+```
+
+Run it as the collector's service identity so files are created with the existing
+owner/SYSTEM ACL helpers. Output and `<cache>/attention/_reports/route_source.json` carry
+counts and codes only; the status `bank` block holds `size`, `verified_live`,
+`spares_per_country`, `no_spare`, `last_scan_seconds`, `scanned`,
+`oldest_assigned_age_hours`. `collector_doctor` shows `route_source`: PASS
+`route_source_off` or `experiment_assigned_N_of_M_spares_K_bank_B_live_L`; UNKNOWN
+`route_source_not_run`; WARN when stale (over 26 h) or degraded (`no_spare:<country>`,
+`x_labels_unassigned`); FAIL on an error reason.
+Rollback: set `route_source_enabled` false (the files stay as last published), run
+`register-route-feeder-task.ps1 -Remove` and, if wanted, restore the owner's own
+list/assignment files.
+
 ## Collector identity pool runbook (owner steps)
 
 **UNRUN on the owner machine.** These are manual owner steps, not authorization
