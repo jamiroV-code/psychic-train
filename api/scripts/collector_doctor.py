@@ -298,6 +298,31 @@ def _proxy_checks(d: Deps, c, labels, accounts, pool) -> list[Check]:
     return out
 
 
+ROUTE_SOURCE_STALE = timedelta(hours=26)
+
+
+def check_route_source(d: Deps, c) -> Check:
+    """D-33: the free public proxy feeder (EXPERIMENT tier). Read-only: its counts-only status file."""
+    from api.data.attention import route_source
+    if not c.route_source_enabled:
+        return Check("route_source", PASS, "route_source_off")
+    doc = _json(route_source.status_path(Path(d.cache_root)))
+    if doc is None:
+        return Check("route_source", UNKNOWN, "route_source_not_run", "python -m api.scripts.route_feeder --once")
+    checked = _iso(doc.get("checked_at")) if isinstance(doc, dict) else None
+    if doc == "unreadable" or checked is None:
+        return Check("route_source", UNKNOWN, "route_source_status_unreadable", "rerun the feeder once")
+    if not timedelta(0) <= d.now - checked <= ROUTE_SOURCE_STALE:
+        return Check("route_source", WARN, "route_source_stale", "check the feeder task or rerun it")
+    state, reason = doc.get("state"), str(doc.get("reason"))[:40]
+    if state == "error":
+        return Check("route_source", FAIL, "route_source_" + reason, "read the feeder status line")
+    if state != "ok":
+        return Check("route_source", WARN, "route_source_" + reason, "spares are short: add list URLs or wait")
+    return Check("route_source", PASS, f"experiment_assigned_{doc.get('assigned')}_of_{doc.get('managed')}"
+                                       f"_spares_{doc.get('spares')}")
+
+
 def check_stage3_trigger(d: Deps, c) -> Check:
     """AC16: the V2Ray gateway stays parked. Trigger (SPEC Stage 3): the built-in proxy list cannot manage the
     accounts' routes, measured from pool evidence: met when no configured account holds an admitted route while
@@ -569,6 +594,8 @@ def run_checks(d: Deps, *, live: bool = False, selftest: bool = False) -> list[C
     else:
         checks.append(check_firewall(d))
     checks.append(check_stage3_trigger(d, c))
+    if c is not None:
+        checks.append(check_route_source(d, c))
     checks += _ops_checks(d, c)
     if live:
         checks += _live_checks(d)

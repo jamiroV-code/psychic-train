@@ -579,6 +579,70 @@ through the production child allowlist, an existing isolated private temp direct
 and the exact bootstrap signature. No production guard was bypassed or relaxed.
 Independent consolidated acceptance and live release gates remain separate.
 
+## Route source feeder (free public proxies, EXPERIMENT tier; D-33)
+
+**UNRUN live; fixture-proven only.** Owner decision 02-11-26: free public proxies are
+allowed, with automatic switching when one is down, and no money is spent. Use it ONLY
+for disposable accounts: public exits are datacenter or burned addresses (about 4-8% of
+listed proxies are alive, about 2.5% accept CONNECT, lives are hours to days), so ban
+risk is high. Nothing here changes B2: the collector still admits every route itself.
+
+What it does, per pass: fetch each `route_source_list_urls` entry (https, host must be
+in `route_source_allowed_hosts`, same-host https redirects only, 2 MiB / 50000 lines);
+keep numeric, public, credential-free HTTP proxies (SOCKS, HTTPS-with-credentials,
+hostnames, private addresses and mail/admin ports are dropped); probe at most 300 with
+16 in flight: raw CONNECT to the policy echo origin with real TLS verification (an
+intercepting proxy fails), two echoes that must agree (rotating exits fail), 5 s latency
+cap, policy baseline digest. The exit country comes from ipapi.co's keyless JSON through
+the SAME verified tunnel (at most 15 lookups per pass, cached 7 days); an unknown country
+is a rejection. It must equal the label's B1 identity country (and timezone when the
+policy's `metadata_provider` is `ipapi`). No paid API and no local GeoIP file are used.
+
+Assignment: healthy routes are sticky. A managed route is replaced only when the X pool
+marks it quarantined or two feeder probes in a row fail; the replacement is a distinct
+same-country spare, the old exit is quarantined for `x_proxy_quarantine_seconds`, an
+alert (`route_replaced`) goes to the status file and an opaque change record (label, old
+ID, new ID, reason, time) to the private state. With no spare the failing route stays and
+B2 refuses that account (`no_spare` alert): never a home-IP fallback. Lines and IDs of
+every other label are carried over unchanged; the list is published before the
+assignments and a slot the old file references is never rewritten. Any publication
+re-revisions accounts in the collector (B2 raw-change rule), so it happens only on change.
+
+Owner keys (collector block; all default off/empty):
+
+```json
+"route_source_enabled": true,
+"route_source_list_urls": ["https://raw.githubusercontent.com/<owner>/<repo>/<ref>/http.txt"],
+"route_source_allowed_hosts": ["raw.githubusercontent.com"],
+"route_source_spares_per_country": 2,
+"x_proxy_experiment_labels": ["<disposable x label>"],
+"reddit_proxy_experiment_identities": {"<reddit label>": {"region": "US", "timezone": "America/New_York", "accept_language": "en-US"}}
+```
+
+Requirements: the three B2 proxy paths are set; X experiment labels need
+`x_identity_enabled` (their identity fixes the country); the policy's
+`allowed_origins` includes `https://ipapi.co`. Every X label must already have an
+assignment unless it is an experiment label, or nothing is published
+(`x_labels_unassigned`). Reddit labels are replaced on the feeder's own probe failures
+(the Reddit pool's quarantine is not read).
+
+Run (owner; the feeder is the single writer of the two route files while enabled, under
+its own lock `<cache_dir>/route_source/state.json.proxy-provider-budget.lock`):
+
+```powershell
+uv run --project api --frozen python -m api.scripts.route_feeder --queries C:\private\collector\queries.json --once --dry-run
+uv run --project api --frozen python -m api.scripts.route_feeder --queries C:\private\collector\queries.json --once
+uv run --project api --frozen python -m api.scripts.route_feeder --queries C:\private\collector\queries.json --loop --interval 1800
+```
+
+Run it as the collector's service identity so files are created with the existing
+owner/SYSTEM ACL helpers. Output and `<cache>/attention/_reports/route_source.json` carry
+counts and codes only. `collector_doctor` shows `route_source`: PASS `route_source_off`
+or `experiment_assigned_N_of_M_spares_K`; UNKNOWN `route_source_not_run`; WARN when stale
+(over 26 h) or degraded (`no_spare`, `x_labels_unassigned`); FAIL on an error reason.
+Rollback: set `route_source_enabled` false (the files stay as last published) and, if
+wanted, restore the owner's own list/assignment files.
+
 ## Collector identity pool runbook (owner steps)
 
 **UNRUN on the owner machine.** These are manual owner steps, not authorization

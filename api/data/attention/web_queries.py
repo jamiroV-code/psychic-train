@@ -121,6 +121,15 @@ FINISH_OPTIONAL_DEFAULTS = {
     "reddit_browser_daily_minutes": 90, "reddit_session_check_enabled": False,
     "reddit_live_gql_daily_request_cap": 600,
 }
+# Route source feeder (D-33, 09-11-26): free public proxy lists feed B2 routes for EXPERIMENT labels only.
+# Default off; only labels named here receive feeder-managed routes. Rules live in `_validate_route_source`.
+ROUTE_SOURCE_OPTIONAL_DEFAULTS = {
+    "route_source_enabled": False, "route_source_list_urls": [], "route_source_allowed_hosts": [],
+    "route_source_spares_per_country": 2, "x_proxy_experiment_labels": [],
+    "reddit_proxy_experiment_identities": {},
+}
+ROUTE_SOURCE_MAX_URLS = 10
+ROUTE_SOURCE_HOST_RE = re.compile(r"(?=.{1,253}\Z)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}")
 # The Reddit method enum (owned here; S-RCore-A consumes it) and the live-method switch names.
 REDDIT_METHODS = ("reddit_live_browser", "reddit_live_gql", "reddit_web", "reddit_stream")
 REDDIT_LIVE_METHODS = ("browser", "gql_anon")
@@ -134,7 +143,7 @@ X_MIXED_TARGET_RE = re.compile(r"[A-Za-z0-9_]{1,15}|[0-9]{1,20}")
 REPO_ROOT = Path(__file__).resolve().parents[3]
 _INT_KEYS = tuple(DEFAULTS)
 DEFAULTS = {**DEFAULTS, **X_DEFAULTS, **REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **X_POOL_OPTIONAL_DEFAULTS,
-            **FINISH_OPTIONAL_DEFAULTS}
+            **FINISH_OPTIONAL_DEFAULTS, **ROUTE_SOURCE_OPTIONAL_DEFAULTS}
 X_WINDOW_SYNTAXES = ("since_time", "date")
 LANG_RE = re.compile(r"[a-z]{2,3}")
 X_LABEL_RE = re.compile(r"[a-z0-9_]{1,24}")  # the same opaque labels as `x_pool.LABEL_RE`
@@ -247,6 +256,12 @@ class CollectorConfig:
     reddit_browser_daily_minutes: int = 90
     reddit_session_check_enabled: bool = False
     reddit_live_gql_daily_request_cap: int = 600
+    route_source_enabled: bool = False
+    route_source_list_urls: tuple[str, ...] = ()
+    route_source_allowed_hosts: tuple[str, ...] = ()
+    route_source_spares_per_country: int = 2
+    x_proxy_experiment_labels: tuple[str, ...] = ()
+    reddit_proxy_experiment_identities: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -551,6 +566,61 @@ def _validate_finish_settings(block: dict) -> None:
         fail("browser_path and browser_profiles_dir", "are required for any browser use")
 
 
+def _validate_route_source(block: dict) -> None:
+    """D-33 route source feeder keys. Messages name the key, never a value."""
+    def fail(key: str, what: str = "is not a valid value"):
+        raise QueriesError(f"collector: {key} {what}")
+    from urllib.parse import urlsplit
+    if type(block["route_source_enabled"]) is not bool:
+        fail("route_source_enabled")
+    hosts = block["route_source_allowed_hosts"]
+    if (not isinstance(hosts, (list, tuple)) or len(hosts) > ROUTE_SOURCE_MAX_URLS
+            or not all(isinstance(h, str) and ROUTE_SOURCE_HOST_RE.fullmatch(h) for h in hosts)
+            or len(set(hosts)) != len(hosts)):
+        fail("route_source_allowed_hosts")
+    urls = block["route_source_list_urls"]
+    if not isinstance(urls, (list, tuple)) or len(urls) > ROUTE_SOURCE_MAX_URLS or len(set(urls)) != len(urls):
+        fail("route_source_list_urls")
+    for url in urls:
+        try:
+            u = urlsplit(url) if isinstance(url, str) and url.isprintable() and url == url.strip() else None
+            ok = (u is not None and len(url) <= 400 and u.scheme == "https" and u.hostname in hosts
+                  and u.username is None and u.password is None and u.port in (None, 443) and not u.fragment)
+        except ValueError:
+            ok = False
+        if not ok:
+            fail("route_source_list_urls", "must be https URLs on route_source_allowed_hosts")
+    if not _int_in(block["route_source_spares_per_country"], 0, 10):
+        fail("route_source_spares_per_country")
+    labels = block["x_proxy_experiment_labels"]
+    if (not isinstance(labels, (list, tuple)) or len(set(labels)) != len(labels)
+            or not all(isinstance(lb, str) for lb in labels) or not set(labels) <= set(block["x_accounts"])):
+        fail("x_proxy_experiment_labels", "must be distinct x_accounts labels")
+    if labels and not block["x_identity_enabled"]:
+        fail("x_proxy_experiment_labels", "need x_identity_enabled (the B1 identity fixes each route's country)")
+    identities = block["reddit_proxy_experiment_identities"]
+    reddit = {a.get("label") for a in block["reddit_browser_accounts"] if isinstance(a, dict)}
+    if not isinstance(identities, dict) or not set(identities) <= reddit:
+        fail("reddit_proxy_experiment_identities", "keys must be reddit_browser_accounts labels")
+    countries = _timezone_countries() if identities else {}
+    for value in identities.values():
+        if (not isinstance(value, dict) or set(value) != {"region", "timezone", "accept_language"}
+                or not all(isinstance(v, str) and v and v.isprintable() and len(v) <= 256 for v in value.values())):
+            fail("reddit_proxy_experiment_identities")
+        try:
+            ZoneInfo(value["timezone"])
+        except (ZoneInfoNotFoundError, ValueError):
+            fail("reddit_proxy_experiment_identities", "has an invalid timezone")
+        _identity_coherence({**value, "impersonation_target": ""}, countries)
+    if block["route_source_enabled"]:
+        if not urls:
+            fail("route_source_list_urls", "is required when route_source_enabled")
+        if not labels and not identities:
+            fail("route_source_enabled", "needs x_proxy_experiment_labels or reddit_proxy_experiment_identities")
+        if any(block[k] is None for k in ("x_proxy_list_path", "x_proxy_assignments_path", "x_proxy_policy_path")):
+            fail("route_source_enabled", "needs the three B2 proxy paths")
+
+
 def validate_config(block) -> CollectorConfig:
     if not isinstance(block, dict):
         raise QueriesError("collector: must be an object")
@@ -561,9 +631,10 @@ def validate_config(block) -> CollectorConfig:
         if key not in block or not _x_value(key, block[key]):
             raise QueriesError(f"collector: {key} is missing or not a valid value")
     block = {**REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **X_POOL_OPTIONAL_DEFAULTS, **FINISH_OPTIONAL_DEFAULTS,
-             **block}
+             **ROUTE_SOURCE_OPTIONAL_DEFAULTS, **block}
     _validate_identity_settings(block)
     _validate_finish_settings(block)
+    _validate_route_source(block)
     if type(block["x_proxy_required"]) is not bool:
         raise QueriesError("collector: x_proxy_required must be boolean")
     paths = [block[k] for k in ("x_proxy_list_path", "x_proxy_assignments_path", "x_proxy_policy_path")]
@@ -600,13 +671,16 @@ def validate_config(block) -> CollectorConfig:
             raise QueriesError(f"collector: {lo} must be <= {hi}")
     if len(block["x_accounts"]) > block["x_pool_max"]:
         raise QueriesError("collector: x_accounts must hold at most x_pool_max labels")
-    tupled = ("x_accounts", "reddit_impl_order", "x_mixed_targets", "reddit_live_methods")
+    tupled = ("x_accounts", "reddit_impl_order", "x_mixed_targets", "reddit_live_methods", "route_source_list_urls",
+              "route_source_allowed_hosts", "x_proxy_experiment_labels")
     out = {k: tuple(block[k]) if k in tupled else block[k] for k in DEFAULTS}
     if out["reddit_stream_subreddits"] is not None:
         out["reddit_stream_subreddits"] = tuple(out["reddit_stream_subreddits"])
     out["x_account_profiles"] = dict(block["x_account_profiles"])
     out["x_account_quiet_hours"] = {k: dict(v) for k, v in block["x_account_quiet_hours"].items()}
     out["reddit_browser_accounts"] = tuple(dict(a) for a in block["reddit_browser_accounts"])
+    out["reddit_proxy_experiment_identities"] = {k: dict(v) for k, v in
+                                                 block["reddit_proxy_experiment_identities"].items()}
     return CollectorConfig(**out)
 
 

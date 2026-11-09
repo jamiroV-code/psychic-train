@@ -459,7 +459,7 @@ def test_finish_keys_declared_optional_with_contract_defaults(doc):
         k: (list(v) if isinstance(v, tuple) else v) for k, v in FINISH_DEFAULTS.items()}
     assert set(wq.FINISH_OPTIONAL_DEFAULTS) == set(FINISH_DEFAULTS)
     assert not set(FINISH_DEFAULTS) & set(wq.X_DEFAULTS)
-    assert set(wq.DEFAULTS) == B2_KEYS | set(FINISH_DEFAULTS)
+    assert set(wq.DEFAULTS) == B2_KEYS | set(FINISH_DEFAULTS) | set(wq.ROUTE_SOURCE_OPTIONAL_DEFAULTS)
     for key in FINISH_DEFAULTS:
         doc["collector"].pop(key, None)
     c = wq.validate(doc).config
