@@ -107,8 +107,8 @@ def test_classes_firewall_query_and_tcp_table_are_read_only():
     assert all(isinstance(pid, int) and isinstance(port, int) for pid, _ip, port, _s in rows)
 
 
-def test_default_owner_policy_refuses_selftest_launch(tmp_path):
-    host = h.BrowserHost(BINARY, tmp_path / "profiles", cache_root=tmp_path, policy=p.OWNER_DECISIONS,
+def test_unapproved_policy_refuses_selftest_launch(tmp_path):
+    host = h.BrowserHost(BINARY, tmp_path / "profiles", cache_root=tmp_path, policy=p.ProfilePolicy(False, False),
                          spawn=fake_spawn, memory=lambda: 9999)
     with pytest.raises(h.BrowserFailure, match="profile_policy_unsatisfied"):
         st.run(host, cache_root=tmp_path, enumerator=lambda: [], firewall=lambda b: False, window=0)

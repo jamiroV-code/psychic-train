@@ -59,7 +59,8 @@ class ProfilePolicy:
     ce2_approved: bool = False
 
 
-OWNER_DECISIONS = ProfilePolicy()
+# Owner decisions 07-11-26: O-1 (CE-1) and O-1b (CE-2) ACCEPTED; recorded in the finish STATUS doc.
+OWNER_DECISIONS = ProfilePolicy(ce1_approved=True, ce2_approved=True)
 
 
 def token_sid():

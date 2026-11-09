@@ -158,7 +158,7 @@ def test_owner_decisions_gate_each_exception_separately(tmp_path):
         with pytest.raises(bp.ProfileFailure) as e:
             store(tmp_path, EDGE_OVERRIDES, policy=policy).prepare("acct1", "acct1")
         assert reason(e) == "profile_policy_unsatisfied"
-    assert bp.OWNER_DECISIONS == bp.ProfilePolicy(ce1_approved=False, ce2_approved=False)
+    assert bp.OWNER_DECISIONS == bp.ProfilePolicy(ce1_approved=True, ce2_approved=True)
 
 
 def test_existing_directory_without_our_record_is_refused(tmp_path):
