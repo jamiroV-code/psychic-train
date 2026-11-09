@@ -17,6 +17,7 @@ import socket
 import socketserver
 import ssl
 import threading
+import time
 from datetime import UTC, datetime, timedelta
 from functools import partial
 from pathlib import Path
@@ -40,7 +41,9 @@ OWNER_ID = "00000000-0000-0000-0000-0000000000b2"
 OWNER_LINE = "https://user:SYNTHETIC_CREDENTIAL_MARKER@owner.example:8443"
 GEO = {"8.8.8.8": ("US", "America/New_York"), "8.8.4.4": ("US", "America/New_York"),
        "4.2.2.2": ("US", "America/New_York"), "4.2.2.3": ("US", "America/New_York"),
-       "81.2.69.142": ("GB", "Europe/London")}
+       "81.2.69.142": ("GB", "Europe/London"), "1.0.0.1": ("AU", "Australia/Sydney"),
+       "1.0.0.2": ("AU", "Australia/Sydney")}
+SITE_PAGE = b"<!doctype html><html><head><title>landing</title></head><body>public landing page</body></html>"
 IDENTITIES = {
     "alpha": {"accept_language": "en-US", "region": "US", "timezone": "America/New_York",
               "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36", "impersonation_target": "chrome131"},
@@ -64,6 +67,7 @@ def _read_head(sock) -> bytes:
 class _Server(socketserver.ThreadingTCPServer):
     daemon_threads = True
     allow_reuse_address = False
+    request_queue_size = 128
 
     def handle_error(self, request, client_address):
         pass
@@ -76,6 +80,8 @@ class World:
         self.certs = certs
         self.lists = {}
         self.redirects = {}
+        self.blocked = {}  # exit ip -> (status, body) the target site landing page answers through that exit
+        self.timeouts = []
         self.dials = []
         self.servers = []
         self.routes = {}  # (host, port) -> loopback port
@@ -114,6 +120,11 @@ class World:
             country, zone = GEO[exit_ip]
             return 200, json.dumps({"ip": exit_ip, "country_code": country, "region_code": "XX",
                                     "timezone": zone}).encode(), ""
+        if host in ("x.com", "www.reddit.com") and path == "/":
+            if exit_ip in self.blocked:
+                status, body = self.blocked[exit_ip]
+                return status, body, ""
+            return 200, SITE_PAGE, ""
         if host == LIST_HOST and path in self.redirects:
             return 302, b"", f"location: {self.redirects[path]}\r\n"
         if host == LIST_HOST and path in self.lists:
@@ -154,6 +165,8 @@ class World:
             with socket.socket() as hole:
                 hole.bind(("127.0.0.1", 0))
                 self.routes[(TOKEN, port)] = ("proxy", hole.getsockname()[1])
+        elif kind == "hang":  # a blackholed SYN: the dial burns its whole connect timeout
+            self.routes[(TOKEN, port)] = ("hang", 0)
         else:
             server = _Server(("127.0.0.1", 0), Proxy)
             self._start(server)
@@ -175,6 +188,10 @@ class World:
         if (host, port) not in self.routes:
             raise AssertionError("fixture dial outside the loopback world")
         kind, loop = self.routes[(host, port)]
+        if kind == "hang":
+            self.timeouts.append(timeout)
+            time.sleep(timeout)
+            raise TimeoutError
         sock = socket.create_connection(("127.0.0.1", loop), timeout=timeout)
         if kind == "direct":
             sock.sendall(b"EXIT home\n")
@@ -262,13 +279,15 @@ class Recorder:
         atomic_json(path, value)
 
 
-def deps(world, certs, tmp_path, rec=None, ids=None):
+def deps(world, certs, tmp_path, rec=None, ids=None, now=NOW, clock=None, connect_timeout=3.0):
     rec = rec or Recorder()
     counter = iter(ids or [f"00000000-0000-4000-8000-{n:012d}" for n in range(1, 100)])
-    return rs.Deps(net=rs.Net(dial=world.dial, tls=verified_context(certs["origin"]["root"]), timeout=3),
+    extra = {"clock": clock} if clock is not None else {}
+    return rs.Deps(net=rs.Net(dial=world.dial, tls=verified_context(certs["origin"]["root"]), timeout=3,
+                              connect_timeout=connect_timeout),
                    opener=fixture_open, publish=rec.publish, write_state=rec.write_state,
-                   write_status=lambda path, value, **kw: atomic_json(path, value), now=lambda: NOW,
-                   new_id=lambda: next(counter), cache_root=tmp_path / "cache", repo_root=tmp_path / "repo")
+                   write_status=lambda path, value, **kw: atomic_json(path, value), now=lambda: now,
+                   new_id=lambda: next(counter), cache_root=tmp_path / "cache", repo_root=tmp_path / "repo", **extra)
 
 
 def standard_list(world):
@@ -368,6 +387,8 @@ def test_route_source_is_off_by_default_and_inert():
     c = wq.load().config
     assert c.route_source_enabled is False and c.x_proxy_experiment_labels == () and c.route_source_list_urls == ()
     assert c.reddit_proxy_experiment_identities == {}
+    assert c.route_source_scan_concurrency == 96 and c.route_source_scan_budget_seconds == 240
+    assert c.route_source_site_checks == {"x": True, "reddit": True}
 
 
 @pytest.mark.parametrize("change", [
@@ -380,6 +401,9 @@ def test_route_source_is_off_by_default_and_inert():
     {"x_proxy_experiment_labels": ["alpha", "alpha"]},
     {"x_identity_enabled": False, "x_account_identities": {}},
     {"route_source_spares_per_country": 11},
+    {"route_source_scan_concurrency": 0}, {"route_source_scan_concurrency": 257},
+    {"route_source_scan_budget_seconds": 5}, {"route_source_site_checks": {"x": True}},
+    {"route_source_site_checks": {"x": 1, "reddit": True}},
     {"route_source_enabled": "yes"},
     {"reddit_proxy_experiment_identities": {"nobody": {"region": "US", "timezone": "America/New_York",
                                                        "accept_language": "en-US"}}},
@@ -424,9 +448,9 @@ def test_once_produces_files_the_real_b2_loader_and_admission_accept(world, cert
     assert alpha["expected_ip"] in ("8.8.8.8", "8.8.4.4")
     assert lines[doc["lines"][alpha["proxy_id"]] - 1] in (f"http://{TOKEN}:8001", f"http://{TOKEN}:8002")
     assert state["owned_ids"] == [alpha["proxy_id"]] and len(state["spares"]) == 1
-    assert {state["spares"][0]["exit_ip"], alpha["expected_ip"]} == {"8.8.8.8", "8.8.4.4"}
+    assert {state["bank"][state["spares"][0]]["exit_ip"], alpha["expected_ip"]} == {"8.8.8.8", "8.8.4.4"}
     rejections = status(tmp_path)["rejections"]
-    for reason in ("dead", "no_connect", "tls", "rotating"):  # geo stops once demand is met (budget economy)
+    for reason in ("dead", "no_connect", "tls", "rotating"):
         assert rejections.get(reason) == 1, (reason, rejections)
     assert "8.8.8.8" not in json.dumps(status(tmp_path)) and TOKEN not in json.dumps(status(tmp_path))
     # REAL B2 loader over the published bytes.
@@ -506,7 +530,7 @@ def test_pool_quarantine_replaces_with_same_country_spare_and_change_record(worl
     snapshot.load_snapshot(path, repo_root=tmp_path / "repo", opener=fixture_open)
 
 
-def test_dying_route_is_replaced_after_threshold_and_freed_slot_is_reused(world, certs, tmp_path):
+def test_dying_route_is_replaced_pre_emptively_and_freed_slot_is_reused(world, certs, tmp_path):
     path = layout(tmp_path)
     standard_list(world)
     rs.run_once(path, deps(world, certs, tmp_path))
@@ -514,26 +538,31 @@ def test_dying_route_is_replaced_after_threshold_and_freed_slot_is_reused(world,
     old = doc["accounts"]["alpha"]
     port = int(lines[doc["lines"][old["proxy_id"]] - 1].rsplit(":", 1)[1])
     world.kill(port)
-    first = rs.run_once(path, deps(world, certs, tmp_path))
-    assert first.replaced == 0 and first.rejections.get("assigned_dead") == 1
-    assert read_private(path.parent)[0]["accounts"]["alpha"] == old  # one failure never rotates
-    world.proxy(8010, exits=("4.2.2.2",))
-    world.lists["/lists/http.txt"] += f"{TOKEN}:8010\n"
-    second = rs.run_once(path, deps(world, certs, tmp_path, ids=["00000000-0000-4000-8000-0000000000bb"]))
-    assert second.replaced == 1
+    first = rs.run_once(path, deps(world, certs, tmp_path, ids=["00000000-0000-4000-8000-0000000000bb"]))
+    assert first.replaced == 1 and first.rejections.get("assigned_dead") == 1  # fail_streak 1 + a spare: replace now
     doc2, lines2, state2 = read_private(path.parent)
     assert doc2["accounts"]["alpha"]["proxy_id"] == "00000000-0000-4000-8000-0000000000bb"
-    assert state2["changes"][-1]["reason"] == "probe_failed"
+    assert doc2["accounts"]["alpha"]["expected_ip"] != old["expected_ip"]
+    assert state2["changes"][-1]["reason"] == "probe_failed" and state2["changes"][-1]["from"] == old["proxy_id"]
     assert len(lines2) == len(lines) + 1  # the replaced slot was still referenced by the old file
     snapshot.load_snapshot(path, repo_root=tmp_path / "repo", opener=fixture_open)
+    steady = rs.run_once(path, deps(world, certs, tmp_path))
+    assert steady.replaced == 0 and not steady.published  # the new healthy route is sticky
 
 
-def test_wrong_country_exit_is_rejected_and_never_assigned(world, certs, tmp_path):
+def test_wrong_country_exit_is_banked_never_assigned_and_coverage_shows_it(world, certs, tmp_path):
     path = layout(tmp_path, spares=0)
     world.lists["/lists/http.txt"] = world.proxy(8007, exits=("81.2.69.142",)) + "\n"
     result = rs.run_once(path, deps(world, certs, tmp_path))
-    assert result.rejections == {"wrong_country": 1} and result.state == "degraded" and not result.published
+    assert result.state == "degraded" and result.reason == "no_spare:US" and not result.published
+    assert {"code": "no_spare:US", "site": "x"} in status(tmp_path)["alerts"]
+    assert status(tmp_path)["bank"]["no_spare"] == ["US"]
     assert "alpha" not in json.loads((path.parent / "assignments.json").read_bytes())["accounts"]
+    out = io.StringIO()
+    assert route_feeder.main(["--queries", str(path), "--coverage"], out=out,
+                             deps=deps(world, certs, tmp_path)) == 0
+    assert out.getvalue().splitlines()[1:] == ["GB 1"]
+    assert "81.2.69.142" not in out.getvalue() and TOKEN not in out.getvalue()
 
 
 def test_no_spare_keeps_the_old_route_and_alerts_never_direct(world, certs, tmp_path, isolated_cache):
@@ -544,10 +573,11 @@ def test_no_spare_keeps_the_old_route_and_alerts_never_direct(world, certs, tmp_
     old = json.loads(before)["accounts"]["alpha"]
     _pool_state(tmp_path, {"alpha": {"proxy_health": "quarantined", "proxy_id": old["proxy_id"]}})
     result = rs.run_once(path, deps(world, certs, tmp_path))
-    assert result.state == "degraded" and result.reason == "no_spare" and not result.published
+    assert result.state == "degraded" and result.reason == "no_spare:US" and not result.published
     assert (path.parent / "assignments.json").read_bytes() == before
+    assert {host for host, _ in world.dials} <= {TOKEN, LIST_HOST}  # never a direct (home-IP) target dial
     report = {c.name: c for c in doctor.run_checks(_doctor_deps(tmp_path, path))}["route_source"]
-    assert report.state == doctor.WARN and report.reason == "route_source_no_spare"
+    assert report.state == doctor.WARN and report.reason == "route_source_no_spare:US"
 
 
 def test_missing_owner_x_label_is_never_published(world, certs, tmp_path):
@@ -606,7 +636,165 @@ def test_doctor_route_source_states(world, certs, tmp_path, isolated_cache):
     standard_list(world)
     rs.run_once(on, deps(world, certs, tmp_path))
     check = {c.name: c for c in doctor.run_checks(_doctor_deps(tmp_path, on))}["route_source"]
-    assert (check.state, check.reason) == (doctor.PASS, "experiment_assigned_1_of_1_spares_1")
+    assert (check.state, check.reason) == (doctor.PASS, "experiment_assigned_1_of_1_spares_1_bank_8_live_4")
     stale = _doctor_deps(tmp_path, on)
     stale.now = NOW + timedelta(days=2)
     assert {c.name: c for c in doctor.run_checks(stale)}["route_source"].state == doctor.WARN
+
+
+# --- v2: bank, whole-list scanner, reachability, spares, pre-emptive replacement -------------------------------------
+
+def _bank(path):
+    return read_private(path.parent)[2]["bank"]
+
+
+def test_bank_persists_and_dead_ttl_skips_known_dead(world, certs, tmp_path):
+    path = layout(tmp_path)
+    standard_list(world)
+    rs.run_once(path, deps(world, certs, tmp_path))
+    bank = _bank(path)
+    good, dead = bank[f"{TOKEN}|8001"], bank[f"{TOKEN}|8003"]
+    assert good["ok_streak"] == 1 and good["fail_streak"] == 0 and good["first_seen"] == NOW.isoformat()
+    assert good["country"] == "US" and good["exit_ip"] == "8.8.8.8" and good["latency"] is not None
+    assert dead["fail_streak"] == 1 and dead["last_ok"] is None and rs._when(dead["dead_until"]) > NOW
+    assert "8.8.8.8" not in json.dumps(status(tmp_path)) and status(tmp_path)["bank"]["size"] == 8
+    world.dials.clear()
+    later = NOW + timedelta(minutes=30)
+    rs.run_once(path, deps(world, certs, tmp_path, now=later))
+    assert (TOKEN, 8003) not in world.dials and (TOKEN, 8004) not in world.dials  # skipped inside the dead TTL
+    bank = _bank(path)
+    assert bank[f"{TOKEN}|8001"]["ok_streak"] == 2 and bank[f"{TOKEN}|8001"]["first_seen"] == NOW.isoformat()
+    world.dials.clear()
+    rs.run_once(path, deps(world, certs, tmp_path, now=NOW + rs.DEAD_TTL + timedelta(minutes=1)))
+    assert (TOKEN, 8003) in world.dials  # the TTL expired: re-probed once
+    assert rs._when(_bank(path)[f"{TOKEN}|8003"]["dead_until"]) - (NOW + rs.DEAD_TTL) > rs.DEAD_TTL  # backoff grows
+
+
+def test_whole_list_scan_fits_the_budget_with_short_connect_timeouts(world, certs, tmp_path):
+    path = layout(tmp_path, spares=0, collector={"route_source_scan_concurrency": 64})
+    lines = [world.proxy(9000 + n, "hang") for n in range(120)] + [world.proxy(8001, exits=("8.8.8.8",))]
+    world.lists["/lists/http.txt"] = "\n".join(lines) + "\n"
+    started = time.monotonic()
+    result = rs.run_once(path, deps(world, certs, tmp_path, connect_timeout=0.25))
+    elapsed = time.monotonic() - started
+    assert len(world.timeouts) == 120 and set(world.timeouts) == {0.25}  # every hung host got only the short dial
+    assert elapsed < 8, elapsed  # 120 x 0.25 s serial would be 30 s
+    assert result.assigned == 1 and result.rejections.get("dead") == 120 and "scan_budget" not in result.rejections
+    assert status(tmp_path)["bank"]["scanned"] == 121
+
+
+def test_budget_stops_starting_probes_and_next_pass_resumes_with_unknown_first(world, certs, tmp_path):
+    path = layout(tmp_path, spares=0, collector={"route_source_scan_concurrency": 1,
+                                                 "route_source_scan_budget_seconds": 10})
+    lines = [world.proxy(9000 + n, "dead") for n in range(6)]
+    world.lists["/lists/http.txt"] = "\n".join(lines) + "\n"
+    ticks = iter(range(0, 10_000, 4))  # every budget check costs 4 s of fake wall clock
+    result = rs.run_once(path, deps(world, certs, tmp_path, clock=lambda: next(ticks)))
+    probed = {p for h, p in world.dials if h == TOKEN}
+    assert result.rejections.get("scan_budget") == 6 - len(probed) and 0 < len(probed) < 6
+    world.dials.clear()
+    ticks2 = iter(range(0, 10_000, 4))
+    rs.run_once(path, deps(world, certs, tmp_path, clock=lambda: next(ticks2)))
+    assert {p for h, p in world.dials if h == TOKEN}.isdisjoint(probed)  # never-probed first, known-dead skipped
+
+
+def test_target_site_reachability_rejects_blocks_and_interstitials(world, certs, tmp_path):
+    path = layout(tmp_path, spares=0)
+    world.lists["/lists/http.txt"] = "\n".join([world.proxy(8001, exits=("8.8.8.8",)),
+                                                world.proxy(8002, exits=("8.8.4.4",)),
+                                                world.proxy(8003, exits=("4.2.2.2",))]) + "\n"
+    world.blocked["8.8.8.8"] = (403, b"forbidden")
+    world.blocked["8.8.4.4"] = (200, b"<html><title>Attention Required! | Cloudflare</title></html>")
+    result = rs.run_once(path, deps(world, certs, tmp_path))
+    assert result.rejections.get("reach_x") == 2
+    doc = json.loads((path.parent / "assignments.json").read_bytes())
+    assert doc["accounts"]["alpha"]["expected_ip"] == "4.2.2.2"
+    bank = _bank(path)
+    assert bank[f"{TOKEN}|8001"]["reach"] == {"x": False} and bank[f"{TOKEN}|8003"]["reach"] == {"x": True}
+
+
+def test_site_check_can_be_switched_off_per_site(world, certs, tmp_path):
+    path = layout(tmp_path, spares=0, collector={"route_source_site_checks": {"x": False, "reddit": True}})
+    world.lists["/lists/http.txt"] = world.proxy(8001, exits=("8.8.8.8",)) + "\n"
+    world.blocked["8.8.8.8"] = (403, b"forbidden")
+    result = rs.run_once(path, deps(world, certs, tmp_path))
+    assert result.assigned == 1 and "reach_x" not in result.rejections
+
+
+def _four_us(world):
+    world.lists["/lists/http.txt"] = "\n".join(
+        world.proxy(8001 + n, exits=(ip,)) for n, ip in enumerate(("8.8.8.8", "8.8.4.4", "4.2.2.2", "4.2.2.3"))) + "\n"
+
+
+def test_spares_are_kept_per_country_and_refilled_while_healthy_route_stays(world, certs, tmp_path):
+    path = layout(tmp_path, spares=2)
+    _four_us(world)
+    first = rs.run_once(path, deps(world, certs, tmp_path))
+    assert first.assigned == 1 and first.spares == 2
+    assert status(tmp_path)["bank"]["spares_per_country"] == {"US": 2}
+    before = (path.parent / "assignments.json").read_bytes()
+    state = read_private(path.parent)[2]
+    victim = state["bank"][state["spares"][0]]["line"]
+    world.kill(int(victim.rsplit(":", 1)[1]))
+    second = rs.run_once(path, deps(world, certs, tmp_path, now=NOW + timedelta(minutes=10)))
+    assert second.spares == 2 and not second.published and second.replaced == 0
+    assert (path.parent / "assignments.json").read_bytes() == before
+    state = read_private(path.parent)[2]
+    assert victim not in {state["bank"][k]["line"] for k in state["spares"]}
+
+
+def test_pre_emptive_replacement_batches_one_change_and_keeps_healthy_routes(world, certs, tmp_path):
+    path = layout(tmp_path, experiment=("alpha", "beta"), owner_beta=False, spares=1)
+    world.lists["/lists/http.txt"] = "\n".join([
+        world.proxy(8001, exits=("8.8.8.8",)), world.proxy(8002, exits=("8.8.4.4",)),
+        world.proxy(8011, exits=("1.0.0.1",)), world.proxy(8012, exits=("1.0.0.2",))]) + "\n"
+    rs.run_once(path, deps(world, certs, tmp_path))
+    doc, lines, _ = read_private(path.parent)
+    alpha, beta = doc["accounts"]["alpha"], doc["accounts"]["beta"]
+    assert beta["region"] == "AU" and beta["expected_ip"] in ("1.0.0.1", "1.0.0.2")
+    world.kill(int(lines[doc["lines"][alpha["proxy_id"]] - 1].rsplit(":", 1)[1]))
+    rec = Recorder()
+    result = rs.run_once(path, deps(world, certs, tmp_path, rec, ids=["00000000-0000-4000-8000-0000000000cc"]))
+    assert result.replaced == 1 and rec.order == ["routes.txt", "assignments.json"]  # one batch, one publication
+    doc2, _, state = read_private(path.parent)
+    assert doc2["accounts"]["beta"] == beta  # healthy route untouched
+    assert doc2["accounts"]["alpha"]["region"] == "US" and doc2["accounts"]["alpha"]["expected_ip"] != alpha["expected_ip"]
+    assert state["changes"][-1] == {"at": NOW.isoformat(), "label": "alpha", "from": alpha["proxy_id"],
+                                    "to": "00000000-0000-4000-8000-0000000000cc", "reason": "probe_failed"}
+    assert {"code": "route_replaced", "site": "x"} in status(tmp_path)["alerts"]
+
+
+def test_everything_dead_never_falls_back_to_a_direct_route(world, certs, tmp_path):
+    path = layout(tmp_path, spares=1)
+    _four_us(world)
+    rs.run_once(path, deps(world, certs, tmp_path))
+    before = (path.parent / "assignments.json").read_bytes(), (path.parent / "routes.txt").read_bytes()
+    for port in (8001, 8002, 8003, 8004):
+        world.kill(port)
+    world.dials.clear()
+    result = rs.run_once(path, deps(world, certs, tmp_path, now=NOW + timedelta(minutes=10)))
+    assert result.state == "degraded" and result.reason == "no_spare:US" and not result.published
+    assert ((path.parent / "assignments.json").read_bytes(), (path.parent / "routes.txt").read_bytes()) == before
+    assert {host for host, _ in world.dials} <= {TOKEN, LIST_HOST}
+
+
+def test_bank_summary_reports_counts_only(world, certs, tmp_path):
+    path = layout(tmp_path, spares=1)
+    standard_list(world)
+    rs.run_once(path, deps(world, certs, tmp_path))
+    rs.run_once(path, deps(world, certs, tmp_path, now=NOW + timedelta(hours=2)))
+    bank = status(tmp_path)["bank"]
+    assert bank["size"] == 8 and bank["verified_live"] == 4 and bank["spares_per_country"] == {"US": 1}
+    assert bank["oldest_assigned_age_hours"] == 2.0 and bank["no_spare"] == [] and bank["last_scan_seconds"] >= 0
+    assert set(bank) == {"size", "verified_live", "spares_per_country", "no_spare", "last_scan_seconds", "scanned",
+                         "oldest_assigned_age_hours"}
+
+
+def test_coverage_cli_is_read_only_and_empty_before_any_scan(world, certs, tmp_path):
+    path = layout(tmp_path)
+    out = io.StringIO()
+    assert route_feeder.main(["--queries", str(path), "--coverage"], out=out, deps=deps(world, certs, tmp_path)) == 0
+    assert out.getvalue().splitlines()[1:] == ["none"] and not world.dials
+    assert not (path.parent / "cache" / "route_source").exists()
+    with pytest.raises(SystemExit):
+        route_feeder.main(["--queries", str(path), "--coverage", "--once"])

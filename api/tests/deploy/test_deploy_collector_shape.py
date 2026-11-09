@@ -222,3 +222,42 @@ def test_stage3_gateway_stays_absent_and_relay_is_loopback_only():
             lower = path.read_text(encoding="utf-8").lower()
             assert "gateway" not in lower and "v2ray" not in lower, path.name
     assert "is NOT a gateway" in _runbook()
+
+
+# --- D-33 v2 (09-11-26): route feeder task; text-shape guards only, no PowerShell runs here. ---
+
+def test_register_route_feeder_task_shape():
+    text = _read("register-route-feeder-task.ps1")
+    assert text.startswith("#") and "UNRUN" in text and text.isascii()
+    assert "param([switch]$Remove, [string]$QueriesPath = '', [int]$IntervalSeconds = 600)" in text
+    assert "'mysite-route-feeder'" in text
+    assert "-LogonType Interactive -RunLevel Limited" in text and "-AtLogOn -User $user" in text
+    assert "-RestartCount 3" in text and "-RestartInterval (New-TimeSpan -Minutes 1)" in text
+    assert "-MultipleInstances IgnoreNew" in text and "-ExecutionTimeLimit ([TimeSpan]::Zero)" in text
+    assert "api.scripts.route_feeder" in text and "--loop" in text and "--interval" in text
+    assert "'run', '--project', 'api', '--frozen'" in text and "--queries" in text
+    assert "Register-ScheduledTask" in text and "Unregister-ScheduledTask" in text and "-Force" in text
+    assert "if (-not $QueriesPath)" in text and "IsPathRooted" in text
+    assert "[System.Security.Principal.WindowsIdentity]::GetCurrent()" in text and ".User.Value" in text
+    assert "IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)" in text and "exit 4" in text
+    assert "service_sid" in text
+    for forbidden in ("SYSTEM", "S4U", "Highest", "ServiceAccount", "-Password", "icacls", "Set-Acl", "LocalService",
+                      "NetworkService", "--dry-run"):
+        assert forbidden not in text, forbidden
+    lower = text.lower()
+    for word in ("password", "cookie", "token =", "apikey"):
+        assert word not in lower, word
+    assert "mysite-route-feeder" not in _read("register-tasks.ps1")
+    assert "mysite-route-feeder" not in _read("register-collector-tasks.ps1")
+
+
+def test_readme_route_feeder_section_documents_v2_and_the_task():
+    text = _read("README.md")
+    start = text.find("## Route source feeder")
+    assert start != -1
+    nxt = text.find("\n## ", start + 1)
+    section = text[start:] if nxt == -1 else text[start:nxt]
+    for needle in ("register-route-feeder-task.ps1", "-Remove", "--coverage", "route_source_scan_concurrency",
+                   "route_source_scan_budget_seconds", "route_source_site_checks", "no_spare:", "bank", "UNRUN"):
+        assert needle in section, needle
+    assert section.isascii()

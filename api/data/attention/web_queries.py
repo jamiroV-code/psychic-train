@@ -127,7 +127,11 @@ ROUTE_SOURCE_OPTIONAL_DEFAULTS = {
     "route_source_enabled": False, "route_source_list_urls": [], "route_source_allowed_hosts": [],
     "route_source_spares_per_country": 2, "x_proxy_experiment_labels": [],
     "reddit_proxy_experiment_identities": {},
+    # v2 scanner (09-11-26): whole-list scan per pass, bounded fan-out and wall clock; per-site reachability stage.
+    "route_source_scan_concurrency": 96, "route_source_scan_budget_seconds": 240,
+    "route_source_site_checks": {"x": True, "reddit": True},
 }
+ROUTE_SOURCE_SITES = ("x", "reddit")
 ROUTE_SOURCE_MAX_URLS = 10
 ROUTE_SOURCE_HOST_RE = re.compile(r"(?=.{1,253}\Z)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}")
 # The Reddit method enum (owned here; S-RCore-A consumes it) and the live-method switch names.
@@ -260,6 +264,9 @@ class CollectorConfig:
     route_source_list_urls: tuple[str, ...] = ()
     route_source_allowed_hosts: tuple[str, ...] = ()
     route_source_spares_per_country: int = 2
+    route_source_scan_concurrency: int = 96
+    route_source_scan_budget_seconds: int = 240
+    route_source_site_checks: dict[str, bool] = field(default_factory=lambda: {"x": True, "reddit": True})
     x_proxy_experiment_labels: tuple[str, ...] = ()
     reddit_proxy_experiment_identities: dict[str, dict[str, str]] = field(default_factory=dict)
 
@@ -592,6 +599,14 @@ def _validate_route_source(block: dict) -> None:
             fail("route_source_list_urls", "must be https URLs on route_source_allowed_hosts")
     if not _int_in(block["route_source_spares_per_country"], 0, 10):
         fail("route_source_spares_per_country")
+    if not _int_in(block["route_source_scan_concurrency"], 1, 256):
+        fail("route_source_scan_concurrency")
+    if not _int_in(block["route_source_scan_budget_seconds"], 10, 3600):
+        fail("route_source_scan_budget_seconds")
+    checks = block["route_source_site_checks"]
+    if (not isinstance(checks, dict) or set(checks) != set(ROUTE_SOURCE_SITES)
+            or not all(type(v) is bool for v in checks.values())):
+        fail("route_source_site_checks", "must map x and reddit to booleans")
     labels = block["x_proxy_experiment_labels"]
     if (not isinstance(labels, (list, tuple)) or len(set(labels)) != len(labels)
             or not all(isinstance(lb, str) for lb in labels) or not set(labels) <= set(block["x_accounts"])):
@@ -681,6 +696,7 @@ def validate_config(block) -> CollectorConfig:
     out["reddit_browser_accounts"] = tuple(dict(a) for a in block["reddit_browser_accounts"])
     out["reddit_proxy_experiment_identities"] = {k: dict(v) for k, v in
                                                  block["reddit_proxy_experiment_identities"].items()}
+    out["route_source_site_checks"] = dict(block["route_source_site_checks"])
     return CollectorConfig(**out)
 
 

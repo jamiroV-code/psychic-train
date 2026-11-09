@@ -319,8 +319,10 @@ def check_route_source(d: Deps, c) -> Check:
         return Check("route_source", FAIL, "route_source_" + reason, "read the feeder status line")
     if state != "ok":
         return Check("route_source", WARN, "route_source_" + reason, "spares are short: add list URLs or wait")
+    bank = doc.get("bank") if isinstance(doc.get("bank"), dict) else {}
     return Check("route_source", PASS, f"experiment_assigned_{doc.get('assigned')}_of_{doc.get('managed')}"
-                                       f"_spares_{doc.get('spares')}")
+                                       f"_spares_{doc.get('spares')}_bank_{bank.get('size', 0)}"
+                                       f"_live_{bank.get('verified_live', 0)}")
 
 
 def check_stage3_trigger(d: Deps, c) -> Check:
