@@ -136,7 +136,7 @@ def inspect_native_acl(path):
             pointer = ctypes.c_void_p()
             _require(adv.GetAce(dacl, i, ctypes.byref(pointer)))
             head = ctypes.string_at(pointer, 8)
-            _require(head[0] == 0 and int.from_bytes(head[2:4], "little") >= 20 and head[1] & ~31 == 0)
+            _require(head[0] in (0, 1) and int.from_bytes(head[2:4], "little") >= 20 and head[1] & ~31 == 0)
             aces.append(NativeAce(_sid_text(pointer.value + 8, w, adv, kernel),
                                   int.from_bytes(head[4:8], "little"), head[1], head[0]))
         return NativeAcl(_sid_text(owner, w, adv, kernel), bool(control.value & 0x1000), tuple(aces))
@@ -188,21 +188,28 @@ def _leveldb_file(parts):
     return (len(parts) > 3 and parts[:3] == ("default", "local storage", "leveldb")
             or len(parts) > 2 and parts[:2] == ("default", "session storage")
             or len(parts) > 7 and parts[:3] == ("default", "storage", "ext") and _EXT.fullmatch(parts[3])
-            and parts[4:7] == ("def", "local storage", "leveldb"))
+            and parts[4:7] == ("def", "local storage", "leveldb")
+            or len(parts) > 6 and parts[:3] == ("default", "storage", "ext") and _EXT.fullmatch(parts[3])
+            and parts[4:6] == ("def", "session storage"))
 
 
 def validate_acl(acl, *, owner_sid, ce1_sid, policy, rel, directory, root=False):
     _require(acl.owner == owner_sid and bool(acl.aces))
     own, cap, world = [], [], []
     for ace in acl.aces:
-        _require(ace.kind == 0 and ace.flags & ~31 == 0)
+        _require(ace.kind in (0, 1) and ace.flags & ~31 == 0)
         if ace.sid in (owner_sid, SYSTEM):
+            _require(ace.kind == 0)
             own.append(ace)
             _require(ace.rights == FULL_ACCESS)
             _require(ace.flags == (OI | CI if root else INHERITED_ACE | (OI | CI if directory else 0)))
         elif ace.sid == ce1_sid:
+            _require(ace.kind == 0)
             cap.append(ace)
         elif ace.sid == EVERYONE:
+            # Edge 157 writes Everyone as a DENY (execute, mask 32) on LevelDB files (re-probe 09-11-26):
+            # a deny only removes access. An Everyone ALLOW is never accepted.
+            _require(ace.kind == 1)
             world.append(ace)
         else:
             raise ProfileFailure()
@@ -225,7 +232,7 @@ def validate_acl(acl, *, owner_sid, ce1_sid, policy, rel, directory, root=False)
     if world:
         _require(policy.ce2_approved, "profile_policy_unsatisfied")
         _require(not directory and _leveldb_file(parts) and len(world) == 1
-                 and world[0].rights == 32 and world[0].flags == 0)
+                 and world[0].rights == 32 and world[0].flags == 0 and world[0].kind == 1)
     return bool(cap), bool(world)
 
 

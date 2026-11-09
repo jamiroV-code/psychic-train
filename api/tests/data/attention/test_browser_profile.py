@@ -55,7 +55,7 @@ def ce1_child_file():
 
 
 def everyone(mask=32, flags=0):
-    return (bp.NativeAce(bp.EVERYONE, mask, flags),)
+    return (bp.NativeAce(bp.EVERYONE, mask, flags, 1),)
 
 
 def edge_tree(tmp_path: Path) -> Path:
@@ -63,11 +63,13 @@ def edge_tree(tmp_path: Path) -> Path:
     profile = root / "acct1"
     for rel in ("Default/Network", "Default/Cache/Cache_Data", "Default/Shared Dictionary",
                 "Default/Local Storage/leveldb", "Default/Session Storage",
-                f"Default/Storage/ext/{EXT}/def/Network", f"Default/Storage/ext/{EXT}/def/Local Storage/leveldb"):
+                f"Default/Storage/ext/{EXT}/def/Network", f"Default/Storage/ext/{EXT}/def/Local Storage/leveldb",
+                f"Default/Storage/ext/{EXT}/def/Session Storage"):
         (profile / rel).mkdir(parents=True, exist_ok=True)
     for rel in ("Local State", "Default/Preferences", "Default/Network/Cookies", "Default/Cache/Cache_Data/index",
                 "Default/Local Storage/leveldb/000003.log", "Default/Session Storage/CURRENT",
-                f"Default/Storage/ext/{EXT}/def/Local Storage/leveldb/LOG"):
+                f"Default/Storage/ext/{EXT}/def/Local Storage/leveldb/LOG",
+                f"Default/Storage/ext/{EXT}/def/Session Storage/000003.log"):
         (profile / rel).write_bytes(b"x")
     (profile / bp.PROFILE_RECORD).write_text(json.dumps(
         {"schema": 1, "creator_version": bp.CREATOR_VERSION, "root_identity": bp.root_identity(profile), "label": "acct1"}))
@@ -81,6 +83,7 @@ EDGE_OVERRIDES = {
     f"Default/Storage/ext/{EXT}/def/Network": ce1_anchor(),
     "Default/Local Storage/leveldb/000003.log": everyone(), "Default/Session Storage/CURRENT": everyone(),
     f"Default/Storage/ext/{EXT}/def/Local Storage/leveldb/LOG": everyone(),
+    f"Default/Storage/ext/{EXT}/def/Session Storage/000003.log": everyone(),
 }
 
 
@@ -135,6 +138,7 @@ def test_full_edge_shape_is_admitted_and_pinned_by_the_post_session_sweep(tmp_pa
     {"Default/Preferences": ce1_child_file()},  # CE-1 outside its locations
     {"Default/Network": (bp.NativeAce("S-1-15-3-1024-1-2-3", bp.CE1_OBJECT_MASK, 0),)},  # other capability SID
     {"Default/Local Storage/leveldb/000003.log": everyone(33)},  # CE-2 mask not exactly 32
+    {"Default/Local Storage/leveldb/000003.log": (bp.NativeAce(bp.EVERYONE, 32, 0, 0),)},  # Everyone ALLOW is never accepted
     {"Default/Preferences": everyone()},  # Everyone outside CE-2 locations
     {"Default/Local Storage/leveldb": everyone()},  # CE-2 on a directory
     {"Default/Session Storage/CURRENT": everyone(32, INH)},  # CE-2 must be explicit
