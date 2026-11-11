@@ -51,11 +51,11 @@ omp plan mode uses the PLAN role (Opus 5.5 for the owner); `--plan-yolo` execute
 - `task.isolation.apply = true` (default, OBSERVED 2026-10-29): successful isolated worker changes are auto-applied into the parent checkout as untracked or modified files; the worker's own branch and commit do not exist there. A worker therefore publishes from its own isolated checkout (commit on its `claude/*` branch, push, ONE draft PR) and the planner must not publish the auto-applied copy again.
 - Observed in the T221 PLAN session: the isolated checkout has a detached HEAD, no git remote at first, and `gh` needs `-R` with the repo slug. Publishing path: add `origin` from the planner-pasted public URL, fetch, push only the worker's own `claude/*` branch. Windows isolation backend behaviour beyond this is UNVERIFIED.
 
-## Git flow (decided, D-28)
+## Git flow (updated owner authorization; D-28)
 
 - omp runs on the owner's PC only for now; the server laptop joins later with the same rules.
-- The PC pushes `claude/*` task branches and opens DRAFT PRs; it never pushes to `main`. Planner and direct-user sessions commit on a branch plus PR. The owner merges every PR.
-- `main` on the PC is kept current by `scripts/pc-sync/sync-main.ps1` (fast-forward only); task branches go up through `scripts/pc-sync/push-task-branch.ps1`. See `scripts/pc-sync/README.md`.
+- Agents may push their own task branches, open PRs and self-merge once the standing merge gates in AGENTS.md pass; no second confirmation needed. No direct push to `main`.
+- GitHub `main` is canonical. The PC sync task should fast-forward the clean local `main` at least daily (`scripts/pc-sync/sync-main.ps1`, preferred every 15 minutes). Dirty or diverged work is preserved and surfaced, never reset or stashed by automation.
 - Branch protection is a GitHub ruleset with github-actions[bot] as bypass actor, set by the owner in GitHub settings. The daily data workflows push to `main` as github-actions[bot] and must stay unaffected.
 - Secrets and cookie files stay outside the repo.
 

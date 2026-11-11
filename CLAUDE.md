@@ -39,19 +39,22 @@ This block is byte-identical in CLAUDE.md and AGENTS.md. It decides what a sessi
 **Hard rules for every role:**
 
 - Phase locking: stay inside your phase or task scope; no file edits in RESEARCH or INNOVATE; no scope expansion.
-- Approval gates: no implementation without approval. For a PLANNER that is the user's explicit ENTER EXECUTE MODE; for a WORKER it is its envelope. Irreversible or outward-facing actions (push, merge, deploy, deletion, spend) need the approval the envelope names or the user's.
-- Commit policy: nobody pushes to `main`. A PLANNER session and direct user work commit only when the user asks, on a branch (`claude/<task-id>-<slug>` or a short descriptive branch) and open a PR; the owner merges. A WORKER commits on its own branch `claude/<task-id>-<slug>` and opens a PR.
+- Approval gates: no implementation without approval. For a PLANNER that is the user's explicit ENTER EXECUTE MODE; for a WORKER it is its envelope. Push, merge, deploy, deletion and spend follow the standing owner permissions below; never bypass their gates.
+- Commit policy: nobody pushes directly to `main`. A PLANNER session and direct user work commit on a branch (`claude/<task-id>-<slug>` or a short descriptive branch) and open a PR; a WORKER commits on its own task branch. Eligible PRs may be merged by the responsible agent/session under the standing owner permission below.
 - No secrets in files, commits, prompts or logs.
 - When unsure, stop and report instead of guessing.
 <!-- ENTRY-SET:END -->
 
-## Owner standing permissions (given 02-11-26)
+## Owner standing permissions (owner, 2026-11-11; merge authorization)
 
-These override the "owner merges" and ".github" restrictions in the ENTRY-SET block and in task envelopes unless an envelope explicitly withholds them:
+These permissions apply to future sessions unless the user explicitly withholds them for a task:
 
+- Agents may push their task branches and may mark their own PR ready and merge it without another confirmation, but only after all merge gates are evidenced: PR is non-draft; CI is green on the exact head SHA; required task gates pass or are within an explicitly saved baseline; an independent review is complete and all findings are fixed; no other open PR overlaps its files; and the PR is mergeable/up to date. Unknown or failing evidence means do not merge.
+- Never push directly to `main`, force-push, or bypass a PR. A merge through GitHub is authorized only when the gates above pass. After merge, verify CI on the merge SHA and report any failure.
+- GitHub `main` is canonical. Keep the PC checkout fast-forwarded at least daily using `scripts/pc-sync/sync-main.ps1` (the scheduled 15-minute cadence is preferred). This script only pulls a clean, fast-forwardable `main`; it does not upload local work. Preserve dirty or divergent work; never clean, reset, stash, or overwrite it just to sync. Report a blocked sync and resolve local work on a task branch/PR first.
 - Changes under `.github/` are allowed when the task needs them. Keep them minimal and covered by a guard test.
-- Merging a PR is allowed once the state is clean: the PR is not a draft, CI is green, the task gates show no failure beyond the saved baseline, an independent review is done with its findings fixed, and no other open PR touches the same files. Never merge on a red or unreviewed state.
-- Still forbidden: pushing to `main` directly, force pushes, secrets in any file, and live provider calls from tests.
+- No secrets in files, commits, prompts or logs.
+- Live provider calls from tests remain forbidden.
 
 ## RIPER-5 Spec-Driven Development System
 
@@ -136,7 +139,7 @@ Outer order: `RESEARCH -> SPEC -> INNOVATE -> PLAN -> VALIDATE -> EXECUTE -> UPD
 
 ## Commit Branch Policy
 
-Nobody pushes to `main` (decisions.md D-28). When the user asks for a commit in a planner or direct user session, commit on a branch (`claude/<task-id>-<slug>` or a short descriptive branch) and open a PR; the owner merges every PR. A WORKER commits on its own task branch `claude/<task-id>-<slug>` and opens a PR (master-planner.md section 6). The daily data workflows that push to `main` as github-actions[bot] are the only exception. Full rule: implementation-standards.md §Commit Hygiene.
+No agent pushes directly to `main` (D-28). Sessions commit and push task branches, open PRs, and may merge their own eligible PRs without further confirmation under the standing merge authorization in AGENTS.md. Merge gates are mandatory: non-draft, exact-head CI green, task gates passing/saved-baseline only, independent review fixed, no overlapping PR, and mergeable/up to date. Daily data workflows may push to `main` as `github-actions[bot]`. Full rule: implementation-standards.md §Commit Hygiene.
 
 ## Key Principles
 

@@ -41,7 +41,7 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 | D-25 | Tradeable universe and narratives rules | 18-10-26 | active |
 | D-26 | Return to full RIPER-5 for new slices; lapse note T96-T107 | 18-10-26 | active |
 | D-27 | Exchange tokens are IN as a narrative (supersedes D-20) | 18-10-26 | active |
-| D-28 | Nobody pushes to main; branch plus PR, owner merges | 29-10-26 | active |
+| D-28 | GitHub canonical; branch + PR; agents may self-merge after gates | 29-10-26 (updated 11-11-26) | active |
 | D-0 | Original goal: one confidence level that sizes positions | 17-09-26 | superseded by D-1, D-2 |
 
 ## Entries
@@ -239,10 +239,10 @@ Abbreviations for sources: **RECOVERY** = `process/general-plans/completed/maste
 - **Consequences:** thin exchange tokens will often read "low data". `exclude`, `exclude_category_ids`, `include_despite_category` and the volume floor are gone from `discovery.json`. The Baskets tab keeps the old universe lists of `attention_universe.json` for its reference (its scores are unchanged); moving Baskets to the new universe is a separate decision (Q-V1). Does not change D-22..D-26. The weight numbers listed in D-22 are superseded by weights v2 (PR #156, merged: trends 25, reddit 20, xsearch 15, exchange_activity 15, wikipedia 10, defillama 5, github_dev 0; trends and wikipedia count as one search group; early-source rule); D-22's text is kept as history. The X/Reddit PC-side collector is planned only: its SPEC (PR #153) is approved by the owner (21-10-26) and merged, but no collector code is shipped.
 - **Status:** active.
 
-### D-28 Nobody pushes to main; branch plus PR, owner merges
-- **Decision:** (owner, 29-10-26; T217) planner and direct-user sessions no longer commit straight to `main`. They commit on a branch (`claude/<task-id>-<slug>` or a short descriptive branch) and open a PR; the owner merges every PR. The planner is moving to an omp agent on the owner's PC (PC only for now; the server laptop joins later with the same rules). The PC may push task branches and open DRAFT PRs automatically, never push to `main`. Branch protection will be a GitHub ruleset with github-actions[bot] as bypass actor, set by the owner in GitHub settings and tested in audit mode through one daily refresh first (not yet in place; whether ruleset Evaluate mode is available on a public free repo is unverified, the owner checks in GitHub settings).
-- **Date:** 29-10-26. **Reason:** GitHub stays the shared source of truth while more than one machine works on the repo. **Alternatives:** keep committing on `main` locally (rejected: diverges from the PC agent's pushes).
-- **Consequences:** supersedes the old "commit on main" rule in CLAUDE.md, AGENTS.md, implementation-standards.md, master-planner.md and operating-instructions.md. The daily data workflows push to `main` as github-actions[bot] and are untouched. Tooling: `scripts/pc-sync/`. omp mapping notes (UNVERIFIED): `process/context/omp-setup.md`.
+### D-28 GitHub canonical; branch + PR; agents may self-merge after gates
+- **Decision:** (owner, 29-10-26; T217; updated by owner 11-11-26) Never push directly to `main`; all code/process work uses a task branch and PR. The responsible agent/session is authorized to mark its own PR ready and merge it without another confirmation once every gate in `AGENTS.md` passes: non-draft, exact-head CI green, task gates pass or saved baseline, independent review fixed, no overlapping open PR, and mergeable/up to date. GitHub `main` is canonical; the PC must fast-forward it at least daily via `scripts/pc-sync/sync-main.ps1` (15-minute schedule preferred). This pull-only helper does not upload local work. Preserve dirty/diverged changes and surface the blocker; never reset, stash or overwrite to force sync. Daily data workflows remain the only direct push to `main`.
+- **Date:** 29-10-26; owner update 11-11-26. **Reason:** GitHub stays canonical across machines; standing self-merge authority and a daily PC sync reduce unnecessary waits without weakening review, CI or data-preservation gates.
+- **Consequences:** branches and PRs remain mandatory; no direct push to `main`. Agents may merge only after evidenced gates; the merger verifies CI on the merge SHA. Task Scheduler should run `sync-main.ps1` every 15 minutes and a successful fast-forward must occur at least daily. A dirty tree, missing task, wrong branch or divergence is a surfaced sync failure, not permission to discard work. Tooling and setup: `scripts/pc-sync/README.md`.
 - **Status:** active.
 
 ### D-29 Pegged and commodity-backed tokens are out of the Discovery universe
