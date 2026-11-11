@@ -2,6 +2,7 @@
 
 **Origin:** screener batch 3 (S5a, S5b), residual AC-8r (SPEC AC-8, Locked), user decision Q1 A on 09-10-26.
 **Owner slice:** a small follow-up slice after the S5b merge and its PC probe (P-S5b-1). Not part of S5a or S5b.
+**Status:** RESOLVED 01-11-26 by PR #212; owner live check passed
 
 ## What AC-8 promised
 

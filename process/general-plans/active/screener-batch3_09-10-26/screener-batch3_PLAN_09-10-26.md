@@ -269,7 +269,7 @@ gap-resolution: A proven now / B added by this plan's checklist / C deferred to 
 | AC-S5b-11 | the S11 behaviour survives: a tick or an equal payload makes no island update, a failed refetch keeps panels, drill-down chart and RSI, the RSI title is Brussels time without `UTC` | Fully-Automated | G-S5b-1 `ScreenerBoardLive` (unedited assertions), `ScreenerBoardLayout`, `SpaghettiChart` test 1, `rsi-format`; G-S5b-8 `S5b-words`; hybrid G-S5b-9, G-S5b-10 (`live-refresh`, `brussels-time`) | B (run: C) |
 | AC-S5b-12 | the T44 shared small-chart zoom survives every layout edit: reorder, move to a group, add and remove keep the one `sharedRange`; an added or moved chart adopts it; only a timeframe change clears it (U7; group edits, layout refetch and a rolled-back save cannot touch it: the state lives in `ScreenerBoard`, not in the layout) | Fully-Automated | G-S5b-1 `ScreenerBoardLayout` (U7 assertions folded in), `ScreenerBoardLinkedZoom` (unedited assertions); hybrid `layout.spec` test 2, G-S5b-10 (`live-refresh`, `screener` zoom test) | B (run: C) |
 | AC-S5b-8r | on-demand states (rename input, remove confirm, open drill-down) pass the contrast audit | Hybrid | none today (Known-Gap residual): backlog `screener-ondemand-states-contrast_NOTE` (written by S5b); the audit reads the default state only | D (CONDITIONAL) |
-| AC-8r | group sort by name, % change or RSI, unavailable values last and labelled (SPEC AC-8) | Hybrid | none in S5 (Known-Gap residual, deferred by the user, Q1 A): follow-up slice after S5b, vitest plus one seeded e2e; backlog `screener-group-sort_NOTE_09-10-26.md` (exists) | D (CONDITIONAL) |
+| AC-8r | group sort by name, % change or RSI, unavailable values last and labelled (SPEC AC-8) | Hybrid | PR #212 (merge `b3b62a55`), report `process/general-plans/active/screener-small-slices_01-11-26/screener-small-slices_REPORT_01-11-26.md`; CI run 41318234253 (api pytest 5m8s, web vitest, tsc and build all pass); live check below; backlog `screener-group-sort_NOTE_09-10-26.md` (RESOLVED) | PASS (01-11-26, owner live check) |
 | AC-S5b-10r | phone, keyboard-only and screen-reader use; Edge select/input look; deployed-origin POST/DELETE; 30-coin refresh; new-coin fill-in | Agent-Probe | P-S5b-1 | C |
 
 ### S5a exact gates (repo root; baselines 951 pytest, 251 vitest in 34 files)
@@ -382,6 +382,8 @@ Live Hyperliquid; real display, phone and keyboard-only use; Edge/Windows contro
 ### Open gaps
 
 No open questions (Q1 A and Q2 A resolved by the user 09-10-26). AC-8r (group sort, backlog `screener-group-sort_NOTE_09-10-26.md`) and AC-S5b-8r (on-demand states contrast, backlog stub) are named residuals. known-gap: real device and browser behaviour: probes P-S5a-1, P-S5b-1.
+
+AC-8r update 01-11-26: moved from CONDITIONAL to PASS. Evidence: PR #212 merged as `b3b62a55`; CI on the PR (run 41318234253) had api pytest (5m8s) and web vitest, tsc and build passing; the owner tested the group sort live on /screener on 01-11-26 and said in chat "its working" (probe P-S5b-1 for this feature recorded as done by the owner on the PC; the planner did not see it and this is the owner's statement, not a captured screenshot). Worker report: `process/general-plans/active/screener-small-slices_01-11-26/screener-small-slices_REPORT_01-11-26.md`. The other residuals (AC-S5b-8r, AC-S5a-4r, AC-S5b-10r) are unchanged.
 
 ### Validation record (PVL cycle 3)
 

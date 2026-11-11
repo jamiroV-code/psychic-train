@@ -2,6 +2,7 @@
 
 **Origin:** T37 / S6 (screener batch 2), named residual AC-S6-6 (= AC-22), user-accepted (Q4).
 **Owner slice:** S5 (not in S6).
+**Status:** ALREADY ON MAIN since S5b (hidden_lines in the saved layout, api/data/layout.py drops unknown ids, existing vitest covers it); the owner has not recorded a PC reload check, so AC-S6-6 stays CONDITIONAL until they do
 
 ## What is missing
 
