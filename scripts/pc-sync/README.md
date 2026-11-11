@@ -1,13 +1,12 @@
 # PC sync scripts (Windows PowerShell)
 
-Git flow for the owner's PC (decisions.md D-28): GitHub is the shared source of truth, nobody pushes to `main`,
-the PC pushes task branches and opens DRAFT PRs, the owner merges every PR.
+Git flow (D-28, updated 2026-11-11): GitHub `main` is canonical and the PC must fast-forward it at least daily. Agents may self-merge only when all owner merge gates in `AGENTS.md` pass. No direct pushes to `main`.
 
 UNVERIFIED IN CI: these scripts were written in a container with no PowerShell. Run each with `-WhatIf` on the PC first.
 
 | Script | What it does |
 |---|---|
-| `sync-main.ps1` | `git fetch`, then `git pull --ff-only` on `main` only when `main` is checked out and the tree is clean and fast-forwardable. Otherwise it changes nothing and logs one line to `%LOCALAPPDATA%\my_site\logs\sync-main.log`. Never merges, rebases, resets or forces. |
+| `sync-main.ps1` | `git fetch`, then `git pull --ff-only` on `main` only when `main` is checked out and the tree is clean and fast-forwardable. Otherwise it changes nothing and logs one line to `%LOCALAPPDATA%\my_site\logs\sync-main.log`. Never merges, rebases, resets or forces. This is download-only; it never uploads local edits or commits. |
 | `push-task-branch.ps1` | Refuses on `main`. Pushes only the checked-out `claude/*` branch (`-Branch` may confirm the name but never bypasses the `claude/*` rule; `main`, detached HEAD and any other branch are refused) using `git push -u origin`, then opens a draft PR with `gh` if installed, else prints the URL. Never uses force. |
 
 Both take `-WhatIf` (print what they would do, change nothing).
@@ -23,13 +22,19 @@ Both take `-WhatIf` (print what they would do, change nothing).
 
 Task Scheduler shows a non-zero code as a failed run, so a real failure is visible there.
 
-## Task Scheduler (sync-main every 15 minutes)
+## Task Scheduler (required; every 15 minutes)
 
-1. Open Task Scheduler, Create Task (not Basic Task). Name: `my_site sync-main`.
-2. General: run only when the user is logged on.
-3. Triggers: New, Daily, repeat task every 15 minutes for a duration of 1 day.
-4. Actions: Start a program: `powershell.exe`; arguments: `-NoProfile -ExecutionPolicy Bypass -File "<repo path>\scripts\pc-sync\sync-main.ps1"`.
-5. Test once with `-WhatIf` in a terminal, then run the task by hand and read the log file.
+The task `my_site sync-main` runs `sync-main.ps1` every 15 minutes while the owner is logged on. Create or repair it from PowerShell:
+
+```powershell
+$script = "$env:USERPROFILE\documents\my_site\scripts\pc-sync\sync-main.ps1"
+$task = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$script`""
+schtasks.exe /Create /SC MINUTE /MO 15 /TN "my_site sync-main" /TR $task /IT /F
+```
+
+Verify it with `schtasks.exe /Query /TN "my_site sync-main" /V /FO LIST`. Run the script with `-WhatIf`, then run the task by hand and inspect `%LOCALAPPDATA%\my_site\logs\sync-main.log`. Confirm a successful fast-forward at least once per day.
+
+A `skipped: working tree is not clean`, `not main`, or diverged message means sync did not happen. Preserve local work and resolve it on a task branch/PR; never clean, reset, stash or overwrite to make the task pass. `push-task-branch.ps1` is a separate upload step for a checked-out `claude/*` branch; `sync-main.ps1` never uploads or commits local work.
 
 ## Secrets
 

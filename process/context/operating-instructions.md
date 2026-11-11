@@ -7,7 +7,7 @@ date: 03-10-26
 
 # Operating Instructions
 
-**Run the API with `uv run --project api`, the web app with `pnpm --filter web`; pick tests by risk tier (RT0-RT4); workers use their own branch, everyone else commits on a branch and opens a PR only when asked; nobody pushes to `main`.** Full test detail: `process/context/tests/all-tests.md`. Worker and merge protocol: master-planner.md.
+**Run the API with `uv run --project api`, the web app with `pnpm --filter web`; choose tests by risk tier (RT0-RT4); work on branches and PRs, and keep the PC `main` fast-forwarded from GitHub at least daily. Agents may merge their own PRs under the standing owner gates.** Full test detail: `process/context/tests/all-tests.md`. Worker and merge protocol: master-planner.md.
 
 ## Commands
 
@@ -24,7 +24,7 @@ date: 03-10-26
 | E2E | `cd web && pnpm test:e2e` (cloud container: set `PLAYWRIGHT_CHROMIUM_PATH` first, see all-tests.md) |
 | Populate caches | runbook `api/scripts/BOOTSTRAP.md` |
 
-**Deploy (user's home PC, Tailscale only):** pull, rebuild with `deploy/build-web.ps1` after any `web/` change, then restart the `mysite-api` / `mysite-web` scheduled tasks. Runbook and hard stops (no Funnel, no port forwarding, no `0.0.0.0`): `deploy/README.md`. Script behaviour on Windows is verifiable only on the PC.
+**Deploy (user's home PC, Tailscale only):** use the fast-forward-only PC sync; rebuild with `deploy/build-web.ps1` after any `web/` change, then restart the `mysite-api` / `mysite-web` scheduled tasks. Runbook and hard stops (no Funnel, no port forwarding, no `0.0.0.0`): `deploy/README.md`. Script behaviour on Windows is verifiable only on the PC.
 
 **Env names** (values never in git): `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `LIQTIDE_ATTRIBUTION_URL`, `API_BASE_URL`, `API_PORT`; deploy also sets `SCREENER_CORS_ORIGINS` and `NEXT_PUBLIC_API_BASE_URL`.
 
@@ -52,10 +52,11 @@ Live-provider checks are user-PC steps (container egress is blocked). CI (`ci.ym
 
 ## Branch, worktree and merge rules
 
-- **Default:** the Master Planner session and direct user work commit on a branch (`claude/<task-id>-<slug>` or a short descriptive branch) and open a PR, only when the user asks. Nobody pushes to `main`; the owner merges every PR (D-28). The daily data workflows push to `main` as github-actions[bot] and are the only exception.
-- **Workers:** branch `claude/<task-id>-<slug>`, one branch per registry task. A worker opens ONE draft PR and stops; the owner merges every PR (D-28) and the planner never merges. Unsure means stop at `review`. Subagents only in a large RT3/RT4 slice whose envelope allows them (at most 3, 15 USD per slice, one level deep, all listed in the report; master-planner.md section 6). Any diff touching CLAUDE.md or AGENTS.md stops at `review` for the user's diff check.
+- **Default:** the Master Planner and direct user work commit/push on task branches and open PRs when requested. Nobody pushes directly to `main`; daily data workflows are the only direct-push exception. A responsible agent/session may merge its own eligible PR under the standing owner authorization after all gates pass; see AGENTS.md and master-planner.md.
+- **Workers:** use `claude/<task-id>-<slug>`, one branch per task. Open a PR (draft until ready); the responsible session may mark it ready and merge after the exact-head CI, task gates, independent review, overlap and mergeability checks pass. No further confirmation is needed. Any diff touching CLAUDE.md or AGENTS.md still stops for the user's diff check.
+- **Daily PC sync:** GitHub `main` is canonical. `scripts/pc-sync/sync-main.ps1` is scheduled every 15 minutes and must successfully fast-forward at least once per day. It pulls only on a clean `main`; if it skips for dirty or diverged state, preserve the work and surface the blocker—never discard local changes.
 - **Worktrees:** git worktrees exist only on the user's PC and are user-driven. Cloud sessions are isolated by container plus branch. No session removes a worktree. On the owner PC omp may create isolated checkouts when `task.isolation.enabled` is on; they follow the same branch and PR rules; see omp-setup.md.
-- **Branch deletion:** only worker task branches whose PR the owner has merged (verified), under the 02-10-26 standing consent, with an Approvals Log row in `process/archive/index.md` first. Every other branch needs per-branch user approval. Measured 03-10-26: a cloud session cannot delete branches (git push --delete fails, REST DELETE returns 403 from the proxy, no MCP tool); the user deletes them.
+- **Branch deletion:** only worker task branches whose PR is merged and verified, under the 02-10-26 standing consent, with an Approvals Log row in `process/archive/index.md` first. Every other branch needs per-branch user approval. Measured 03-10-26: a cloud session cannot delete branches (git push --delete fails, REST DELETE returns 403 from the proxy, no MCP tool); the user deletes.
 - **Shared files** (`.gitignore`, all-context.md, CLAUDE.md): one owning lane at a time.
 - **Commits:** conventional prefix (`feat|fix|docs|spec|process|phase|chore|refactor|test`).
 

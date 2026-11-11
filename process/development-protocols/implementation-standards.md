@@ -61,10 +61,7 @@ See skill: invoke `vc-risk-evidence-pack` for the full 6-class definitions, 5-ar
 - Keep commits focused on the requested change.
 - Never commit secrets or credentials.
 - Use clean professional commit messages, ideally conventional-commit style when it fits the change.
-- **Nobody pushes to `main`** (decisions.md D-28). When the user asks for a commit, commit on a branch
-  (`claude/<task-id>-<slug>` or a short descriptive branch) and open a PR; the owner merges every PR.
-  This matches the generic "if on the default branch, branch first" harness default. Only the daily
-  data workflows push to `main`, as github-actions[bot].
+- **Nobody pushes directly to `main`** (D-28). Commit and push task work on a branch (`claude/<task-id>-<slug>` or a short descriptive branch), then open a PR. The responsible agent/session may mark its own PR ready and merge it under the standing owner authorization in `AGENTS.md` after all merge gates pass; no second confirmation is needed. Daily data workflows may push to `main` as `github-actions[bot]`.
 
 ## Agent Frontmatter Conventions
 
