@@ -9,6 +9,8 @@ feature: general
 
 **Status 01-11-26 (branch `claude/cache-hardening`):** KG3 and KG4 fixed — every pairs_response write and both JSON archive writers now go through cache.py's unique-temp + fsync + `os.replace` helpers (`_atomic_to_parquet`, `_atomic_write_bytes`). SQ1 still open, re-worded: `watchlist.py` has NO fallback (`_load_raw` returns an empty list when the file is missing); the open question is whether to ADD one (pipeline-completeness PLAN line 345). Not covered by this note but seen: `watchlist._save_raw` writes the user's watchlist in place (non-atomic).
 
+**Status 01-11-26 (branch `claude/pairs-spreads-staging`):** KG3 follow-up fixed — `compute_and_persist` now stages spreads in a per-run `spreads.tmp.<hex>` dir, swaps it in by renaming the old dir aside (retried if an overlapping run lands first), cleans its own staging dir on failure, and at start removes only `spreads.tmp*` dirs older than 1 hour. The swap is still two renames, not atomic. See `process/general-plans/active/spreads-staging_01-11-26/`.
+
 **Priority:** Low-Medium. Both KG items are naturally done together in the T21 `cache.py` refactor.
 
 - **KG3:** `api/analytics/cointegration/pairs_response.py` writes its tmp files without fsync (out of the atomic-writes lane).
