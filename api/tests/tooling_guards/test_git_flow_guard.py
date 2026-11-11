@@ -52,6 +52,8 @@ def test_new_policy_stated():
     assert "agents may push their task branches and may mark their own pr ready and merge it" in text.lower()
     assert "independent review is complete and all findings are fixed" in text.lower()
     assert "keep the pc checkout fast-forwarded at least daily" in text.lower()
+    assert "changes to `claude.md` or `agents.md` also require the user's diff check before merge" in text.lower()
+    assert "deploy, deletion and spend still require approval in the worker envelope or explicit user approval" in text.lower()
 
 def test_pc_scripts_exist_and_have_whatif():
     for name in ("sync-main.ps1", "push-task-branch.ps1"):
