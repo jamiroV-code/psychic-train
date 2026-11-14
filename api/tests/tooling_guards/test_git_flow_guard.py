@@ -1,5 +1,5 @@
-"""T217 guards (file-only): the entry block is identical in CLAUDE.md and AGENTS.md, no doc still says planners
-commit straight to main, and the PC sync scripts never merge, rebase, reset or force."""
+"""T217 guards: root entry blocks match, sessions do not push directly to main, merge gates stay explicit,
+and the PC sync scripts never rewrite history."""
 
 from __future__ import annotations
 
@@ -48,8 +48,12 @@ def test_no_doc_says_planners_commit_to_main():
 
 def test_new_policy_stated():
     text = (REPO_ROOT / "CLAUDE.md").read_text(encoding="utf-8")
-    assert "owner merges" in text.lower() and "nobody pushes to `main`" in text
-
+    assert "never push directly to `main`" in text.lower()
+    assert "agents may push their task branches and may mark their own pr ready and merge it" in text.lower()
+    assert "independent review is complete and all findings are fixed" in text.lower()
+    assert "keep the pc checkout fast-forwarded at least daily" in text.lower()
+    assert "changes to `claude.md` or `agents.md` also require the user's diff check before merge" in text.lower()
+    assert "deploy, deletion and spend still require approval in the worker envelope or explicit user approval" in text.lower()
 
 def test_pc_scripts_exist_and_have_whatif():
     for name in ("sync-main.ps1", "push-task-branch.ps1"):

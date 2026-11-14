@@ -6,10 +6,10 @@ resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'emscripten'",
     "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version == '3.13.*' and sys_platform == 'win32'",
-    "python_full_version < '3.13' and sys_platform == 'win32'",
     "python_full_version == '3.13.*' and sys_platform == 'emscripten'",
-    "python_full_version < '3.13' and sys_platform == 'emscripten'",
     "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version < '3.13' and sys_platform == 'win32'",
+    "python_full_version < '3.13' and sys_platform == 'emscripten'",
     "python_full_version < '3.13' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
@@ -205,6 +205,7 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "statsmodels" },
+    { name = "tzdata" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -236,6 +237,7 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=17.0" },
     { name = "pydantic", specifier = ">=2.8" },
     { name = "statsmodels", specifier = ">=0.14" },
+    { name = "tzdata", specifier = ">=2026.4" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
 
