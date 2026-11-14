@@ -170,22 +170,32 @@ def _swap_into_place(staging: Path, spreads_dir: Path) -> None:
     overlapping run's dir lands in between, the swap is retried; the last
     run to swap wins with its complete set.
     """
+    backups: list[Path] = []
     for attempt in range(_SWAP_ATTEMPTS):
-        old: Path | None = spreads_dir.with_name(f"{_STAGING_PREFIX}.old.{uuid.uuid4().hex}")
+        old = spreads_dir.with_name(f"{_STAGING_PREFIX}.old.{uuid.uuid4().hex}")
+        moved_old = False
         try:
             try:
                 os.replace(spreads_dir, old)
+                moved_old = True
             except FileNotFoundError:
-                old = None
+                pass
             os.replace(staging, spreads_dir)
-            return
         except OSError:
+            if moved_old:
+                try:
+                    os.replace(old, spreads_dir)
+                except OSError:
+                    # Another writer may have installed its complete directory.
+                    # Keep the displaced directory until a later successful swap.
+                    backups.append(old)
             if attempt == _SWAP_ATTEMPTS - 1:
                 raise
-        finally:
-            if old is not None:
-                shutil.rmtree(old, ignore_errors=True)
+            continue
 
+        for backup in (*backups, *((old,) if moved_old else ())):
+            shutil.rmtree(backup, ignore_errors=True)
+        return
 
 def compute_and_persist() -> ComputeSummary:
     """Compute every pair of the current universe and persist the results cache."""

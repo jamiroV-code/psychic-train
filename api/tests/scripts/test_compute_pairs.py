@@ -250,6 +250,30 @@ def test_failure_mid_staging_keeps_previous_spreads_and_cleans_staging(seeded, m
     assert not list(spreads.parent.glob("spreads.tmp*"))
 
 
+def test_failed_spreads_swap_restores_previous_directory(tmp_path, monkeypatch):
+    parent = tmp_path / "pairs"
+    spreads = parent / "spreads"
+    staging = parent / "spreads.tmp.new"
+    spreads.mkdir(parents=True)
+    staging.mkdir()
+    (spreads / "old.parquet").write_bytes(b"previous complete result")
+    (staging / "new.parquet").write_bytes(b"new result")
+    real_replace = os.replace
+
+    def fail_staging_replace(source, destination):
+        if source == staging:
+            raise OSError("disk full during swap")
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(pairs_response.os, "replace", fail_staging_replace)
+    with pytest.raises(OSError, match="disk full during swap"):
+        pairs_response._swap_into_place(staging, spreads)
+
+    assert (spreads / "old.parquet").read_bytes() == b"previous complete result"
+    assert not (spreads / "new.parquet").exists()
+    assert not list(parent.glob("spreads.tmp.old.*"))
+
+
 def test_stale_staging_dirs_swept_but_live_one_kept(seeded):
     """A crashed run's staging dirs older than the safe age are removed at the
     start of a run; a recent one (a concurrent live run) is never touched."""
