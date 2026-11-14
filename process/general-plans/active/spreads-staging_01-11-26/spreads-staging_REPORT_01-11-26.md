@@ -21,7 +21,7 @@ done. Linux CI is green on PR #221 (see §6).
 - This report.
 
 ## 5 Commits
-`claude/pairs-spreads-staging`: 9a24e8e4 (red tests), daba7617 (fix + note status), the report commit, plus the commit that records the CI result here.
+`claude/pairs-spreads-staging`: 9a24e8e4 (red tests), daba7617 (fix + note status), the report commit, the CI-result commit, and 74a542b3 (failed-swap recovery + regression test + report update).
 
 ## 6 Tests run
 All runs were local on Windows, with `uv run --project api pytest ... -q -p no:cacheprovider`, on 2026-11-01:
