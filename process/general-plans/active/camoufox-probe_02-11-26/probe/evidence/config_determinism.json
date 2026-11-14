@@ -1,0 +1,81 @@
+{
+  "step": "config_determinism",
+  "started": "2026-11-02T14:04:03.714+00:00",
+  "python": "3.12.14",
+  "camoufox": "0.5.9",
+  "playwright": "1.62.0",
+  "free_ram_mb_start": 1030,
+  "disk_free_gib_start": 27.82,
+  "modes": {
+    "unpinned_default": {
+      "config_keys": 37,
+      "config_keys_that_differ": [
+        "fonts",
+        "mediaDevices:microphoneGroups",
+        "mediaDevices:microphoneLabels",
+        "mediaDevices:micros",
+        "mediaDevices:speakerGroups",
+        "mediaDevices:speakerLabels",
+        "mediaDevices:speakers",
+        "mediaDevices:webcamGroups",
+        "mediaDevices:webcamLabels",
+        "mediaDevices:webcams",
+        "navigator.appVersion",
+        "navigator.oscpu",
+        "navigator.platform",
+        "navigator.userAgent",
+        "screen.availHeight",
+        "screen.availWidth",
+        "screen.colorDepth",
+        "screen.height",
+        "screen.pixelDepth",
+        "screen.width",
+        "voices",
+        "webGl2:parameters",
+        "webGl2:supportedExtensions",
+        "webGl:parameters",
+        "webGl:renderer",
+        "webGl:supportedExtensions",
+        "webGl:vendor",
+        "window.outerHeight",
+        "window.outerWidth",
+        "window.screenX",
+        "window.screenY"
+      ],
+      "prefs_that_differ": [
+        "dom.webgpu.enabled",
+        "gfx.blacklist.webgpu",
+        "gfx.font_rendering.fallback.async"
+      ],
+      "canvas_placeholder_pref_keys": [],
+      "sample": {
+        "navigator.userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:158.0) Gecko/20100101 Firefox/158.0",
+        "screen.width": 1920,
+        "screen.height": 1080,
+        "navigator.hardwareConcurrency": 8,
+        "webGl:renderer": "Radeon HD 3200 Graphics, or similar"
+      },
+      "fonts_count": 291
+    },
+    "pinned_fingerprint": {
+      "config_keys": 37,
+      "config_keys_that_differ": [],
+      "prefs_that_differ": [],
+      "canvas_placeholder_pref_keys": [],
+      "sample": {
+        "navigator.userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:158.0) Gecko/20100101 Firefox/158.0",
+        "screen.width": 1920,
+        "screen.height": 1200,
+        "navigator.hardwareConcurrency": 8,
+        "webGl:renderer": "ANGLE (Intel, Intel(R) HD Graphics 400 Direct3D11 vs_5_0 ps_5_0), or similar"
+      },
+      "fonts_count": 119
+    }
+  },
+  "external_connections_seen": [],
+  "free_ram_mb_end": 1287,
+  "finished": "2026-11-02T14:04:42.520+00:00",
+  "survivors_at_end": [],
+  "sink_requests": [],
+  "sink_hosts": []
+}

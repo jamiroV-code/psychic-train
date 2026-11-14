@@ -1,0 +1,3 @@
+iteration	gate	findings	disposition
+1	BLOCKED	Infra unsafe active-checkout full gate; coverage/contracts/security underspecified	Amended exact guards, RLock scope, bounded regressions, disposable isolation and sentinel protocol; local import probe VIABLE
+2	PASS	All four independent dimension rechecks PASS; feasibility PASS	Validate-contract written; explicit execution approval pending

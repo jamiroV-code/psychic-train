@@ -1,9 +1,13 @@
 """W8e: the PC-side attention worker (SPEC rules 1-3, 6, 7, 9, 10, 15, 16; AC8, AC10, AC21, AC22, AC24, AC37, AC38,
-AC40). It runs the X (`xsearch_web`) and Reddit (`reddit_web`) collectors inside the API process on the owner's host.
+AC40). It runs the X (`xsearch_web`) and Reddit (`reddit_web`) collectors on the owner's host, either as its own
+process (`python -m api.data.attention_collector`, mode `standalone`, so restarting the API never interrupts it) or
+inside the API process (mode `in_api`).
 
 Off unless `SCREENER_ATTENTION_PC_WORKER` is exactly `1`; the test conftest and the workflows never set it, so tests
 and runners never start it. The app lifespan starts it after the equities worker and stops it last
-(`start_from_env` / `stop_worker`, the `equities_refresh` pattern).
+(`start_from_env` / `stop_worker`, the `equities_refresh` pattern); the standalone runner uses the same two calls.
+Both modes write the shared heartbeat (`collector_heartbeat`) and a start is refused while another live collector
+holds it, so the shared Reddit and X budgets are never spent by two workers.
 
 - Two streams on two threads, each with its own lock in `PASS_LOCKS` (owner Q14): X never waits for Reddit and
   Reddit never waits for X. X goes only through the `x_reader.XReader` seam: the readers come from
@@ -62,6 +66,7 @@ from pathlib import Path
 
 from api.data import cache
 from api.data.attention import (
+    collector_heartbeat,
     pc_adapter,
     pc_pace,
     reddit_items,
@@ -262,7 +267,10 @@ class Stream:
         path = pc_pace.state_path(self.source).with_name(f"{self.source}_health.json")
         path.parent.mkdir(parents=True, exist_ok=True)
         cache._atomic_write_json({"mode": self.worker.mode(now), "expected_gap_s": gap,
-                                  "observed_at": now.isoformat()}, path)
+                                  "observed_at": now.isoformat(), **self._sizing(q, src, syms)}, path)
+
+    def _sizing(self, q, src, syms) -> dict:
+        return {}
 
     def _completeness(self, syms, day, *, symbol=None, reason="not_reached", attempted=False, result=None):
         """Reddit-compatible target-day evidence; one latest record per coin-day, never canary or page counts.
@@ -424,7 +432,27 @@ class XStream(Stream):
         return pc_pace.Trickle.for_source(q.config, X_SOURCE, self.rng)
 
     def _pool(self, config) -> x_pool.XPool:
-        return x_pool.XPool(list(config.x_accounts), clock=self.worker.clock)
+        return x_pool.from_config(config, clock=self.worker.clock)
+
+    def _sizing(self, q, src, syms) -> dict:
+        from api.data.attention import x_capacity
+
+        if not q.config.x_accounts:
+            return {}
+        try:
+            pool = self._pool(q.config)
+        except x_pool.XPoolStateError:
+            return {}
+        target = _utc(self.worker.clock()).date() - timedelta(days=1)
+        queued = self.queue(q, syms)
+        target_count = sum(day == target for _, day in queued)
+        per_unit = x_capacity.per_unit_reads(sample_n=q.config.x_sample_n,
+                                             page_cap=q.config.x_page_cap, page_size=xr.PAGE_ENTRIES)
+        return {"sizing_day": target.isoformat(), **x_capacity.sizing(
+            global_room=0 if src.budget_spent() else src.remaining(), remaining_caps=pool.remaining_caps(),
+            queued_target=target_count, backlog=len(queued) - target_count, per_unit=per_unit,
+            canary_pages=0 if pool.canary_passed_today() else len(pool.canary_accounts()),
+            page_size=xr.PAGE_ENTRIES)}
 
     def _held(self, q):
         if not q.config.x_accounts:
@@ -479,6 +507,7 @@ class XStream(Stream):
             return "not_configured"
         try:
             pool = self._pool(c)
+            pool.begin_pass()
         except x_pool.XPoolStateError:
             log.warning("attention pc %s pool state unreadable: source paused, file kept", X_SOURCE)
             return "state_error"
@@ -525,10 +554,14 @@ class XStream(Stream):
             query = x_window.build_query(x_window.coin_terms(q, symbol), day, syntax=c.x_window_syntax,
                                          lang=policy.lang)
             self._completeness(syms, day, symbol=symbol, reason="unit_interrupted", attempted=True)
+            log_start = len(pool.log)
             try:
                 out = x_pool.run_unit(pool, start.readers, src, c, symbol=symbol, day=day, query=query,
                                       coin=x_filters.Coin(symbol, entry["name"]), policy=policy, rng=self.rng,
                                       sleep=w._sleep, fallback=start.fallback)
+                for message in pool.log[log_start:]:
+                    if " parse drop " in message:
+                        log.warning("attention pc %s", message)
             except Exception:
                 self._completeness(syms, day, symbol=symbol, reason="failed", attempted=True)
                 raise
@@ -838,7 +871,7 @@ class AttentionPcWorker:
                 or ledger_retention_days < 1:
             raise ValueError("ledger retention must be at least one day")
         self._wait = wait or _default_wait
-        self.queries = queries or web_queries.load
+        self.queries = queries or web_queries.load_merged
         self.symbols = symbols or _default_symbols
         self.x_start = x_start or _default_x_start
         self.x_cleanup = x_cleanup or _default_x_cleanup
@@ -962,11 +995,12 @@ def remove_log_handler(handler: logging.Handler) -> None:
     handler.close()
 
 
-# --- process-wide registry (the app lifespan owns it) -----------------------------------------------------------------
+# --- process-wide registry (the app lifespan or the standalone runner owns it) ----------------------------------------
 
 _registry_lock = threading.Lock()
 _worker: AttentionPcWorker | None = None
 _handler: logging.Handler | None = None
+_heartbeat: collector_heartbeat.Heartbeat | None = None
 _disabled_reason = "not-started"
 
 
@@ -981,15 +1015,22 @@ def stream_enabled(env=None) -> bool:
     return env.get(STREAM_ENV) == "1"
 
 
-def start_from_env(env=None, **worker_kwargs) -> AttentionPcWorker | None:
-    """Lifespan entry: start only with `SCREENER_ATTENTION_PC_WORKER=1`; never raises."""
-    global _worker, _handler, _disabled_reason
+def start_from_env(env=None, *, mode: str = "in_api", **worker_kwargs) -> AttentionPcWorker | None:
+    """Lifespan or standalone entry: start only with `SCREENER_ATTENTION_PC_WORKER=1` and while no other live
+    collector holds the heartbeat (`collector_heartbeat.blocking`); never raises."""
+    global _worker, _handler, _heartbeat, _disabled_reason
     env = os.environ if env is None else env
     if not enabled(env):
         with _registry_lock:
             _disabled_reason = "flag-off"
         return None
     try:
+        other = collector_heartbeat.blocking(_default_clock())
+        if other is not None:  # checked before the log handler: two processes never rotate one log file
+            log.warning("attention pc worker did not start: another_instance mode=%s", other["mode"])
+            with _registry_lock:
+                _disabled_reason = "another-instance"
+            return None
         max_bytes, files = log_settings(env)
         handler = install_log_handler(log_dir(), max_bytes=max_bytes, files=files)
         with _registry_lock:
@@ -1000,9 +1041,17 @@ def start_from_env(env=None, **worker_kwargs) -> AttentionPcWorker | None:
         worker = AttentionPcWorker(**worker_kwargs)
         with _registry_lock:
             previous, _worker = _worker, worker
+            old_beat, _heartbeat = _heartbeat, None
         if previous is not None:
             previous.stop()
+        if old_beat is not None:
+            old_beat.stop()
         worker.start()
+        beat = collector_heartbeat.Heartbeat(mode=mode, sources=list(worker.streams))
+        with _registry_lock:
+            _heartbeat = beat
+        beat.start()
+        log.info("attention pc worker started: mode=%s sources=%s", mode, ",".join(worker.streams) or "none")
         return worker
     except Exception as exc:  # noqa: BLE001 - the API starts whatever happens here
         log.warning("attention pc worker did not start: %s", type(exc).__name__)
@@ -1013,17 +1062,24 @@ def start_from_env(env=None, **worker_kwargs) -> AttentionPcWorker | None:
 
 
 def stop_worker() -> None:
-    """Lifespan exit: stop and unregister the worker and its log file handler (idempotent, never raises)."""
-    global _worker, _handler, _disabled_reason
+    """Lifespan or runner exit: stop and unregister the worker, mark its heartbeat stopped and remove its log file
+    handler (idempotent, never raises)."""
+    global _worker, _handler, _heartbeat, _disabled_reason
     with _registry_lock:
         worker, _worker = _worker, None
         handler, _handler = _handler, None
+        beat, _heartbeat = _heartbeat, None
         _disabled_reason = "not-started"
     if worker is not None:
         try:
             worker.stop()
         except Exception as exc:  # noqa: BLE001
             log.warning("attention pc worker stop skipped: %s", type(exc).__name__)
+    if beat is not None:
+        try:
+            beat.stop()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("attention pc heartbeat stop skipped: %s", type(exc).__name__)
     if handler is not None:
         remove_log_handler(handler)
 

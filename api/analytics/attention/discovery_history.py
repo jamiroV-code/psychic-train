@@ -224,7 +224,7 @@ def coin_history(symbol: str, window: int, *, today: date, probe_path: Path | No
     rows, reason = load_universe_rows(universe_path)
     if not rows:
         return DiscoveryCoinHistory(**base, status="no-data", reason=reason, history_days={}, days=[])
-    if sym not in eligibility(cfg, rows).eligible:
+    if sym not in eligibility(cfg, rows, use_ledger=False).eligible:   # T223: history keeps today's meaning
         raise UnknownSubject(f"unknown symbol {symbol!r}")
 
     def compute():
@@ -258,7 +258,7 @@ def category_history(category_id: str, window: int, *, today: date, probe_path: 
     rows, reason = load_universe_rows(universe_path)
     if not rows:
         return DiscoveryCategoryHistory(**base, status="no-data", reason=reason, days=[])
-    eligible = eligibility(cfg, rows).eligible
+    eligible = eligibility(cfg, rows, use_ledger=False).eligible
     in_narrative = {c["symbol"] for n in doc["narratives"] if n["id"] == nid for c in n["coins"]}
     coins = [s for s in eligible if s in in_narrative]
 

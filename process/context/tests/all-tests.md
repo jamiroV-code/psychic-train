@@ -7,10 +7,8 @@ date: 24-09-26
 
 # my_site - All Tests
 
-Last updated: 2026-09-28 (pair screener v1 RFC-001..005 EVL, `main` worktree — final green counts
-below; supersedes the 2026-09-24 narrative-mindshare RFC-1..6 EVL counts, which are themselves
-recorded further down along with the regime dashboard RFC-001..006 and momentum-screener RFC-006
-counts before them)
+Last updated: 2026-11-11 (timezone alias runtime dependency fix; suite evidence below retains
+its original recorded dates)
 
 Attach this file first when the task involves testing, verification, or test debugging.
 
@@ -206,6 +204,7 @@ Practical rules that follow:
 | Screener UI shows "Symbol configuration issue" / "Data source unavailable" / "Not enough history…" on a chart or relative-performance note | this is the frontend now rendering `ChartSeries`/`RelativePerformanceSeries.reason` directly (RFC-006 `reason-value-rendering` slice, `web/lib/format-unavailable-reason.ts`) — read the on-screen text itself to know which of the three it is; every such element also carries a `data-reason` attribute with the raw value for automated checks |
 | Watchlist tests fail against real coins | fixture isolation; should be fixed as of 19-09-26 |
 | `uv` can't find the project | use `--project api` |
+| `ZoneInfoNotFoundError` for a valid IANA alias such as `US/Eastern` in CI | make `tzdata` an explicit API runtime dependency; `ZoneInfo` otherwise relies on host data that may omit the alias, and the existing acceptance test covers it |
 | Weekly candle plotted ~6 days late, or a weekly bar dated in the future | pre-ADR-5 `1w.parquet` still cached; restart the API and re-request the board, then `uv run --project api python api/scripts/check_weekly_anchor.py` |
 | Cached timestamps come back with a local tz (e.g. `datetime64[us, Europe/Brussels]`), or daily bars read at 01:00/02:00 instead of 00:00 | a DuckDB read bypassing `cache._connect()`. Every read in `cache.py` must use it — a bare `duckdb.connect()` converts TIMESTAMPTZ to the session timezone (ADR-6) |
 | A cached series looks right locally but wrong in UTC | evaluate weekdays with `pd.to_datetime(..., utc=True)`. Monday 00:00 local is Sunday 22:00/23:00 UTC |

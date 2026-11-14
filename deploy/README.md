@@ -33,6 +33,7 @@ Full plan (with the long version of every step): `process/general-plans/active/d
 | `start-web.ps1` | Starts the built web app (`next start`, never the dev server) on `<tailscale-ip>:3000`. `-DryRun` available. Refuses a stale build, frees only the web port, smoke-checks the new server (see "Restarting safely"). |
 | `build-web.ps1` | Builds the web app with `NEXT_PUBLIC_API_BASE_URL=http://<tailscale-ip>:8000` baked in. `-DryRun` available. Frees only the web port first, then writes the build marker after a successful build (see "Restarting safely"). |
 | `register-tasks.ps1` | Creates Task Scheduler tasks `mysite-api` and `mysite-web` that start at your logon (no admin, no SYSTEM account). `-Remove` deletes them. |
+| `start-collector.ps1` | Starts the attention collector (X and Reddit) as its own process, so API restarts never interrupt it. `-DryRun` available. Not registered by `register-tasks.ps1` (see "Collector (separate from the API)"). |
 
 **These scripts were written in a container that has no PowerShell.** Automated tests only
 check their text. Run the parse check (B5) and dry runs (B6) before anything else.
@@ -269,6 +270,89 @@ logged on, the app is down — that is expected for an intermittently available 
 
 Logs: `%LOCALAPPDATA%\my_site\logs\api.log` and `web.log`.
 
+## Collector (separate from the API)
+
+The attention collector (X search and Reddit) used to run inside the API process, so every API
+restart interrupted collection. It now runs as its own process:
+`python -m api.data.attention_collector`, started by `deploy\start-collector.ps1`. It runs both
+sources (two threads, same pacing, budgets and evidence as before) and writes the rotating log
+`<cache>\attention\_logs\attention_pc.log` plus `%LOCALAPPDATA%\my_site\logs\collector.log`.
+
+- **The API no longer needs `SCREENER_ATTENTION_PC_WORKER`.** The launcher sets it for the
+  collector process only. The API still honours the flag (the old in-API mode), so nothing breaks
+  while it is set, but then the API and the collector compete for one collector slot.
+- **Only one collector at a time.** Both modes write `<cache>\attention\_pc_state\collector_heartbeat.json`
+  every 30 s. A start is refused (exit code 3, log line `another_instance`) while another
+  process's heartbeat is younger than 90 s and that process is alive, so the shared Reddit and
+  X budgets are never spent twice. A crashed collector leaves an old heartbeat that does not block.
+- **Status box.** /narrative, Discovery tab, under the window buttons: `Collector: Running
+  (standalone process)` or `Running (inside the API)`, `Stopped (...)` or `Not started`, the start
+  time, the heartbeat age, and one line each for X search and Reddit (last unit, pause, stale,
+  budget). A missing or unreadable heartbeat never shows as running.
+- **Stopping.** CTRL+C (or closing the window) stops it cleanly and marks the heartbeat stopped.
+  `Stop-ScheduledTask` ends it hard; the box then reads `Stopped (process not running)`. If the box
+  still reads Running after that, the process id is in the heartbeat file:
+  `(Get-Content <cache>\attention\_pc_state\collector_heartbeat.json | ConvertFrom-Json).pid`.
+- **Code updates.** The collector does not pull. After a pull that changes the collector, restart
+  it (the box shows the commit it runs as `code <sha>`).
+
+### Transport identity (B1, 02-11-26; both switches default off, nothing here has been run live)
+
+Two optional keys in the `collector` block of `api\data\attention_queries.json` (absent means the defaults):
+
+- `x_connection_style`: `plain` (default, httpx, one bounded curl fallback per UTC day pool-wide) or `curl`
+  (normal browser-like transport for every X client). Changing it needs a collector restart.
+  `deploy\start-collector.ps1` reads it, refuses any other value, and sets `TWS_HTTP_BACKEND` to `httpx` or `curl`
+  for the collector process only. Global `TWS_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` are still removed
+  and still refused by the reader.
+- `x_identity_enabled` (default false) with `x_account_identities`: per account label `accept_language`, `region`,
+  `timezone`, an exact `impersonation_target` (for example `chrome131`, never an alias) and, for style `plain`, a
+  literal `user_agent` of the same browser family. Unknown labels, invalid values and duplicate identities refuse
+  startup. Under `curl` the wire user agent is the target's own (the curl backend ignores a supplied one).
+- Before the library loads, the selected backend is verified (platform, distribution name and version, wheel tag,
+  lock and allowlist hash, install record; the installed binaries are NOT re-hashed). Selected `curl` that does not verify
+  refuses startup; there is no curl-on-curl fallback.
+- Limitation: in `plain` style the daily curl fallback child sends the target-derived user agent, which may differ in
+  version text from the account's literal one; it is used at most once per UTC day for the whole pool.
+- Rollback: set `x_identity_enabled` false and `x_connection_style` `plain` (or remove both keys) and restart.
+  Proxies and the real-account comparison are not part of B1 and were not run.
+
+### Switchover steps (UNRUN: none of these commands has been run; run them in order)
+
+| Step | Do | Expect |
+|---|---|---|
+| C1 | Find where the API gets the flag: `[Environment]::GetEnvironmentVariable('SCREENER_ATTENTION_PC_WORKER', 'User')`, and check the window or task that runs `start-api.ps1`. (UNRUN) | `1` if it is a user variable; otherwise it is set in the API window. |
+| C2 | Remove it from the API launch environment: `[Environment]::SetEnvironmentVariable('SCREENER_ATTENTION_PC_WORKER', $null, 'User')`, or stop setting it in the API window. Then restart the API: `Stop-ScheduledTask mysite-api; Start-ScheduledTask mysite-api`. (UNRUN) | The box reads `Collector: Stopped (stopped cleanly)`. Collection pauses until C4. |
+| C3 | `powershell -NoProfile -ExecutionPolicy Bypass -File deploy\start-collector.ps1 -DryRun` (UNRUN) | `SCREENER_ATTENTION_PC_WORKER = 1`, your Reddit stream setting, proxy variables cleared, the `uv run ... api.data.attention_collector` command. |
+| C4 | Start it in its own window: `powershell -NoProfile -ExecutionPolicy Bypass -File deploy\start-collector.ps1` (or register the task below and `Start-ScheduledTask mysite-collector`). (UNRUN) | Log line `attention collector running`; within a minute the box reads `Collector: Running (standalone process)`. Exit code 3 means a collector is still running inside the API: redo C2. |
+| C5 | Restart the API again: `Stop-ScheduledTask mysite-api; Start-ScheduledTask mysite-api`. (UNRUN) | The box still reads `Collector: Running (standalone process)` with the same start time. |
+
+`SCREENER_ATTENTION_REDDIT_STREAM` is inherited as you set it (exactly `1` turns the Reddit stream
+on); to keep it for the scheduled task, set it as a user variable:
+`[Environment]::SetEnvironmentVariable('SCREENER_ATTENTION_REDDIT_STREAM', '1', 'User')` (UNRUN).
+
+### Scheduled task `mysite-collector` (UNRUN: not registered by any script)
+
+`register-tasks.ps1` does not create it. To start the collector at your logon, run this once in a
+normal (not admin) PowerShell in the repo root; it mirrors `register-tasks.ps1` (your user, no
+elevation, restarts up to 3 times, no time limit) and is idempotent (`-Force` replaces it):
+
+```powershell
+$user = "$env:USERDOMAIN\$env:USERNAME"
+$powershellExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$script = Join-Path (Get-Location).Path 'deploy\start-collector.ps1'
+$action = New-ScheduledTaskAction -Execute $powershellExe -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$script`"" -WorkingDirectory (Get-Location).Path
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
+$settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+Register-ScheduledTask -TaskName mysite-collector -Trigger $trigger -Principal $principal -Settings $settings -Action $action -Force | Out-Null
+Get-ScheduledTask mysite-collector | Select TaskName,State
+```
+
+Registering does not start it (it starts at your next logon, or now with
+`Start-ScheduledTask mysite-collector`). Remove it with
+`Unregister-ScheduledTask -TaskName mysite-collector -Confirm:$false` (UNRUN).
+
 ## LSE API key (equities prices)
 
 The equities prices need `LSE_API_KEY`. Store it once; `start-api.ps1` loads it at every start
@@ -336,3 +420,42 @@ Get-Process uvicorn,node -ErrorAction SilentlyContinue | Stop-Process
 ```
 
 Optionally sign out of Tailscale. Your caches and watchlist are untouched by all of this.
+
+## X account caps, rest and ready (Stage 0)
+
+These optional collector settings default **off** in code; existing query files need no change:
+
+- `x_account_daily_cap`: `null` (no per-account limit), or an integer >= 1. Counts loaded entries per
+  account per UTC day, including canaries, curl pages and abandoned attempts. The global read budget remains
+  the ceiling. A coin-day already started may cross the account cap; it finishes on that account, and the
+  next selection skips that account. If no account is selectable because of caps, X waits for the next UTC
+  day as `budget_spent`; an in-flight lock wait takes precedence.
+- `x_account_rest_days`: integer >= 0, default `0`. When enabled, a label newly added to an **existing**
+  pool state rests from the first collector pass that registers it. Existing labels and first-ever pool
+  files are grandfathered. Merely viewing status does not register an account or write state.
+
+After adding a configured label and giving it normal manual use, mark it ready:
+
+```powershell
+uv run --project api python -m api.data.attention.twscrape_reader --mark-ready acct_new
+```
+
+The command accepts a configured label only and writes an ISO UTC timestamp to `account_ready.json`
+in the configured accounts folder, atomically. It does not read cookies, open account databases or
+contact X. The file is separate from `attention/_pc_state/x_pool.json`, so a running collector cannot
+overwrite the mark. Both gates apply: rest must have elapsed **and** the ready mark must be from a
+previous UTC day. The account then joins the next day's canary. Re-marking delays activation until
+the next UTC day again; no collector restart is required to read the mark.
+
+The status box reuses the X source's account health list: loaded reads today / cap, state and reason,
+rest deadline, ready gate, last use and cookie age. Unknown reads stay unknown until accounting starts;
+no cap means **no limit**, not zero. Capacity is a file snapshot of remaining selectable caps versus
+global room, queued yesterday coin-days and pending canary pages; older backlog is separate. A
+shortfall is in reads, not a promise of coverage: losses and restarts can consume extra reads.
+Yesterday's coverage uses the existing completeness evidence: eligible = stored + missing,
+exact = stored - capped, estimated = capped. Missing evidence is unknown, never fabricated zero.
+
+Rollback: older versions reject the three added per-account state keys. Before rolling back, with
+the collector stopped by the owner, back up the pool file and remove `reads_day`, `reads_used` and
+`rest_until` from each account object. Keep the ready marks separately. This change does not deploy,
+restart anything, renew cookies, add proxies or enable a browser.

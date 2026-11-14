@@ -11,6 +11,8 @@ import type { ChartBar } from "@/lib/types/screener";
 export type LiquidityCompositeVariant = "reduced" | "full";
 export type AgeLabel = "early" | "mid" | "late";
 export type CompositeChangeLabel = "rising" | "falling" | "flat";
+export type BtcMomentumSignalKind = "BUY" | "SELL";
+
 
 export interface BtcLegBoundary {
   date: string;
@@ -70,6 +72,13 @@ export interface LegEstimate {
   composite: CompositeEstimate;
 }
 
+export interface BtcMomentumSignal {
+  kind: "BUY" | "SELL";
+  timestamp: string;
+  price: number;
+}
+
+
 export interface BtcLegChartResponse {
   available: boolean;
   reason: string | null;
@@ -83,4 +92,5 @@ export interface BtcLegChartResponse {
   legs: BtcLeg[];
   current_leg: CurrentLeg | null;
   estimate: LegEstimate | null;
+  signals: BtcMomentumSignal[];
 }

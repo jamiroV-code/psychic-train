@@ -291,6 +291,8 @@ def test_stream_flag_only_exact_one_enables(value, on, monkeypatch):
     seen = {}
 
     class Capture:
+        streams: dict = {}  # the worker's stream map (named in the collector heartbeat)
+
         def __init__(self, **kw):
             seen.update(kw)
 
@@ -309,6 +311,8 @@ def test_start_from_env_without_variable_means_stream_off(monkeypatch):
     seen = {}
 
     class Capture:
+        streams: dict = {}
+
         def __init__(self, **kw):
             seen.update(kw)
 

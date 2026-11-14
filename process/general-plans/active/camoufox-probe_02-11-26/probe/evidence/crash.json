@@ -1,0 +1,91 @@
+{
+  "step": "crash",
+  "started": "2026-11-02T14:05:41.303+00:00",
+  "python": "3.12.14",
+  "camoufox": "0.5.9",
+  "playwright": "1.62.0",
+  "free_ram_mb_start": 1468,
+  "disk_free_gib_start": 27.78,
+  "ram_checks": [
+    {
+      "t": "2026-11-02T14:05:41.345+00:00",
+      "before": "launch A-crash",
+      "available_mb": 1469
+    }
+  ],
+  "launches": [
+    {
+      "label": "A-crash",
+      "t": "2026-11-02T14:06:02.676+00:00",
+      "launch_s": 20.95,
+      "first_page_s": 0.38
+    }
+  ],
+  "cookies_before_kill": {
+    "names": [
+      "acct",
+      "auth_token",
+      "ct0",
+      "precrash_marker"
+    ],
+    "acct": "A",
+    "auth_token_is_FAKE": true,
+    "session_cookie_present": false
+  },
+  "storage_before_kill": {
+    "probe_acct": "A",
+    "probe_written": "1793628065712",
+    "precrash_ls": "1793628363027"
+  },
+  "killed": [
+    {
+      "pid": 31612,
+      "name": "camoufox.exe"
+    },
+    {
+      "pid": 16836,
+      "name": "camoufox.exe"
+    },
+    {
+      "pid": 33916,
+      "name": "camoufox.exe"
+    },
+    {
+      "pid": 24996,
+      "name": "camoufox.exe"
+    },
+    {
+      "pid": 33736,
+      "name": "camoufox.exe"
+    },
+    {
+      "pid": 32144,
+      "name": "camoufox.exe"
+    },
+    {
+      "pid": 15192,
+      "name": "camoufox.exe"
+    }
+  ],
+  "browser_gone_s": 0.16,
+  "alive_after_kill": [],
+  "playwright_after_kill": "TargetClosedError('Page.evaluate: Target page, context or browser has been closed')",
+  "closes": [
+    {
+      "label": "A-crash exit after kill",
+      "close_call_s": 0.02,
+      "all_children_gone_s_after_close": 0.02,
+      "survivors": [],
+      "error": null
+    }
+  ],
+  "lock_files_after_kill": [
+    "parent.lock"
+  ],
+  "external_connections_seen": [],
+  "free_ram_mb_end": 1454,
+  "finished": "2026-11-02T14:06:06.774+00:00",
+  "survivors_at_end": [],
+  "sink_requests": [],
+  "sink_hosts": []
+}

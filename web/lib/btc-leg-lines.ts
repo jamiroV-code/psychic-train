@@ -1,6 +1,6 @@
 import { formatDate } from "@/lib/brussels-time";
 import { SERIES } from "@/lib/chart-palette";
-import type { SimpleLineSeries } from "@/lib/island-loader";
+import type { SimpleLineSeries, SimpleLineSignalPoint } from "@/lib/island-loader";
 import type {
   AgeEstimate,
   AgeLabel,
@@ -89,6 +89,16 @@ export function legBands(data: Pick<BtcLegChartResponse, "legs" | "last_bar_ts">
 /** One marker per confirmed boundary date. */
 export function boundaryMarkers(data: Pick<BtcLegChartResponse, "boundaries">): LegMarker[] {
   return data.boundaries.map((b) => ({ timestamp: dayStart(b.date), label: b.date }));
+}
+
+/** One price-anchored point per signal, at the signal bar's close. */
+export function signalPoints(data: Pick<BtcLegChartResponse, "signals">): SimpleLineSignalPoint[] {
+  return data.signals.map((s) => ({ timestamp: s.timestamp, value: s.price, kind: s.kind }));
+}
+
+/** Accessible text per signal, e.g. "BUY 2026-01-01 at 90,000". */
+export function signalText(s: { kind: string; timestamp: string; price: number }): string {
+  return `${s.kind} ${s.timestamp.slice(0, 10)} at ${Math.round(s.price).toLocaleString("en-US")}`;
 }
 
 function num(v: number | null | undefined, digits = 3): string {

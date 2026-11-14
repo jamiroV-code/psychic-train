@@ -28,10 +28,10 @@ const resp = (baskets: BasketAttention[], window: AttentionWindow = 30): Attenti
 });
 
 describe("NarrativeTabs", () => {
-  it("has two tabs, My baskets selected first", async () => {
+  it("has three tabs, My baskets selected first", async () => {
     render(<NarrativeTabs fetchAttention={() => Promise.resolve(resp([basket("a")]))} />);
     const tabs = screen.getAllByRole("tab");
-    expect(tabs.map((t) => t.textContent)).toEqual(["My baskets", "Discovery"]);
+    expect(tabs.map((t) => t.textContent)).toEqual(["My baskets", "Discovery", "New coins"]);
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
     await waitFor(() => expect(screen.getByTestId("attention-table")).toBeTruthy());
   });
@@ -86,6 +86,15 @@ describe("NarrativeTabs", () => {
     render(<NarrativeTabs fetchAttention={() => Promise.resolve(resp([]))} fetchDiscovery={() => new Promise(() => undefined)} />);
     fireEvent.click(screen.getByRole("tab", { name: "Discovery" }));
     expect(screen.getByTestId("discovery-loading")).toBeTruthy();
+    expect(screen.queryByTestId("attention-chart")).toBeNull();
+  });
+
+  it("loads the New coins tab from the injected read-only response", async () => {
+    render(<NarrativeTabs fetchAttention={() => Promise.resolve(resp([]))}
+      fetchOnboarding={() => Promise.resolve({ mode: "shadow", as_of: null, status: "no-ledger",
+        probation_days: 14, exit_band_rank: 120, exit_days: 7, coins: [] })} />);
+    fireEvent.click(screen.getByRole("tab", { name: "New coins" }));
+    await waitFor(() => expect(screen.getByTestId("onboarding-unavailable")).toBeTruthy());
     expect(screen.queryByTestId("attention-chart")).toBeNull();
   });
 

@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+from importlib.resources import files
 from pathlib import Path
+from zoneinfo import TZPATH, ZoneInfo, ZoneInfoNotFoundError
 
 DATA_DIR = Path(__file__).resolve().parents[1]
 QUERIES_PATH = DATA_DIR / "attention_queries.json"
@@ -90,9 +92,13 @@ REDDIT_STREAM_DEFAULTS = {
     # W8c2w (owner Q1 option b): the stream's share of the day's Reddit request budget, a fraction in (0, 1]
     "reddit_stream_budget_share": 0.45,
 }
+# Optional pool and transport settings; the committed query file need not contain them.
+X_POOL_OPTIONAL_DEFAULTS = {"x_account_daily_cap": None, "x_account_rest_days": 0,
+                            "x_connection_style": "plain", "x_identity_enabled": False,
+                            "x_account_identities": {}}
 REDDIT_METHODS = ("reddit_stream", "reddit_web")
 _INT_KEYS = tuple(DEFAULTS)
-DEFAULTS = {**DEFAULTS, **X_DEFAULTS, **REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS}
+DEFAULTS = {**DEFAULTS, **X_DEFAULTS, **REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **X_POOL_OPTIONAL_DEFAULTS}
 X_WINDOW_SYNTAXES = ("since_time", "date")
 LANG_RE = re.compile(r"[a-z]{2,3}")
 X_LABEL_RE = re.compile(r"[a-z0-9_]{1,24}")  # the same opaque labels as `x_pool.LABEL_RE`
@@ -158,6 +164,11 @@ class CollectorConfig:
     reddit_stream_poll_retention_days: int = REDDIT_STREAM_DEFAULTS["reddit_stream_poll_retention_days"]
     reddit_stream_max_pages_per_poll: int = REDDIT_STREAM_DEFAULTS["reddit_stream_max_pages_per_poll"]
     reddit_stream_budget_share: float = REDDIT_STREAM_DEFAULTS["reddit_stream_budget_share"]
+    x_account_daily_cap: int | None = None
+    x_account_rest_days: int = 0
+    x_connection_style: str = "plain"
+    x_identity_enabled: bool = False
+    x_account_identities: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -216,6 +227,136 @@ def _stream_value(key: str, v) -> bool:
     return isinstance(v, int) and not isinstance(v, bool) and v >= 1
 
 
+# Exact, non-alias profiles in the locked curl_cffi 0.16.3 distribution. Startup also checks the installed library.
+_IDENTITY_TARGETS = frozenset({
+    "edge99", "edge101", "chrome99", "chrome100", "chrome101", "chrome104", "chrome107", "chrome110",
+    "chrome116", "chrome119", "chrome120", "chrome123", "chrome124", "chrome131", "chrome133a",
+    "chrome136", "chrome142", "chrome145", "chrome146", "chrome150", "chrome99_android", "chrome131_android",
+    "safari153", "safari155", "safari170", "safari172_ios", "safari180", "safari180_ios", "safari184",
+    "safari184_ios", "safari260", "safari2601", "safari260_ios", "firefox133", "firefox135",
+    "firefox144", "firefox147",
+})
+
+
+def _browser_family(value: str) -> str | None:
+    lower = value.lower()
+    if "edg/" in lower or lower.startswith("edge"):
+        return "edge"
+    if "firefox" in lower:
+        return "firefox"
+    if "chrome" in lower or "chromium" in lower:
+        return "chrome"
+    if "safari" in lower:
+        return "safari"
+    return None
+
+
+def _timezone_countries() -> dict[str, set[str]]:
+    """Use tzdb's country tables, not offset guesses or a one-country-per-zone map."""
+    tables = []
+    for name in ("zone.tab", "zone1970.tab"):
+        for root in TZPATH:
+            path = Path(root) / name
+            if path.is_file():
+                tables.append(path.read_text(encoding="utf-8"))
+                break
+        else:
+            try:
+                tables.append(files("tzdata.zoneinfo").joinpath(name).read_text(encoding="utf-8"))
+            except (ModuleNotFoundError, FileNotFoundError):
+                continue
+    if not tables:
+        raise QueriesError("collector: identity coherence timezone country tables unavailable")
+    countries: dict[str, set[str]] = {}
+    for table in tables:
+        for line in table.splitlines():
+            if line and not line.startswith("#"):
+                codes, _coordinates, zone, *_ = line.split("\t")
+                countries.setdefault(zone, set()).update(codes.split(","))
+    return countries
+
+
+def _identity_coherence(value: dict[str, str], countries: dict[str, set[str]]) -> None:
+    """Reject explicit contradictions only. OS has no geographic implication.
+
+    Country tables are many-to-many. Aliases/neutral zones absent from them are unknown,
+    not mismatches. Only the primary language's explicit alpha-2 region is compared;
+    languages, secondary preferences, offsets and DST never imply residence.
+    Platform evidence is limited to B1's four measured targets and explicit mobile suffixes.
+    A platform-neutral literal UA remains allowed; this is not full browser equivalence.
+    """
+    region = value["region"]
+    if not re.fullmatch(r"[A-Z]{2}", region):
+        raise QueriesError("collector: identity coherence requires alpha-2 region")
+    if value["timezone"] in countries and region not in countries[value["timezone"]]:
+        raise QueriesError("collector: identity coherence timezone/region mismatch")
+    primary = value["accept_language"].split(",", 1)[0].split(";", 1)[0].split("-")
+    # Stop before BCP47 extensions/private use; their subtags are not region claims.
+    for subtag in primary[1:]:
+        if len(subtag) == 1:
+            break
+        if len(subtag) == 2 and subtag.isalpha():
+            if subtag.upper() != region:
+                raise QueriesError("collector: identity coherence language/region mismatch")
+            break
+    target = value["impersonation_target"]
+    expected = {"chrome131": "macos", "safari170": "macos", "firefox133": "macos",
+                "edge101": "windows"}.get(target)
+    if target.endswith("_android"):
+        expected = "android"
+    elif target.endswith("_ios"):
+        expected = "ios"
+    ua = value.get("user_agent", "").lower()
+    platforms = {platform for marker, platform in (
+        ("windows nt", "windows"), ("android", "android"), ("iphone", "ios"), ("ipad", "ios"),
+        ("macintosh", "macos"), ("x11; linux", "linux"),
+    ) if marker in ua}
+    if expected and platforms and platforms != {expected}:
+        raise QueriesError("collector: identity coherence target/UA platform mismatch")
+
+
+def _validate_identity_settings(block: dict) -> None:
+    style, enabled, identities = (block["x_connection_style"], block["x_identity_enabled"],
+                                  block["x_account_identities"])
+    if style not in ("plain", "curl") or not isinstance(enabled, bool) or not isinstance(identities, dict):
+        raise QueriesError("collector: invalid identity settings")
+    if not enabled:
+        return
+    if set(identities) != set(block["x_accounts"]):
+        raise QueriesError("collector: identity labels must match x_accounts")
+    countries = _timezone_countries()
+    effective, targets = set(), set()
+    for value in identities.values():
+        required = {"accept_language", "region", "timezone", "impersonation_target"}
+        if style == "plain":
+            required.add("user_agent")
+        if not isinstance(value, dict) or not required <= set(value) or set(value) - (required | {"user_agent"}):
+            raise QueriesError("collector: invalid identity fields")
+        if any(not isinstance(v, str) or not v or v != v.strip() or not v.isprintable() for v in value.values()):
+            raise QueriesError("collector: invalid identity value")
+        language_range = r"[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*(?:\s*;\s*q=(?:0(?:\.\d{1,3})?|1(?:\.0{1,3})?))?"
+        if not re.fullmatch(rf"{language_range}(?:\s*,\s*{language_range})*", value["accept_language"]):
+            raise QueriesError("collector: invalid identity language")
+        target = value["impersonation_target"]
+        if target not in _IDENTITY_TARGETS:
+            raise QueriesError("collector: invalid impersonation target")
+        if "user_agent" in value and (value["user_agent"].startswith("@")
+                                      or _browser_family(value["user_agent"]) != _browser_family(target)):
+            raise QueriesError("collector: identity browser family mismatch")
+        if target in targets:
+            raise QueriesError("collector: duplicate fallback identity")
+        targets.add(target)
+        try:
+            ZoneInfo(value["timezone"])
+        except (ZoneInfoNotFoundError, ValueError):
+            raise QueriesError("collector: invalid identity timezone") from None
+        _identity_coherence(value, countries)
+        current = value["user_agent"] if style == "plain" else target
+        if current in effective:
+            raise QueriesError("collector: duplicate effective identity")
+        effective.add(current)
+
+
 def validate_config(block) -> CollectorConfig:
     if not isinstance(block, dict):
         raise QueriesError("collector: must be an object")
@@ -225,7 +366,14 @@ def validate_config(block) -> CollectorConfig:
     for key in X_DEFAULTS:
         if key not in block or not _x_value(key, block[key]):
             raise QueriesError(f"collector: {key} is missing or not a valid value")
-    block = {**REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **block}
+    block = {**REDDIT_DEFAULTS, **REDDIT_STREAM_DEFAULTS, **X_POOL_OPTIONAL_DEFAULTS, **block}
+    _validate_identity_settings(block)
+    for key, floor in (("x_account_daily_cap", 1), ("x_account_rest_days", 0)):
+        value = block[key]
+        if key == "x_account_daily_cap" and value is None:
+            continue
+        if type(value) is not int or value < floor:
+            raise QueriesError(f"collector: {key} is not a valid value")
     for key in REDDIT_STREAM_DEFAULTS:
         if not _stream_value(key, block[key]):
             raise QueriesError(f"collector: {key} is not a valid value")
@@ -314,11 +462,66 @@ def load(path: Path | None = None, placed_symbols=None) -> Queries:
     return validate(json.loads(text, object_pairs_hook=_no_duplicate_keys), placed_symbols)
 
 
+# --- T223 O4: the resolver's overlay (bot-written, under the cache root). The owner file always wins. ---
+OVERLAY_NAME = "attention_queries_auto.json"
+OVERLAY_EXTRA_KEYS = ("source", "resolved_at")
+
+
+def overlay_path() -> Path:
+    from api.data import cache
+    return cache.CACHE_ROOT / "attention" / "onboarding" / OVERLAY_NAME
+
+
+def overlay_entry_ok(sym, entry) -> bool:
+    """An automatic Reddit/X entry: a valid symbol, a safe name, `cashtag_only` true, nothing else."""
+    return (isinstance(sym, str) and bool(SYMBOL_RE.fullmatch(sym)) and isinstance(entry, dict)
+            and set(entry) == {"name", "cashtag_only"} and entry["cashtag_only"] is True
+            and isinstance(entry["name"], str) and bool(NAME_RE.fullmatch(entry["name"])))
+
+
+def merge_overlay(q: Queries, overlay, placed) -> tuple[Queries, list[tuple[str, str]]]:
+    """Owner queries plus each valid overlay entry for a PLACED symbol the owner file lacks; never raises.
+    Unplaced overlay entries stay out of `coins` (stream matching and `placed` checks iterate it)."""
+    entries = overlay.get("entries") if isinstance(overlay, dict) else None
+    if not isinstance(entries, dict):
+        return q, []
+    placed, coins, dropped = set(placed or ()), dict(q.coins), []
+    for sym, raw in entries.items():
+        e = {k: v for k, v in raw.items() if k not in OVERLAY_EXTRA_KEYS} if isinstance(raw, dict) else raw
+        if not overlay_entry_ok(sym, e):
+            dropped.append((str(sym)[:24], "invalid entry"))
+        elif sym in coins:
+            dropped.append((sym, "owner entry wins"))
+        elif sym in placed:
+            coins[sym] = dict(e)
+    return Queries(q.config, q.subreddits, q.ambiguous, coins), dropped
+
+
+def load_merged(path: Path | None = None, placed_symbols=None) -> Queries:
+    """The owner file plus the overlay for placed coins; an explicit `path` never merges; `load` stays owner-only.
+    A placed coin with neither an owner nor an overlay entry raises, like `load`."""
+    if path is not None:
+        return load(path, placed_symbols)
+    q = load(None)
+    from api.data.attention import onboarding_store
+    overlay = onboarding_store.read_json(OVERLAY_NAME)
+    q, _ = merge_overlay(q, overlay, placed_symbols if placed_symbols is not None else _current_placed())
+    if placed_symbols is not None:
+        missing = sorted(set(placed_symbols) - set(q.coins))
+        if missing:
+            raise QueriesError(f"coins: {len(missing)} placed coin(s) have no entry: {', '.join(missing[:5])}")
+    return q
+
+
 def placed_symbols(path: Path | None = None) -> list[str]:
     """Every symbol placed in a narrative (read here so api.data never imports api.analytics)."""
     doc = json.loads((path or NARRATIVES_PATH).read_text(encoding="utf-8"))
     syms = {_symbol(c.get("symbol"), "narratives") for n in doc.get("narratives", []) for c in n.get("coins", [])}
     return sorted(syms)
+
+
+def _current_placed() -> list[str]:
+    return placed_symbols()
 
 
 def coin_set(q: Queries, source: str, placed) -> list[str]:

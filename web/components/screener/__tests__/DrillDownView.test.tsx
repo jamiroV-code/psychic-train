@@ -15,6 +15,22 @@ function makeChartView(timeframe: Timeframe): ChartView {
   };
 }
 
+it("shows inclusive UTC daily ranges without a chart and removes a summary-only repair", async () => {
+  const view = { ...makeChartView("4h"), chart: { ...makeChartView("4h").chart, available: false } };
+  const affected = { ...view, daily_data_gap: { missing_days: 2, ranges: [
+    { start: "2026-01-02", end: "2026-01-03" },
+  ] } };
+  const fetchGap = vi.fn(async () => affected);
+  const { rerender } = render(<DrillDownView symbol="BTC" fetchChart={fetchGap} />);
+  expect(await screen.findByText("Daily data gap: 2 missing days")).toBeVisible();
+  expect(screen.getByText("2026-01-02")).toBeVisible();
+  expect(screen.getByText("2026-01-03")).toBeVisible();
+  expect(screen.getByText("Missing date ranges (UTC, inclusive):")).toBeVisible();
+  const fetchRepaired = vi.fn(async () => ({ ...view, daily_data_gap: { missing_days: 0, ranges: [] } }));
+  rerender(<DrillDownView symbol="BTC" fetchChart={fetchRepaired} />);
+  await waitFor(() => expect(screen.queryByText(/Daily data gap:/)).not.toBeInTheDocument());
+});
+
 describe("DrillDownView", () => {
   it("captions the drill-down chart's last bar in Brussels time with its age and a plain stale marker (T34 / S2)", async () => {
     const fetchChart = vi.fn(async (_symbol: string, tf: Timeframe) => {

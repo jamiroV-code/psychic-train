@@ -1,0 +1,35 @@
+{
+  "task": "T222 — BTC Momentum API calculation/model/response/TypeScript contract slice",
+  "snippets": [
+    {
+      "file": "api/analytics/regime/btc_legs.py",
+      "lines": "165-177,180-274,277-303,352-366",
+      "description": "Vote-to-target logic, completed-bar calculator and response assembly.",
+      "content": "_target_for_votes implements the approved score/3 scaling, SMA multiplier and exposure cap; calculate_btc_momentum_signals enforces daily completion, continuity, warm-up, UTC window and target transitions; assembly calculates from BTC bars independently of composite status and attaches the signals field."
+    },
+    {
+      "file": "api/models/regime.py",
+      "lines": "217-253",
+      "description": "Constrained signal event and default-safe response field.",
+      "content": "BtcMomentumSignal constrains kind and validates UTC timestamp and finite positive price; BtcLegChartResponse adds default_factory signals."
+    },
+    {
+      "file": "web/lib/types/btc-legs.ts",
+      "lines": "14,75-95",
+      "description": "TypeScript mirror of the additive signal event and chart response contract.",
+      "content": "The signal kind is the BUY/SELL literal union; each signal carries only kind, timestamp and price, and the chart response includes the signals list."
+    },
+    {
+      "file": "api/tests/analytics/test_btc_legs.py",
+      "lines": "30-142,342-358",
+      "description": "Exact target, daily boundary, transition and composite-isolation behavior.",
+      "content": "Tests assert exact vote targets, warm-up thresholds, same-bar UTC close anchoring, SMA equality, gaps/duplicates, date boundaries, and signal computation when composite data is unavailable."
+    },
+    {
+      "file": "api/tests/routers/test_btc_legs_router.py",
+      "lines": "131-162,203-227",
+      "description": "Response model/TypeScript parity and narrow BTC-only vocabulary exception.",
+      "content": "Contract tests assert exact Pydantic/TypeScript fields and literal kind, reject invalid event values, and preserve the unrelated verdict-word guard outside the BTC API calculator."
+    }
+  ]
+}

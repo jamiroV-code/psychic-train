@@ -2,7 +2,7 @@
 
 import { useLiveClock } from "@/components/screener/LiveProvider";
 import { useVariant } from "@/components/screener/VariantProvider";
-import { freshnessCaption, type ChartFreshnessFields } from "@/lib/chart-freshness";
+import { freshnessCaption, sourceLabel, type ChartFreshnessFields } from "@/lib/chart-freshness";
 import { dateOnlyCaption } from "@/lib/equities-freshness";
 import type { Timeframe } from "@/lib/types/screener";
 
@@ -21,10 +21,19 @@ export function ChartFreshness({ chart, timeframe }: { chart: ChartFreshnessFiel
   const nowMs = useLiveClock();
   const { dateOnlyBars } = useVariant();
   const caption = dateOnlyBars ? dateOnlyCaption(chart, timeframe) : freshnessCaption(chart, nowMs);
-  if (!caption && !chart.stale) return null;
+  const source = sourceLabel(chart.source);
+  if (!caption && !chart.stale && !source) return null;
   return (
     <div data-testid="chart-freshness" className="chart-freshness">
       {caption && <span data-testid="chart-freshness-caption">{caption}</span>}
+      {source && (
+        <>
+          {caption ? " " : ""}
+          <span data-testid="chart-source" className="chart-freshness__source">
+            {source}
+          </span>
+        </>
+      )}
       {chart.stale && (
         <>
           {" "}

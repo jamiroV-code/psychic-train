@@ -1,0 +1,53 @@
+[WebServer] INFO:     Started server process [6620]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:18001 (Press CTRL+C to quit)
+[WebServer] INFO:     127.0.0.1:58289 - "GET /api/health HTTP/1.1" 200 OK
+[WebServer] $ vite build --config vite.islands.config.mjs
+[WebServer] (node:24064) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 
+[WebServer] (!) The public directory feature may not work correctly. outDir C:\Users\jamir\.herdr\worktrees\my_site\wt-daily-data-gap\web\public\islands and publicDir C:/Users/jamir/.herdr/worktrees/my_site/wt-daily-data-gap/web/public are not separate folders.
+[WebServer] 
+[WebServer] $ next dev --port 13100
+[WebServer] (node:34996) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:31192) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:1756) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] INFO:     127.0.0.1:58348 - "GET /api/screener/board?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58348 - "GET /api/screener/BTC/chart?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58348 - "GET /api/screener/board?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58371 - "GET /api/refresh/status HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58372 - "GET /api/layout/crypto HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58370 - "GET /api/screener/board?timeframe=1d HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58369 - "GET /api/regime/btc-legs HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58372 - "GET /api/screener/spaghetti?timeframe=1d HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58370 - "GET /api/screener/spaghetti?timeframe=1d HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58369 - "GET /api/refresh/status HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58371 - "GET /api/layout/crypto HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58370 - "GET /api/regime/btc-legs HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58372 - "GET /api/screener/board?timeframe=1d HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58370 - "GET /api/screener/spaghetti?timeframe=1d HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58372 - "GET /api/screener/spaghetti?timeframe=1d HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58369 - "GET /api/screener/BTC/chart?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58372 - "GET /api/screener/spaghetti?timeframe=15m HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58371 - "GET /api/screener/BTC/chart?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58370 - "GET /api/screener/board?timeframe=15m HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58381 - "GET /api/screener/BTC/chart?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58381 - "GET /api/screener/board?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58397 - "GET /api/refresh/status HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58398 - "GET /api/layout/crypto HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58370 - "GET /api/regime/btc-legs HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58396 - "GET /api/screener/board?timeframe=1d HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58396 - "GET /api/screener/spaghetti?timeframe=1d HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58370 - "GET /api/screener/spaghetti?timeframe=1d HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58396 - "GET /api/screener/BTC/chart?timeframe=4h HTTP/1.1" 200 OK
+[WebServer] INFO:     127.0.0.1:58370 - "GET /api/screener/BTC/chart?timeframe=4h HTTP/1.1" 200 OK
+  ok 1 [chromium] › e2e\daily-data-gap.spec.ts:18:5 › stored daily gaps persist across cache/reload, all widths, and disappear on repair offline (19.1s)
+
+  1 passed (1.0m)

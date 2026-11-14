@@ -32,8 +32,13 @@ MAX_TICKERS = 30
 CAP_MESSAGE = "Equities list is full: 30 tickers maximum. Remove a ticker to add another."
 
 # One read-modify-write at a time (as `watchlist.py`): without it, concurrent
-# adds lose tickers and the cap check races.
-_LOCK = threading.Lock()
+# adds lose tickers and the cap check races. Public reads take the same lock:
+# on Windows `os.replace` fails with PermissionError while another handle has
+# the destination open, so an in-process reader must not overlap the atomic
+# replacement. Re-entrant because mutators load inside their critical section.
+# In-process only: it does not guard other processes, and it is never held
+# across refresh, layout or network callbacks.
+_LOCK = threading.RLock()
 
 
 class TickerLimitError(Exception):
@@ -62,11 +67,12 @@ def normalize_ticker(ticker: str) -> str:
 
 
 def load_tickers() -> list[str]:
-    path = equities_path()
-    if not path.exists():
-        return []
-    raw = json.loads(path.read_text() or "{}")
-    return [t for t in raw.get("tickers", []) if isinstance(t, str)]
+    with _LOCK:
+        path = equities_path()
+        if not path.exists():
+            return []
+        raw = json.loads(path.read_text() or "{}")
+        return [t for t in raw.get("tickers", []) if isinstance(t, str)]
 
 
 def _write(tickers: list[str]) -> None:

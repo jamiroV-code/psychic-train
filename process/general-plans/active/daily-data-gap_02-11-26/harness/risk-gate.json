@@ -1,0 +1,6 @@
+{
+  "riskClass": "public API or external contract changes",
+  "workDescription": "Add nullable daily gap summary to crypto board/drill-down; preserve equities null and stored history.",
+  "approver": "Owner EXECUTE approval in task envelope; implementation self-review below",
+  "mustStopBeforeFinalize": true
+}

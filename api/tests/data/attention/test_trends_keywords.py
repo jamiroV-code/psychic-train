@@ -41,12 +41,16 @@ def _err(doc, placed=None) -> str:
 
 
 def test_shipped_file_validates_against_placed_symbols():
-    m = k.load(placed_symbols=_placed())
-    assert m.warnings == [f"keywords: {s} is not a placed coin" for s in sorted(DISCOVERY_EXTRA | {"PYTH"})]  # T160 extras; T195 PYTH (owner-approved, not placed)
+    m = k.load_merged()
+    placed = _placed()
+    assert placed <= set(m.entries)
     assert m.anchor["term"] == "Bitcoin"
     topics = {s: e["topic"] for s, e in m.entries.items() if "topic" in e}
-    assert topics == ALL_TOPICS  # topic ids come only from the owner (checker runs 21-10-26, 22-10-26; T134, T154)
-    assert len(topics) == 41
+    assert ALL_TOPICS.items() <= topics.items()
+    assert len(topics.values()) == len(set(topics.values()))
+    owner = k.load()
+    checked = k.validate({**owner.entries, "_anchor": owner.anchor, "_ambiguous": list(owner.ambiguous)}, placed & set(owner.entries))
+    assert checked["warnings"] == [f"keywords: {s} is not a placed coin" for s in sorted(set(owner.entries) - placed)]
 
 
 OWNER_PASS_TOPICS = {

@@ -17,10 +17,13 @@ from dataclasses import dataclass, field
 
 from api.data.attention import tradeable_markets
 
-# Closed list for `excluded_coins` / `excluded_counts`. The last three are not exclusions: an IN coin that is not
-# shown (no narrative, only hidden narratives, no usable source until U5), so shown + sum(counts) = universe.
+# Closed list for `excluded_coins` / `excluded_counts`. `unassigned`, `hidden-narrative` and `no-source-data` are not
+# exclusions: an IN coin that is not shown (no narrative, only hidden narratives, no usable source until U5), so
+# shown + sum(counts) = universe. T223: `watching`, `inactive`, `unclassified` come from the onboarding ledger and
+# apply only under `mode == "enforce"`.
 REASONS = ("stablecoin", "wrapped-staked", "commodity-backed", "no-market", "not-tradeable-config", "not-tradeable",
-           "unassigned", "hidden-narrative", "no-source-data")
+           "unassigned", "hidden-narrative", "no-source-data", "watching", "inactive", "unclassified")
+LEDGER_REASONS = ("watching", "inactive", "unclassified")
 CLASS_REASON = {"stablecoin": ("stablecoin", "stablecoin"), "wrapped_staked": ("wrapped-staked", "wrapped or staked"),
                 "commodity_backed": ("commodity-backed", "gold or commodity backed"),
                 "tokenized_fund": ("no-market", "tokenized fund")}
@@ -88,9 +91,29 @@ def classify(symbol: str, rules: dict) -> str:
     return "normal"
 
 
+def ledger_reason(entry: dict, probation_days: int) -> tuple[str, str] | None:
+    """T223: why the onboarding ledger keeps a coin OUT under `enforce`, or None. State first, then the class
+    (the owner's `confirmed_classes` are already merged into the entry by the caller)."""
+    if entry.get("state") == "watching":
+        return ("watching", f"in probation, {entry.get('consecutive_top100', 0)} of {probation_days} days")
+    if entry.get("state") == "inactive":
+        return ("inactive", "left the exit band")
+    cls = entry.get("class")
+    if cls in CLASS_REASON:
+        return CLASS_REASON[cls]
+    if cls != "normal":
+        return ("unclassified", "class not known yet")
+    return None
+
+
 def build(rows: list[dict], rules: dict, venues: dict[str, tradeable_markets.VenueList] | None = None,
-          today=None) -> Universe:
-    """`venues` None: the stored lists, point in time at `today` (None = the UTC date)."""
+          today=None, *, ledger: dict | None = None, mode: str = "shadow", probation_days: int = 14) -> Universe:
+    """`venues` None: the stored lists, point in time at `today` (None = the UTC date).
+
+    T223: with `mode == "enforce"` and a `ledger`, the order is force_include, then the owner class lists and
+    `not_tradeable`, then the ledger (matched by coin `id`; a row without an id is never gated), then the venue
+    check. Ledger exclusions are not counted in the no-market safety share."""
+    gated = (ledger or {}).get("coins") if mode == "enforce" else None
     if venues is None:
         venues = tradeable_markets.load_venues(today, [str(r["symbol"]) for r in rows])
     force = set(rules.get("force_include", []))
@@ -114,6 +137,9 @@ def build(rows: list[dict], rules: dict, venues: dict[str, tradeable_markets.Ven
             out = CLASS_REASON[cls]
         elif s in nt:
             out = ("not-tradeable-config", nt[s])
+        elif gated and isinstance(r.get("id"), str) and isinstance(gated.get(r["id"]), dict) and (
+                why := ledger_reason(gated[r["id"]], probation_days)):
+            out = why
         else:
             checked += 1
             if t.status == "not_tradeable":

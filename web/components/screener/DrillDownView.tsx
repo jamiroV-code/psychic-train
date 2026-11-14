@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ChartFreshness } from "@/components/chart/ChartFreshness";
 import { MiniChart } from "@/components/chart/MiniChart";
+import { DailyDataGapNotice } from "@/components/screener/DailyDataGapNotice";
 import { DeadDataNotice } from "@/components/screener/DeadDataNotice";
 import { useLiveData } from "@/components/screener/LiveProvider";
 import { RsiChart } from "@/components/screener/RsiChart";
@@ -82,6 +83,7 @@ export function DrillDownView({ symbol, onClose, fetchChart = fetchChartView }: 
       </div>
 
       {error && <DeadDataNotice testId="drilldown-error" message={error} />}
+      <DailyDataGapNotice gap={view?.daily_data_gap} showRanges />
       {view?.chart.available ? (
         <>
           <MiniChart price={view.chart.price} sma={view.chart.sma} height={240} timeframe={view.timeframe} />

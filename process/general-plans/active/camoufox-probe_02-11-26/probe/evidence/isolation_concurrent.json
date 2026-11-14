@@ -1,0 +1,145 @@
+{
+  "step": "isolation_concurrent",
+  "started": "2026-11-02T14:08:51.733+00:00",
+  "python": "3.12.14",
+  "camoufox": "0.5.9",
+  "playwright": "1.62.0",
+  "free_ram_mb_start": 1395,
+  "disk_free_gib_start": 27.71,
+  "ram_checks": [
+    {
+      "t": "2026-11-02T14:08:52.433+00:00",
+      "before": "concurrent launch B",
+      "available_mb": 1299,
+      "need_mb": 600
+    },
+    {
+      "t": "2026-11-02T14:09:13.835+00:00",
+      "before": "concurrent launch C",
+      "available_mb": 784,
+      "need_mb": 1400
+    },
+    {
+      "t": "2026-11-02T14:09:23.842+00:00",
+      "before": "second launch on B",
+      "available_mb": 938,
+      "need_mb": 1400
+    }
+  ],
+  "aborted": "available RAM 938 MB < 1400 MB before second launch on B",
+  "memory_both_open_10s": {
+    "n": 29,
+    "rss_mb_mean": 706.0,
+    "private_mb_mean": 627.9,
+    "rss_mb_max": 837.7,
+    "private_mb_max": 785.8,
+    "procs_max": 8
+  },
+  "memory_peak": {
+    "rss_mb": 905.8,
+    "private_mb": 855.5,
+    "procs": 9
+  },
+  "exit_s": 0.02,
+  "survivors": [],
+  "profiles": {
+    "B": {
+      "launch_s": 16.25,
+      "cookies": {
+        "names": [
+          "acct",
+          "auth_token",
+          "ct0"
+        ],
+        "acct": "B",
+        "auth_token_is_FAKE": true,
+        "session_cookie_present": false
+      },
+      "echo": {
+        "cookie_names": [
+          "acct",
+          "auth_token",
+          "ct0"
+        ],
+        "acct": "B",
+        "auth_token_is_FAKE": true,
+        "ct0_is_FAKE": true
+      },
+      "storage": {
+        "probe_acct": "B"
+      },
+      "identity": {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:158.0) Gecko/20100101 Firefox/158.0",
+        "platform": "Linux x86_64",
+        "oscpu": "Linux x86_64",
+        "hardwareConcurrency": 8,
+        "languages": [
+          "en-US",
+          "en"
+        ],
+        "timezone": "HOST_TZ_REDACTED",
+        "screen": {
+          "width": 1920,
+          "height": 1080,
+          "availWidth": 1920,
+          "availHeight": 1080,
+          "colorDepth": 24
+        },
+        "outer": [
+          1920,
+          968
+        ],
+        "inner": [
+          1920,
+          883
+        ],
+        "dpr": 1,
+        "webgl": {
+          "vendor": "Intel",
+          "renderer": "Intel(R) HD Graphics, or similar"
+        },
+        "voices": 0,
+        "fonts": [
+          [
+            "Segoe UI",
+            true
+          ],
+          [
+            "Calibri",
+            true
+          ],
+          [
+            "Helvetica Neue",
+            true
+          ],
+          [
+            "Ubuntu",
+            true
+          ],
+          [
+            "DejaVu Sans",
+            true
+          ],
+          [
+            "Arial",
+            true
+          ]
+        ],
+        "canvas_sha256": "da8444edd4e07eb9e7d18db36249734d5dbca6a4e2aa9c13d56918b786228cfb"
+      },
+      "tree_after_launch": {
+        "t": 1622468.109,
+        "procs": 8,
+        "rss_mb": 839.32421875,
+        "private_mb": 787.1953125
+      }
+    }
+  },
+  "cpu_seconds_tree": 38.92,
+  "external_connections_seen": [],
+  "free_ram_mb_end": 1451,
+  "finished": "2026-11-02T14:09:24.657+00:00",
+  "survivors_at_end": [],
+  "sink_requests": [],
+  "sink_hosts": []
+}

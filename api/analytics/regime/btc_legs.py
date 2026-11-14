@@ -162,13 +162,124 @@ def composite_estimate(series: pd.DataFrame | None) -> CompositeEstimate:
     return CompositeEstimate(**base, threshold=threshold, label=label)
 
 
+def _target_for_votes(
+    votes: int,
+    *,
+    vote_scale: float,
+    max_exposure: float,
+    below_sma: bool,
+    below_ma_scale: float,
+) -> float:
+    """Convert positive momentum votes to a bounded target exposure."""
+    target = min(max_exposure, votes * (1 / 3) * vote_scale)
+    if below_sma:
+        target *= below_ma_scale
+    return min(max_exposure, max(0.0, target))
+
+
+def calculate_btc_momentum_signals(
+    bars: pd.DataFrame,
+    now: pd.Timestamp,
+    *,
+    bars_per_month: int = 21,
+    segment_ends: tuple[int, int, int] = (3, 6, 12),
+    vote_scale: float = 1.73,
+    max_exposure: float = 0.98,
+    sma_length: int = 200,
+    below_ma_scale: float = 0.5,
+) -> list[dict[str, str | float]]:
+    """Return target-transition events on completed, contiguous UTC daily bars."""
+    if (
+        len(segment_ends) != 3
+        or any(not isinstance(n, int) or n <= 0 for n in segment_ends)
+        or not segment_ends[0] < segment_ends[1] < segment_ends[2]
+    ):
+        raise ValueError("segment ends must be three strictly increasing positive integers")
+    monthly = 30 if bars_per_month == 0 else bars_per_month
+    if not isinstance(monthly, int) or monthly < 1 or not isinstance(sma_length, int) or sma_length < 1:
+        raise ValueError("bar and SMA lengths must be positive integers")
+    if not all(math.isfinite(x) for x in (vote_scale, max_exposure, below_ma_scale)):
+        raise ValueError("exposure settings must be finite")
+    if max_exposure < 0 or below_ma_scale < 0:
+        raise ValueError("exposure settings must be nonnegative")
+    lengths = tuple(end * monthly for end in segment_ends)
+    if bars.empty or not {"timestamp", "close"} <= set(bars.columns):
+        return []
+
+    data = bars[["timestamp", "close"]].copy()
+    data["timestamp"] = pd.to_datetime(data["timestamp"], utc=True, errors="coerce")
+    data["close"] = pd.to_numeric(data["close"], errors="coerce")
+    data = data.sort_values("timestamp", kind="stable").reset_index(drop=True)
+    data["_day"] = data["timestamp"].dt.normalize()
+    duplicate = data["_day"].notna() & data["_day"].duplicated(keep=False)
+    start = pd.Timestamp("2006-01-01T00:00:00Z")
+    end = pd.Timestamp("2170-12-31T23:59:00Z")
+    now = freshness.as_utc(now)
+    if now is None:
+        return []
+
+    signals: list[dict[str, str | float]] = []
+    target, prior_day, closes = 0.0, None, []
+    ended = False
+    for pos, (ts, raw_close) in enumerate(data[["timestamp", "close"]].itertuples(index=False, name=None)):
+        day = data["_day"].iloc[pos]
+        if pd.isna(ts):
+            target, prior_day, closes, ended = 0.0, None, [], False
+            continue
+        if pd.isna(day) or duplicate.iloc[pos]:
+            target, prior_day, closes = 0.0, None, []
+            ended = ended or ts >= end
+            continue
+        close = float(raw_close) if pd.notna(raw_close) else math.nan
+        if not math.isfinite(close) or close <= 0:
+            target, prior_day, closes = 0.0, None, []
+            ended = ended or ts >= end
+            continue
+        if prior_day is not None and day - prior_day != pd.Timedelta(days=1):
+            target, closes, ended = 0.0, [], False
+        prior_day = day
+        if ts + pd.Timedelta(days=1) > now:
+            continue
+        closes.append(close)
+        if ended:
+            continue
+        previous_target = target
+        if start <= ts < end:
+            if len(closes) < max(lengths[-1] + 1, sma_length):
+                continue
+            i = len(closes) - 1
+            segments = (
+                closes[i] / closes[i - lengths[0]] - 1,
+                closes[i - lengths[0]] / closes[i - lengths[1]] - 1,
+                closes[i - lengths[1]] / closes[i - lengths[2]] - 1,
+            )
+            votes = sum(segment > 0 for segment in segments)
+            target = _target_for_votes(
+                votes,
+                vote_scale=vote_scale,
+                max_exposure=max_exposure,
+                below_sma=closes[-1] < sum(closes[-sma_length:]) / sma_length,
+                below_ma_scale=below_ma_scale,
+            )
+        elif ts >= end:
+            target, ended = 0.0, True
+        else:
+            continue
+        if target != previous_target:
+            signals.append({
+                "kind": "BUY" if target > previous_target else "SELL",
+                "timestamp": freshness.iso_z(ts),
+                "price": close,
+            })
+    return signals
+
+
 def assemble_btc_leg_chart(inputs: leg_boundary.LegInputs, now: pd.Timestamp) -> BtcLegChartResponse:
     """Pure assembly of the response from one `LegInputs` read."""
     server_time = freshness.iso_z(now)
     variant = inputs.variant
-    btc_df = inputs.btc.df if inputs.btc is not None else None
 
-    if btc_df is None or btc_df.empty:
+    if inputs.btc is None or inputs.btc.df is None or inputs.btc.df.empty:
         return BtcLegChartResponse(
             available=False,
             reason="no BTC 1d bars in the cache",
@@ -178,11 +289,18 @@ def assemble_btc_leg_chart(inputs: leg_boundary.LegInputs, now: pd.Timestamp) ->
             btc=[],
             boundaries=[],
             legs=[],
+            signals=[],
         )
 
-    bars = btc_df.sort_values("timestamp").reset_index(drop=True)
-    btc = [ChartBar(timestamp=freshness.iso_z(t), close=float(c)) for t, c in zip(bars["timestamp"], bars["close"])]
+    bars = inputs.btc.df.copy()
+    bars["timestamp"] = pd.to_datetime(bars["timestamp"], utc=True, errors="coerce")
+    bars = bars.sort_values("timestamp", kind="stable").reset_index(drop=True)
+    btc = [
+        ChartBar(timestamp=freshness.iso_z(t), close=float(c))
+        for t, c in zip(bars["timestamp"], bars["close"])
+    ]
     first_bar, last_bar = bars["timestamp"].iloc[0], bars["timestamp"].iloc[-1]
+    signals = calculate_btc_momentum_signals(bars, now)
 
     composite_ok = bool(getattr(inputs.composite, "available", False))
     confirmed = {c.candidate_date: c for c in inputs.confirmations if c.confirmed}
@@ -192,13 +310,13 @@ def assemble_btc_leg_chart(inputs: leg_boundary.LegInputs, now: pd.Timestamp) ->
             date=_iso_date(c.date),
             z_score=c.z_score,
             confirmed_date=(
-                _iso_date(confirmed[c.date].confirmed_date) if confirmed[c.date].confirmed_date is not None else None
+                _iso_date(confirmed[c.date].confirmed_date)
+                if confirmed[c.date].confirmed_date is not None else None
             ),
         )
         for c in confirmed_candidates
     ]
     legs = build_legs([c.date for c in confirmed_candidates], last_bar)
-
     reason = None if composite_ok else "composite unavailable: no boundaries can be detected"
     current_leg = None
     estimate = None
@@ -244,6 +362,7 @@ def assemble_btc_leg_chart(inputs: leg_boundary.LegInputs, now: pd.Timestamp) ->
         legs=legs,
         current_leg=current_leg,
         estimate=estimate,
+        signals=signals,
     )
 
 

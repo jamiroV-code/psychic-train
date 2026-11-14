@@ -5,9 +5,10 @@ RFC-003/RFC-004 code against them, not invent fields ad hoc later.
 """
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 Timeframe = Literal["15m", "1h", "4h", "1d", "1w"]
 TIMEFRAMES: tuple[Timeframe, ...] = ("15m", "1h", "4h", "1d", "1w")
@@ -69,6 +70,9 @@ class ChartSeries(BaseModel):
     is_partial: bool | None = None
     server_time: str | None = None
     stale: bool = False
+    # Equities only (additive, defaulted): the provider when it is not the primary one, e.g. "hyperliquid" for a
+    # perp used while LSE cannot serve the ticker. None means the page's usual source.
+    source: str | None = None
     # T40 / S5a (additive, defaulted): the RSI series, filled only by the
     # drill-down chart view; board charts keep `[]`. Timestamps end in `Z`.
     rsi: list[RsiPoint] = []
@@ -90,6 +94,18 @@ class GainChip(BaseModel):
     reason: UnavailableReason | None = None
 
 
+class DailyDataGapRange(BaseModel):
+    """Inclusive missing UTC calendar dates."""
+
+    start: date
+    end: date
+
+
+class DailyDataGap(BaseModel):
+    missing_days: int = Field(ge=0)
+    ranges: list[DailyDataGapRange]
+
+
 class CoinPanel(BaseModel):
     symbol: str
     chart: ChartSeries
@@ -99,6 +115,8 @@ class CoinPanel(BaseModel):
     gain_by_timeframe: dict[Timeframe, GainChip] = {}
     # T40 / S5a (additive): RSI of the displayed timeframe.
     rsi: RsiReading = RsiReading()
+    # None means not evaluated (including equities), not checked continuous.
+    daily_data_gap: DailyDataGap | None = None
 
 
 class ScreenerBoardResponse(BaseModel):
@@ -117,6 +135,7 @@ class ChartView(BaseModel):
     symbol: str
     timeframe: Timeframe
     chart: ChartSeries
+    daily_data_gap: DailyDataGap | None = None
 
 
 class SpaghettiLine(BaseModel):

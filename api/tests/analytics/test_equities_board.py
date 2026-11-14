@@ -45,6 +45,9 @@ def test_panel_has_price_sma_and_rsi():
     assert len(panel.chart.sma) == 120 - 59
     assert panel.rsi.value is not None and panel.rsi.as_of == "2026-10-12T00:00:00Z"
     assert panel.chart.rsi == []
+    assert panel.daily_data_gap is None
+    assert equities_board.build_chart_view("AAPL", "1d", now=MON_2130).daily_data_gap is None
+    assert equities_board.build_chart_view("AAPL", "1w", now=MON_2130).daily_data_gap is None
 
 
 def test_server_time_from_clock_and_skew_fields_null(monkeypatch):

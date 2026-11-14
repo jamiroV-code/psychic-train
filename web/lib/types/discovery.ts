@@ -63,7 +63,10 @@ export type DiscoveryExclusionReason =
   | "not-tradeable"
   | "unassigned"
   | "hidden-narrative"
-  | "no-source-data";
+  | "no-source-data"
+  | "watching"
+  | "inactive"
+  | "unclassified";
 
 /** One tracked venue's stored market list; only "ok" proves or rules out a market. */
 export interface DiscoveryVenueList {
@@ -153,6 +156,13 @@ export interface DiscoveryAccountHealth {
   last_used: string | null;
   /** null: never refreshed through `--refresh-cookies`. */
   cookie_age_days: number | null;
+  reads_today?: number | null;
+  /** Absent/null means no per-account limit. */
+  cap?: number | null;
+  rest_until?: string | null;
+  ready?: boolean | null;
+  parse_strikes?: number | null;
+  parse_strike_last_at?: string | null;
 }
 
 /** W8e2 health line, computed by the API; the web only formats it. */
@@ -208,6 +218,41 @@ export interface DiscoveryTrendsWatch {
   days_held: number;
 }
 
+/** One PC stream in the collector box (API `DiscoveryCollectorSource`): null values are unknown, never 0. */
+export interface DiscoveryCollectorSource {
+  /** Discovery source id: xsearch | reddit */
+  id: string;
+  label: string;
+  /** false: the worker never wrote this source's state file */
+  has_state: boolean;
+  last_unit_at: string | null;
+  paused: boolean | null;
+  pause_reason: string | null;
+  pause_until: string | null;
+  stale: boolean | null;
+  budget_used: number | null;
+  effective_budget: number | null;
+  sizing_day?: string | null;
+  capacity_reads?: number | null;
+  need_reads?: number | null;
+  shortfall_reads?: number | null;
+  backlog_reads?: number | null;
+}
+
+/** The attention collector process, read by the API from its heartbeat file; the web only formats it. */
+export interface DiscoveryCollectorStatus {
+  state: "running" | "stopped" | "never_started" | "unknown";
+  reason: "" | "stopped_cleanly" | "heartbeat_stale" | "process_gone" | "no_heartbeat" | "unreadable";
+  started_at: string | null;
+  last_beat: string | null;
+  /** seconds since last_beat, computed by the API */
+  age_s: number | null;
+  mode: "standalone" | "in_api" | null;
+  version: string | null;
+  running_sources: string[];
+  sources: DiscoveryCollectorSource[];
+}
+
 export interface DiscoverySourcesResponse {
   as_of: string;
   universe_size: number;
@@ -219,6 +264,8 @@ export interface DiscoverySourcesResponse {
   sources: DiscoverySourceRow[];
   trends_keyword?: DiscoveryTrendsKeyword | null;
   trends_watch?: DiscoveryTrendsWatch[] | null;
+  /** standalone collector: absent from an older API, then shown as unknown */
+  collector?: DiscoveryCollectorStatus | null;
 }
 
 /** GET /api/narrative/discovery/history: shared by the coin and category payloads. */
@@ -274,3 +321,31 @@ export interface DiscoveryPrice {
 
 /** What the table selected for the chart. */
 export type DiscoverySelection = { kind: "coin"; symbol: string } | { kind: "category"; id: string; name: string };
+
+export interface OnboardingSource {
+  state: "name" | "pending" | "missing" | "none";
+  value: string | null;
+  reason: string;
+}
+
+export interface OnboardingCoin {
+  symbol: string;
+  state: "watching" | "member" | "inactive";
+  days_in_top100: number;
+  class: string;
+  class_source: "owner" | "auto" | "confirmed";
+  class_evidence: Record<string, unknown>;
+  sources: Record<"wikipedia" | "trends" | "reddit_x", OnboardingSource>;
+  pending: { source: string; reason: string; evidence?: Record<string, unknown> }[];
+  proposal: { narrative: string; category: string; as_of?: string | null }[];
+}
+
+export interface OnboardingResponse {
+  mode: "shadow" | "enforce";
+  as_of: string | null;
+  status: "ok" | "no-ledger" | "corrupt";
+  probation_days: number;
+  exit_band_rank: number;
+  exit_days: number;
+  coins: OnboardingCoin[];
+}

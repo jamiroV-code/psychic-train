@@ -125,6 +125,33 @@ def _bars(timeframe: str, count: int, base: float) -> pd.DataFrame:
     )
 
 
+# BTC 1d closes for the signal chart: rise to bar 299 (close 101 + i), then fall
+# 1.5 a bar. The expected events below are the DESIGN of that shape, worked out
+# by hand (three segment votes at 63/126/252 bars, SMA 200, cap 0.98), not
+# produced by the production calculator:
+#   bar 252  first bar with 253 closes; 3 votes, above SMA        -> target 0.98   BUY  @ 353
+#   bar 344  close 332.5 drops under SMA 200 (target x 0.5)       -> target 0.49   SELL
+#   bar 388  segment 1 turns negative: 1 vote, below SMA          -> target 0.288  SELL @ 266.5
+#   bar 476  all three segments negative                          -> target 0      SELL @ 134.5
+# Bar 499 is the still-open current day and never produces an event.
+BTC_SIGNAL_EVENTS = [(252, "BUY", 353.0), (344, "SELL", 332.5), (388, "SELL", 266.5), (476, "SELL", 134.5)]
+
+
+def _btc_signal_bars(df: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:
+    assert len(df) == 500
+    closes = [101.0 + i if i <= 299 else 400.0 - 1.5 * (i - 299) for i in range(500)]
+    df = df.copy()
+    df["open"] = [c - 1 for c in closes]
+    df["high"] = [c + 5 for c in closes]
+    df["low"] = [c - 5 for c in closes]
+    df["close"] = closes
+    events = []
+    for i, kind, price in BTC_SIGNAL_EVENTS:
+        assert df["close"].iloc[i] == price, (i, df["close"].iloc[i], price)
+        events.append({"kind": kind, "timestamp": df["timestamp"].iloc[i].strftime("%Y-%m-%dT%H:%M:%SZ"), "price": price})
+    return df, events
+
+
 def _wave(n: int, base: float, amp: float, period: float) -> list[float]:
     """Deterministic smooth series (no randomness): base + amp*sin(2*pi*i/period) + slow drift."""
     return [base + amp * math.sin(2 * math.pi * i / period) + base * 0.0002 * i for i in range(n)]
@@ -824,6 +851,8 @@ def main() -> int:
         for timeframe, count in BAR_COUNTS.items():
             bars = THIN_BAR_COUNT if symbol == THIN_SYMBOL else count
             df = _bars(timeframe, bars, base=100.0 + offset * 1000)
+            if symbol == "BTC" and timeframe == "1d":
+                df, btc_signals = _btc_signal_bars(df)
             cache.write_ohlcv(symbol, timeframe, df)
             written[symbol][timeframe] = bars
         # `1w` is deliberately NOT seeded. It is derived from `1d` on request,
@@ -862,6 +891,7 @@ def main() -> int:
         "thin_symbol": THIN_SYMBOL,
         "min_bars_required": 60,
         "bars_written": written,
+        "btc_signals": btc_signals,
         "seeded_at": pd.Timestamp.now(tz="UTC").isoformat(),
     }
     MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)

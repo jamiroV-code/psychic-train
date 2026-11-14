@@ -39,12 +39,12 @@ describe("DiscoveryExclusions", () => {
   });
 
   it("gives each reason one plain sentence and keeps unknown reasons readable", () => {
-    const all = ["stablecoin", "wrapped-staked", "commodity-backed", "no-market", "not-tradeable-config", "not-tradeable", "unassigned", "hidden-narrative", "no-source-data", "brand-new"]
+    const all = ["stablecoin", "wrapped-staked", "commodity-backed", "no-market", "not-tradeable-config", "not-tradeable", "unassigned", "hidden-narrative", "no-source-data", "watching", "inactive", "unclassified", "brand-new"]
       .map((reason, i) => ({ symbol: `C${i}`, reason, detail: "" }));
     render(<DiscoveryExclusions coins={all} counts={{}} minCategoryCoins={3} />);
     fireEvent.click(screen.getByTestId("discovery-exclusions-toggle"));
     const groups = screen.getAllByTestId(/^discovery-excluded-/);
-    expect(groups).toHaveLength(10);
+    expect(groups).toHaveLength(13);
     for (const g of groups) {
       const sentence = g.querySelector(".discovery-exclusions__why")?.textContent ?? "";
       expect(sentence).toMatch(/^[A-Z].*\.$/);
@@ -85,5 +85,19 @@ describe("DiscoveryExclusions", () => {
   it("renders nothing when no coin is excluded", () => {
     const { container } = render(<DiscoveryExclusions coins={[]} counts={{}} minCategoryCoins={3} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("names the three onboarding reasons in plain words", () => {
+    const coins = [
+      { symbol: "NEW", reason: "watching", detail: "in probation, 3 of 14 days" },
+      { symbol: "OLD", reason: "inactive", detail: "left the exit band" },
+      { symbol: "UNK", reason: "unclassified", detail: "class not known yet" },
+    ];
+    render(<DiscoveryExclusions coins={coins} counts={{ watching: 1, inactive: 1, unclassified: 1 }} minCategoryCoins={3} />);
+    fireEvent.click(screen.getByTestId("discovery-exclusions-toggle"));
+    expect(screen.getByTestId("discovery-excluded-watching")).toHaveTextContent("1 new coins in probation");
+    expect(screen.getByTestId("discovery-excluded-watching")).toHaveTextContent("NEW (in probation, 3 of 14 days)");
+    expect(screen.getByTestId("discovery-excluded-inactive")).toHaveTextContent("1 coins that left the exit band");
+    expect(screen.getByTestId("discovery-excluded-unclassified")).toHaveTextContent("1 coins not classified yet");
   });
 });

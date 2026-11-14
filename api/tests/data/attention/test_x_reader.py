@@ -642,19 +642,20 @@ def test_retries_counted_as_extra_pages_and_setup_overhead_recorded():
     assert out.pages == 4 and row["pages"] == 4 and row["overhead_requests"] == 5
 
 
-def test_parse_drop_page_with_entries_and_zero_parsed_is_layout_changed():
+def test_parse_drop_page_with_entries_and_zero_parsed_retries():
     _, pool, src = setup()
     pass_canary(pool)
     tws = tweets(20, END - timedelta(minutes=1))
-    out = unit(pool, {"acct_a": reader("acct_a", [page(tws, broken=20)]), "acct_b": reader("acct_b")}, src)
-    assert out.reason == "layout_changed" and pool.stopped_reason() == "layout_changed"
+    out = unit(pool, {"acct_a": reader("acct_a", [page(tws, broken=20)]),
+                      "acct_b": reader("acct_b", [page(tws), None])}, src)
+    assert out.result is not None and pool.stopped_reason() is None
     assert xr.read_pages("SOL", DAY)[0]["entries"] == 20  # the raw page is archived with the dropped entries
     assert xrd.parse_drop(entries=2, parsed=0, threshold=1.0)  # several entries, none parsed
     assert xrd.parse_drop(entries=2, parsed=0, threshold=0.2) and not xrd.parse_drop(entries=1, parsed=0,
                                                                                        threshold=1.0)
 
 
-def test_parse_drop_rate_above_threshold_is_layout_changed():
+def test_parse_drop_rate_above_threshold_retries():
     assert not xrd.parse_drop(entries=20, parsed=16, threshold=0.2)  # 0.2 is not above
     assert xrd.parse_drop(entries=20, parsed=15, threshold=0.2)
     assert not xrd.parse_drop(entries=20, parsed=21, threshold=0.2)
@@ -663,8 +664,8 @@ def test_parse_drop_rate_above_threshold_is_layout_changed():
     pass_canary(pool)
     tws = tweets(40, END - timedelta(minutes=1))
     out = unit(pool, {"acct_a": reader("acct_a", [page(tws[:20], broken=3), page(tws[20:], broken=6)]),
-                      "acct_b": reader("acct_b")}, src)
-    assert out.reason == "layout_changed"  # page 1 drops 3 of 20 (0.15), page 2 drops 6 of 20 (0.3 > 0.2)
+                      "acct_b": reader("acct_b", [page(tws[:20]), page(tws[20:])])}, src)
+    assert out.result is not None and pool.stopped_reason() is None
     assert xr.read_pages("SOL", DAY)[1]["entries"] == 20
 
 
@@ -896,16 +897,16 @@ def test_parse_drop_rate_only_from_ten_entries_zero_parsed_rule_kept():
     assert not xrd.small_page_drop(entries=10, parsed=9) and not xrd.small_page_drop(entries=5, parsed=0)
 
 
-def test_small_page_drop_counts_toward_layout_changed_instead_of_stopping():
+def test_small_page_drop_strikes_then_stops_single_account():
     reset_state()
     clock, pool, src = setup(("acct_a",))
     pass_canary(pool)
-    for i in range(3):
+    for i in range(2):
         tws = tweets(5, END - timedelta(hours=1), 30)
         out = unit(pool, {"acct_a": reader("acct_a", [page(tws, broken=1)])}, src, symbol=f"C{i}")
         clock.advance(minutes=10)
-        if i < 2:
-            assert out.reason == "drift" and out.result is None and pool.stopped_reason() is None
+        if i == 0:
+            assert out.reason == "account_failed" and out.result is None and pool.stopped_reason() is None
     assert out.reason == "layout_changed" and pool.stopped_reason() == "layout_changed"
 
 

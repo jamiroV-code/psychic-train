@@ -1,7 +1,9 @@
-"""Top-100 market-cap snapshots for the D-3 reference universe.
+"""Market-cap snapshots for the D-3 reference universe (top 100) and the onboarding exit band (T223).
 
 One JSON file under the cache root: {"snapshots": [{date, coins}]}, newest last,
 at most KEEP_SNAPSHOTS kept. The path is resolved at call time so tests redirect it.
+Each coin is {id, symbol, market_cap, volume_24h} plus, since T223, optional `rank` (1-based cap position) and
+`name`; snapshots written before T223 have neither and still load unchanged.
 """
 from __future__ import annotations
 

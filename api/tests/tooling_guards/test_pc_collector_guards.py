@@ -39,8 +39,9 @@ def imported(source: str) -> set[str]:
 
 
 def network_offenders(source: str) -> list[str]:
-    """Network-capable imports, and any dynamic import or exec that could hide one."""
-    bad = sorted(m for m in imported(source) if any(m == r or m.startswith(r + ".") for r in NETWORK_ROOTS))
+    """Network-capable imports/dynamic code; static package data access stays pure."""
+    bad = sorted(m for m in imported(source) if m != "importlib.resources"
+                 and any(m == r or m.startswith(r + ".") for r in NETWORK_ROOTS))
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Call):
             bare = isinstance(node.func, ast.Name) and node.func.id in DYNAMIC_BUILTINS
@@ -117,6 +118,9 @@ def test_network_guard_detects_planted_imports():
     for src in planted:
         assert network_offenders(src), src
     assert network_offenders("import json\nimport re\nX = re.compile('a')\nfrom pathlib import Path\nimport os") == []
+    # B1.1 reads tzdb country tables as local package data, never dynamic modules.
+    assert network_offenders("from importlib.resources import files") == []
+    assert network_offenders("from importlib import import_module")
 
 
 def test_no_detection_evasion_in_collector_files():
@@ -197,7 +201,7 @@ def test_no_machine_state_committed():
 # --- W8d1: the X pure core for the X library (SPEC rules 17-20, AC41, AC53, AC55) --------------------------------
 
 X_MODULES = [API_DIR / "data" / "attention" / f for f in
-             ("x_window.py", "x_filters.py", "x_density.py", "x_raw.py", "x_reader.py", "x_pool.py")]
+             ("x_window.py", "x_filters.py", "x_density.py", "x_raw.py", "x_reader.py", "x_pool.py", "x_capacity.py")]
 # The X library, its optional HTTP backend and every network client stay out of the pure core (W8d2 wraps them).
 X_LIBRARY_ROOTS = ("twscrape", "curl_cffi")
 

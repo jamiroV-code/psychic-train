@@ -173,7 +173,7 @@ jobs:
     needs: refresh
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 52
     steps:
       # The branch head, not the trigger sha: it includes what `refresh` just pushed.
       - uses: actions/checkout@v4
@@ -223,6 +223,15 @@ jobs:
           print(f"trends failure-class: {cls} - {r.detail}")
           PY
           exit "$rc"
+
+      # T223: automatic coin onboarding (classify, Wikipedia and Trends names). Its own step and
+      # budget so the Trends step above keeps its time; shadow mode, fixed-token status lines only.
+      - name: Onboard new coins (shadow mode)
+        continue-on-error: true
+        timeout-minutes: 12
+        run: |
+          set -o pipefail
+          uv run --project api --with pytrends==4.9.2 python api/scripts/refresh_attention.py --sources classify,resolve_wiki,resolve_trends 2>&1 | tee "$RUNNER_TEMP/extra-onboarding.log"
 
       - name: Check whether the Reddit credentials exist
         id: redditgate

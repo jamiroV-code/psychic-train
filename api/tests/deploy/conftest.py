@@ -43,12 +43,12 @@ ORIGINAL_WATCHLIST_PATH = watchlist_store.DEFAULT_WATCHLIST_PATH
 
 
 def snapshot_real_data() -> dict[str, tuple[int, int]]:
-    """(size, mtime_ns) for every file under the real cache dir plus the real
-    watchlist. Missing paths simply contribute nothing."""
+    """(size, mtime_ns) for files under the real cache dir and the real watchlist,
+    excluding only the exact live collector heartbeat. Missing paths contribute nothing."""
     listing: dict[str, tuple[int, int]] = {}
     if REAL_CACHE_DIR.exists():
         for p in REAL_CACHE_DIR.rglob("*"):
-            if p.is_file():
+            if p.is_file() and p != REAL_CACHE_DIR / "attention" / "_pc_state" / "collector_heartbeat.json":
                 st = p.stat()
                 listing[str(p)] = (st.st_size, st.st_mtime_ns)
     if REAL_WATCHLIST.exists():

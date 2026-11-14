@@ -46,7 +46,7 @@ from api.data import attention_pc_refresh, equities_refresh, refresh_worker, spo
 from api.routers import attention as attention_router
 from api.routers import discovery as discovery_router
 from api.routers import equities
-from api.routers import baskets, layout, narrative, onchain_activity, pairs, refresh, regime, screener, watchlist
+from api.routers import baskets, layout, narrative, onchain_activity, pairs, refresh, regime, screener, symbols, watchlist
 
 
 @asynccontextmanager
@@ -123,6 +123,7 @@ app.include_router(onchain_activity.router)
 app.include_router(pairs.router)
 app.include_router(refresh.router)
 app.include_router(equities.router)
+app.include_router(symbols.router)
 
 
 @app.get("/api/health")

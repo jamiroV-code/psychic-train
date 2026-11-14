@@ -1,6 +1,7 @@
 """T104 W3: GET /api/narrative/discovery/price, daily closes from the local 1d cache only."""
 from __future__ import annotations
 
+import ipaddress
 import socket
 from datetime import date
 
@@ -32,7 +33,21 @@ def client(isolated_cache, monkeypatch):
         raise AssertionError("handler must not reach the network")
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", boom)
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", boom)
-    monkeypatch.setattr(socket.socket, "connect", boom)
+    real_connect = socket.socket.connect
+
+    def local_only(sock, address, *args, **kwargs):
+        if (isinstance(address, tuple) and len(address) in (2, 4)
+                and isinstance(address[0], str) and type(address[1]) is int
+                and 0 <= address[1] <= 65535
+                and (len(address) == 2 or all(type(v) is int and v >= 0 for v in address[2:]))):
+            try:
+                if ipaddress.ip_address(address[0]).is_loopback:
+                    return real_connect(sock, address, *args, **kwargs)
+            except ValueError:
+                pass
+        return boom()
+
+    monkeypatch.setattr(socket.socket, "connect", local_only)
     return TestClient(app)
 
 

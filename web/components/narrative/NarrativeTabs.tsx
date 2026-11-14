@@ -4,24 +4,27 @@ import { useEffect, useState } from "react";
 import { BasketAttentionChart } from "@/components/narrative/BasketAttentionChart";
 import { BasketTable } from "@/components/narrative/BasketTable";
 import { DiscoveryTab } from "@/components/narrative/DiscoveryTab";
+import { NewCoinsPanel } from "@/components/narrative/NewCoinsPanel";
 import { fetchBasketAttention } from "@/lib/api/attention";
 import type { AttentionResponse, AttentionWindow } from "@/lib/types/attention";
-import type { DiscoveryResponse, DiscoveryWindow } from "@/lib/types/discovery";
+import type { DiscoveryResponse, DiscoveryWindow, OnboardingResponse } from "@/lib/types/discovery";
 
 export interface NarrativeTabsProps {
   fetchAttention?: (window: AttentionWindow) => Promise<AttentionResponse>;
   fetchDiscovery?: (window: DiscoveryWindow) => Promise<DiscoveryResponse>;
+  fetchOnboarding?: () => Promise<OnboardingResponse>;
 }
 
-type TabId = "baskets" | "discovery";
+type TabId = "baskets" | "discovery" | "onboarding";
 
 const TABS: readonly { id: TabId; label: string }[] = [
   { id: "baskets", label: "My baskets" },
   { id: "discovery", label: "Discovery" },
+  { id: "onboarding", label: "New coins" },
 ];
 
-/** /narrative body: My baskets (chart, then ranked table) and Discovery (ranked categories). */
-export function NarrativeTabs({ fetchAttention = fetchBasketAttention, fetchDiscovery }: NarrativeTabsProps) {
+/** /narrative body: baskets, Discovery and read-only onboarding evidence. */
+export function NarrativeTabs({ fetchAttention = fetchBasketAttention, fetchDiscovery, fetchOnboarding }: NarrativeTabsProps) {
   const [tab, setTab] = useState<TabId>("baskets");
   const [window, setWindow] = useState<AttentionWindow>(30);
   const [data, setData] = useState<AttentionResponse | null>(null);
@@ -69,9 +72,13 @@ export function NarrativeTabs({ fetchAttention = fetchBasketAttention, fetchDisc
           <BasketAttentionChart data={data} window={window} onWindowChange={setWindow} error={error} onRetry={() => setAttempt((n) => n + 1)} />
           {data && <BasketTable baskets={data.baskets} />}
         </div>
-      ) : (
+      ) : tab === "discovery" ? (
         <div role="tabpanel" id="narrative-panel-discovery" aria-labelledby="narrative-tab-discovery">
           <DiscoveryTab fetchDiscovery={fetchDiscovery} />
+        </div>
+      ) : (
+        <div role="tabpanel" id="narrative-panel-onboarding" aria-labelledby="narrative-tab-onboarding">
+          <NewCoinsPanel fetchOnboarding={fetchOnboarding} />
         </div>
       )}
     </div>

@@ -215,26 +215,31 @@ def parse_candles(payload) -> pd.DataFrame:
 # --- cache -------------------------------------------------------------------
 
 
-def equity_cache_dir(symbol: str) -> Path:
+CACHE_DIR = "equities"
+
+
+def equity_cache_dir(symbol: str, root: str = CACHE_DIR) -> Path:
     # cache.CACHE_ROOT is read at call time so `isolated_cache` redirects it.
-    return cache.CACHE_ROOT / "equities" / symbol
+    # `root` lets the Hyperliquid fallback keep its own bars beside, never inside, the LSE ones.
+    return cache.CACHE_ROOT / root / symbol
 
 
-def equity_parquet_path(symbol: str, timeframe: str) -> Path:
-    return equity_cache_dir(symbol) / f"{timeframe}.parquet"
+def equity_parquet_path(symbol: str, timeframe: str, root: str = CACHE_DIR) -> Path:
+    return equity_cache_dir(symbol, root) / f"{timeframe}.parquet"
 
 
-def _sidecar_path(symbol: str, timeframe: str) -> Path:
-    return equity_cache_dir(symbol) / f"{timeframe}.meta.json"
+def _sidecar_path(symbol: str, timeframe: str, root: str = CACHE_DIR) -> Path:
+    return equity_cache_dir(symbol, root) / f"{timeframe}.meta.json"
 
 
-def _write_cache(symbol: str, timeframe: str, df: pd.DataFrame, fetched_at: pd.Timestamp) -> None:
-    path = equity_parquet_path(symbol, timeframe)
+def _write_cache(symbol: str, timeframe: str, df: pd.DataFrame, fetched_at: pd.Timestamp,
+                 root: str = CACHE_DIR, attrs: dict | None = None) -> None:
+    path = equity_parquet_path(symbol, timeframe, root)
     path.parent.mkdir(parents=True, exist_ok=True)
     tagged = df.copy()
-    tagged.attrs = dict(PARQUET_ATTRS)
+    tagged.attrs = dict(PARQUET_ATTRS if attrs is None else attrs)
     cache._atomic_to_parquet(tagged, path)
-    sidecar = _sidecar_path(symbol, timeframe)
+    sidecar = _sidecar_path(symbol, timeframe, root)
     fd, tmp = tempfile.mkstemp(dir=sidecar.parent, prefix=f".{sidecar.name}.", suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as fh:
@@ -250,8 +255,8 @@ def _write_cache(symbol: str, timeframe: str, df: pd.DataFrame, fetched_at: pd.T
         raise
 
 
-def _read_cache(symbol: str, timeframe: str) -> pd.DataFrame | None:
-    path = equity_parquet_path(symbol, timeframe)
+def _read_cache(symbol: str, timeframe: str, root: str = CACHE_DIR) -> pd.DataFrame | None:
+    path = equity_parquet_path(symbol, timeframe, root)
     if not path.exists():
         return None
     try:
@@ -262,9 +267,9 @@ def _read_cache(symbol: str, timeframe: str) -> pd.DataFrame | None:
     return df[OHLCV_COLUMNS]
 
 
-def _fetched_at(symbol: str, timeframe: str) -> pd.Timestamp | None:
+def _fetched_at(symbol: str, timeframe: str, root: str = CACHE_DIR) -> pd.Timestamp | None:
     try:
-        meta = json.loads(_sidecar_path(symbol, timeframe).read_text())
+        meta = json.loads(_sidecar_path(symbol, timeframe, root).read_text())
         return pd.Timestamp(meta["fetched_at"]).tz_convert("UTC")
     except Exception:
         return None

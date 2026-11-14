@@ -13,7 +13,24 @@ import type { ChartSeries } from "@/lib/types/screener";
  * Age is measured from the bar's open in both cases.
  */
 
-export type ChartFreshnessFields = Pick<ChartSeries, "last_bar_ts" | "is_partial" | "server_time" | "stale">;
+export type ChartFreshnessFields = Pick<ChartSeries, "last_bar_ts" | "is_partial" | "server_time" | "stale"> & {
+  source?: ChartSeries["source"];
+};
+
+const SOURCE_LABELS: Record<string, string> = {
+  hyperliquid: "Source: Hyperliquid perp (tracks the price, trades 24/7)",
+  ecb: "Source: reconstructed from ECB reference rates (close only, differs from the ICE close by about 0.4%)",
+  gate: "Source: Gate.io spot (Hyperliquid does not list this coin)",
+  mexc: "Source: MEXC spot (Hyperliquid does not list this coin)",
+  kucoin: "Source: KuCoin spot (Hyperliquid does not list this coin)",
+  bitfinex: "Source: Bitfinex spot, USD quote (Hyperliquid does not list this coin)",
+  bigone: "Source: BigONE spot (Hyperliquid does not list this coin)",
+};
+
+/** The caption naming a fallback provider, or null for the page's usual source. */
+export function sourceLabel(source: string | null | undefined): string | null {
+  return source ? (SOURCE_LABELS[source] ?? `Source: ${source}`) : null;
+}
 
 /** `<1 min`, `N min` (under 120 min), `N h` (under 48 h), else `N d`. */
 export function formatAge(seconds: number): string {

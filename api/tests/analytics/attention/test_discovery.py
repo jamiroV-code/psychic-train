@@ -690,3 +690,30 @@ def test_discovery_does_not_import_the_watch_list_or_sources():
     names = {a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names}
     assert not any("trends_runs" in m or m.endswith(".sources") for m in mods)
     assert "trends_runs" not in names and "sources" not in names
+
+
+def test_enforce_ledger_reasons_count_in_the_legacy_exclusion_sum(isolated_cache, tmp_path, monkeypatch):
+    """T223 O2: watching / inactive / unclassified are exclusions: counted per reason and in `exclusion_list`."""
+    from api.data.attention import onboarding_settings, onboarding_store
+    world(tmp_path, monkeypatch, {"A": 5e7, "W": 5e7, "I": 5e7, "U": 5e7}, cats={"ai": ["A", "W", "I", "U"]})
+    for s in ("A", "W", "I", "U"):
+        gain(s)
+    shadow = disc.build_discovery(30, today=TODAY)
+    assert shadow.shown_size == 4 and shadow.excluded_counts["watching"] == 0
+    raw = json.loads(onboarding_settings.SETTINGS_PATH.read_text())
+    p = tmp_path / "onb.json"
+    p.write_text(json.dumps({**raw, "mode": "enforce"}))
+    monkeypatch.setattr(onboarding_settings, "SETTINGS_PATH", p)
+    base = {"first_seen": "2026-10-01", "last_in_top100": "2026-10-15", "last_in_top120": "2026-10-15",
+            "consecutive_top100": 4, "consecutive_outside120": 0, "class_evidence": {}, "class_source": "auto",
+            "seeded": False, "updated": "2026-10-15"}
+    onboarding_store.write_ledger({"last_advanced_date": "2026-10-15", "seeded_at": None, "coins": {
+        "w": {**base, "symbol": "W", "state": "watching", "class": "normal"},
+        "i": {**base, "symbol": "I", "state": "inactive", "class": "normal"},
+        "u": {**base, "symbol": "U", "state": "member", "class": "unknown"}}})
+    res = disc.build_discovery(30, today=TODAY)
+    assert res.shown_size == 1
+    assert (res.excluded_counts["watching"], res.excluded_counts["inactive"], res.excluded_counts["unclassified"]) == (
+        1, 1, 1)
+    assert res.excluded.exclusion_list == 3
+    assert res.shown_size + sum(res.excluded_counts.values()) == res.universe_size

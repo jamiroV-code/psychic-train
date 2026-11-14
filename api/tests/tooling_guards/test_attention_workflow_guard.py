@@ -118,7 +118,7 @@ def test_extra_job_runs_after_core_even_when_it_is_red() -> None:
     job = _doc()["jobs"]["refresh-extra"]
     assert job["needs"] == "refresh"
     assert job["if"] == "${{ !cancelled() }}"
-    assert job["timeout-minutes"] == 40
+    assert job["timeout-minutes"] == 52
     assert "needs" not in _doc()["jobs"]["refresh"]
     assert job["steps"][0]["with"]["ref"] == "${{ github.ref_name }}"  # latest main, with the core push
 
@@ -194,6 +194,14 @@ def _trends_step() -> dict:
     steps = [s for s in _steps("refresh-extra") if "--sources trends " in s.get("run", "")]
     assert len(steps) == 1
     return steps[0]
+
+
+def test_onboarding_step_is_isolated_bounded_and_after_trends() -> None:
+    steps = _steps("refresh-extra")
+    onboard = [s for s in steps if "--sources classify,resolve_wiki,resolve_trends" in s.get("run", "")]
+    assert len(onboard) == 1 and onboard[0]["continue-on-error"] is True and onboard[0]["timeout-minutes"] == 12
+    assert "pytrends==4.9.2" in onboard[0]["run"] and "pipefail" in onboard[0]["run"]
+    assert steps.index(_trends_step()) < steps.index(onboard[0])
 
 
 def test_trends_step_pins_pytrends_exactly_without_touching_pyproject() -> None:

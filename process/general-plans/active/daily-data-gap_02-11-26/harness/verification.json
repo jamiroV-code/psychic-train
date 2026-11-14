@@ -1,0 +1,40 @@
+{
+  "steps": [
+    {
+      "step": "Bounded UTC calendar boundaries and invalid input",
+      "command": "uv run --project api pytest api/tests/analytics/test_daily_data_gap.py api/tests/routers/test_screener_daily_data_gap.py api/tests/routers/test_screener_no_verdict_contract.py api/tests/data/test_ccxt_tail_fetch.py api/tests/analytics/test_equities_board.py -q",
+      "result": "FAIL",
+      "notes": "Pure/retention/contract cases passed in initial run; fixture failures corrected and 23 affected cases passed; final nested schema assertion passed separately. See report for initial failed gate, not claiming clean original consolidated command."
+    },
+    {
+      "step": "Corrected backend fixtures and equities regressions",
+      "command": "uv run --frozen --project api pytest api/tests/routers/test_screener_daily_data_gap.py api/tests/analytics/test_equities_board.py -q",
+      "result": "PASS",
+      "notes": "23 passed; final added nullable nested-schema assertion separately passed (1 test)."
+    },
+    {
+      "step": "Full frontend",
+      "command": "pnpm test -- --maxWorkers=1 --minWorkers=1",
+      "result": "PASS",
+      "notes": "604 tests in65 files; final tsc exit0."
+    },
+    {
+      "step": "Real guarded API smoke",
+      "command": "D18OfflineSmoke plus recorded Bun fetch/real cache writer repair sequence",
+      "result": "PASS",
+      "notes": "evidence/offline-api-smoke.json; provider attempts0, parquet bytes unchanged."
+    },
+    {
+      "step": "Initial real seeded browser attempt (historical)",
+      "command": "pnpm exec playwright test e2e/daily-data-gap.spec.ts --project=chromium --workers=1",
+      "result": "FAIL",
+      "notes": "Initial navigation timed out180s; acceptance was rejected at that point. See subsequent owner-authorized passing run."
+    },
+    {
+      "step": "Owner-authorized fully seeded real API/Next/Edge browser acceptance",
+      "command": "pnpm exec playwright test e2e/daily-data-gap.spec.ts --project=chromium --workers=1 --output=C:/Users/jamir/AppData/Local/Temp/d18-e2e-20261102-resume-08-browser",
+      "result": "PASS",
+      "notes": "1 passed, 19.1s scenario; evidence recorded2026-11-02T01:01:25Z. Gap/cache/reload/timeframe/repair/restore and unchanged intraday chart data passed. Four screenshots retained and inspected. Empty browser-provider-attempts.jsonl proves zero actual provider attempts. Owner approved allowing unused generic HTTP allocations while retaining ccxt construction, actual HTTP sends and external socket guards."
+    }
+  ]
+}

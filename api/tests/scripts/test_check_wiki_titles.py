@@ -16,7 +16,7 @@ DATA = Path(wikipedia.__file__).parents[1]
 CANDIDATES = DATA / "wiki_articles_candidates.json"
 MAPPED = DATA / "wiki_articles.json"
 
-GOOD = {"type": "standard", "description": "Layer 1 blockchain", "extract": "Sui is a decentralized network."}
+GOOD = {"type": "standard", "title": "Sui_(blockchain)", "description": "Layer 1 blockchain", "extract": "Sui is a decentralized network."}
 
 
 def _client(handler) -> httpx.Client:
@@ -48,18 +48,18 @@ def test_404_fails():
 
 
 def test_off_topic_200_fails():
-    body = {"type": "standard", "description": "Species of bird", "extract": "A small bird found in Asia."}
+    body = {"type": "standard", "title": "Bird", "description": "Species of bird", "extract": "A small bird found in Asia."}
     res, _ = _run({"X": "Bird"}, lambda r: httpx.Response(200, json=body))
     assert res[0].verdict == "FAIL" and "crypto" in res[0].reason
 
 
-def test_redirect_followed():
+def test_redirect_to_other_canonical_title_is_refused():
     def h(r):
         if r.url.path.endswith("/Old"):
             return httpx.Response(302, headers={"location": "https://en.wikipedia.org/api/rest_v1/page/summary/New"})
-        return httpx.Response(200, json=GOOD)
+        return httpx.Response(200, json={**GOOD, "title": "New"})
     res, _ = _run({"X": "Old"}, h)
-    assert res[0].verdict == "PASS" and res[0].status == 200
+    assert res[0].verdict == "FAIL" and "redirected" in res[0].reason and res[0].status == 200
 
 
 def test_network_error_reported_not_raised():
@@ -72,7 +72,7 @@ def test_network_error_reported_not_raised():
 
 def test_json_block_only_pass_entries():
     def h(r):
-        return httpx.Response(200, json=GOOD) if r.url.path.endswith("/Good") else httpx.Response(404)
+        return httpx.Response(200, json={**GOOD, "title": "Good"}) if r.url.path.endswith("/Good") else httpx.Response(404)
     _, text = _run({"A": "Good", "B": "Bad"}, h)
     block = json.loads(text[text.index("{\n") if "{\n" in text else text.rindex("{"):])
     assert block == {"A": "Good"}
@@ -104,6 +104,12 @@ def test_no_network_in_main_with_empty_file(tmp_path):
     f = tmp_path / "m.json"
     f.write_text("{}")
     assert c.main(["--file", str(f)]) == 0
+
+
+def test_missing_canonical_title_is_not_identity_evidence():
+    body = {k: v for k, v in GOOD.items() if k != "title"}
+    result, _ = _run({"SUI": "Sui_(blockchain)"}, lambda r: httpx.Response(200, json=body))
+    assert result[0].verdict == "FAIL"
 
 
 # --- candidates file ---

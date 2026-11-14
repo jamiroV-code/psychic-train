@@ -1,0 +1,34 @@
+{
+  "snippets": [
+    {
+      "file": "api/models/screener.py",
+      "lines": "94-116,129-135",
+      "description": "Date-only nested ranges and default-null parent fields",
+      "content": "class DailyDataGapRange(BaseModel): start: date; end: date\nclass DailyDataGap(BaseModel): missing_days: int = Field(ge=0); ranges: list[DailyDataGapRange]\ndaily_data_gap: DailyDataGap | None = None"
+    },
+    {
+      "file": "api/analytics/screener_board.py",
+      "lines": "190,233-237",
+      "description": "Use existing full daily frame or one local cache read; no new adapter call",
+      "content": "daily_data_gap=summarize_daily_data_gap(dfs_by_tf[\"1d\"])\ndaily = display.df if timeframe == \"1d\" else daily_ref if timeframe == \"1w\" else cache.read_ohlcv(symbol, \"1d\")"
+    },
+    {
+      "file": "web/lib/types/screener.ts",
+      "lines": "66-84,99-104",
+      "description": "Mirrored UTC date-only nested types and optional nullable fields",
+      "content": "daily_data_gap?: DailyDataGap | null;"
+    },
+    {
+      "file": "web/components/screener/CoinPanel.tsx",
+      "lines": "72-74",
+      "description": "Notice outside chart availability branch",
+      "content": "<DailyDataGapNotice gap={panel.daily_data_gap} />"
+    },
+    {
+      "file": "web/components/screener/DrillDownView.tsx",
+      "lines": "86-87",
+      "description": "Drill-down UTC ranges outside availability branch",
+      "content": "<DailyDataGapNotice gap={view?.daily_data_gap} showRanges />"
+    }
+  ]
+}

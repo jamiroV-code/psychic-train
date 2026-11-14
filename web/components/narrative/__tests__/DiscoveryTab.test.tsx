@@ -41,7 +41,7 @@ const resp = (over: Partial<DiscoveryResponse> = {}): DiscoveryResponse => ({
   universe_size: 90,
   eligible_size: 60,
   shown_size: 50,
-  excluded_counts: { "no-source-data": 19, stablecoin: 16, "no-market": 7, unassigned: 4 },
+  excluded_counts: { "no-source-data": 19, stablecoin: 16, "no-market": 7, unassigned: 4, watching: 0, inactive: 0, unclassified: 0 },
   excluded_coins: [
     { symbol: "USDT", reason: "stablecoin", detail: "stablecoin" },
     { symbol: "BUIDL", reason: "no-market", detail: "tokenized fund" },

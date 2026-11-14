@@ -59,3 +59,17 @@ describe("CoinPanel RSI row and actions", () => {
     expect(screen.getByRole("button", { name: "Do it" })).toBeInTheDocument();
   });
 });
+
+it("discloses daily gaps without a chart and removes summary-only repairs", () => {
+  const original = panel("BTC", VALUE, false);
+  const affected = { ...original, daily_data_gap: {
+    missing_days: 2, ranges: [{ start: "2026-01-02", end: "2026-01-03" }],
+  } };
+  const { rerender } = render(<CoinPanel panel={affected} timeframe="15m" />);
+  expect(screen.getByText("Daily data gap: 2 missing days")).toBeVisible();
+  expect(screen.getByText(/Indicators using daily history may span/)).toBeVisible();
+  rerender(<CoinPanel panel={{ ...affected, daily_data_gap: { missing_days: 0, ranges: [] } }} timeframe="15m" />);
+  expect(screen.queryByText(/Daily data gap:/)).not.toBeInTheDocument();
+  rerender(<CoinPanel panel={original} timeframe="1w" />);
+  expect(screen.queryByText(/Daily data gap:/)).not.toBeInTheDocument();
+});

@@ -12,6 +12,9 @@ data, else the first); X in rotation mode is gated by `x_rotation_points` stored
 W8e2: optional worker health is read from atomic state/completeness snapshots only. Collection-day counts
 are distinct coin-days, excluding canaries, pages and account retries. The text separately labels the target
 UTC day. Older files without attempt or scheduling evidence report unknown, never inferred zero.
+
+Standalone collector: `collector` reads the collector's heartbeat file (`collector_heartbeat.status`) and repeats
+each PC stream's health fields (X search, Reddit), also for a parked source; no worker state stays unknown.
 """
 from __future__ import annotations
 
@@ -31,13 +34,13 @@ from api.analytics.attention.discovery import (EXCHANGE_SERIES, FALLBACK_SERIES,
 from api.analytics.attention import narratives
 from api.analytics.attention.universe import load_universe_rows
 from api.data import cache
-from api.data.attention import (pc_pace, registry, store, trends_keywords, trends_runs, universe_store, web_queries,
-                                x_pool)
+from api.data.attention import (collector_heartbeat, pc_pace, registry, store, trends_keywords, trends_runs,
+                                universe_store, web_queries, x_pool)
 from api.data.attention import pc_adapter as pa
 from api.data.attention.types import MIN_HISTORY_DAYS
-from api.models.discovery import (DiscoveryAccountHealth, DiscoveryKeywordGap, DiscoverySourceHealth,
-                                  DiscoverySourceRow, DiscoverySourcesResponse, DiscoveryTrendsKeyword,
-                                  DiscoveryTrendsWatch)
+from api.models.discovery import (DiscoveryAccountHealth, DiscoveryCollectorSource, DiscoveryCollectorStatus,
+                                  DiscoveryKeywordGap, DiscoverySourceHealth, DiscoverySourceRow,
+                                  DiscoverySourcesResponse, DiscoveryTrendsKeyword, DiscoveryTrendsWatch)
 
 LABELS = {
     "wikipedia": "Wikipedia pageviews", "trends": "Google Trends", "reddit": "Reddit", "xsearch": "X search",
@@ -56,6 +59,7 @@ def clear_cache() -> None:
 
 
 PC_STORES = frozenset({"xsearch_web", "reddit_web"})
+COLLECTOR_SOURCES = (("xsearch", "xsearch_web"), ("reddit", "reddit_web"))   # (Discovery id, PC stream store)
 
 
 def _json_file(path: Path) -> dict | None:
@@ -91,7 +95,7 @@ def _accounts(now: datetime, health: DiscoverySourceHealth) -> None:
     if not path.exists():
         return
     try:
-        pool = x_pool.XPool(list(cfg.x_accounts), clock=lambda: now)
+        pool = x_pool.from_config(cfg, clock=lambda: now)
         snapshot = pool.health()
     except x_pool.XPoolStateError:
         health.paused, health.pause_reason, health.pause_until = True, "state_error", None
@@ -218,6 +222,33 @@ def _health(store_id: str, day: date, now: datetime) -> DiscoverySourceHealth | 
     return h
 
 
+def _collector_status(rows: list[DiscoverySourceRow], day: date, now: datetime) -> DiscoveryCollectorStatus:
+    """The collector box: the heartbeat's state and each PC stream's health (reused from its row when computed)."""
+    beat = collector_heartbeat.status(now)
+    known = {r.impl: r.health for r in rows if r.impl in PC_STORES}
+    sources = []
+    for sid, store_id in COLLECTOR_SOURCES:
+        h = known[store_id] if store_id in known else _health(store_id, day, now)
+        fields = {} if h is None else {
+            "last_unit_at": h.last_unit_at, "paused": h.paused, "pause_reason": h.pause_reason,
+            "pause_until": h.pause_until, "stale": h.stale, "budget_used": h.budget_used,
+            "effective_budget": h.effective_budget}
+        if sid == "xsearch":
+            schedule = _json_file(pc_pace.state_path(store_id).with_name(f"{store_id}_health.json")) or {}
+            keys = ("capacity_reads", "need_reads", "shortfall_reads", "backlog_reads")
+            # Only today's scheduling evidence describes today's capacity; stale/malformed is unknown.
+            observed = _timestamp(schedule.get("observed_at"))
+            target = (now.date() - timedelta(days=1)).isoformat()
+            if (observed and observed.date() == now.date() and schedule.get("sizing_day") == target
+                    and all(type(schedule.get(k)) is int and schedule[k] >= 0 for k in keys)):
+                fields.update({k: schedule[k] for k in keys})
+                fields["sizing_day"] = target
+        sources.append(DiscoveryCollectorSource(id=sid, label=LABELS[sid], has_state=h is not None, **fields))
+    return DiscoveryCollectorStatus(state=beat["state"], reason=beat["reason"], started_at=beat["started_at"],
+                                    last_beat=beat["last_beat"], age_s=beat["age_s"], mode=beat["mode"],
+                                    version=beat["version"], running_sources=beat["sources"], sources=sources)
+
+
 def _scan(source: str, symbol: str) -> tuple[int, date | None]:
     """(stored days, newest date) of one file; (0, None) when missing or unreadable."""
     path = store.store_path(source, symbol)
@@ -293,7 +324,7 @@ def _narratives_row() -> DiscoverySourceRow:
 
 def _trends_keyword(eligible: list[str]) -> DiscoveryTrendsKeyword:
     """Read from the keyword file with the runner's own rule (`keyword_status`), so the two cannot disagree."""
-    km, _ = trends_keywords.safe_load()
+    km, _ = trends_keywords.safe_load_merged()
     cov = trends_keywords.coverage(km, eligible)
     return DiscoveryTrendsKeyword(eligible_size=cov.eligible, with_keyword=cov.with_keyword,
                                   missing=[DiscoveryKeywordGap(symbol=s, detail=st) for s, st in cov.missing])
@@ -365,7 +396,11 @@ def build_sources(today: date, *, probe_path: Path | None = None, universe_path:
         out.append(row(m, "exchange-member", cfg["exchange_sub_weights"].get(m), *members[m]))
     fb = row(FALLBACK_SERIES, "fallback", None, *fallback)
     out.append(fb.model_copy(update={"label": COVERAGE_ONLY_LABEL}) if coverage_only else fb)
-    out.append(_helper("universe", universe_store.read_latest(), "coins", "top-100 snapshot"))
+    snap = universe_store.read_latest()
+    if snap and isinstance(snap.get("coins"), list):   # T223: the 120-row snapshot still reports the top 100
+        snap = {**snap, "coins": [r for r in snap["coins"]
+                                  if not (isinstance(r, dict) and isinstance(r.get("rank"), int) and r["rank"] > 100)]}
+    out.append(_helper("universe", snap, "coins", "top-100 snapshot"))
     out.append(_narratives_row())
 
     weighted = [r for r in out if r.kind == "weighted" and (r.weight or 0) > 0]
@@ -375,4 +410,5 @@ def build_sources(today: date, *, probe_path: Path | None = None, universe_path:
         total_sources=len(weighted), live_weight=sum(r.weight or 0 for r in live),
         newest=max((r.newest for r in live if r.newest), default=None), sources=out,
         trends_keyword=_trends_keyword(eligible),
-        trends_watch=[DiscoveryTrendsWatch(**w) for w in trends_runs.watch_list(today)])
+        trends_watch=[DiscoveryTrendsWatch(**w) for w in trends_runs.watch_list(today)],
+        collector=_collector_status(out, end, now))

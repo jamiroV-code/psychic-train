@@ -1,0 +1,103 @@
+{
+  "step": "same_profile_twice",
+  "started": "2026-11-02T14:09:55.324+00:00",
+  "python": "3.12.14",
+  "camoufox": "0.5.9",
+  "playwright": "1.62.0",
+  "free_ram_mb_start": 1597,
+  "disk_free_gib_start": 27.7,
+  "ram_checks": [
+    {
+      "t": "2026-11-02T14:09:55.352+00:00",
+      "before": "launch B",
+      "available_mb": 1597,
+      "need_mb": 600
+    },
+    {
+      "t": "2026-11-02T14:10:20.014+00:00",
+      "before": "second Camoufox on B",
+      "available_mb": 1050,
+      "need_mb": 900
+    }
+  ],
+  "launches": [
+    {
+      "label": "B-hold",
+      "t": "2026-11-02T14:10:20.004+00:00",
+      "launch_s": 24.53,
+      "first_page_s": 0.12
+    }
+  ],
+  "error": "TimeoutExpired(['C:\\\\Users\\\\jamir\\\\camoufox-probe\\\\venv\\\\Scripts\\\\python.exe', '-c', \"import json,sys\\nsys.path.insert(0, r'C:\\\\Users\\\\jamir\\\\.herdr\\\\worktrees\\\\my_site\\\\wt-camoufox-probe\\\\process\\\\general-plans\\\\active\\\\camoufox-probe_02-11-26\\\\probe')\\nimport camoufox_probe as P\\nfrom camoufox.sync_api import Camoufox\\ntry:\\n    with Camoufox(**P.launch_kwargs(P.PROFILES / 'B', os='linux')) as c:\\n        print(json.dumps({'rejected': False}))\\nexcept Exception as e:\\n    print(json.dumps({'rejected': True, 'error': str(e)[:1500]}))\\n\"], 180)",
+  "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\jamir\\.herdr\\worktrees\\my_site\\wt-camoufox-probe\\process\\general-plans\\active\\camoufox-probe_02-11-26\\probe\\camoufox_probe.py\", line 833, in main\n    STEPS[args.step](result, mon)\n  File \"C:\\Users\\jamir\\.herdr\\worktrees\\my_site\\wt-camoufox-probe\\process\\general-plans\\active\\camoufox-probe_02-11-26\\probe\\camoufox_probe.py\", line 612, in step_same_profile_twice\n    proc = subprocess.run([sys.executable, \"-c\", code], capture_output=True, text=True, timeout=180)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\jamir\\AppData\\Roaming\\uv\\python\\cpython-3.12.14-windows-x86_64-none\\Lib\\subprocess.py\", line 550, in run\n    stdout, stderr = process.communicate(input, timeout=timeout)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\jamir\\AppData\\Roaming\\uv\\python\\cpython-3.12.14-windows-x86_64-none\\Lib\\subprocess.py\", line 1209, in communicate\n    stdout, stderr = self._communicate(input, endtime, timeout)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\jamir\\AppData\\Roaming\\uv\\python\\cpython-3.12.14-windows-x86_64-none\\Lib\\subprocess.py\", line 1630, in _communicate\n    raise TimeoutExpired(self.args, orig_timeout)\nsubprocess.TimeoutExpired: Command '['C:\\\\Users\\\\jamir\\\\camoufox-probe\\\\venv\\\\Scripts\\\\python.exe', '-c', \"import json,sys\\nsys.path.insert(0, r'C:\\\\Users\\\\jamir\\\\.herdr\\\\worktrees\\\\my_site\\\\wt-camoufox-probe\\\\process\\\\general-plans\\\\active\\\\camoufox-probe_02-11-26\\\\probe')\\nimport camoufox_probe as P\\nfrom camoufox.sync_api import Camoufox\\ntry:\\n    with Camoufox(**P.launch_kwargs(P.PROFILES / 'B', os='linux')) as c:\\n        print(json.dumps({'rejected': False}))\\nexcept Exception as e:\\n    print(json.dumps({'rejected': True, 'error': str(e)[:1500]}))\\n\"]' timed out after 180 seconds\n",
+  "external_connections_seen": [
+    {
+      "t": "2026-11-02T14:11:36.386+00:00",
+      "pid": 21584,
+      "raddr": "151.101.1.91:80",
+      "status": "SYN_SENT"
+    },
+    {
+      "t": "2026-11-02T14:11:36.386+00:00",
+      "pid": 21584,
+      "raddr": "2a04:4e42:400::347:80",
+      "status": "SYN_SENT"
+    },
+    {
+      "t": "2026-11-02T14:11:57.338+00:00",
+      "pid": 21584,
+      "raddr": "2a04:4e42:600::347:80",
+      "status": "SYN_SENT"
+    },
+    {
+      "t": "2026-11-02T14:12:18.209+00:00",
+      "pid": 21584,
+      "raddr": "2a04:4e42:200::347:80",
+      "status": "SYN_SENT"
+    },
+    {
+      "t": "2026-11-02T14:12:40.234+00:00",
+      "pid": 21584,
+      "raddr": "151.101.65.91:80",
+      "status": "ESTABLISHED"
+    }
+  ],
+  "free_ram_mb_end": 897,
+  "finished": "2026-11-02T14:13:20.947+00:00",
+  "survivors_at_end": [
+    {
+      "pid": 20556,
+      "name": "node.exe"
+    },
+    {
+      "pid": 6828,
+      "name": "camoufox.exe"
+    },
+    {
+      "pid": 27444,
+      "name": "camoufox.exe"
+    },
+    {
+      "pid": 16244,
+      "name": "camoufox.exe"
+    },
+    {
+      "pid": 23860,
+      "name": "camoufox.exe"
+    },
+    {
+      "pid": 3412,
+      "name": "camoufox.exe"
+    },
+    {
+      "pid": 8224,
+      "name": "camoufox.exe"
+    },
+    {
+      "pid": 268,
+      "name": "camoufox.exe"
+    }
+  ],
+  "sink_requests": [],
+  "sink_hosts": []
+}

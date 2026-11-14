@@ -1,0 +1,131 @@
+{
+  "step": "after_crash",
+  "started": "2026-11-02T14:06:10.134+00:00",
+  "python": "3.12.14",
+  "camoufox": "0.5.9",
+  "playwright": "1.62.0",
+  "free_ram_mb_start": 1528,
+  "disk_free_gib_start": 27.78,
+  "ram_checks": [
+    {
+      "t": "2026-11-02T14:06:10.170+00:00",
+      "before": "launch A-after-crash",
+      "available_mb": 1528
+    }
+  ],
+  "launches": [
+    {
+      "label": "A-after-crash",
+      "t": "2026-11-02T14:06:44.164+00:00",
+      "launch_s": 33.31,
+      "first_page_s": 0.67
+    }
+  ],
+  "cookies_on_reopen": {
+    "names": [
+      "acct",
+      "auth_token",
+      "ct0",
+      "precrash_marker"
+    ],
+    "acct": "A",
+    "auth_token_is_FAKE": true,
+    "session_cookie_present": false
+  },
+  "storage_on_reopen": {
+    "probe_acct": "A",
+    "probe_written": "1793628065712"
+  },
+  "echo_on_reopen": {
+    "cookie_names": [
+      "acct",
+      "auth_token",
+      "ct0",
+      "precrash_marker"
+    ],
+    "acct": "A",
+    "auth_token_is_FAKE": true,
+    "ct0_is_FAKE": true
+  },
+  "identity": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:158.0) Gecko/20100101 Firefox/158.0",
+    "platform": "Win32",
+    "oscpu": "Windows NT 10.0; Win64; x64",
+    "hardwareConcurrency": 8,
+    "languages": [
+      "en-US",
+      "en"
+    ],
+    "timezone": "HOST_TZ_REDACTED",
+    "screen": {
+      "width": 1366,
+      "height": 800,
+      "availWidth": 1366,
+      "availHeight": 752,
+      "colorDepth": 24
+    },
+    "outer": [
+      1293,
+      752
+    ],
+    "inner": [
+      1293,
+      667
+    ],
+    "dpr": 1,
+    "webgl": {
+      "vendor": "Google Inc. (Intel)",
+      "renderer": "ANGLE (Intel, Intel(R) HD Graphics 400 Direct3D11 vs_5_0 ps_5_0), or similar"
+    },
+    "voices": 0,
+    "fonts": [
+      [
+        "Segoe UI",
+        true
+      ],
+      [
+        "Calibri",
+        true
+      ],
+      [
+        "Helvetica Neue",
+        true
+      ],
+      [
+        "Ubuntu",
+        true
+      ],
+      [
+        "DejaVu Sans",
+        true
+      ],
+      [
+        "Arial",
+        true
+      ]
+    ],
+    "canvas_sha256": "3830b4dc1b8765705d4386f955d1c830b2cc24f9f458582f143e8b6ec8f4d95e"
+  },
+  "memory_peak": {
+    "rss_mb": 809.8,
+    "private_mb": 742.6,
+    "procs": 11
+  },
+  "closes": [
+    {
+      "label": "A-after-crash graceful",
+      "close_call_s": 0.52,
+      "all_children_gone_s_after_close": 0.02,
+      "survivors": [],
+      "error": null
+    }
+  ],
+  "cpu_seconds_tree": 73.19,
+  "profile_size_mb_after": 47.22,
+  "external_connections_seen": [],
+  "free_ram_mb_end": 1270,
+  "finished": "2026-11-02T14:06:49.098+00:00",
+  "survivors_at_end": [],
+  "sink_requests": [],
+  "sink_hosts": []
+}

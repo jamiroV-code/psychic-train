@@ -11,9 +11,11 @@ was later confirmed), `confirmed_boundaries` is the confirmed subset.
 """
 from __future__ import annotations
 
+import math
+from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from api.models.screener import ChartBar
 
@@ -212,7 +214,28 @@ class LegEstimate(BaseModel):
     heading: str
     age: AgeEstimate
     composite: CompositeEstimate
+class BtcMomentumSignal(BaseModel):
+    kind: Literal["BUY", "SELL"]
+    timestamp: str
+    price: float
 
+    @field_validator("timestamp")
+    @classmethod
+    def validate_utc_timestamp(cls, value: str) -> str:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("timestamp must be a valid UTC ISO timestamp") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() != timezone.utc.utcoffset(parsed):
+            raise ValueError("timestamp must have a UTC offset")
+        return value
+
+    @field_validator("price")
+    @classmethod
+    def validate_positive_finite_price(cls, value: float) -> float:
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("price must be finite and positive")
+        return value
 
 class BtcLegChartResponse(BaseModel):
     available: bool
@@ -227,3 +250,4 @@ class BtcLegChartResponse(BaseModel):
     legs: list[BtcLeg]
     current_leg: CurrentLeg | None = None
     estimate: LegEstimate | None = None
+    signals: list[BtcMomentumSignal] = Field(default_factory=list)

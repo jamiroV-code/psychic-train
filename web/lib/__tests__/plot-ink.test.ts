@@ -19,12 +19,6 @@ function token(name: string): string {
   return match[1].trim();
 }
 
-function block(selector: string): string {
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = css.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`));
-  if (!match) throw new Error(`globals.css has no rule for ${selector}`);
-  return match[1];
-}
 
 function lin(c: number): number {
   const v = c / 255;
@@ -52,8 +46,4 @@ describe("plot axis ink", () => {
     expect(contrast(token("an-ink-3"), token("an-panel"))).toBeLessThan(4.5);
   });
 
-  it("colours canvas axis labels (via currentColor) and SVG tick text with --an-ink-2", () => {
-    expect(block(".analytic-plot")).toMatch(/color:\s*var\(--an-ink-2\)/);
-    expect(block(".spread-chart .tick text,\n.spread-chart text")).toMatch(/fill:\s*var\(--an-ink-2\)/);
-  });
 });

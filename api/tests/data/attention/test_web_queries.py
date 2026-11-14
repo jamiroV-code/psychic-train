@@ -29,6 +29,178 @@ def test_committed_file_loads_with_locked_defaults():
     assert {k: wq.DEFAULTS[k] for k in LOCKED} == LOCKED
     assert set(wq.DEFAULTS) == set(q.config.as_dict())
 
+def test_transport_identity_defaults_are_off(doc):
+    config = wq.validate(doc).config
+    assert config.x_connection_style == "plain"
+    assert config.x_identity_enabled is False
+    assert config.x_account_identities == {}
+
+
+def test_plain_identity_requires_compatible_fallback_target(doc):
+    block = doc["collector"]
+    block["x_accounts"] = ["alpha"]
+    block["x_identity_enabled"] = True
+    block["x_account_identities"] = {"alpha": {
+        "accept_language": "en-US,en;q=0.9", "region": "US", "timezone": "America/New_York",
+        "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36",
+        "impersonation_target": "chrome131",
+    }}
+    assert wq.validate(doc).config.x_account_identities["alpha"]["impersonation_target"] == "chrome131"
+    del block["x_account_identities"]["alpha"]["impersonation_target"]
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+    block["x_account_identities"]["alpha"]["impersonation_target"] = "firefox133"
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+
+
+@pytest.mark.parametrize("style", ["plain", "curl"])
+def test_identity_rejects_unknown_duplicate_and_missing_labels(doc, style):
+    block = doc["collector"]
+    block.update(x_accounts=["alpha", "beta"], x_identity_enabled=True, x_connection_style=style)
+    identity = {"accept_language": "en-US,en;q=0.9", "region": "US", "timezone": "America/New_York",
+                "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36",
+                "impersonation_target": "chrome131"}
+    block["x_account_identities"] = {"alpha": identity.copy(), "beta": identity.copy()}
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+    block["x_account_identities"] = {"alpha": identity.copy()}
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+    block["x_account_identities"] = {"alpha": identity.copy(), "unknown": identity.copy()}
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+
+
+def test_plain_identities_cannot_share_fallback_target(doc):
+    block = doc["collector"]
+    block.update(x_accounts=["alpha", "beta"], x_identity_enabled=True)
+    one = {"accept_language": "en-US", "region": "US", "timezone": "America/New_York",
+           "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36", "impersonation_target": "chrome131"}
+    two = {**one, "user_agent": "Mozilla/5.0 Chrome/131.0.1.0 Safari/537.36"}
+    block["x_account_identities"] = {"alpha": one, "beta": two}
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+
+
+@pytest.mark.parametrize("key,value", [
+    ("x_connection_style", "browser"), ("x_identity_enabled", 1),
+    ("x_account_identities", []),
+])
+def test_identity_settings_reject_invalid_types(doc, key, value):
+    doc["collector"][key] = value
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+
+
+@pytest.mark.parametrize("key,value", [
+    ("accept_language", ""), ("accept_language", "en\r\nX-Injected: yes"),
+    ("region", ""), ("timezone", "not/a/timezone"), ("user_agent", ""),
+    ("impersonation_target", "chrome"), ("impersonation_target", "chrome999999"),
+    ("user_agent", "@chrome"), ("accept_language", "not a language"),
+])
+def test_enabled_identity_rejects_invalid_fields(doc, key, value):
+    block = doc["collector"]
+    block.update(x_accounts=["alpha"], x_identity_enabled=True)
+    identity = {"accept_language": "en-US,en;q=0.9", "region": "US", "timezone": "America/New_York",
+                "user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36",
+                "impersonation_target": "chrome131"}
+    identity[key] = value
+    block["x_account_identities"] = {"alpha": identity}
+    with pytest.raises(wq.QueriesError):
+        wq.validate(doc)
+
+
+def _coherent_identity(doc, style, **changes):
+    identity = {"accept_language": "en-US,en;q=0.9", "region": "US", "timezone": "America/New_York",
+                "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/131.0.0.0 Safari/537.36",
+                "impersonation_target": "chrome131"}
+    identity.update(changes)
+    doc["collector"].update(x_accounts=["alpha"], x_identity_enabled=True, x_connection_style=style,
+                            x_account_identities={"alpha": identity})
+    return identity
+
+
+@pytest.mark.parametrize("style", ["plain", "curl"])
+@pytest.mark.parametrize("changes", [
+    {"region": "FR"},  # Neither New York nor the primary language's region agrees.
+    {"timezone": "Europe/Paris"},
+    {"accept_language": "en-GB,en;q=0.9"},
+    {"user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0 Safari/537.36"},
+])
+def test_identity_coherence_rejects_explicit_contradictions(doc, style, changes):
+    _coherent_identity(doc, style, **changes)
+    with pytest.raises(wq.QueriesError, match="coherence"):
+        wq.validate(doc)
+
+
+@pytest.mark.parametrize("style", ["plain", "curl"])
+@pytest.mark.parametrize("changes", [
+    {},  # macOS can be used in New York; OS never determines geography.
+    {"timezone": "America/Phoenix"},  # Same country, no seasonal offset change.
+    {"timezone": "Pacific/Honolulu"},  # Same country, very different offset.
+    {"region": "DE", "timezone": "Europe/Zurich", "accept_language": "de-DE,de;q=0.9"},
+    {"region": "CH", "timezone": "Europe/Zurich", "accept_language": "fr-CH,fr;q=0.9"},
+    {"accept_language": "fr,en-GB;q=0.5"},  # No regional claim in primary language.
+    {"accept_language": "en-US,en-GB;q=0.5"},  # Secondary preference is not residence.
+    {"timezone": "UTC"},  # Region-neutral zone: no country claim to contradict.
+    {"timezone": "US/Eastern"},  # Valid alias not in country tables: unknown, not false.
+    {"user_agent": "Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36"},  # Platform-neutral B1 UA.
+])
+def test_identity_coherence_accepts_bounded_claims(doc, style, changes):
+    identity = _coherent_identity(doc, style, **changes)
+    assert wq.validate(doc).config.x_account_identities["alpha"] == identity
+
+
+@pytest.mark.parametrize("style", ["plain", "curl"])
+def test_disabled_identity_skips_coherence(doc, style):
+    _coherent_identity(doc, style, region="FR", timezone="America/New_York",
+                       user_agent="Mozilla/5.0 (Windows NT 10.0) Chrome/131.0.0.0 Safari/537.36")
+    doc["collector"]["x_identity_enabled"] = False
+    assert wq.validate(doc).config.x_identity_enabled is False
+
+
+def test_identity_coherence_is_not_an_offset_or_dst_test(doc):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    zone = ZoneInfo("America/New_York")
+    assert datetime(2026, 1, 15, tzinfo=zone).utcoffset() != datetime(2026, 7, 15, tzinfo=zone).utcoffset()
+    _coherent_identity(doc, "plain")
+    assert wq.validate(doc).config.x_identity_enabled
+
+
+@pytest.mark.parametrize("target,ua", [
+    ("edge101", "Mozilla/5.0 (Macintosh) Chrome/101.0 Edg/101.0"),
+    ("safari170", "Mozilla/5.0 (Windows NT 10.0) Version/17.0 Safari/605.1"),
+    ("firefox133", "Mozilla/5.0 (Windows NT 10.0) Firefox/133.0"),
+    ("chrome131_android", "Mozilla/5.0 (Macintosh) Chrome/131.0"),
+    ("safari172_ios", "Mozilla/5.0 (Macintosh) Version/17.2 Safari/605.1"),
+])
+def test_identity_coherence_platform_evidence_is_target_specific(doc, target, ua):
+    _coherent_identity(doc, "plain", impersonation_target=target, user_agent=ua)
+    with pytest.raises(wq.QueriesError, match="coherence target/UA platform"):
+        wq.validate(doc)
+
+
+def test_identity_coherence_requires_country_tables_only_when_enabled(doc, monkeypatch):
+    monkeypatch.setattr(wq, "TZPATH", ())
+    def absent(_package):
+        raise ModuleNotFoundError
+    monkeypatch.setattr(wq, "files", absent)
+    _coherent_identity(doc, "plain")
+    with pytest.raises(wq.QueriesError, match="tables unavailable"):
+        wq.validate(doc)
+    doc["collector"]["x_identity_enabled"] = False
+    assert not wq.validate(doc).config.x_identity_enabled
+
+
+def test_identity_coherence_loads_system_country_tables(tmp_path, monkeypatch):
+    (tmp_path / "zone.tab").write_text("US\t+0000+00000\tAmerica/New_York\n", encoding="utf-8")
+    (tmp_path / "zone1970.tab").write_text("# shared\nCH,DE,LI\t+0000+00000\tEurope/Zurich\n", encoding="utf-8")
+    monkeypatch.setattr(wq, "TZPATH", (str(tmp_path),))
+    assert wq._timezone_countries() == {"America/New_York": {"US"}, "Europe/Zurich": {"CH", "DE", "LI"}}
+
 
 def test_reddit_baseline_250_and_separate_degraded_150_budget():
     assert wq.DEFAULTS["reddit_daily_request_budget"] == 250
@@ -81,8 +253,9 @@ def test_config_change_is_read(doc, tmp_path):
 
 def test_coin_set_is_narrative_placed_symbols_minus_ambiguous():
     placed = wq.placed_symbols()
-    assert len(placed) == 75 and "SOL" in placed
-    q = wq.load(placed_symbols=placed)
+    assert len(placed) == len(set(placed)) and "SOL" in placed
+    q = wq.load_merged(placed_symbols=placed)
+    assert set(placed) <= set(q.coins)
     for source in wq.SOURCES:
         coins = wq.coin_set(q, source, placed)
         assert set(coins) == set(placed) - q.ambiguous[source]
@@ -210,3 +383,25 @@ def test_budget_share_accepts_one_and_fractions(doc, good):
 def test_budget_share_absent_key_uses_default(doc):
     doc["collector"].pop("reddit_stream_budget_share", None)
     assert wq.validate(doc).config.reddit_stream_budget_share == 0.45
+
+
+# --- collector identity pool, Part A: optional per-account cap and rest days (defaults live in code) ---
+
+def test_account_cap_and_rest_optional_off_by_default(doc):
+    assert "x_account_daily_cap" not in wq.X_DEFAULTS and "x_account_rest_days" not in wq.X_DEFAULTS
+    c = wq.validate(doc).config
+    assert c.x_account_daily_cap is None and c.x_account_rest_days == 0
+    doc["collector"]["x_account_daily_cap"] = 300
+    doc["collector"]["x_account_rest_days"] = 3
+    c = wq.validate(doc).config
+    assert (c.x_account_daily_cap, c.x_account_rest_days) == (300, 3)
+
+
+@pytest.mark.parametrize("key,bad", [("x_account_daily_cap", 0), ("x_account_daily_cap", True),
+                                     ("x_account_daily_cap", 1.5), ("x_account_daily_cap", "300"),
+                                     ("x_account_rest_days", -1), ("x_account_rest_days", None),
+                                     ("x_account_rest_days", False)])
+def test_account_cap_and_rest_rejected_when_invalid(doc, key, bad):
+    doc["collector"][key] = bad
+    with pytest.raises(wq.QueriesError, match=key):
+        wq.validate(doc)
