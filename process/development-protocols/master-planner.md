@@ -62,23 +62,21 @@ review -> in_progress (acceptance rejected, with reasons; counts against the ret
 
 A worker saying "done" yields `review` only. Missing tier evidence keeps the task at `review` and is recorded as a gap; a known gap is never a pass. A merged task that still needs (d) stays `review` after the merge until that evidence exists.
 
-## 5. Standing authorization (user, 02-10-26; merge and archive part superseded by D-28)
-
-History (user's words, 02-10-26, superseded by D-28 for the merge and archive part): "it spawns workers for tasks you already marked approved, without asking again (max 3 sessions at the same time excl. master planner session), each session can merge and archive on itself automatically if it's sure it's ready and safe to merge".
+## 5. Standing authorization (owner update, 2026-11-11; supersedes D-28 owner-only merge rule)
 
 1. **Spawn:** the Master Planner may spawn a worker for any `approved` task without asking again. Max 3 concurrent workers, excluding the planner.
-2. **Merge and archive (D-28):** the owner merges every PR. A worker opens ONE draft PR and stops; it never merges and never archives. The Master Planner never merges. Registry `accepted` then `archived` is recorded only after the owner's merge is verified and the acceptance rule (section 4) holds; the worker requests it in report headings 9 and 10. A diff touching CLAUDE.md or AGENTS.md stops at `review` for the user's diff check (user 03-10-26).
-3. **Fail-safes:** an unsure worker stops at `review`; every condition must be evidenced; a denied or permission-prompting call means stop, never retry around it.
-4. **Verifiability:** behaviour visible only on the user's PC (Windows PowerShell scripts at runtime, Task Scheduler, Tailscale, the live app) cannot be evidenced from the cloud, so such a task stops at `review` and the user verifies.
-5. **Owner merge check:** after each owner merge the Master Planner checks CI on the merge SHA on `main`; on red it proposes `git revert <merge sha>` to the owner and stops.
-6. **Items superseded by D-28:** the 03-10-26 worker-merge items (no class exception, serialized merges with a merge token in the registry, Open Question 10) are superseded by D-28 and not operative. Direct worker lane (Open Question 12): keep as is. RT4 bypass of user acceptance: still open (kept from the old item 8).
+2. **Merge:** the user authorizes the responsible agent/session to mark its PR ready and merge it without a second confirmation once every gate in AGENTS.md passes. This is not permission to merge a draft, red/unknown CI, unresolved review findings, a PR without independent review, or overlapping work. Changes to `CLAUDE.md` or `AGENTS.md` additionally require the user's diff check before merge. The merger verifies CI on the merge SHA and reports the result. No direct push to `main`.
+3. **Acceptance and archive:** the task remains `review` until independent evidence satisfies section 4; a merge alone does not accept or archive it. The worker requests registry updates in report headings 9 and 10.
+4. **Fail-safes:** an unsure session stops at `review`; every merge condition must be evidenced. A denied or permission-prompting call means stop, never retry around it.
+5. **Verifiability:** behaviour visible only on the user's PC (Windows PowerShell scripts at runtime, Task Scheduler, Tailscale, the live app) cannot be evidenced from the cloud, so the task stops at `review` until a user or recorded agent-probe verifies it.
 
-Nothing above is platform-enforced (repo PUBLIC, verified 03-10-26 with `gh api repos/jamiroV-code/psychic-train --jq .private` = false; `main` unprotected, `branches/main` protected = false; `allow_auto_merge` = true and `delete_branch_on_merge` = true, as returned): every control is procedure.
+Nothing above is platform-enforced (repo PUBLIC, `main` unprotected, `allow_auto_merge` true per earlier probe): every control is procedural.
+
 
 ## 6. Worker lane and commit policy
 
 - A WORKER is a direct-lane session: it does not orchestrate, spawn sessions or run the multi-agent RIPER chain. Tiny tasks (RT0 or RT1, about 100 lines or less, no schema, auth, API, billing or migration surface) use the QUICK FIX lane; one `vc-quick-fix-agent` spawn is not a subagent chain. Every other worker writes a compact validate-contract in its own task folder (the gate list from the envelope) before editing, then edits and runs its gates.
-- Workers commit on `claude/<task-id>-<slug>` and open a PR. The Master Planner session and direct user work also commit on a branch and open a PR, only when the user asks; nobody pushes to `main` and the owner merges every PR (D-28).
+- Workers commit and push on `claude/<task-id>-<slug>` and open one PR. The responsible session may mark it ready and merge it under the standing owner authorization once all gates pass; the Master Planner may do the same. Never push directly to `main`. The task remains `review` until independent acceptance evidence is recorded. Direct user work also uses a branch and PR when requested.
 - **Big-task rule (decided 03-10-26: 3 subagents, 15 USD, 1 level):** a large product feature is planned and validated by the planner, then cut into bounded slices: one worker per slice, with owned files, a test tier and a budget. Default for small tasks stays no subagents. For a large risky slice (RT3 or RT4) the envelope may allow a CAPPED subagent lane: at most 3 subagents per slice, a 15 USD cap per slice, one level deep, and every subagent listed in the worker report. The planner runs its own independent check after every worker. The cap values were approved by the user 03-10-26 and apply to RT3/RT4 slices only. (Follow-up to Open Question 12.)
 - Retry budget: see "Bounded retry" in operating-instructions.md (single home: 2 fix cycles per failing gate, same failure twice stops, 10-cycle outer ceiling).
 
