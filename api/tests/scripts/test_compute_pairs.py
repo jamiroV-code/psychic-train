@@ -259,12 +259,16 @@ def test_failed_spreads_swap_restores_previous_directory(tmp_path, monkeypatch):
     (spreads / "old.parquet").write_bytes(b"previous complete result")
     (staging / "new.parquet").write_bytes(b"new result")
     real_replace = os.replace
+    fail_restore_once = True
 
     def fail_staging_replace(source, destination):
+        nonlocal fail_restore_once
         if source == staging:
             raise OSError("disk full during swap")
+        if source.name.startswith("spreads.tmp.old.") and destination == spreads and fail_restore_once:
+            fail_restore_once = False
+            raise OSError("transient restore failure")
         return real_replace(source, destination)
-
     monkeypatch.setattr(pairs_response.os, "replace", fail_staging_replace)
     with pytest.raises(OSError, match="disk full during swap"):
         pairs_response._swap_into_place(staging, spreads)
@@ -275,13 +279,13 @@ def test_failed_spreads_swap_restores_previous_directory(tmp_path, monkeypatch):
 
 
 def test_stale_staging_dirs_swept_but_live_one_kept(seeded):
-    """A crashed run's staging dirs older than the safe age are removed at the
-    start of a run; a recent one (a concurrent live run) is never touched."""
+    """Remove stale staging dirs, preserve a stale recovery backup and a live stage."""
     pairs_dir = cache.pairs_results_path().parent
     pairs_dir.mkdir(parents=True, exist_ok=True)
     old = time.time() - 2 * 3600
     stale = [pairs_dir / "spreads.tmp", pairs_dir / "spreads.tmp.crashed"]
-    for d in stale:
+    recovery_backup = pairs_dir / "spreads.tmp.old.recovery"
+    for d in [*stale, recovery_backup]:
         d.mkdir()
         (d / "AAA_BBB.parquet").write_bytes(b"partial")
         os.utime(d / "AAA_BBB.parquet", (old, old))
@@ -293,6 +297,7 @@ def test_stale_staging_dirs_swept_but_live_one_kept(seeded):
     pairs_response.compute_and_persist()
     assert not any(d.exists() for d in stale)
     assert (live / "AAA_BBB.parquet").read_bytes() == b"another run"
+    assert (recovery_backup / "AAA_BBB.parquet").read_bytes() == b"partial"
     assert sorted(p.name for p in cache.pairs_spreads_dir().iterdir()) == OK_SPREADS
 
 

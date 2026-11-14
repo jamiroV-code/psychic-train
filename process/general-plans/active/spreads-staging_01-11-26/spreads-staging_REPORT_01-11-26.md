@@ -10,8 +10,8 @@ done. Linux CI is green on PR #221 (see §6).
 `compute_and_persist` staged spreads in a fixed `pairs/spreads.tmp` dir. On c69d1b2f a second run's `rmtree(staging)` deleted the first run's staged files, and a mid-staging failure left `spreads.tmp` behind. Now:
 - Each run stages in its own dir `pairs/spreads.tmp.<uuid4 hex>` (same parent). It is created with `Path.mkdir()` instead of `tempfile.mkdtemp`, because `mkdtemp` creates mode 0o700 on POSIX and the renamed `spreads/` dir would keep that mode. Permissions stay as before.
 - Swap (`_swap_into_place`): the current `spreads/` is renamed aside to a unique `spreads.tmp.old.<hex>`, the staging dir is renamed to `spreads/`, and the aside dir is removed. If an overlapping run's dir lands in between, the rename fails and is retried (5 attempts). The last run to swap wins with its complete set. This is still two renames, not atomic. A directory cannot be replaced in one rename on Windows, nor on POSIX when the target is non-empty. Readers can briefly see no `spreads/` dir, the same gap as the old `rmtree` + `os.replace`. One difference: the old dir is no longer partly deleted before the rename. It is moved aside whole.
-- A failed swap now restores the directory it moved aside; a displaced backup is retained if a concurrent writer prevents restoration and is removed only after a later swap succeeds. A regression test covers repeated staging-rename failure.
-- At the start of a run, `spreads.tmp*` dirs whose mtime is more than 1 hour old are removed. This covers the legacy fixed `spreads.tmp`, crashed `spreads.tmp.<hex>` dirs, and leftover `.old.` dirs. A live run's staging dir has a fresh mtime and is never touched.
+- A failed swap retries restoration of the previous directory on each attempt and once before returning an error. Recovery backups are never removed by the stale-staging sweep; they are removed only after a later swap succeeds.
+- At the start of a run, stale `spreads.tmp*` staging directories are removed after 1 hour, except `.old.*` recovery backups, which are preserved because they may hold the only complete result. A live staging directory has a fresh mtime and is never touched.
 - Unchanged: output files and formats, the provenance-first-invalidation order, and the `cache.py` helpers.
 
 ## 4 Files changed
@@ -39,7 +39,7 @@ All runs were local on Windows, with `uv run --project api pytest ... -q -p no:c
 
 ## 8 Deviations
 - I used `Path.mkdir()` with a uuid4 name instead of `tempfile.mkdtemp`, to keep the dir mode (see §3).
-- Stale `.old.` aside dirs also use the `spreads.tmp` prefix, so the same sweep cleans them after a crash.
+- Stale `.old.` backups are deliberately excluded from automatic cleanup; they are preserved until a successful later swap removes them.
 
 ## 9 Blockers
 Independent review of the final updated branch is still required before merge.

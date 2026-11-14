@@ -152,6 +152,9 @@ _SWAP_ATTEMPTS = 5
 def _sweep_stale_staging(parent: Path) -> None:
     cutoff = time.time() - _STALE_STAGING_AGE_S
     for p in parent.glob(_STAGING_PREFIX + "*"):
+        # A displaced old directory can be the only recoverable complete copy.
+        if p.name.startswith(f"{_STAGING_PREFIX}.old."):
+            continue
         try:
             stale = p.is_dir() and p.stat().st_mtime < cutoff
         except OSError:
@@ -172,6 +175,15 @@ def _swap_into_place(staging: Path, spreads_dir: Path) -> None:
     """
     backups: list[Path] = []
     for attempt in range(_SWAP_ATTEMPTS):
+        if backups and not spreads_dir.exists():
+            for backup in reversed(backups):
+                try:
+                    os.replace(backup, spreads_dir)
+                except OSError:
+                    continue
+                backups.remove(backup)
+                break
+
         old = spreads_dir.with_name(f"{_STAGING_PREFIX}.old.{uuid.uuid4().hex}")
         moved_old = False
         try:
@@ -186,10 +198,18 @@ def _swap_into_place(staging: Path, spreads_dir: Path) -> None:
                 try:
                     os.replace(old, spreads_dir)
                 except OSError:
-                    # Another writer may have installed its complete directory.
-                    # Keep the displaced directory until a later successful swap.
+                    # Another writer or transient filesystem failure blocked restoration.
+                    # Retry from this preserved backup on the next attempt.
                     backups.append(old)
             if attempt == _SWAP_ATTEMPTS - 1:
+                if not spreads_dir.exists():
+                    for backup in reversed(backups):
+                        try:
+                            os.replace(backup, spreads_dir)
+                        except OSError:
+                            continue
+                        backups.remove(backup)
+                        break
                 raise
             continue
 
