@@ -35,8 +35,9 @@ Full plan (with the long version of every step): `process/general-plans/active/d
 | `register-tasks.ps1` | Creates Task Scheduler tasks `mysite-api` and `mysite-web` that start at your logon (no admin, no SYSTEM account). `-Remove` deletes them. |
 | `start-collector.ps1` | Starts the attention collector (X and Reddit) as its own process, so API restarts never interrupt it. `-DryRun` available. Not registered by `register-tasks.ps1` (see "Collector (separate from the API)"). |
 
-**These scripts were written in a container that has no PowerShell.** Automated tests only
-check their text. Run the parse check (B5) and dry runs (B6) before anything else.
+**These scripts were written in a container that has no PowerShell.** Most automated deploy
+tests check script text; `run-perp-collector.ps1` has a Windows PowerShell `-DryRun` behavior
+test. Run the parse check (B5) and dry runs (B6) before anything else.
 
 ## What Tailscale does and does not protect
 
@@ -73,12 +74,11 @@ address from B1. Condensed from the plan's Section B; report results back when d
 
 ## Moving to a different PC (cache migration)
 
-**TL;DR** — Clone the repo on the new Windows PC, install the prerequisites, copy five
-gitignored cache paths off the old PC, then **recreate `deploy.psd1` and re-run
-`deploy\build-web.ps1`** so the new machine's Tailscale address gets baked in. Never copy
-`web\.next`, `.venv` or `node_modules`. Nothing is permanently lost if a copy is missed —
-everything is regenerable — but a fresh deep price-history fetch may not reach as far back,
-so copying is preferred.
+**TL;DR** — Clone the repo on the new Windows PC, install prerequisites, copy gitignored
+cache paths off the old PC, then **recreate `deploy.psd1` and re-run `deploy\build-web.ps1`**
+so the new machine's Tailscale address gets baked in. Never copy `web\.next`, `.venv` or
+`node_modules`. Most caches can be rebuilt; Hyperliquid perp snapshots are forward-only and
+irreplaceable, so copy `api\data\cache\perp\` rather than expecting a regeneration.
 
 Use this section when the app moves to a **different** machine than the one that first held
 the caches. The ordinary first-time setup above assumes the repo and the caches already live
@@ -88,6 +88,7 @@ on the same PC; that assumption does not hold for a migration.
 
 | Path | What it is | Needed by |
 |---|---|---|
+| `api\data\cache\perp\` | **Irreplaceable, forward-only Hyperliquid BTC/ETH snapshots.** Copy intact; missed history cannot be regenerated. | `/perp` |
 | `api\data\cache\ohlcv\` | Price bars, including the one-time deep history (~2,230 daily bars back to about 2020-08-19) | `/screener`, `/pairs` |
 | `api\data\cache\liquidity\` | FRED macro series | `/regime` |
 | `api\data\cache\pairs\` | Precomputed pair statistics + `provenance.json` | `/pairs` |
@@ -179,8 +180,10 @@ read, not just present.
 
 ### If a copy is missed, or the old PC dies
 
-Nothing is permanently lost — every cache on the old PC is regenerable, and all four scripts
-below exist on this branch:
+The old PC may hold caches that cannot be rebuilt with equal history. In particular, the
+forward-only Hyperliquid perp snapshots are irreplaceable; copy `api\data\cache\perp\` before
+retiring the old machine. The other caches can be regenerated, though a fresh deep price-history
+fetch may not reach as far back. The scripts below rebuild the regenerable caches:
 
 1. `uv run --project api python -m api.scripts.refresh_cache` — shallow OHLCV (about 500 bars).
 2. `uv run --project api python -m api.scripts.backfill_pairs_universe` — the one-time deep OHLCV fetch. Never part of any automatic path.
@@ -459,3 +462,18 @@ Rollback: older versions reject the three added per-account state keys. Before r
 the collector stopped by the owner, back up the pool file and remove `reads_day`, `reads_used` and
 `rest_until` from each account object. Keep the ready marks separately. This change does not deploy,
 restart anything, renew cookies, add proxies or enable a browser.
+
+## Perp collector (UNRUN: not registered by any script)
+
+`deploy\run-perp-collector.ps1` runs one hourly pass of `api/scripts/collect_perp.py --job hl-snapshot` and exits. The host scheduler supplies the cadence; the script never registers a task. Exit codes: 0 written and clean, 1 nothing written, 2 written but flagged (read the sidecar `api/data/cache/perp/_last_run_hl-snapshot.json`).
+
+- **Windows Task Scheduler:** hourly trigger at minute 55; action **Program/script** = `powershell.exe`; **Add arguments** = `-NoProfile -ExecutionPolicy Bypass -File "<absolute path to durable checkout>\deploy\run-perp-collector.ps1"`; **Start in** = `<absolute path to durable checkout>`; run whether or not a window is open; enable **Wake the computer to run this task**; restart on failure OFF (a failed hour is a gap, not a retry storm).
+- **Linux:** crontab line `55 * * * *` running `uv run --project api python api/scripts/collect_perp.py --job hl-snapshot`, plus an equivalent systemd timer; export `SCREENER_CACHE_ROOT` when a non-default root is used.
+- **Roots and dry run:** nonempty `-RepoRoot` overrides the configured root; otherwise the launcher uses the configured root or the repository containing the launcher. Nonempty `-CacheRoot` overrides the configured cache; otherwise it uses the configured cache or `<RepoRoot>\api\data\cache`. Empty and whitespace-only values fall through. `-DryRun` prints the effective roots and command without starting the collector; this does not prove the actual uv working directory or child-process `SCREENER_CACHE_ROOT`.
+- **Reading coverage:** `uv run --project api python api/scripts/collect_perp.py --coverage --days 2` prints one line per day, `ok` or `gap`.
+- **Clock:** the PC clock must be synced; snapshot time is stamped when the response arrives; HTTP `Date` is retained as `server_date` when present.
+- **Guards:** a left-behind guard blocks writes until manually cleared. The collector never removes a guard it did not create. Coverage and sidecar identify its exact `.lock.takeover` path and report `takeover-guard-left`; stop the task and confirm no run is active before manual removal.
+
+### Moving the perp collector to another machine
+
+Perp data is irreplaceable and forward-only. On the old PC, disable the perp Task Scheduler task and confirm no run is active (`api\data\cache\perp\_locks\hl-snapshot.lock` absent). Copy `api\data\cache\perp\` intact to the new PC, then register and enable the task there. Never copy a `.lock` or `.lock.takeover` file. If a `api\data\cache\perp\_locks\hl-snapshot.lock.takeover` guard is present, confirm no run is active, then remove that exact file by hand. Coverage and the sidecar name it. Snapshots from two machines can be combined: the reader sorts by `collected_at_utc` and ignores exact duplicate lines.

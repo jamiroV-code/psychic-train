@@ -1,0 +1,27 @@
+{
+  "_synthetic": true,
+  "response": [
+    {"universe": [
+      {"name": "SYN0", "szDecimals": 2, "maxLeverage": 5},
+      {"name": "BTC", "szDecimals": 5, "maxLeverage": 50},
+      {"name": "ETH", "szDecimals": 4, "maxLeverage": 50}
+    ]},
+    [
+      {"dayBaseVlm": "10.0", "dayNtlVlm": "1000.0", "funding": "0.0001", "impactPxs": ["99.0", "101.0"], "markPx": "100.0", "midPx": "100.5", "openInterest": "10.0", "oraclePx": "100.2", "premium": "0.0002", "prevDayPx": "99.5"},
+      {"dayBaseVlm": "10.0", "dayNtlVlm": "2000.0", "funding": "0.0002", "impactPxs": ["199.0", "201.0"], "markPx": "200.0", "midPx": "200.5", "openInterest": "20.0", "oraclePx": "200.2", "premium": "0.0003", "prevDayPx": "199.5"},
+      {"dayBaseVlm": "10.0", "dayNtlVlm": "3000.0", "funding": "0.0003", "impactPxs": ["299.0", "301.0"], "markPx": "300.0", "midPx": "300.5", "openInterest": "30.0", "oraclePx": "300.2", "premium": "0.0004", "prevDayPx": "299.5"}
+    ]
+  ],
+  "response_eth_null": [
+    {"universe": [
+      {"name": "SYN0", "szDecimals": 2, "maxLeverage": 5},
+      {"name": "BTC", "szDecimals": 5, "maxLeverage": 50},
+      {"name": "ETH", "szDecimals": 4, "maxLeverage": 50}
+    ]},
+    [
+      {"dayBaseVlm": "10.0", "dayNtlVlm": "1000.0", "funding": "0.0001", "impactPxs": ["99.0", "101.0"], "markPx": "100.0", "midPx": "100.5", "openInterest": "10.0", "oraclePx": "100.2", "premium": "0.0002", "prevDayPx": "99.5"},
+      {"dayBaseVlm": "10.0", "dayNtlVlm": "2000.0", "funding": "0.0002", "impactPxs": ["199.0", "201.0"], "markPx": "200.0", "midPx": "200.5", "openInterest": "20.0", "oraclePx": "200.2", "premium": "0.0003", "prevDayPx": "199.5"},
+      {"dayBaseVlm": "10.0", "dayNtlVlm": "3000.0", "funding": "0.0003", "impactPxs": null, "markPx": "300.0", "midPx": null, "openInterest": "30.0", "oraclePx": "300.2", "premium": null, "prevDayPx": "299.5"}
+    ]
+  ]
+}

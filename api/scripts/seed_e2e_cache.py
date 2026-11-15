@@ -837,8 +837,35 @@ def seed_onchain(seed_today: str = ONCHAIN_SEED_TODAY, now: pd.Timestamp | None 
     return fixture["facts"]
 
 
+SEED_MARKER = "_e2e_seeded"
+
+
+def _refuse_unmarked_perp_data(root: Path) -> None:
+    """VA-41: refuse to wipe a root that holds unmarked perp data.
+
+    Perp collector files cannot be fetched again. A perp tree under the
+    guarded root that holds any file and no top-level `_e2e_seeded` marker is
+    not disposable test data, so exit before the wipe changes anything.
+    """
+    from api.data.perp import paths
+
+    trees = {root / "perp"}
+    perp = paths.perp_root().resolve()
+    if perp == root or root in perp.parents:
+        trees.add(perp)
+    for tree in sorted(trees):
+        if not tree.is_dir() or (tree / SEED_MARKER).exists():
+            continue
+        if any(p.is_file() for p in tree.rglob("*")):
+            sys.exit(
+                f"REFUSING: {tree} holds perp collector data with no "
+                f"{SEED_MARKER} marker. Move it aside before seeding."
+            )
+
+
 def main() -> int:
     root = _guard()
+    _refuse_unmarked_perp_data(root)
     from api.data import cache, watchlist as watchlist_store
 
     if root.exists():

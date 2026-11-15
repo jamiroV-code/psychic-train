@@ -22,7 +22,7 @@ function Write-MySiteLog {
 }
 
 function Import-MySiteConfig {
-    param([string]$LogName = 'deploy')
+    param([string]$LogName = 'deploy', [switch]$AllowMissingRepoRoot)
     $script:MySiteLogName = $LogName
     if (-not (Test-Path $script:MySiteConfigPath)) {
         Write-MySiteLog "Config file not found: $($script:MySiteConfigPath). Copy deploy\config.example.psd1 there and edit it (deploy\README.md, step B4)."
@@ -30,6 +30,9 @@ function Import-MySiteConfig {
     }
     $config = Import-PowerShellDataFile -Path $script:MySiteConfigPath
     foreach ($key in 'RepoRoot', 'UvPath', 'PnpmPath', 'TailscaleExe', 'ApiPort', 'WebPort', 'MaxWaitSeconds') {
+        if ($key -eq 'RepoRoot' -and $AllowMissingRepoRoot) {
+            continue
+        }
         if (-not $config.ContainsKey($key) -or [string]::IsNullOrWhiteSpace([string]$config[$key])) {
             Write-MySiteLog "Config key '$key' is missing or empty in $($script:MySiteConfigPath)."
             exit 2

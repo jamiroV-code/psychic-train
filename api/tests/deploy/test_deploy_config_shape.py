@@ -259,6 +259,20 @@ def test_readme_migration_says_legs_cache_is_not_needed():
     assert "has been removed" in section
     assert "dead weight" in section.lower()
 
+def test_migration_identifies_irreplaceable_perp_data_and_guards_are_actionable():
+    section = _migration_section()
+    assert r"api\data\cache\perp" in section
+    lower = section.lower()
+    assert "irreplaceable" in lower or "cannot be regenerated" in lower
+    from api.data.perp import textlog
+    from api.scripts import collect_perp
+
+    perp = _read("README.md").split("## Perp collector", 1)[1]
+    guard_name = textlog.guard_path(collect_perp._run_data_path()).name
+    assert guard_name == "hl-snapshot.lock.takeover"
+    assert guard_name in perp
+    assert "wake the computer to run this task" in perp.lower()
+
 
 def test_readme_migration_states_pairs_staleness_rule():
     section = _migration_section()
