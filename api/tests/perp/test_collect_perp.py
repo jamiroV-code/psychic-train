@@ -241,7 +241,10 @@ def test_persistent_503_is_exit_1_with_the_status_recorded(isolated_cache, monke
     monkeypatch.setattr(hs, "time", FakeClock())
     client = _sequence_client([(503, None)] * hs.MAX_RETRIES)
     assert _run(["--job", "hl-snapshot"], client) == 1
-    assert "http-503" in _sidecar()["problems"]
+    side = _sidecar()
+    assert "http-503" in side["problems"]
+    for coin in hs.COINS:
+        assert str(textlog.guard_path(_month_file(coin))) in side["lock_guard"]
 
 
 def test_collected_at_is_stamped_at_response_receipt_not_job_start(isolated_cache, monkeypatch):
@@ -260,6 +263,33 @@ def test_collected_at_is_stamped_at_response_receipt_not_job_start(isolated_cach
     assert _sidecar()["started_utc"] == "2026-11-14T23:30:00Z"
     row = json.loads(_month_file("BTC").read_text(encoding="utf-8").splitlines()[0])
     assert row["collected_at_utc"] == "2026-11-14T23:30:05Z"
+
+
+def test_response_month_is_used_for_coin_guard_paths(isolated_cache, monkeypatch):
+    stamps = [dt.datetime(2026, 11, 30, 23, 59, 0, tzinfo=dt.timezone.utc),
+              dt.datetime(2026, 12, 1, 0, 0, 5, tzinfo=dt.timezone.utc)]
+
+    def fake_now(tz):
+        return stamps.pop(0) if len(stamps) > 1 else stamps[0]
+
+    monkeypatch.setattr(collect_perp.dt, "datetime", type("DateTimeProxy", (), {
+        "timezone": dt.timezone,
+        "datetime": dt.datetime,
+        "now": staticmethod(fake_now),
+    }))
+    assert collect_perp.run(["--job", "hl-snapshot"], client=_client(_body())) == 0
+
+    side = _sidecar()
+    for coin in hs.COINS:
+        november = hl_snapshot_path(coin, "2026-11")
+        december = hl_snapshot_path(coin, "2026-12")
+        december_guard = str(textlog.guard_path(december))
+        november_guard = str(textlog.guard_path(november))
+        assert december.exists() and not november.exists()
+        assert december_guard in side["lock_guard"]
+        assert november_guard not in side["lock_guard"]
+        assert side["lock_guard"][december_guard] == {"lock": False, "guard": False}
+
 
 
 # --- exit codes ---------------------------------------------------------------

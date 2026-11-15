@@ -103,29 +103,31 @@ def _word(flag: bool) -> str:
 
 def _fetch_and_write(
     client: httpx.Client | None, now: dt.datetime | None, handle: textlog.Handle
-) -> tuple[int, list[str], int]:
+) -> tuple[int, list[str], int, str | None]:
     result = hs.fetch_snapshot(client=client, now=now)
     problems = list(result.problems)
     if result.status != "ok":
-        return EXIT_NOTHING, problems, 0
+        return EXIT_NOTHING, problems, 0, None
+    response_month = result.collected_at_utc[:7]
     written, _ = hs.write_snapshot(result, handle, problems)
     if written == 0:
-        return EXIT_NOTHING, problems, 0
+        return EXIT_NOTHING, problems, 0, response_month
     if problems or written < len(hs.COINS):
-        return EXIT_FLAGGED, problems, written
-    return EXIT_OK, problems, written
+        return EXIT_FLAGGED, problems, written, response_month
+    return EXIT_OK, problems, written, response_month
 
 
 def _collect(job: str, client: httpx.Client | None, now: dt.datetime | None) -> int:
     started = _utc(now)
     run_problems: list[str] = []
     code, problems = EXIT_NOTHING, []
+    response_month = None
     try:
         _run_data_path().parent.mkdir(parents=True, exist_ok=True)
         with textlog.locked(_run_data_path(), wait_seconds=0.0, takeover=True,
                             stale_seconds=RUN_LOCK_STALE_SECONDS) as handle:
             run_problems = handle.problems
-            code, problems, _ = _fetch_and_write(client, now, handle)
+            code, problems, _, response_month = _fetch_and_write(client, now, handle)
     except textlog.LockHeld as held:
         code, problems = EXIT_NOTHING, [held.reason, *held.problems]
     except OSError:
@@ -137,7 +139,7 @@ def _collect(job: str, client: httpx.Client | None, now: dt.datetime | None) -> 
     if code == EXIT_OK and problems:
         code = EXIT_FLAGGED
     finished = _utc(now) if now is not None else dt.datetime.now(_UTC)
-    month = _stamp(started)[:7]
+    month = response_month or _stamp(started)[:7]
     guard_paths = {str(textlog.guard_path(hl_snapshot_path(coin, month))): _guard_state(coin, month)
                    for coin in hs.COINS}
     guard_paths[str(run_guard)] = {"guard": run_guard.exists(), "lock": run_target().exists()}

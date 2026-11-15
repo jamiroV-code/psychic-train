@@ -156,17 +156,47 @@ def test_server_date_is_persisted_in_each_line(isolated_cache):
     _write(result)
     for coin in hs.COINS:
         row = json.loads(hl_snapshot_path(coin, "2026-11").read_text().splitlines()[0])
+        assert row["v"] == 1
+        assert row["source"] == "hyperliquid:metaAndAssetCtxs"
+        assert row["ctx"] == result.coins[coin]
+        assert "context" not in row
         assert row["server_date"] == result.server_date
 
 
 def test_reader_removes_exact_duplicate_lines_preserving_order(isolated_cache):
     path = hl_snapshot_path("BTC", "2026-11")
     path.parent.mkdir(parents=True, exist_ok=True)
-    first = json.dumps({"collected_at_utc": "2026-11-14T10:00:00Z", "coin": "BTC", "context": {"markPx": "a"}})
-    second = json.dumps({"collected_at_utc": "2026-11-14T11:00:00Z", "coin": "BTC", "context": {"markPx": "b"}})
+    first = json.dumps({"v": 1, "collected_at_utc": "2026-11-14T10:00:00Z",
+                        "coin": "BTC", "source": "hyperliquid:metaAndAssetCtxs",
+                        "ctx": {"markPx": "a"}})
+    second = json.dumps({"v": 1, "collected_at_utc": "2026-11-14T11:00:00Z",
+                         "coin": "BTC", "source": "hyperliquid:metaAndAssetCtxs",
+                         "ctx": {"markPx": "b"}})
     path.write_text(first + "\n" + second + "\n" + first + "\n", encoding="utf-8")
     rows = hs.read_snapshots("BTC", dt.date(2026, 11, 14), dt.date(2026, 11, 15))
-    assert [r["context"]["markPx"] for r in rows] == ["a", "b"]
+    assert [r["ctx"]["markPx"] for r in rows] == ["a", "b"]
+
+
+def test_reader_skips_and_reports_valid_unterminated_tail(isolated_cache, caplog):
+    path = hl_snapshot_path("BTC", "2026-11")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    complete = json.dumps({
+        "v": 1, "collected_at_utc": "2026-11-14T10:00:00Z", "coin": "BTC",
+        "source": "hyperliquid:metaAndAssetCtxs", "ctx": {"markPx": "complete"},
+    })
+    unterminated = json.dumps({
+        "v": 1, "collected_at_utc": "2026-11-14T11:00:00Z", "coin": "BTC",
+        "source": "hyperliquid:metaAndAssetCtxs", "ctx": {"markPx": "tail"},
+    })
+    path.write_text(complete + "\n" + unterminated, encoding="utf-8")
+
+    rows = hs.read_snapshots("BTC", dt.date(2026, 11, 14), dt.date(2026, 11, 15))
+
+    assert [row["ctx"]["markPx"] for row in rows] == ["complete"]
+    assert "unterminated final snapshot line" in caplog.text
+    assert str(path) not in caplog.text
+    assert unterminated not in caplog.text
+
 
 def test_server_date_absent_is_none():
     result = hs.fetch_snapshot(client=_client(_response_body()), now=NOW)
@@ -268,7 +298,7 @@ def test_rolling_fields_are_not_relabelled_as_daily(isolated_cache):
     # VA-55: prevDayPx / dayNtlVlm / dayBaseVlm are stored verbatim as rolling values.
     _write(_snap("2026-11-14T23:55:04Z", "close"))
     rows = hs.read_snapshots("BTC", dt.date(2026, 11, 14), dt.date(2026, 11, 15))
-    assert "prevDayPx" in rows[0]["context"]
+    assert "prevDayPx" in rows[0]["ctx"]
     assert "closed_day" not in json.dumps(rows[0])
 
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,6 +19,8 @@ import httpx
 
 from api.data.perp import textlog
 from api.data.perp.paths import hl_snapshot_path
+_LOG = logging.getLogger(__name__)
+
 
 INFO_URL = "https://api.hyperliquid.xyz/info"
 COINS = ("BTC", "ETH")
@@ -163,8 +166,8 @@ def write_snapshot(result: SnapshotResult, handle: textlog.Handle,
         except OSError:
             problems.append(f"not-written:{coin}")
             continue
-        line = json.dumps({"collected_at_utc": result.collected_at_utc, "coin": coin,
-                           "context": context,
+        line = json.dumps({"v": 1, "collected_at_utc": result.collected_at_utc, "coin": coin,
+                           "source": "hyperliquid:metaAndAssetCtxs", "ctx": context,
                            **({"server_date": result.server_date} if result.server_date is not None else {})},
                           separators=(",", ":"))
         result_write = textlog.append_line(path, line, wait_seconds=0.0)
@@ -202,7 +205,13 @@ def read_snapshots(coin: str, start: dt.date, end: dt.date) -> list[dict]:
         path = hl_snapshot_path(coin, month)
         if not path.exists():
             continue
-        for raw in path.read_text(encoding="utf-8", errors="replace").split("\n"):
+        with path.open("r", encoding="utf-8", errors="replace", newline="") as source:
+            content = source.read()
+        raw_lines = content.split("\n")
+        if raw_lines[-1]:
+            _LOG.warning("skipping unterminated final snapshot line")
+            raw_lines.pop()
+        for raw in raw_lines:
             if not raw:
                 continue
             try:
@@ -232,7 +241,7 @@ def close_value(coin: str, day: dt.date, field_name: str) -> object | None:
     inside = [r for r in rows if lo < _parse_stamp(r["collected_at_utc"]) <= hi]
     if not inside:
         return None
-    return inside[-1]["context"].get(field_name)
+    return inside[-1]["ctx"].get(field_name)
 
 
 def coverage(coin: str, start: dt.date, end: dt.date) -> list[tuple[dt.date, bool]]:
